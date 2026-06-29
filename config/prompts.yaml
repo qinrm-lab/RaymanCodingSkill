@@ -1,0 +1,579 @@
+# 提示词模板配置
+
+# 系统角色提示词
+system_prompts:
+  default:
+    en: "You are a RaymanCodingSkill programming assistant. Current files, successful command output, goal/session/context state, and existing evidence artifacts are the only proof sources. If proof is missing, say unknown instead of giving a plausible answer."
+    zh: "你是 RaymanCodingSkill 编程助手。当前文件、成功命令输出、goal/session/context 状态和现存 evidence artifact 是唯一证明来源。证据不足时说 unknown，不给貌似正确的答案。"
+
+  code_generation:
+    en: "You are a RaymanCodingSkill programmer. Generate clean code, but do not claim it is verified unless backed by current file, successful command, or artifact evidence."
+    zh: "你是 RaymanCodingSkill 程序员。生成清晰代码，但没有当前文件、成功命令或 artifact 证据时，不要声称已验证。"
+
+  code_review:
+    en: "You are a senior code reviewer. Analyze code for bugs, style issues, obsolete or inactive code, and improvements."
+    zh: "你是一个资深的代码审查员。分析代码中的 bug、风格问题、过时或不再生效的代码和改进建议。"
+
+  code_refactor:
+    en: "You are a refactoring expert. Improve code structure while preserving functionality."
+    zh: "你是一个重构专家。在保持功能的同时改进代码结构。"
+
+  code_explain:
+    en: "You are a programming teacher. Explain code clearly and thoroughly."
+    zh: "你是一个编程教师。清晰透彻地解释代码。"
+
+  test_generation:
+    en: "You are a professional test engineer, skilled in writing comprehensive test cases."
+    zh: "你是一个专业的测试工程师，擅长编写全面的测试用例。"
+
+  regression_test:
+    en: "You are a professional test engineer, skilled in regression testing and anti-regression validation."
+    zh: "你是一个专业的测试工程师，擅长回归测试和防回归验证。"
+
+  doc_sync:
+    en: "You are a professional technical documentation engineer, skilled in writing clear documentation."
+    zh: "你是一个专业的技术文档工程师，擅长编写清晰的文档。"
+
+  conflict_detection:
+    en: "You are a professional code architect, skilled in detecting and resolving feature conflicts."
+    zh: "你是一个专业的代码架构师，擅长检测和解决功能冲突。"
+
+  implementation_validation:
+    en: "You are a senior engineer validating a completed implementation before delivery. You inspect edge cases, simulate logic paths, identify bugs, and return the corrected final code."
+    zh: "你是一个负责交付前实现验证的资深工程师。你会检查边缘情况、模拟逻辑路径、识别 bug，并返回修正后的最终代码。"
+
+# 代码生成模板
+code_generation:
+  en: |
+    Generate {language} code for the following requirement:
+
+    Requirement: {prompt}
+
+    Requirements:
+    - Write clean, readable code
+    - Include necessary comments
+    - Follow best practices
+    - Handle edge cases
+    - Preserve UTF-8 and handle Chinese/CJK text, filenames, directory names, JSON/YAML/HTML, logs, terminal/console output, and generated artifacts without mojibake
+    - For terminal/console programs, account for Windows PowerShell/cmd and Unix-like UTF-8 consoles; do not use byte length as display width for Chinese/CJK alignment, truncation, or wrapping
+    - Evidence-first: distinguish verified, unknown, assumption, blocked, and advisory; auxiliary AI, cached summaries, memory, research output, and confidence are not proof
+    - When reporting claims, include claim_ledger/evidence_refs or say unknown
+
+    Please provide the complete code implementation.
+
+  zh: |
+    为以下需求生成 {language} 代码：
+
+    需求：{prompt}
+
+    要求：
+    - 编写清晰、可读的代码
+    - 包含必要的注释
+    - 遵循最佳实践
+    - 处理边界情况
+    - 保持 UTF-8，正确处理中文/CJK 文本、文件名、目录名、JSON/YAML/HTML、日志、终端/控制台输出和生成物，避免乱码
+    - 终端/控制台程序需要考虑 Windows PowerShell/cmd 和类 Unix UTF-8 控制台；中文/CJK 对齐、截断或换行不能用字节长度当显示宽度
+    - 证据优先：区分 verified、unknown、assumption、blocked、advisory；辅助 AI、缓存摘要、记忆、research 输出和 confidence 都不是证明
+    - 报告声明时包含 claim_ledger/evidence_refs；没有证据就说 unknown
+
+    请提供完整的代码实现。
+
+# 实现后自检模板
+implementation_validation:
+  en: |
+    Validate this completed {language} implementation before delivery.
+
+    Requirement:
+    {requirement}
+
+    Code:
+    ```{language}
+    {code}
+    ```
+
+    Tasks:
+    1. Return evidence_status, claim_ledger, unknowns, assumptions, and blockers.
+    2. Do not set verified/success when current file, successful command output, or evidence artifact proof is absent.
+    3. Check important edge cases and boundary inputs.
+    4. Simulate the main logic paths without executing arbitrary code.
+    5. Identify likely bugs, regressions, or missing handling.
+    6. Check UTF-8 Chinese/CJK handling for user-visible text, filenames, directory names, terminal/console output, JSON/YAML/HTML, logs, and generated artifacts.
+    7. Return the corrected final version.
+
+    Return JSON only. Required keys:
+    status, evidence_status, claim_ledger, unknowns, assumptions, blockers, edge_cases, logic_simulation, potential_bugs, fixes_applied, validation_summary, final_code.
+    Use status "passed" when no changes are needed, "fixed" when final_code includes corrections, or "failed" when no safe corrected version can be produced.
+    final_code must contain complete code only, with no Markdown fences.
+
+  zh: |
+    对以下已完成的 {language} 实现做交付前验证。
+
+    需求：
+    {requirement}
+
+    代码：
+    ```{language}
+    {code}
+    ```
+
+    任务：
+    1. 返回 evidence_status、claim_ledger、unknowns、assumptions 和 blockers。
+    2. 缺少当前文件、成功命令输出或 evidence artifact 证明时，不要标记 verified/success。
+    3. 检查重要边缘情况和边界输入。
+    4. 在不执行任意代码的前提下模拟主要逻辑路径。
+    5. 指出可能存在的 bug、回归或遗漏处理。
+    6. 检查用户可见文本、文件名、目录名、终端/控制台输出、JSON/YAML/HTML、日志和生成物的 UTF-8 中文/CJK 处理。
+    7. 返回修正后的最终版本。
+
+    只返回 JSON。必须包含字段：
+    status, evidence_status, claim_ledger, unknowns, assumptions, blockers, edge_cases, logic_simulation, potential_bugs, fixes_applied, validation_summary, final_code。
+    无需修改时 status 使用 "passed"；已修正时使用 "fixed"；无法安全给出修正版时使用 "failed"。
+    final_code 必须只包含完整代码，不要使用 Markdown 代码围栏。
+
+# 代码审查模板
+code_review:
+  en: |
+    Review the following {language} code:
+
+    ```{language}
+    {code}
+    ```
+
+    Please analyze:
+    1. Potential bugs or errors
+    2. Code style and readability
+    3. Performance issues
+    4. Security vulnerabilities
+    5. Obsolete, inactive, unreachable, replaced, or duplicate code/assets that can be removed
+    6. Suggestions for improvement
+
+    Provide a detailed review report. Include a separate "Obsolete asset pruning" section with removal reasons, affected paths, replacement behavior, risks, and validation evidence.
+    Obsolete assets across code, tests, docs, config, examples/fixtures, prompts/templates, scripts/tools, dependency manifests, CLI/API routes, migration notes, generated artifacts, caches, and temp/session state must be considered when present.
+    Evidence-first: mark claims as verified only with current file, successful command output, goal/session/context state, or existing artifact evidence; otherwise report unknown, assumption, blocked, or advisory and include claim_ledger/evidence_refs.
+
+  zh: |
+    审查以下 {language} 代码：
+
+    ```{language}
+    {code}
+    ```
+
+    请分析：
+    1. 潜在的 bug 或错误
+    2. 代码风格和可读性
+    3. 性能问题
+    4. 安全漏洞
+    5. 可删除的过时资产、无效代码、不可达代码、被替代代码或重复代码
+    6. 改进建议
+
+    请提供详细的审查报告，并单独包含“过时资产瘦身”小节，说明删除理由、影响路径、替代行为、风险和验证证据。
+    过时资产包括代码、测试、文档、配置、示例/fixtures、prompts/templates、脚本工具、依赖清单、CLI/API 路由、迁移说明、生成物、缓存和临时/会话状态中仍指向旧行为的内容。
+    证据优先：只有当前文件、成功命令输出、goal/session/context 状态或现存 artifact 证据才能标记 verified；否则报告 unknown、assumption、blocked 或 advisory，并包含 claim_ledger/evidence_refs。
+
+# 代码重构模板
+code_refactor:
+  en: |
+    Refactor the following {language} code:
+
+    ```{language}
+    {code}
+    ```
+
+    Refactoring goals:
+    {goals}
+
+    Requirements:
+    - Preserve original functionality
+    - Improve code structure
+    - Enhance readability
+    - Follow best practices
+
+    Provide the refactored code with explanations.
+
+  zh: |
+    重构以下 {language} 代码：
+
+    ```{language}
+    {code}
+    ```
+
+    重构目标：
+    {goals}
+
+    要求：
+    - 保持原有功能
+    - 改进代码结构
+    - 提升可读性
+    - 遵循最佳实践
+
+    请提供重构后的代码并说明改进点。
+
+# 代码解释模板
+code_explain:
+  en: |
+    Explain the following {language} code:
+
+    ```{language}
+    {code}
+    ```
+
+    Detail level: {detail_level}
+
+    Please provide:
+    1. Overall purpose and functionality
+    2. Step-by-step explanation
+    3. Key concepts and techniques used
+    4. Potential use cases
+
+    Make the explanation clear and easy to understand.
+
+  zh: |
+    解释以下 {language} 代码：
+
+    ```{language}
+    {code}
+    ```
+
+    详细程度：{detail_level}
+
+    请提供：
+    1. 整体目的和功能
+    2. 逐步解释
+    3. 使用的关键概念和技术
+    4. 潜在的使用场景
+
+    请确保解释清晰易懂。
+
+# 测试生成模板
+test_generation:
+  en: |
+    Generate comprehensive test cases for the following {language} code:
+
+    ```{language}
+    {code}
+    ```
+
+    Test types to generate:
+    {test_types_description}
+
+    Requirements:
+    1. Use the target language's native test framework
+    2. Each test function is independent
+    3. Include clear test descriptions
+    4. Use assert statements
+    5. Cover all boundary cases
+    6. Include exception handling tests
+
+    Provide complete runnable test code.
+
+  zh: |
+    为以下 {language} 代码生成完整的测试用例：
+
+    ```{language}
+    {code}
+    ```
+
+    请生成以下类型的测试：
+    {test_types_description}
+
+    要求：
+    1. 使用目标语言的原生测试框架
+    2. 每个测试函数独立
+    3. 包含清晰的测试说明
+    4. 使用 assert 断言
+    5. 覆盖所有边界情况
+    6. 包含异常处理测试
+
+    请提供完整可运行的测试代码。
+
+# 测试类型描述
+test_types:
+  positive:
+    en: "Positive tests (normal input, expected success)"
+    zh: "正向测试（正常输入，预期成功）"
+  negative:
+    en: "Negative tests (abnormal input, expected failure)"
+    zh: "负向测试（异常输入，预期失败）"
+  boundary:
+    en: "Boundary tests (boundary value input)"
+    zh: "边界测试（边界值输入）"
+  cross:
+    en: "Cross-validation tests (multiple input combinations)"
+    zh: "交叉验证测试（多种输入组合）"
+
+# 回归测试模板
+regression_test:
+  analysis:
+    en: |
+      Analyze the regression testing requirements for the following code changes:
+
+      ### Old Code:
+      ```{language}
+      {old_code}
+      ```
+
+      ### New Code:
+      ```{language}
+      {new_code}
+      ```
+
+      {existing_tests_section}
+
+      Please provide:
+      1. **Change Analysis**: List all functional changes
+      2. **Regression Risk Assessment**: Identify potentially affected features
+      3. **Regression Test Recommendations**: Tests that need to be re-run
+      4. **New Test Requirements**: Test cases that need to be added
+      5. **Anti-Regression Measures**: Recommendations to prevent feature degradation
+
+      Provide a detailed analysis report and test recommendations.
+
+    zh: |
+      分析以下代码变更的回归测试需求：
+
+      ### 旧代码：
+      ```{language}
+      {old_code}
+      ```
+
+      ### 新代码：
+      ```{language}
+      {new_code}
+      ```
+
+      {existing_tests_section}
+
+      请提供：
+      1. **变更分析**：列出所有功能变更点
+      2. **回归风险评估**：识别可能影响的功能
+      3. **回归测试建议**：需要重新运行的测试
+      4. **新增测试需求**：需要新增的测试用例
+      5. **防回归措施**：防止功能退化的建议
+
+      请提供详细的分析报告和测试建议。
+
+  generation:
+    en: |
+      Generate regression test cases for the following code changes:
+
+      ### Old Code:
+      ```{language}
+      {old_code}
+      ```
+
+      ### New Code:
+      ```{language}
+      {new_code}
+      ```
+
+      Please generate:
+      1. **Functionality Preservation Tests**: Verify original features are not broken
+      2. **New Feature Tests**: Verify new features work correctly
+      3. **Compatibility Tests**: Verify compatibility between old and new features
+      4. **Performance Regression Tests**: Verify performance has not degraded
+
+      Use the target language's native test framework and provide complete runnable test code.
+
+    zh: |
+      为以下代码变更生成回归测试用例：
+
+      ### 旧代码：
+      ```{language}
+      {old_code}
+      ```
+
+      ### 新代码：
+      ```{language}
+      {new_code}
+      ```
+
+      请生成：
+      1. **功能保持测试**：验证原有功能未被破坏
+      2. **新功能测试**：验证新增功能正常工作
+      3. **兼容性测试**：验证新旧功能的兼容性
+      4. **性能回归测试**：验证性能未退化
+
+      使用目标语言的原生测试框架，提供完整可运行的测试代码。
+
+# 文档同步模板
+doc_sync:
+  doc_to_code:
+    en: |
+      Synchronize code based on updated documentation:
+
+      ### Updated Documentation:
+      {doc_content}
+
+      {existing_code_section}
+
+      Please:
+      1. Analyze documentation changes
+      2. Identify code sections that need modification
+      3. Generate updated code
+      4. Maintain consistent code style
+      5. Add necessary comments
+
+      {action_instruction}
+
+    zh: |
+      根据更新的文档同步代码：
+
+      ### 更新后的文档：
+      {doc_content}
+
+      {existing_code_section}
+
+      请：
+      1. 分析文档变更点
+      2. 识别需要修改的代码部分
+      3. 生成更新后的代码
+      4. 保持代码风格一致
+      5. 添加必要的注释
+
+      {action_instruction}
+
+  code_to_doc:
+    en: |
+      Synchronize documentation based on updated code:
+
+      ### Updated Code:
+      ```{language}
+      {code_content}
+      ```
+
+      {existing_doc_section}
+
+      Please:
+      1. Analyze code changes
+      2. Identify documentation sections that need updates
+      3. Generate updated documentation
+      4. Include function descriptions, parameter descriptions, return values, usage examples
+      5. Use Markdown format
+
+      {action_instruction}
+
+    zh: |
+      根据更新的代码同步文档：
+
+      ### 更新后的代码：
+      ```{language}
+      {code_content}
+      ```
+
+      {existing_doc_section}
+
+      请：
+      1. 分析代码变更点
+      2. 识别需要更新的文档部分
+      3. 生成更新后的文档
+      4. 包含功能说明、参数说明、返回值、使用示例
+      5. 使用 Markdown 格式
+
+      {action_instruction}
+
+# 冲突检测模板
+conflict_detection:
+  detection:
+    en: |
+      Detect conflicts between new feature and existing features:
+
+      ### New Feature:
+      {new_feature}
+
+      {existing_features_section}
+
+      Please analyze:
+      1. **Conflict Detection**: Does the new feature conflict with existing features?
+      2. **Conflict Types**:
+         - Feature duplication (same functionality)
+         - Feature override (new feature replaces old feature)
+         - Logic conflict (contradictory functionality logic)
+         - Naming conflict (same name but different functionality)
+      3. **Impact Scope**: List affected existing features
+      4. **Solutions**:
+         - Keep new feature, retire old feature
+         - Merge features
+         - Rename to avoid conflict
+         - Keep both coexisting
+
+      {auto_resolve_instruction}
+
+      Provide detailed analysis report{resolution_suffix}.
+
+    zh: |
+      检测新功能与现有功能的冲突：
+
+      ### 新功能：
+      {new_feature}
+
+      {existing_features_section}
+
+      请分析：
+      1. **冲突检测**：新功能是否与现有功能冲突？
+      2. **冲突类型**：
+         - 功能重复（相同功能）
+         - 功能覆盖（新功能替代旧功能）
+         - 逻辑冲突（功能逻辑矛盾）
+         - 命名冲突（名称相同但功能不同）
+      3. **影响范围**：列出受影响的现有功能
+      4. **解决方案**：
+         - 保留新功能，退役旧功能
+         - 合并功能
+         - 重命名避免冲突
+         - 保持共存
+
+      {auto_resolve_instruction}
+
+      提供详细的分析报告{resolution_suffix}。
+
+  resolution:
+    en: |
+      Resolve the following feature conflicts:
+
+      ### New Feature:
+      {new_feature}
+
+      {conflicts_section}
+
+      ### Resolution Strategy: {strategy_description}
+
+      Please provide:
+      1. **Processed New Feature**: New feature adjusted according to strategy
+      2. **Old Features to Delete**: List indices of old features to delete
+      3. **Old Features to Modify**: If old features need modification, provide modified versions
+      4. **Processing Description**: Explain how conflicts were handled
+
+      Provide complete solution.
+
+    zh: |
+      解决以下功能冲突：
+
+      ### 新功能：
+      {new_feature}
+
+      {conflicts_section}
+
+      ### 解决策略：{strategy_description}
+
+      请提供：
+      1. **处理后的新功能**：根据策略调整后的新功能
+      2. **需要删除的旧功能**：列出需要删除的旧功能索引
+      3. **需要修改的旧功能**：如果需要修改旧功能，提供修改后的版本
+      4. **处理说明**：解释如何处理冲突
+
+      提供完整的解决方案。
+
+# 冲突解决策略描述
+conflict_strategies:
+  replace_old:
+    en: "Retire old feature, keep new feature"
+    zh: "退役旧功能，保留新功能"
+  merge:
+    en: "Merge new and old features"
+    zh: "合并新旧功能"
+  rename:
+    en: "Rename to avoid conflict"
+    zh: "重命名避免冲突"
+  keep_both:
+    en: "Keep both coexisting"
+    zh: "保持两者共存"

@@ -1,0 +1,348 @@
+# 技能配置规范
+
+# 每个技能的配置结构
+skill_config_schema:
+  enabled: boolean          # 是否启用
+  priority: integer         # 优先级 (1-10)
+  timeout: integer          # 超时时间（秒）
+  retry_attempts: integer   # 重试次数
+  parameters: object        # 技能特定参数
+
+# 基础技能配置
+skills:
+  code_generation:
+    enabled: true
+    priority: 8
+    timeout: 60
+    retry_attempts: 3
+    parameters:
+      max_length: 2000
+      include_comments: true
+      style_guide: "native"  # native style for the requested language
+      language_defaults:
+        rust: "2024 edition"
+        javascript: "ES6+"
+        java: "11+"
+
+  code_review:
+    enabled: true
+    priority: 7
+    timeout: 90
+    retry_attempts: 2
+    parameters:
+      check_style: true
+      check_security: true
+      check_performance: true
+      check_obsolete: true
+      check_best_practices: true
+      severity_levels:
+        - critical
+        - high
+        - medium
+        - low
+      output_format: "markdown"  # markdown, json, text
+
+  code_refactor:
+    enabled: true
+    priority: 6
+    timeout: 120
+    retry_attempts: 2
+    parameters:
+      preserve_functionality: true
+      improve_readability: true
+      optimize_performance: false
+      modernize_syntax: true
+      refactor_goals:
+        - reduce_complexity
+        - improve_naming
+        - extract_functions
+        - remove_duplication
+
+  code_explain:
+    enabled: true
+    priority: 5
+    timeout: 60
+    retry_attempts: 2
+    parameters:
+      detail_level: "medium"  # low, medium, high
+      include_examples: true
+      explain_algorithms: true
+      explain_patterns: true
+      output_sections:
+        - overview
+        - step_by_step
+        - key_concepts
+        - use_cases
+
+  obsolete_code_pruning:
+    enabled: true
+    priority: 7
+    timeout: 120
+    retry_attempts: 2
+    parameters:
+      preserve_public_behavior: true
+      require_review_evidence: true
+      remove_only_identified_obsolete_code: true
+      require_backup_before_write: true
+      report_only_by_default: true
+      require_asset_inventory: true
+      require_docs_config_tests_sync: true
+      require_validation_evidence: true
+      supported_assets:
+        - code
+        - tests
+        - docs
+        - config
+        - examples_fixtures
+        - prompts_templates
+        - scripts_tools
+        - dependency_manifests
+        - cli_api_routes
+        - migration_notes
+        - generated_artifacts
+        - caches_temp_session_state
+
+# 高级功能配置
+  test_generation:
+    enabled: true
+    priority: 9
+    timeout: 120
+    retry_attempts: 3
+    parameters:
+      test_types:
+        - positive
+        - negative
+        - boundary
+        - cross
+      framework: "native"  # native framework for the requested language
+      coverage_target: 80  # 目标覆盖率百分比
+      include_fixtures: true
+      include_mocks: true
+      test_naming_convention: "test_{function_name}_{scenario}"
+      assertion_style: "assert"  # assert, expect, should
+
+  implementation_validation:
+    enabled: true
+    priority: 10
+    timeout: 120
+    retry_attempts: 2
+    parameters:
+      require_structured_json: true
+      native_static_check: true
+      fail_on_validation_failure: true
+
+  regression_test:
+    enabled: true
+    priority: 10
+    timeout: 180
+    retry_attempts: 2
+    parameters:
+      auto_detect_regression: true
+      fail_on_regression: true
+      regression_threshold: 0  # 允许的失败测试数
+      compare_performance: true
+      performance_tolerance: 0.1  # 10% 性能容忍度
+      analysis_depth: "deep"  # shallow, medium, deep
+      report_format: "detailed"  # summary, detailed, json
+
+  doc_sync:
+    enabled: true
+    priority: 7
+    timeout: 90
+    retry_attempts: 2
+    parameters:
+      auto_sync: true
+      sync_on_code_change: true
+      sync_on_doc_change: true
+      sync_direction: "bidirectional"  # doc_to_code, code_to_doc, bidirectional
+      doc_format: "markdown"  # markdown, rst, asciidoc
+      document_size_budget:
+        enabled: true
+        default_max_chars: null  # 需要外部任务或项目配置显式指定文档额度
+        skill_rule_trigger_chars: 20000
+        skill_rule_target_chars: 11999
+        skill_main_max_lines: 100
+        splitting_strategy: "lossless_references"
+        preserve_structure: true
+      include_sections:
+        - description
+        - parameters
+        - returns
+        - examples
+        - notes
+      sync_triggers:
+        - function_signature_change
+        - parameter_change
+        - return_type_change
+        - docstring_update
+
+  conflict_detection:
+    enabled: true
+    priority: 10
+    timeout: 120
+    retry_attempts: 2
+    parameters:
+      auto_resolve: true
+      default_strategy: "replace_old"  # replace_old, merge, rename, keep_both
+      conflict_types:
+        - feature_duplication
+        - feature_override
+        - logic_conflict
+        - naming_conflict
+      detection_scope:
+        - code
+        - documentation
+        - tests
+        - examples
+      resolution_rules:
+        feature_duplication: "replace_old"
+        feature_override: "replace_old"
+        logic_conflict: "manual"
+        naming_conflict: "rename"
+      require_confirmation: false  # 是否需要用户确认
+
+# 工作流配置
+workflows:
+  standard_development:
+    name: "标准开发流程"
+    enabled: true
+    steps:
+      - skill: code_generation
+        required: true
+      - skill: implementation_validation
+        required: true
+      - skill: test_generation
+        required: true
+      - skill: doc_sync
+        required: true
+        direction: "code_to_doc"
+      - skill: conflict_detection
+        required: true
+      - skill: regression_test
+        required: false
+        condition: "has_old_version"
+
+  feature_update:
+    name: "功能更新流程"
+    enabled: true
+    steps:
+      - skill: conflict_detection
+        required: true
+      - skill: code_refactor
+        required: false
+      - skill: implementation_validation
+        required: true
+      - skill: test_generation
+        required: true
+      - skill: regression_test
+        required: true
+      - skill: doc_sync
+        required: true
+        direction: "code_to_doc"
+
+  documentation_update:
+    name: "文档更新流程"
+    enabled: true
+    steps:
+      - skill: doc_sync
+        required: true
+        direction: "doc_to_code"
+      - skill: implementation_validation
+        required: true
+      - skill: test_generation
+        required: true
+      - skill: regression_test
+        required: true
+        condition: "has_old_version"
+
+# 质量门禁配置
+quality_gates:
+  test_coverage:
+    enabled: true
+    minimum_coverage: 80
+    fail_on_below_threshold: true
+
+  regression_check:
+    enabled: true
+    allow_failures: 0
+    fail_on_regression: true
+
+  conflict_resolution:
+    enabled: true
+    require_all_conflicts_resolved: true
+    allow_manual_resolution: true
+
+  documentation_sync:
+    enabled: true
+    require_doc_code_sync: true
+    allow_outdated_docs: false
+
+  implementation_validation:
+    enabled: true
+    fail_on_validation_failure: true
+
+# 通知配置
+notifications:
+  on_test_failure:
+    enabled: true
+    channels:
+      - console
+      - log
+
+  on_regression_detected:
+    enabled: true
+    severity: "high"
+    channels:
+      - console
+      - log
+
+  on_conflict_detected:
+    enabled: true
+    severity: "medium"
+    channels:
+      - console
+      - log
+
+  on_workflow_complete:
+    enabled: true
+    severity: "info"
+    channels:
+      - console
+
+# 性能配置
+performance:
+  parallel_execution:
+    enabled: true
+    max_workers: 4
+
+  caching:
+    enabled: true
+    cache_prompts: true
+    cache_results: false
+    cache_ttl: 3600  # 秒
+
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 60
+    burst_size: 10
+
+# 日志配置
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "{time:YYYY-MM-DD HH:mm:ss} | {level} | {name} | {message}"
+  file: "logs/rayman_skill.log"
+  rotation: "10 MB"
+  retention: "7 days"
+  log_to_console: true
+  log_to_file: true
+  include_timestamps: true
+  include_caller_info: false
+
+# 语言偏好配置
+language_preferences:
+  auto_detect: true
+  default_language: "zh"  # en, zh
+  fallback_language: "zh"
+  supported_languages:
+    - en
+    - zh

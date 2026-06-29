@@ -1,0 +1,162 @@
+# 辅助 AI 运行配置。
+# 你要新增/修改本地或免费辅助模型时，主要改这个文件。
+
+# AI-UBUNTU 路由器的来源信息。auto_update_from_settings=true 时，
+# rayman update-models 可能会从 settings_url 刷新这些字段。
+source:
+  # 路由器设置接口，返回模型/地址等元数据。
+  settings_url: http://ai-ubuntu.local:8001/
+  # 设置接口发布的原始 base_url，通常不是最终使用端口。
+  published_base_url: http://192.168.15.204:8000/v1
+  # 实际优先使用的 OpenAI-compatible /v1 地址。
+  preferred_base_url: http://192.168.15.204:8888/v1
+  # 优先端口；应和 preferred_base_url 里的端口一致。
+  preferred_port: 8888
+  # 可选值: true/false。true=允许 update-models 自动刷新来源字段。
+  auto_update_from_settings: true
+  # 上次成功刷新时间，UTC。
+  last_checked: 2026-05-29T03:09:58.855705Z
+
+# 辅助 AI 全局行为。
+auxiliary_ai:
+  # 可选值: true/false。总开关，false=完全不使用辅助 AI。
+  enabled: true
+  # 可选值: true/false。
+  # true=主流程先继续，后台排队做辅助复核；rayman auxiliary advise 仍然是同步调用。
+  async: true
+  # 默认超时时间，单位秒。单个 provider 的 models.<provider>.timeout 会覆盖它。
+  default_timeout: 120
+
+  # 辅助 AI provider 顺序列表。
+  # enabled=true 的 provider 会轮询使用；一个失败后会尝试后面的 enabled provider。
+  providers:
+  # 当前可用的 AI-UBUNTU 路由器。
+  - provider: ai_ubuntu_8888
+    # 模型名；AI-UBUNTU router 这里用 auto。
+    model: auto
+    # 可选值: true/false。true=参与辅助 AI 调用。
+    enabled: true
+  # 第二个 provider 占位。你改好下面 models.auxiliary_manual_2 后，再设为 enabled: true。
+  - provider: auxiliary_manual_yunyi
+    # 必填: 大模型名称。改成服务商要求的模型名。
+    # 例: gpt-5.5、qwen2.5-coder、deepseek-chat、claude-sonnet-4-6 等。
+    model: gpt-5.5
+    # 可选值: true/false。占位地址先保持 false，避免假地址参与调用。
+    enabled: false
+
+  # 可选值: advisory。当前只支持 advisory，表示辅助 AI 只提供建议。
+  mode: advisory
+  # 可选值: true/false。必须保持 true，辅助 AI 不能执行、编辑、批准或替代验证。
+  advisory_only: true
+  # 可选值: true/false。true=辅助 AI 失败时主流程继续；false=辅助失败会阻断。
+  fail_open: true
+  # 可选值: true/false。true=非简单编程任务应尽量调用辅助 AI。
+  required_when_available: true
+  # 可选值: true/false。true=跳过辅助 AI 时记录原因。
+  record_skip_reason: true
+
+  # 允许辅助 AI 参与的任务类型。
+  # 可选项包括: planning, code_generation, code_review, implementation_validation,
+  # test_generation, code_refactor, code_explain, obsolete_code_pruning, doc_sync,
+  # regression_test, instruction_lifecycle, conflict_detection, review_gate,
+  # workflow_summary, research_planner, research_scientist, research_critic,
+  # research_reflector, research_arbiter, research_safety_monitor。
+  tasks:
+  - planning
+  - code_generation
+  - code_review
+  - implementation_validation
+  - test_generation
+  - code_refactor
+  - code_explain
+  - obsolete_code_pruning
+  - doc_sync
+  - regression_test
+  - instruction_lifecycle
+  - conflict_detection
+  - review_gate
+  - workflow_summary
+  - research_planner
+  - research_scientist
+  - research_critic
+  - research_reflector
+  - research_arbiter
+  - research_safety_monitor
+
+# Provider 连接参数。上面 providers 里每个 provider 名，都要在 models 下有同名配置。
+models:
+  ai_ubuntu_8888:
+    # 可选值: openai_compatible/local/anthropic/openai。
+    # openai_compatible=使用 /v1/chat/completions 兼容接口。
+    adapter: openai_compatible
+    # OpenAI-compatible 服务地址，通常以 /v1 结尾。
+    base_url: http://192.168.15.204:8888/v1
+    # 可选值建议: local_loopback/trusted_lan/trusted_remote/untrusted。
+    # local_loopback=本机服务；trusted_lan=可信局域网服务；
+    # trusted_remote=你明确信任的外网服务；untrusted=不信任外部服务。
+    trust_level: trusted_lan
+    # 可选值: true/false。true=允许把工作区相关文本发给这个 provider。
+    allow_workspace_data: true
+    data_policy:
+      # 可选值: true/false。必须保持 true，表示只做建议。
+      advisory_only: true
+      role: "auxiliary context for the primary AI; never executes, edits, approves, or replaces validation"
+    # 可选值: true/false。true=需要 API key；false=不需要。
+    auth_required: false
+    # 如果 auth_required=true，需要增加 api_key_env，例如:
+    # api_key_env: "AUXILIARY_AI_2_API_KEY"
+    # 单 provider 超时秒数，会覆盖 auxiliary_ai.default_timeout。
+    timeout: 120
+    # 当前内部重试次数。通常填 0，失败后交给下一个 provider。
+    retry_attempts: 0
+    proxy:
+      # 可选值:
+      # - env: 读取 HTTP_PROXY/HTTPS_PROXY/NO_PROXY。当前推荐，适合需要本机代理/隧道访问的地址。
+      # - direct: 强制直连，完全绕过环境代理。
+      # - http: 显式代理；需要再加 url: http://127.0.0.1:7890。
+      mode: env
+
+  # 第二个 provider，供你手工改成真实辅助 AI。
+  # 注意: 这里的 key 必须和上面 providers[].provider 完全一致。
+  auxiliary_manual_yunyi:
+    # 可选值: openai_compatible/local/anthropic/openai。
+    # 大多数自建 /v1 接口选 openai_compatible。
+    adapter: openai_compatible
+    # 改成真实 endpoint；sapi.quan2go.com/openai 按 Codex 备份配置使用 wire_api=openai。
+    base_url: https://sapi.quan2go.com/openai
+    # 可选值: openai/chat_completions/responses。
+    # openai=按 OpenAI 兼容模式调用 /chat/completions；chat_completions=同 openai；
+    # responses=调用 /responses，适合 capi/yunyi.cfd 等明确要求 Responses API 的 provider。
+    wire_api: openai
+    # 可选值: minimal/low/medium/high。仅 wire_api=responses 时写入 reasoning.effort。
+    model_reasoning_effort: low
+    # 可选值示例: pragmatic/concise/friendly/neutral。会作为 provider 个性参数发送。
+    personality: pragmatic
+    # 可选值: true/false。当前 Rayman 只走 HTTP，不走 websocket。
+    supports_websockets: false
+    # 可选值: true/false。false=不是官方 OpenAI 账号体系；不影响 auth_required 是否发送 Bearer key。
+    requires_openai_auth: false
+    # 可选值建议: local_loopback/trusted_lan/trusted_remote/untrusted。
+    # 本机 127.0.0.1 用 local_loopback；可信局域网用 trusted_lan；
+    # 你明确信任的外网 provider 用 trusted_remote。
+    trust_level: trusted_remote
+    # 可选值: true/false。远端手工 provider 默认不接收工作区文本；确需开启时必须有明确授权。
+    allow_workspace_data: false
+    data_policy:
+      # 可选值: true/false。必须保持 true，表示只做建议。
+      advisory_only: true
+      role: "auxiliary context for the primary AI; never executes, edits, approves, or replaces validation"
+    # 可选值: true/false。外网大模型通常需要鉴权，所以这里设为 true。
+    auth_required: true
+    # 必填: API key 环境变量名。真实 key 必须保存在本机环境或凭据管理器中，不能写入仓库配置。
+    api_key_env: "AUXILIARY_YUNYI_API_KEY"
+    # 单 provider 超时秒数。慢模型可调大，例如 300/600。
+    timeout: 120
+    retry_attempts: 0
+    proxy:
+      # 可选值:
+      # - env: 读取 HTTP_PROXY/HTTPS_PROXY/NO_PROXY，当前网络优先推荐。
+      # - direct: 强制直连。
+      # - http: 显式代理；需要再加 url: http://127.0.0.1:7890。
+      mode: http
+      url: http://127.0.0.1:7890

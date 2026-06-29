@@ -1,0 +1,414 @@
+# 冲突检测和解决配置
+
+# 冲突类型定义
+conflict_types:
+  feature_duplication:
+    name: "功能重复"
+    severity: "high"
+    description: "新功能与现有功能完全相同或高度相似"
+    default_strategy: "replace_old"
+    detection_rules:
+      - same_function_name
+      - same_parameters
+      - same_return_type
+      - similar_implementation
+
+  feature_override:
+    name: "功能覆盖"
+    severity: "high"
+    description: "新功能替代旧功能，提供更好的实现"
+    default_strategy: "replace_old"
+    detection_rules:
+      - same_function_name
+      - compatible_parameters
+      - enhanced_functionality
+      - backward_compatible
+
+  logic_conflict:
+    name: "逻辑冲突"
+    severity: "critical"
+    description: "新功能与现有功能的逻辑相互矛盾"
+    default_strategy: "manual"
+    detection_rules:
+      - contradictory_behavior
+      - incompatible_assumptions
+      - conflicting_side_effects
+
+  naming_conflict:
+    name: "命名冲突"
+    severity: "medium"
+    description: "名称相同但功能不同"
+    default_strategy: "rename"
+    detection_rules:
+      - same_name
+      - different_functionality
+      - different_parameters
+
+  api_conflict:
+    name: "API 冲突"
+    severity: "high"
+    description: "API 接口不兼容"
+    default_strategy: "version"
+    detection_rules:
+      - breaking_change
+      - incompatible_signature
+      - removed_parameters
+
+# 解决策略配置
+resolution_strategies:
+  replace_old:
+    name: "替换旧功能"
+    description: "退役被取代的旧功能，保留新功能作为唯一当前实现"
+    priority: 1
+    auto_executable: true
+    actions:
+      - action: "mark_deprecated"
+        target: "old_feature"
+        parameters:
+          deprecation_message: "This feature has been replaced by {new_feature}"
+          removal_version: "next_major"
+
+      - action: "update_references"
+        target: "all_callers"
+        parameters:
+          replace_with: "new_feature"
+          add_migration_guide: true
+
+      - action: "remove_old_code"
+        target: "old_feature"
+        parameters:
+          backup: true
+          cleanup_tests: true
+          cleanup_docs: true
+
+      - action: "update_documentation"
+        target: "all_docs"
+        parameters:
+          mark_deprecated: true
+          add_migration_notes: true
+
+  merge:
+    name: "合并功能"
+    description: "合并新旧功能的优点"
+    priority: 2
+    auto_executable: false
+    actions:
+      - action: "analyze_features"
+        parameters:
+          identify_unique_aspects: true
+          find_common_ground: true
+
+      - action: "create_merged_implementation"
+        parameters:
+          preserve_old_behavior: true
+          add_new_behavior: true
+          maintain_compatibility: true
+
+      - action: "update_tests"
+        parameters:
+          merge_test_cases: true
+          add_compatibility_tests: true
+
+      - action: "update_documentation"
+        parameters:
+          document_merged_behavior: true
+          add_migration_guide: true
+
+  rename:
+    name: "重命名"
+    description: "重命名以避免冲突"
+    priority: 3
+    auto_executable: true
+    actions:
+      - action: "suggest_new_name"
+        parameters:
+          naming_convention: "descriptive"
+          avoid_conflicts: true
+
+      - action: "rename_feature"
+        target: "new_feature"
+        parameters:
+          update_references: true
+          update_imports: true
+
+      - action: "update_documentation"
+        parameters:
+          document_rename: true
+          explain_reason: true
+
+  keep_both:
+    name: "保持共存"
+    description: "保持两者共存，明确区分使用场景"
+    priority: 4
+    auto_executable: false
+    actions:
+      - action: "differentiate_features"
+        parameters:
+          add_namespace: true
+          add_version_suffix: true
+          clarify_use_cases: true
+
+      - action: "update_documentation"
+        parameters:
+          document_differences: true
+          provide_selection_guide: true
+
+      - action: "add_deprecation_plan"
+        parameters:
+          plan_future_consolidation: true
+          set_timeline: true
+
+  version:
+    name: "版本化"
+    description: "使用版本号区分不同实现"
+    priority: 5
+    auto_executable: true
+    actions:
+      - action: "add_version_suffix"
+        parameters:
+          version_format: "v{major}"
+          update_old_to_v1: true
+          set_new_as_v2: true
+
+      - action: "create_version_router"
+        parameters:
+          default_version: "latest"
+          allow_version_selection: true
+
+      - action: "update_documentation"
+        parameters:
+          document_versions: true
+          add_migration_guide: true
+
+# 冲突检测配置
+conflict_detection:
+  enabled: true
+  auto_detect: true
+
+  detection_scope:
+    code:
+      enabled: true
+      file_patterns:
+        - "**/*.py"
+        - "**/*.js"
+        - "**/*.java"
+        - "**/*.go"
+      exclude_patterns:
+        - "**/tests/**"
+        - "**/node_modules/**"
+        - "**/vendor/**"
+
+    documentation:
+      enabled: true
+      file_patterns:
+        - "**/*.md"
+        - "**/*.rst"
+        - "**/docs/**"
+
+    tests:
+      enabled: true
+      file_patterns:
+        - "**/test_*.py"
+        - "**/*_test.py"
+        - "**/*.test.js"
+        - "**/*Test.java"
+
+    examples:
+      enabled: true
+      file_patterns:
+        - "**/examples/**"
+        - "**/samples/**"
+
+  detection_methods:
+    - method: "signature_comparison"
+      enabled: true
+      weight: 0.4
+
+    - method: "semantic_analysis"
+      enabled: true
+      weight: 0.3
+
+    - method: "behavior_comparison"
+      enabled: true
+      weight: 0.2
+
+    - method: "naming_analysis"
+      enabled: true
+      weight: 0.1
+
+  similarity_thresholds:
+    high_similarity: 0.9  # 高度相似，可能重复
+    medium_similarity: 0.7  # 中度相似，需要检查
+    low_similarity: 0.5  # 低度相似，可能无关
+
+# 冲突解决配置
+conflict_resolution:
+  auto_resolve: true
+  require_confirmation: false
+
+  resolution_rules:
+    - condition:
+        conflict_type: "feature_duplication"
+        similarity: ">= 0.9"
+      strategy: "replace_old"
+      auto_execute: true
+
+    - condition:
+        conflict_type: "feature_override"
+        backward_compatible: true
+      strategy: "replace_old"
+      auto_execute: true
+
+    - condition:
+        conflict_type: "logic_conflict"
+      strategy: "manual"
+      auto_execute: false
+
+    - condition:
+        conflict_type: "naming_conflict"
+        same_module: true
+      strategy: "rename"
+      auto_execute: true
+
+    - condition:
+        conflict_type: "api_conflict"
+        breaking_change: true
+      strategy: "version"
+      auto_execute: true
+
+  fallback_strategy: "manual"
+
+# 退役流程配置
+retirement_process:
+  enabled: true
+
+  retirement_steps:
+    - step: "mark_deprecated"
+      required: true
+      actions:
+        - add_deprecation_decorator
+        - add_deprecation_warning
+        - update_documentation
+
+    - step: "notify_users"
+      required: true
+      actions:
+        - log_deprecation_warning
+        - update_changelog
+        - notify_maintainers
+
+    - step: "provide_migration_path"
+      required: true
+      actions:
+        - document_replacement
+        - provide_code_examples
+        - create_migration_script
+
+    - step: "cleanup_old_code"
+      required: true
+      delay: "1_major_version"
+      actions:
+        - remove_deprecated_code
+        - remove_deprecated_tests
+        - remove_deprecated_docs
+        - update_imports
+
+  deprecation_policy:
+    warning_period: "1_major_version"
+    removal_period: "2_major_versions"
+    maintain_compatibility: true
+
+# 影响分析配置
+impact_analysis:
+  enabled: true
+
+  analysis_scope:
+    - direct_callers
+    - indirect_dependencies
+    - test_files
+    - documentation
+    - examples
+
+  analysis_metrics:
+    - usage_frequency
+    - dependency_count
+    - test_coverage
+    - documentation_references
+
+  risk_assessment:
+    high_risk:
+      - many_direct_callers
+      - critical_functionality
+      - no_test_coverage
+
+    medium_risk:
+      - some_direct_callers
+      - important_functionality
+      - partial_test_coverage
+
+    low_risk:
+      - few_direct_callers
+      - utility_functionality
+      - full_test_coverage
+
+# 验证配置
+validation:
+  enabled: true
+
+  validation_checks:
+    - check: "no_duplicate_implementations"
+      severity: "error"
+      description: "确保没有重复的功能实现"
+
+    - check: "all_conflicts_resolved"
+      severity: "error"
+      description: "确保所有冲突都已解决"
+
+    - check: "deprecated_features_marked"
+      severity: "warning"
+      description: "确保废弃功能已标记"
+
+    - check: "migration_guide_provided"
+      severity: "warning"
+      description: "确保提供了迁移指南"
+
+    - check: "tests_updated"
+      severity: "error"
+      description: "确保测试已更新"
+
+    - check: "documentation_updated"
+      severity: "warning"
+      description: "确保文档已更新"
+
+  fail_on_unresolved_conflicts: true
+  fail_on_high_risk_changes: false
+
+# 报告配置
+reporting:
+  enabled: true
+
+  report_format: "markdown"  # markdown, json, html
+
+  report_sections:
+    - section: "summary"
+      include:
+        - total_conflicts
+        - resolved_conflicts
+        - unresolved_conflicts
+        - resolution_strategies_used
+
+    - section: "details"
+      include:
+        - conflict_type
+        - affected_features
+        - resolution_strategy
+        - impact_analysis
+
+    - section: "actions"
+      include:
+        - deprecated_features
+        - removed_features
+        - renamed_features
+        - migration_guide
+
+  output_location: "reports/conflict_resolution"

@@ -1,0 +1,301 @@
+# 并行执行和性能优化配置
+
+# 子 Agent 并行执行配置
+parallel_execution:
+  enabled: true
+  max_concurrent_agents: 4
+  agent_pool_size: 8
+  timeout_per_agent: 300  # 秒
+
+  # Codex host subagent 是主模型/强模型子线程提速，不是 ai_ubuntu_8888 辅助AI。
+  # 该段是调度参考策略；实际可执行入口是 `rayman subagent auto-start`/`rayman subagent plan` 和 host 暴露的 subagent 能力。
+  host_subagent_speed_strategy:
+    planner_command: "rayman subagent auto-start --task <task> --path <path> --max-lanes 4"
+    runtime_model_policy: "inherit_parent_main_model_by_default"
+    decision_authority: "main_agent"
+    recommended_parallel_lanes: 4
+    # 该值是默认建议，不是运行时硬上限；实际 lane 数由 rayman subagent plan 参数和 host 能力决定。
+    dispatch_when:
+      - "任务是非平凡审计、修复、重构、性能、回归或跨模块实现"
+      - "可以拆成互不重叠的 explorer / worker / validation lane"
+      - "主 agent 能在 subagent 运行时继续推进关键路径"
+    do_not_dispatch_when:
+      - "单文件小改动的委派开销高于收益"
+      - "写入范围无法拆开或会互相覆盖"
+      - "缺凭证、破坏性许可、客户业务决策等硬阻塞仍未解除"
+      - "subagent 只会重复主 agent 正在做的同一条关键路径"
+    lane_templates:
+      - id: "impact_scan"
+        agent_type: "explorer"
+        read_only: true
+        output: "affected paths, existing patterns, focused validation"
+      - id: "worker_scope"
+        agent_type: "worker"
+        read_only: false
+        output: "bounded patch, changed paths, validation evidence"
+      - id: "contract_sync"
+        agent_type: "explorer"
+        read_only: true
+        output: "docs/config/test drift and terminology conflicts"
+      - id: "validation_lane"
+        agent_type: "explorer"
+        read_only: true
+        output: "focused test/gate result and failure triage"
+    ledger_required_steps:
+      - "rayman subagent record"
+      - "rayman subagent result"
+      - "rayman subagent review"
+      - "rayman subagent status"
+
+  # 可并行执行的 host-subagent lane 组合；默认继承主模型，不在 YAML 中写模型覆盖。
+  parallel_task_groups:
+    - name: "审计和验证"
+      lanes:
+        - lane_id: "impact_scan"
+          agent_type: "explorer"
+          read_only: true
+        - lane_id: "contract_sync"
+          agent_type: "explorer"
+          read_only: true
+        - lane_id: "validation_lane"
+          agent_type: "explorer"
+          read_only: true
+
+    - name: "非重叠实现"
+      lanes:
+        - lane_id: "worker_scope_1"
+          agent_type: "worker"
+          read_only: false
+          write_scope: "declared by rayman subagent plan"
+        - lane_id: "worker_scope_2"
+          agent_type: "worker"
+          read_only: false
+          write_scope: "declared by rayman subagent plan"
+
+# 断点续传配置
+resumable_downloads:
+  enabled: true
+  chunk_size: 1048576  # 1MB
+  max_retries: 5
+  retry_delay: 2  # 秒
+
+  # 支持断点续传的资源类型
+  supported_types:
+    - models
+    - datasets
+    - dependencies
+    - documentation
+
+  # 缓存目录
+  cache_dir: ".cache/downloads"
+  temp_dir: ".tmp/downloads"
+
+  # 并行下载
+  parallel_downloads: true
+  max_parallel_downloads: 3
+
+# 工具自动安装配置
+auto_tool_installation:
+  enabled: true
+  prefer_existing: true  # 优先使用已安装的工具
+
+  # 包管理器优先级
+  package_managers:
+    rust:
+      - cargo
+      - rustup
+
+    javascript:
+      - npm
+      - yarn
+      - pnpm
+
+    system:
+      - apt
+      - brew
+      - choco
+
+  # 自动安装的工具列表
+  tools:
+    # 代码质量工具
+    - name: "rustfmt"
+      type: "rust"
+      purpose: "代码格式化"
+      check_command: "cargo fmt --version"
+
+    - name: "clippy"
+      type: "rust"
+      purpose: "代码检查"
+      check_command: "cargo clippy --version"
+
+    - name: "cargo-test"
+      type: "rust"
+      purpose: "测试框架"
+      check_command: "cargo test --version"
+
+    # Git 工具
+    - name: "git"
+      type: "system"
+      purpose: "版本控制"
+      check_command: "git --version"
+      install_instructions: "请手动安装 Git"
+
+    # 文档工具
+    - name: "cargo-doc"
+      type: "rust"
+      purpose: "文档生成"
+      check_command: "cargo doc --version"
+
+    # 性能分析工具
+    - name: "cargo-flamegraph"
+      type: "rust"
+      purpose: "性能分析"
+      check_command: "cargo flamegraph --help"
+
+# 多供应商模型配置。
+# 该段仅描述主模型路由/回退治理；Codex host subagent 默认继承主模型，
+# 不把多供应商示例当作 host-subagent 调度策略。
+multi_vendor_models:
+  enabled: true
+
+  # 任务到供应商的映射
+  task_vendor_mapping:
+    code_generation:
+      primary: "configured_primary"
+      fallback:
+        - "configured_fallback_1"
+        - "configured_fallback_2"
+
+    code_review:
+      # 使用配置声明的供应商进行交叉验证；不要把这里映射到 host-subagent 模型覆盖。
+      vendors:
+        - "configured_primary"
+        - "configured_review_fallback"
+      strategy: "consensus"  # consensus, majority, all
+
+    test_generation:
+      primary: "configured_primary"
+      fallback:
+        - "configured_fallback_1"
+
+    doc_sync:
+      primary: "configured_primary"
+      fallback:
+        - "configured_fallback_1"
+
+  # 供应商健康检查
+  health_check:
+    enabled: true
+    interval: 300  # 秒
+    timeout: 10
+
+  # 负载均衡
+  load_balancing:
+    enabled: true
+    strategy: "round_robin"  # round_robin, least_loaded, random
+
+  # 成本优化
+  cost_optimization:
+    enabled: true
+    prefer_cheaper_for_simple_tasks: true
+    cost_threshold: 0.01  # 美元
+
+# 缓存和性能优化
+caching:
+  enabled: true
+
+  # 多级缓存
+  cache_levels:
+    - level: "memory"
+      enabled: true
+      max_size: "512MB"
+      ttl: 3600  # 秒
+
+    - level: "disk"
+      enabled: true
+      max_size: "5GB"
+      ttl: 86400  # 秒
+      path: ".cache/disk"
+
+    - level: "distributed"
+      enabled: false
+      backend: "redis"
+      ttl: 3600
+
+  # 缓存策略
+  cache_strategies:
+    prompts:
+      enabled: true
+      cache_level: "memory"
+
+    model_responses:
+      enabled: true
+      cache_level: "disk"
+
+    tool_results:
+      enabled: true
+      cache_level: "memory"
+
+  # 缓存预热
+  cache_warmup:
+    enabled: true
+    warmup_on_startup: true
+    common_prompts:
+      - "code_generation"
+      - "test_generation"
+
+# 性能监控
+performance_monitoring:
+  enabled: true
+
+  metrics:
+    - name: "response_time"
+      enabled: true
+      threshold: 5000  # 毫秒
+
+    - name: "token_usage"
+      enabled: true
+      track_cost: true
+
+    - name: "cache_hit_rate"
+      enabled: true
+      target: 0.7  # 70%
+
+    - name: "parallel_efficiency"
+      enabled: true
+      target: 0.8  # 80%
+
+  # 性能报告
+  reporting:
+    enabled: true
+    interval: 3600  # 秒
+    output_format: "json"
+    output_path: "reports/performance"
+
+# 错误处理和重试
+error_handling:
+  enabled: true
+
+  # 重试策略
+  retry_strategy:
+    max_attempts: 3
+    backoff_type: "exponential"  # linear, exponential
+    initial_delay: 1  # 秒
+    max_delay: 60  # 秒
+
+  # 降级策略
+  fallback_strategy:
+    enabled: true
+    fallback_chain:
+      - "primary_model"
+      - "fallback_model_1"
+      - "fallback_model_2"
+      - "cached_response"
+      - "default_response"
+
+  # 断路器
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 5
+    timeout: 60  # 秒
+    half_open_timeout: 30  # 秒

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Rayman Coding Skill"
+  short_description: "Workspace-scoped coding workflows"
+  default_prompt: "Use $raymancodingskill to complete this coding task with workspace state, tests, backups, and pending-work tracking."
