@@ -249,16 +249,17 @@ pub fn render_feature_coverage_markdown(report: &FeatureCoverageReport) -> Strin
         report.documented_api_endpoints.len()
     ));
     text.push_str("## Matrix\n\n");
-    text.push_str("| ID | Docs | Implementation | Tests | Validation | UI |\n");
-    text.push_str("| --- | --- | --- | --- | --- | --- |\n");
+    text.push_str("| ID | Docs | Implementation | Tests | Validation | Claims | UI |\n");
+    text.push_str("| --- | --- | --- | --- | --- | --- | --- |\n");
     for feature in &report.features {
         text.push_str(&format!(
-            "| `{}` | {} | {} | {} | {} | {} |\n",
+            "| `{}` | {} | {} | {} | {} | {} | {} |\n",
             escape_markdown_table(&feature.id),
             anchor_summary(&feature.doc_anchors),
             anchor_summary(&feature.implementation_anchors),
             anchor_summary(&feature.test_anchors),
             list_summary(&feature.validation_commands),
+            claim_summary(&feature.claim_checks),
             list_summary(&feature.ui_surfaces)
         ));
     }
@@ -1776,6 +1777,23 @@ fn list_summary(values: &[String]) -> String {
         .join("<br>")
 }
 
+fn claim_summary(claims: &[ClaimCheck]) -> String {
+    if claims.is_empty() {
+        return String::new();
+    }
+    claims
+        .iter()
+        .map(|claim| {
+            if claim.strict_validation {
+                format!("`{}` (strict)", escape_markdown_table(&claim.id))
+            } else {
+                format!("`{}`", escape_markdown_table(&claim.id))
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("<br>")
+}
+
 fn escape_markdown_table(value: &str) -> String {
     value.replace('|', "\\|")
 }
@@ -2202,6 +2220,59 @@ features:
                 .iter()
                 .any(|finding| { finding.kind == "claim_validation_commands_missing" })
         );
+    }
+
+    #[test]
+    fn markdown_matrix_lists_claim_check_ids() {
+        let report = FeatureCoverageReport {
+            workspace_path: PathBuf::from("."),
+            generated_at: "2026-07-01T00:00:00Z".into(),
+            manifest_path: PathBuf::from(FEATURE_COVERAGE_MANIFEST),
+            status: "passed".into(),
+            strict: true,
+            feature_count: 1,
+            finding_count: 0,
+            findings: Vec::new(),
+            covered_document_paths: Vec::new(),
+            expected_document_paths: Vec::new(),
+            documented_public_commands: Vec::new(),
+            implemented_public_commands: Vec::new(),
+            registered_public_commands: Vec::new(),
+            documented_api_endpoints: Vec::new(),
+            implemented_api_endpoints: Vec::new(),
+            registered_api_endpoints: Vec::new(),
+            required_actions: Vec::new(),
+            features: vec![FeatureCoverageItem {
+                id: "quality".into(),
+                title: "Quality".into(),
+                strict_validation: false,
+                doc_anchors: Vec::new(),
+                implementation_anchors: Vec::new(),
+                test_anchors: Vec::new(),
+                validation_commands: Vec::new(),
+                validation_records: Vec::new(),
+                ui_surfaces: Vec::new(),
+                public_commands: Vec::new(),
+                api_endpoints: Vec::new(),
+                claim_checks: vec![ClaimCheck {
+                    id: "execution_context_quality_patterns".into(),
+                    claim: "Execution context patterns are visible in generated docs.".into(),
+                    strict_validation: true,
+                    doc_anchors: Vec::new(),
+                    implementation_anchors: Vec::new(),
+                    test_anchors: Vec::new(),
+                    validation_commands: Vec::new(),
+                    validation_records: Vec::new(),
+                }],
+            }],
+        };
+
+        let markdown = render_feature_coverage_markdown(&report);
+
+        assert!(
+            markdown.contains("| ID | Docs | Implementation | Tests | Validation | Claims | UI |")
+        );
+        assert!(markdown.contains("`execution_context_quality_patterns` (strict)"));
     }
 
     #[test]

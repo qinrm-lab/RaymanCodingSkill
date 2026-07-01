@@ -36,7 +36,6 @@
 <pre><code>rayman session status
 rayman workspace-skill status
 rayman context status
-rayman context status --ch
 
 [truncated for generated HTML documentation]
 </code></pre>
@@ -66,6 +65,7 @@ rayman install-tools rust,node
 <p>`rayman agent-skill sync` updates both host skill entries and the installed `rayman` CLI binary. It also installs the companion `提醒` background reminder binary next to `rayman`. The CLI binary source is the canonical release binary when it exists, falling back to the currently running binary only when release output is not present.</p>
 <p>`rayman agent-skill install`, `rayman agent-skill update`, `rayman skill sync`, `rayman skill install`, and `rayman skill update` are accepted aliases for the same sync operation. `rayman skill status` is an accepted alias for `rayman agent-skill status`.</p>
 <p>`rayman agent-skill status` reports `rayman-cli` as stale when the installed binary differs from the canonical release binary. It also reports `rayman-reminder` as stale when the installed reminder differs from the canonical release reminder binary. Treat stale installed binaries as execution blockers for commands or automatic flows added by the current RaymanCodingSkill source, including `rayman auxiliary` and task-stop reminders.</p>
+<p>If a project-local wrapper, shell profile, or retired agent directory intercepts `rayman` or exposes an older command surface, treat that as an active-skill authority issue. Use the canonical RaymanCodingSkill release binary, run shells with profile loading disabled when needed, and record which retired or shadow surfaces were excluded before relying on command output. Project-local RaymanAgent-like material is not current command or requirements authority unless the active workspace contract explicitly reactivates it.</p>
 <pre><code>rayman generate &quot;Create a parser&quot; -l rust -o parser.rs
 rayman review parser.rs -l rust
 rayman review parser.rs -l rust --apply-prune --backup-comment &quot;before obsolete-code pruning&quot;
@@ -133,15 +133,13 @@ rayman benchmark run --smoke
 </code></pre>
 <p>`rayman regression run --profile auto|quick|full|shared-parallel-full|parallel-full` executes repository regression gates and appends an immutable run record to `.RaymanCodingSkill/regression/history.jsonl`.</p>
 <p>Non-success `rayman goal close` creates pending recovery metadata with explicit blocker ownership, minimum input, `.RaymanCodingSkill/goals/&lt;id&gt;.json` evidence path, resume command, and automatic resume strategy.</p>
+<p>Host execution mode is outside the CLI&#39;s control. If the host is in Plan Mode or otherwise prevents edits, destructive actions, approvals, or long-running execution, the correct closeout is a blocked or resumable handoff with the current mode/capability, blocker owner, minimum input, evidence path, and resume command. Do not claim the CLI or an ordinary user message can exit that host mode.</p>
 <p>For non-trivial goal plan stages, `rayman goal run` and `rayman goal resume` print `HOST_SUBAGENT_DISPATCH_REQUEST {json}` and stop with `host_subagent_dispatch_requested` when host-subagent lanes are recommended. The primary AI must call the host `spawn_agent` tool with the included lane payloads, or record an unavailable/failed closeout with `rayman subagent record --goal-id &lt;id&gt; --dispatch-request-id &lt;request-id&gt;` followed by `result` and `review`, before continuing the serial path. The standing authorization source is [Host Subagent Auto-Start Authorization](../references/skill-subagent-auto-start-authorization.md); in enabled workspaces it has the same effect as an explicit `开启subagent` phrase, so that phrase is not an extra precondition.</p>
 <p>Use `rayman subagent plan --read-only` or `rayman subagent auto-start --read-only` for audit/review-only work. Read-only intent suppresses writable worker lanes, emits only read-only explorer lanes, and includes `--read-only` in the ledger record command templates.</p>
 <p>After a top-level `rayman goal run`, `rayman goal resume`, `rayman goal close`, or `rayman session close` command ends, the CLI starts the companion `提醒` program in the background exactly once for that command, whether the command succeeds or returns an error. `subagent` / `host-subagent` commands do not arm this reminder, and child-agent contexts can suppress it with `RAYMAN_REMINDER_SCOPE=subagent`, `RAYMAN_AGENT_ROLE=subagent`, or `RAYMAN_SUBAGENT=1`. A later continued main-thread command can arm a fresh reminder. `提醒` has no visible window; it exits quietly if the user moves the mouse or presses a key, and plays a short beep pattern when the screen is black or no mouse/keyboard activity is detected for 10 seconds.</p>
 <p>See [Context Kernel](../references/cli-context-kernel.md) for the full rule text.</p>
 <p>See [Project Intelligence](../references/cli-project-intelligence.md) for the full rule text.</p>
 <p>`rayman assets status` reports workspace-local obsolete asset retirement state from `.RaymanCodingSkill/assets/retirement.json`, including controller scope, ignored scan roots, blockers, candidates, retired assets still present, compatibility exemptions, cleanup plan, detected references, required actions, and source policy.</p>
-<p>`rayman assets scan` rereads current files, recomputes stale docs/config/tests/CLI/API references to recorded obsolete assets, ignores non-current roots such as `.git`, `target`, build caches, and `.RaymanCodingSkill/tmp`, and writes the refreshed workspace-local retirement state.</p>
-<p>`rayman assets cleanup --apply` deletes only retirement-candidate files already registered in `.RaymanCodingSkill/assets/retirement.json`, only when they still resolve inside the current workspace and have no current references. It does not delete unknown files, active `raymancodingskill` or `rayman.exe` assets, or arbitrary user data. Directory cleanup is blocked until an explicit per-file manifest is available; there is no bare recursive delete path.</p>
-<p>`rayman assets retire --path &lt;path&gt; --replacement &lt;text&gt; --reason &lt;text&gt; --validation-command &lt;cmd&gt; --apply-delete` records a hash-backed retirement candidate and deletes only a whole file inside the workspace after reference checks pass.</p>
 <p>[truncated for generated HTML documentation]</p>
 
 </section>

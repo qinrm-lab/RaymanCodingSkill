@@ -630,6 +630,76 @@ fn default_patterns() -> Vec<QualityPattern> {
             updated_at: now.clone(),
         },
         QualityPattern {
+            id: "active_skill_authority".into(),
+            name: "Active Skill Authority".into(),
+            description: "Skill-driven work must prove which skill is active, quarantine retired or shadow skill surfaces, and use the canonical RaymanCodingSkill CLI/source instead of project-local wrappers or stale agent material.".into(),
+            source: "builtin".into(),
+            trigger_terms: terms(&["raymanagent", "RaymanAgent", "retired skill", "deprecated skill", "shadow skill", "skill interference", "skill source", "old command", "rayman wrapper", "project-local wrapper", "RaymanAgent wrapper", "wrapper bypass", ".Rayman/", "project-local .Rayman", "只用 raymancodingskill", "排除 raymanagent", "技能干扰", "旧技能", "影子 skill"]),
+            required_evidence: vec![
+                "workspace-skill status or mark-used evidence".into(),
+                "canonical SKILL source evidence".into(),
+                "retired/shadow skill exclusion evidence".into(),
+                "canonical CLI or wrapper bypass evidence".into(),
+                "current-behavior source decision evidence".into(),
+            ],
+            incidents: Vec::new(),
+            hit_count: 0,
+            created_at: now.clone(),
+            updated_at: now.clone(),
+        },
+        QualityPattern {
+            id: "host_execution_mode_boundary".into(),
+            name: "Host Execution Mode Boundary".into(),
+            description: "When host mode or capability prevents writes, destructive actions, approvals, or long-running execution, the agent must state the capability boundary, avoid success claims, and leave an executable resume handoff.".into(),
+            source: "builtin".into(),
+            trigger_terms: terms(&["Plan Mode", "plan mode", "退出plan mode", "Apply plan", "Implement mode", "execution mode", "host mode", "mode boundary", "不能改文件", "不能执行", "普通用户消息不能解除", "user message cannot exit"]),
+            required_evidence: vec![
+                "current host mode or capability evidence".into(),
+                "no success/write claim while execution is unavailable".into(),
+                "resumable execution handoff evidence".into(),
+                "blocker owner, minimum input, and resume command evidence".into(),
+            ],
+            incidents: Vec::new(),
+            hit_count: 0,
+            created_at: now.clone(),
+            updated_at: now.clone(),
+        },
+        QualityPattern {
+            id: "delivery_gate_stratification".into(),
+            name: "Delivery Gate Stratification".into(),
+            description: "Project deliverable gates, Rayman broad readiness gates, and success-close gates must be reported as separate authority layers so a pass or blocker in one layer is not over-promoted into another.".into(),
+            source: "builtin".into(),
+            trigger_terms: terms(&["project gate vs broad readiness", "project gate versus meta gate", "broad readiness", "meta gate", "project deliverable gate", "项目门禁", "元门禁", "交付门禁", "Rayman 元门禁", "项目 gate 和 Rayman gate"]),
+            required_evidence: vec![
+                "deliverable gate identity and command evidence".into(),
+                "Rayman meta/readiness gate disposition evidence".into(),
+                "unresolved blockers classified by gate layer".into(),
+                "final status matches the proven gate layer".into(),
+            ],
+            incidents: Vec::new(),
+            hit_count: 0,
+            created_at: now.clone(),
+            updated_at: now.clone(),
+        },
+        QualityPattern {
+            id: "contract_surface_reconciliation".into(),
+            name: "Contract Surface Reconciliation".into(),
+            description: "Implementation work must reconcile all active contract surfaces, including visible and hidden requirements, generated docs, feature coverage, tests, and gate scripts, before claiming the requested behavior is implemented.".into(),
+            source: "builtin".into(),
+            trigger_terms: terms(&["hidden requirements", "visible requirements", ".requirements.md", ".RaymanWeb", "requirements gate", "contract surface", "generated docs", "feature coverage", "合同面", "隐藏 requirements", "可见 requirements", "需求镜像", "合同漂移", "门禁脚本"]),
+            required_evidence: vec![
+                "active contract surface inventory".into(),
+                "visible/hidden requirement reconciliation evidence".into(),
+                "generated docs and feature coverage sync evidence".into(),
+                "gate script discovery covers hidden surfaces".into(),
+                "conflicting old requirement retired or updated evidence".into(),
+            ],
+            incidents: Vec::new(),
+            hit_count: 0,
+            created_at: now.clone(),
+            updated_at: now.clone(),
+        },
+        QualityPattern {
             id: "tool_loop_recovery".into(),
             name: "Tool Loop Recovery".into(),
             description: "Empty model responses, diagnostic-only failures, or irrelevant tool results must trigger retry, supplemental lookup, or local synthesis.".into(),
@@ -731,6 +801,10 @@ fn missing_evidence_for_pattern(pattern: &QualityPattern, corpus: &str) -> Vec<S
         "research_agent_autonomy" => research_agent_autonomy_missing(corpus),
         "codex_host_subagent_ledger" => codex_host_subagent_ledger_missing(corpus),
         "codex_harness_execution_contract" => codex_harness_execution_contract_missing(corpus),
+        "active_skill_authority" => active_skill_authority_missing(corpus),
+        "host_execution_mode_boundary" => host_execution_mode_boundary_missing(corpus),
+        "delivery_gate_stratification" => delivery_gate_stratification_missing(corpus),
+        "contract_surface_reconciliation" => contract_surface_reconciliation_missing(corpus),
         "tool_loop_recovery" => tool_loop_missing(corpus),
         "temporal_fact_evidence" => temporal_fact_missing(corpus),
         "debug_release_delivery" => debug_release_missing(corpus),
@@ -1348,6 +1422,268 @@ fn codex_harness_execution_contract_missing(corpus: &str) -> Vec<String> {
     missing
 }
 
+fn active_skill_authority_missing(corpus: &str) -> Vec<String> {
+    let mut missing = Vec::new();
+    if !contains_any(
+        corpus,
+        &[
+            "rayman workspace-skill status",
+            "rayman workspace-skill mark-used",
+            "workspace-skill mark-used",
+            "workspace_skill.yaml",
+            "current_skill_sha256",
+            "workspace skill state",
+        ],
+    ) {
+        missing.push("缺少 workspace-skill status or mark-used evidence".into());
+    }
+    if !contains_any(
+        corpus,
+        &[
+            "canonical SKILL",
+            "canonical skill",
+            "uses_latest_skill_file",
+            "skill_file",
+            "规范 SKILL",
+            "当前 SKILL.md",
+        ],
+    ) {
+        missing.push("缺少 canonical SKILL source evidence".into());
+    }
+    if !contains_any(
+        corpus,
+        &[
+            "retired/shadow skill exclusion",
+            "retired skill exclusion",
+            "shadow skill exclusion",
+            "RaymanAgent excluded",
+            "exclude RaymanAgent",
+            "排除 raymanagent",
+            ".Rayman excluded",
+            "旧技能隔离",
+        ],
+    ) {
+        missing.push("缺少 retired/shadow skill exclusion evidence".into());
+    }
+    if !contains_any(
+        corpus,
+        &[
+            "canonical CLI",
+            "rayman.exe",
+            "target/release/rayman",
+            "NoProfile",
+            "wrapper bypass",
+            "agent-skill status",
+            "绕过 wrapper",
+            "规范 CLI",
+        ],
+    ) {
+        missing.push("缺少 canonical CLI or wrapper bypass evidence".into());
+    }
+    if !contains_any(
+        corpus,
+        &[
+            "current-behavior source decision",
+            "only raymancodingskill",
+            "current skill only",
+            "不参与需求来源",
+            "当前行为来源",
+            "只按 raymancodingskill",
+        ],
+    ) {
+        missing.push("缺少 current-behavior source decision evidence".into());
+    }
+    missing
+}
+
+fn host_execution_mode_boundary_missing(corpus: &str) -> Vec<String> {
+    let mut missing = Vec::new();
+    if !contains_any(
+        corpus,
+        &[
+            "current host mode",
+            "current-session capability",
+            "host mode capability",
+            "mode boundary evidence",
+            "Plan Mode constraint verified",
+            "当前宿主模式",
+            "当前会话能力",
+        ],
+    ) {
+        missing.push("缺少 current host mode or capability evidence".into());
+    }
+    if !contains_any(
+        corpus,
+        &[
+            "no success claim",
+            "no write claim",
+            "writes unavailable",
+            "write-unavailable",
+            "不声称已执行",
+            "不声称成功",
+            "不可写时不写",
+        ],
+    ) {
+        missing.push("缺少 no success/write claim while execution is unavailable evidence".into());
+    }
+    if !contains_any(
+        corpus,
+        &[
+            "resumable execution handoff",
+            "resume command",
+            "checkpoint",
+            "可恢复执行入口",
+            "恢复命令",
+            "继续执行入口",
+        ],
+    ) {
+        missing.push("缺少 resumable execution handoff evidence".into());
+    }
+    if !(contains_any(corpus, &["blocker owner", "owner=", "阻塞责任方", "owner:"])
+        && contains_any(corpus, &["minimum input", "minimum_input", "最小输入"])
+        && contains_any(corpus, &["resume command", "resume_command", "恢复命令"]))
+    {
+        missing.push("缺少 blocker owner, minimum input, and resume command evidence".into());
+    }
+    missing
+}
+
+fn delivery_gate_stratification_missing(corpus: &str) -> Vec<String> {
+    let mut missing = Vec::new();
+    if !contains_any(
+        corpus,
+        &[
+            "deliverable gate",
+            "project gate command",
+            "requirements_gate",
+            "requirements gate",
+            "项目门禁命令",
+            "交付门禁",
+        ],
+    ) {
+        missing.push("缺少 deliverable gate identity and command evidence".into());
+    }
+    if !contains_any(
+        corpus,
+        &[
+            "meta gate",
+            "broad readiness disposition",
+            "Rayman meta",
+            "rayman gate status --check",
+            "元门禁",
+            "宽门禁",
+        ],
+    ) {
+        missing.push("缺少 Rayman meta/readiness gate disposition evidence".into());
+    }
+    if !contains_any(
+        corpus,
+        &[
+            "blocker classification",
+            "deliverable/meta/external",
+            "pre-existing meta blocker",
+            "classified by gate layer",
+            "阻塞分层",
+            "按门禁层级分类",
+        ],
+    ) {
+        missing.push("缺少 unresolved blockers classified by gate layer evidence".into());
+    }
+    if !contains_any(
+        corpus,
+        &[
+            "final status matches",
+            "status matches gate layer",
+            "project success meta partial",
+            "交付状态匹配",
+            "最终状态匹配门禁层级",
+        ],
+    ) {
+        missing.push("缺少 final status matches the proven gate layer evidence".into());
+    }
+    missing
+}
+
+fn contract_surface_reconciliation_missing(corpus: &str) -> Vec<String> {
+    let mut missing = Vec::new();
+    if !contains_any(
+        corpus,
+        &[
+            "contract surface inventory",
+            "active contract surfaces",
+            "requirements inventory",
+            "合同面清单",
+            "需求面清单",
+        ],
+    ) {
+        missing.push("缺少 active contract surface inventory evidence".into());
+    }
+    if !(contains_any(
+        corpus,
+        &[
+            "visible requirements",
+            "可见 requirements",
+            "visible contract",
+        ],
+    ) && contains_any(
+        corpus,
+        &[
+            "hidden requirements",
+            ".RaymanWeb",
+            "--hidden",
+            "隐藏 requirements",
+            "hidden contract",
+        ],
+    )) {
+        missing.push("缺少 visible/hidden requirement reconciliation evidence".into());
+    }
+    if !(contains_any(
+        corpus,
+        &[
+            "generated docs",
+            "docs maintain",
+            "project-docs",
+            "生成文档",
+        ],
+    ) && contains_any(
+        corpus,
+        &[
+            "feature coverage",
+            "feature_coverage.yaml",
+            "coverage status",
+            "功能覆盖",
+        ],
+    )) {
+        missing.push("缺少 generated docs and feature coverage sync evidence".into());
+    }
+    if !contains_any(
+        corpus,
+        &[
+            "rg --hidden",
+            "Get-ChildItem -Force",
+            "hidden surface discovery",
+            "gate script covers hidden",
+            "隐藏路径扫描",
+            "隐藏合同扫描",
+        ],
+    ) {
+        missing.push("缺少 gate script discovery covers hidden surfaces evidence".into());
+    }
+    if !contains_any(
+        corpus,
+        &[
+            "old requirement retired",
+            "conflicting old requirement updated",
+            "stale requirement retired",
+            "旧需求已退役",
+            "冲突旧需求已更新",
+        ],
+    ) {
+        missing.push("缺少 conflicting old requirement retired or updated evidence".into());
+    }
+    missing
+}
+
 fn tool_loop_missing(corpus: &str) -> Vec<String> {
     let mut missing = Vec::new();
     if !contains_any(
@@ -1494,6 +1830,32 @@ fn regression_checklist_for_pattern(pattern: &QualityPattern) -> Vec<String> {
             "Map durable instruction surfaces: AGENTS.md, skills, hooks, and MCP/rules.".into(),
             "Verify subagent inheritance and Rayman subagent ledger primary review.".into(),
             "Document non-interactive approval failure handling before success.".into(),
+        ],
+        "active_skill_authority" => vec![
+            "Record workspace-skill status or mark-used evidence before consuming skill rules.".into(),
+            "Verify the canonical SKILL.md source and installed skill hash.".into(),
+            "Scan and quarantine retired or shadow skill surfaces such as project-local wrappers.".into(),
+            "Use the canonical RaymanCodingSkill CLI or record a wrapper-bypass path.".into(),
+            "State which source is current behavior authority and which retired material is excluded.".into(),
+        ],
+        "host_execution_mode_boundary" => vec![
+            "Map the current host mode and available execution capabilities before promising writes.".into(),
+            "Avoid success or implementation claims while the host mode prevents execution.".into(),
+            "Leave a resumable handoff with checkpoint or exact resume command.".into(),
+            "Record blocker owner, minimum input, evidence path, and automatic resume strategy.".into(),
+        ],
+        "delivery_gate_stratification" => vec![
+            "Name the project deliverable gate command and its result.".into(),
+            "Name the Rayman broad readiness/meta gate result separately.".into(),
+            "Classify unresolved blockers by deliverable, meta-governance, external, or pre-existing layer.".into(),
+            "Make the final status match the strongest proven gate layer without over-promotion.".into(),
+        ],
+        "contract_surface_reconciliation" => vec![
+            "Inventory all active contract surfaces before implementation.".into(),
+            "Reconcile visible and hidden requirements, including dot-directory mirrors.".into(),
+            "Synchronize generated docs, feature coverage, tests, and gate scripts with the same behavior claim.".into(),
+            "Verify gate discovery includes hidden surfaces such as dot directories.".into(),
+            "Retire or update conflicting old requirements instead of leaving both old and new contracts active.".into(),
         ],
         "tool_loop_recovery" => vec![
             "Exercise empty response, diagnostic failure, or irrelevant tool-result recovery.".into(),
@@ -2069,6 +2431,187 @@ mod tests {
             )
             .unwrap();
 
+        assert_eq!(passed.status, "passed", "{:?}", passed.missing_evidence);
+    }
+
+    #[test]
+    fn active_skill_authority_blocks_retired_shadow_skill_without_authority_evidence() {
+        let temp = tempfile::tempdir().unwrap();
+        let goals = GoalManager::new(temp.path()).unwrap();
+        let goal = goals
+            .start(
+                "排除 RaymanAgent 干扰，只用 raymancodingskill 修复 wrapper 冲突",
+                "standard_development",
+                &[],
+                &[],
+                &[],
+                &[],
+            )
+            .unwrap();
+        let quality = QualityManager::new(temp.path()).unwrap();
+
+        let blocked = quality
+            .gate_goal(&goal, Some("req_1: implemented active skill cleanup"))
+            .unwrap();
+        assert_eq!(blocked.status, "blocked");
+        assert!(blocked.missing_evidence.iter().any(|item| {
+            item.contains("active_skill_authority") && item.contains("workspace-skill")
+        }));
+
+        let passed = quality
+            .gate_goal(
+                &goal,
+                Some("req_1: rayman workspace-skill mark-used passed with current_skill_sha256; canonical SKILL source verified from uses_latest_skill_file and skill_file; retired/shadow skill exclusion scan covered RaymanAgent and .Rayman/ excluded; canonical CLI wrapper bypass verified with rayman.exe and NoProfile; current-behavior source decision records only raymancodingskill; absolute date 2026-07-01; current evidence/source verification complete"),
+            )
+            .unwrap();
+        assert_eq!(passed.status, "passed", "{:?}", passed.missing_evidence);
+    }
+
+    #[test]
+    fn active_skill_authority_does_not_match_unrelated_api_wrapper_work() {
+        let temp = tempfile::tempdir().unwrap();
+        let goals = GoalManager::new(temp.path()).unwrap();
+        let goal = goals
+            .start(
+                "Implement an HTTP API wrapper for a customer SDK",
+                "standard_development",
+                &[],
+                &[],
+                &[],
+                &[],
+            )
+            .unwrap();
+        let quality = QualityManager::new(temp.path()).unwrap();
+
+        let report = quality
+            .gate_goal(
+                &goal,
+                Some("req_1: implemented SDK wrapper with current evidence/source verification complete"),
+            )
+            .unwrap();
+
+        assert!(
+            !report
+                .matched_patterns
+                .iter()
+                .any(|pattern| pattern.pattern_id == "active_skill_authority")
+        );
+    }
+
+    #[test]
+    fn host_execution_mode_boundary_requires_resumable_handoff() {
+        let temp = tempfile::tempdir().unwrap();
+        let goals = GoalManager::new(temp.path()).unwrap();
+        let goal = goals
+            .start(
+                "退出 Plan Mode 并自动执行全部任务",
+                "standard_development",
+                &[],
+                &[],
+                &[],
+                &[],
+            )
+            .unwrap();
+        let quality = QualityManager::new(temp.path()).unwrap();
+
+        let blocked = quality
+            .gate_goal(&goal, Some("req_1: plan accepted"))
+            .unwrap();
+        assert_eq!(blocked.status, "blocked");
+        assert!(blocked.missing_evidence.iter().any(|item| {
+            item.contains("host_execution_mode_boundary") && item.contains("current host mode")
+        }));
+
+        let passed = quality
+            .gate_goal(
+                &goal,
+                Some("req_1: current host mode checked and Plan Mode constraint verified; no success claim and no write claim while writes unavailable; resumable execution handoff saved with checkpoint and resume command; blocker owner=host minimum input=execution mode resume command=rayman goal resume --id goal_1 --until blocked; absolute date 2026-07-01; current evidence/source verification complete"),
+            )
+            .unwrap();
+        assert_eq!(passed.status, "passed", "{:?}", passed.missing_evidence);
+    }
+
+    #[test]
+    fn delivery_gate_stratification_separates_project_and_meta_gates() {
+        let temp = tempfile::tempdir().unwrap();
+        let goals = GoalManager::new(temp.path()).unwrap();
+        let goal = goals
+            .start(
+                "close project deliverable gate authority layers",
+                "standard_development",
+                &[],
+                &[],
+                &[],
+                &[],
+            )
+            .unwrap();
+        let quality = QualityManager::new(temp.path()).unwrap();
+
+        let blocked = quality
+            .gate_goal(&goal, Some("req_1: project gate PASS"))
+            .unwrap();
+        assert_eq!(blocked.status, "blocked");
+        assert!(
+            blocked
+                .matched_patterns
+                .iter()
+                .any(|pattern| pattern.pattern_id == "delivery_gate_stratification")
+        );
+        assert!(
+            blocked
+                .missing_evidence
+                .iter()
+                .any(|item| { item.contains("Rayman meta/readiness gate") })
+        );
+
+        let passed = quality
+            .gate_goal(
+                &goal,
+                Some("req_1: deliverable gate command requirements_gate_and_prompt.ps1 PASS; Rayman meta gate disposition recorded from rayman gate status --check; blocker classification deliverable/meta/external captured with pre-existing meta blocker noted; final status matches gate layer with project success meta partial"),
+            )
+            .unwrap();
+        assert_eq!(passed.status, "passed", "{:?}", passed.missing_evidence);
+    }
+
+    #[test]
+    fn contract_surface_reconciliation_requires_hidden_and_generated_surfaces() {
+        let temp = tempfile::tempdir().unwrap();
+        let goals = GoalManager::new(temp.path()).unwrap();
+        let goal = goals
+            .start(
+                "sync contract surface before implementation",
+                "standard_development",
+                &[],
+                &[],
+                &[],
+                &[],
+            )
+            .unwrap();
+        let quality = QualityManager::new(temp.path()).unwrap();
+
+        let blocked = quality
+            .gate_goal(&goal, Some("req_1: visible requirements updated"))
+            .unwrap();
+        assert_eq!(blocked.status, "blocked");
+        assert!(
+            blocked
+                .matched_patterns
+                .iter()
+                .any(|pattern| pattern.pattern_id == "contract_surface_reconciliation")
+        );
+        assert!(
+            blocked
+                .missing_evidence
+                .iter()
+                .any(|item| { item.contains("visible/hidden") })
+        );
+
+        let passed = quality
+            .gate_goal(
+                &goal,
+                Some("req_1: contract surface inventory covered active contract surfaces; visible requirements and hidden requirements in .RaymanWeb reconciled; generated docs via docs maintain and feature coverage feature_coverage.yaml synchronized; gate script covers hidden with rg --hidden and Get-ChildItem -Force; conflicting old requirement updated and stale requirement retired"),
+            )
+            .unwrap();
         assert_eq!(passed.status, "passed", "{:?}", passed.missing_evidence);
     }
 

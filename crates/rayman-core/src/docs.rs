@@ -1768,8 +1768,32 @@ fn compact_markdown_text(text: &str, max_chars: usize) -> String {
         return text.to_string();
     }
     let mut compact = text.chars().take(max_chars).collect::<String>();
+    let boundary = readable_truncation_boundary(&compact, max_chars);
+    if let Some(boundary) = boundary {
+        compact.truncate(boundary);
+    }
+    compact = compact.trim_end().to_string();
     compact.push_str("\n\n[truncated for generated HTML documentation]");
     compact
+}
+
+fn readable_truncation_boundary(text: &str, max_chars: usize) -> Option<usize> {
+    let min_boundary = max_chars / 2;
+    let mut candidates = Vec::new();
+    candidates.extend(
+        text.match_indices("\n\n")
+            .map(|(index, pattern)| index + pattern.len()),
+    );
+    candidates.extend(text.match_indices('\n').map(|(index, _)| index + 1));
+    candidates.extend(text.match_indices(". ").map(|(index, _)| index + 1));
+    candidates.extend(["。", "；"].into_iter().flat_map(|pattern| {
+        text.match_indices(pattern)
+            .map(move |(index, _)| index + pattern.len())
+    }));
+    candidates
+        .into_iter()
+        .filter(|index| *index >= min_boundary && text.is_char_boundary(*index))
+        .max()
 }
 
 fn markdown_to_html_fragment(markdown: &str) -> String {
@@ -2001,6 +2025,28 @@ mod tests {
     fn skill_main_line_budget_rejects_above_compaction_trigger() {
         let text = "line\n".repeat(SKILL_MAIN_COMPACT_TRIGGER_LINES + 1);
         assert!(assert_skill_main_line_budget(&text).is_err());
+    }
+
+    #[test]
+    fn compact_markdown_text_truncates_at_readable_boundary() {
+        let text = "## CLI\n\n`rayman assets status` reports state.\n\n`rayman assets scan` rereads current files, recomputes stale docs/config/tests/CLI/API references, and writes refreshed state.\n\n`rayman assets cleanup --apply` deletes only registered files.";
+
+        let compact = compact_markdown_text(text, 125);
+
+        assert!(compact.contains("[truncated for generated HTML documentation]"));
+        assert!(!compact.contains("recomputes sta\n\n[truncated"));
+        assert!(compact.contains("reports state."));
+    }
+
+    #[test]
+    fn compact_markdown_text_truncates_chinese_at_char_boundary() {
+        let text = "## 说明\n\n第一段说明当前行为已经验证。第二段说明生成文档必须在中文标点后安全截断；继续补充更多上下文以触发压缩逻辑。\n\n第三段不应该成为必需内容。";
+
+        let compact = compact_markdown_text(text, 64);
+
+        assert!(compact.contains("[truncated for generated HTML documentation]"));
+        assert!(!compact.contains("�"));
+        assert!(compact.is_char_boundary(compact.len()));
     }
 
     #[test]

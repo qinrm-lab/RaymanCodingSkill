@@ -719,37 +719,37 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-06-28T23:50:38.691762Z"
+            updated_at: "2026-07-01T01:50:49.723302Z"
           - command: "cargo test -p rayman-core goal::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-06-28T23:50:38.691762Z"
+            updated_at: "2026-07-01T01:50:49.723302Z"
           - command: cargo test -p rayman-core enabled_workspace_subagent_authorization_matches_explicit_phrase
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-06-28T23:50:38.691762Z"
+            updated_at: "2026-07-01T01:50:49.723302Z"
           - command: cargo test -p rayman-cli cli_parses_subagent_commands
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-06-28T23:50:38.691762Z"
+            updated_at: "2026-07-01T01:50:49.723302Z"
           - command: cargo test -p rayman-cli cli_goal_run_emits_host_subagent_dispatch_request
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-06-28T23:50:38.691762Z"
+            updated_at: "2026-07-01T01:50:49.723302Z"
           - command: cargo test -p rayman-cli --test ui_contract cli_subagent_auto_start_emits_spawn_contract
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-06-28T23:50:38.691762Z"
+            updated_at: "2026-07-01T01:50:49.723302Z"
       - id: codex_harness_execution_contract
         claim: Codex harness-style self-improvement is treated as a mapping to documented Codex execution controls or current-session capabilities, with quality-gate evidence for sandbox/approval boundaries, AGENTS.md/skills/hooks/MCP-rules instruction surfaces, subagent inheritance plus Rayman ledger review, and non-interactive approval/escalation failure handling.
         doc_anchors:
@@ -787,6 +787,71 @@ features:
           - cargo test -p rayman-core codex_harness
           - "cargo test -p rayman-core eval::"
           - rayman eval run --profile core
+      - id: execution_context_quality_patterns
+        claim: RaymanCodingSkill quality gates generalize thread-derived execution failures into reusable patterns for active skill authority, host execution mode boundaries, contract surface reconciliation, and delivery-gate stratification; success evidence must prove canonical skill/CLI authority, visible-hidden contract sync, resumable host-mode handoff, and separate project/meta gate disposition instead of applying case-specific patches.
+        doc_anchors:
+          - path: SKILL.md
+            contains: "establish active skill authority"
+          - path: SKILL.md
+            contains: "reconcile the active contract surfaces"
+          - path: SKILL.md
+            contains: "Respect the host execution mode"
+          - path: SKILL.md
+            contains: "Keep gate authority layers separate"
+          - path: references/skill-core-workflow.md
+            contains: "Establish active skill authority"
+          - path: references/skill-core-workflow.md
+            contains: "Reconcile active contract surfaces"
+          - path: references/skill-core-workflow.md
+            contains: "Map the host execution mode"
+          - path: references/skill-core-workflow.md
+            contains: "Keep gate authority layers separate"
+          - path: docs/QUALITY.md
+            contains: "active_skill_authority"
+          - path: docs/QUALITY.md
+            contains: "host_execution_mode_boundary"
+          - path: docs/QUALITY.md
+            contains: "contract_surface_reconciliation"
+          - path: docs/QUALITY.md
+            contains: "delivery_gate_stratification"
+          - path: docs/CLI.md
+            contains: "active-skill authority issue"
+          - path: docs/CLI.md
+            contains: "Host execution mode is outside the CLI's control"
+          - path: docs/CLI.md
+            contains: "keep the project deliverable gate and Rayman broad readiness gate separate"
+        implementation_anchors:
+          - path: crates/rayman-core/src/quality.rs
+            contains: "fn active_skill_authority_missing"
+          - path: crates/rayman-core/src/quality.rs
+            contains: "fn host_execution_mode_boundary_missing"
+          - path: crates/rayman-core/src/quality.rs
+            contains: "fn contract_surface_reconciliation_missing"
+          - path: crates/rayman-core/src/quality.rs
+            contains: "fn delivery_gate_stratification_missing"
+        test_anchors:
+          - path: crates/rayman-core/src/quality.rs
+            contains: "fn active_skill_authority_blocks_retired_shadow_skill_without_authority_evidence"
+            proves:
+              - execution_context_quality_patterns
+          - path: crates/rayman-core/src/quality.rs
+            contains: "fn host_execution_mode_boundary_requires_resumable_handoff"
+            proves:
+              - execution_context_quality_patterns
+          - path: crates/rayman-core/src/quality.rs
+            contains: "fn contract_surface_reconciliation_requires_hidden_and_generated_surfaces"
+            proves:
+              - execution_context_quality_patterns
+          - path: crates/rayman-core/src/quality.rs
+            contains: "fn delivery_gate_stratification_separates_project_and_meta_gates"
+            proves:
+              - execution_context_quality_patterns
+        validation_commands:
+          - cargo test -p rayman-core active_skill_authority
+          - cargo test -p rayman-core host_execution_mode_boundary
+          - cargo test -p rayman-core contract_surface_reconciliation
+          - cargo test -p rayman-core delivery_gate_stratification
+          - rayman coverage status --check
       - id: repeated_value_centralization
         claim: Repeated literals, thresholds, paths, prompt fragments, and policy values across skill and program surfaces must be inventoried and centralized as a named constant, config key, helper, template variable, or referenced rule section; the rule wording lives in the Repeated Value Centralization Rule section and Rust audit fixtures reuse named constants/helpers instead of copying the rule text.
         doc_anchors:
@@ -1171,19 +1236,19 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: close_success_requires_actual_evidence"
-            updated_at: "2026-07-01T00:36:58.953026Z"
+            updated_at: "2026-07-01T02:28:14.451769Z"
           - command: "cargo test -p rayman-core session::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: close_success_requires_actual_evidence"
-            updated_at: "2026-07-01T00:36:58.953026Z"
+            updated_at: "2026-07-01T02:28:14.451769Z"
           - command: "cargo test -p rayman-core quality::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: close_success_requires_actual_evidence"
-            updated_at: "2026-07-01T00:36:58.953026Z"
+            updated_at: "2026-07-01T02:28:14.451769Z"
       - id: goal_wait_recovery_contract
         claim: Goal workflows exhaust non-human executable stages before waiting, and every blocked/partial pending-work item records blocker ownership, minimum input, evidence path, resume command, and automatic resume strategy. User-owned blockers are `wait_user`, unavailable outside dependencies are `wait_external`, and remaining validation/release blockers are `hard_gate`.
         implementation_anchors:
@@ -1928,19 +1993,19 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: paper_claim_audit_protocol"
-            updated_at: "2026-07-01T00:36:58.953026Z"
+            updated_at: "2026-07-01T02:27:15.777558Z"
           - command: cargo test -p rayman-cli cli_parses_coverage_status
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: paper_claim_audit_protocol"
-            updated_at: "2026-07-01T00:36:58.953026Z"
+            updated_at: "2026-07-01T02:27:15.777558Z"
           - command: rayman coverage status --check
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: paper_claim_audit_protocol"
-            updated_at: "2026-07-01T00:36:58.953026Z"
+            updated_at: "2026-07-01T02:27:15.777558Z"
       - id: feature_preservation_protocol
         claim: Public CLI/API/runtime surfaces cannot disappear from docs or manifest silently; source-extracted CLI commands and obsolete asset blockers must be resolved, documented, tested, or explicitly retired.
         implementation_anchors:

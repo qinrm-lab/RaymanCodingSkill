@@ -30,6 +30,8 @@ RaymanCodingSkill is a governance framework, not a default pointer to nearby or 
 - For non-trivial coding work, run `rayman context status`, `rayman context os --check`, `rayman context task "<task>"`, and path-specific `rayman impact` / `rayman regression plan` before editing.
 - For terse or ambiguous customer requests, use the goal clarification contract: `rayman goal clarify "<request>" --format text|json` previews recommended defaults, and `goal start` stores the same hidden-requirement clarification under `contract.clarification` for intake confirmation.
 - Current workspace files, command output, and goal/session/context state are the source of truth; cached summaries, Context Index records, remembered conclusions, and auxiliary AI output are navigation only.
+- Before consuming any project-local agent instructions, wrappers, generated docs, or old automation directories, establish active skill authority: verify `.RaymanCodingSkill/workspace_skill.yaml`, current canonical `SKILL.md`, and the installed/current skill hash when available. Retired or shadow skill surfaces such as project-local `.Rayman/` material, old `rayman` wrappers, and retired RaymanAgent/RaymanAgent-like docs are not requirements, current behavior evidence, or command authority unless the current workspace contract explicitly reactivates them.
+- Before implementing behavior in customer projects, reconcile the active contract surfaces: visible requirements, hidden/dot-directory requirements, generated docs, feature coverage, tests, and gate scripts. Gate discovery must include hidden contract mirrors when the project uses them, and conflicting old requirements must be retired or updated rather than left active beside the new behavior.
 - If context is stale, hashes differ, indexed evidence conflicts with current files, or Context OS state is missing/stale, reread the current source/docs/config files, run `rayman context refresh`, and confirm `rayman context os --check` before relying on it.
 - Do not use cross-project memory or remembered customer-project assumptions; opted-in customer projects get workspace-local context only.
 - Completion evidence for every `must` requirement must cite current files and validation output; cached context never satisfies a requirement by itself.
@@ -70,6 +72,8 @@ See [Proof And Preservation](references/skill-proof-and-preservation.md) for clo
 
 - Default to continuing: exhaust non-human executable paths by inspecting, implementing, validating, repairing, documenting, and summarizing without asking when the next step is locally knowable.
 - Host subagent auto-start authorization lives in [Host Subagent Auto-Start Authorization](references/skill-subagent-auto-start-authorization.md). Read that file before deciding whether to spawn Codex host subagents. In short: standing authorization permits suitable Codex host subagent use without per-use approval, and in enabled workspaces it has the same effect as an explicit `开启subagent` phrase; `rayman goal run` / `rayman goal resume` may emit `HOST_SUBAGENT_DISPATCH_REQUEST {json}`; use `rayman subagent auto-start` for host-tool-ready payloads; keep subagents as main-model/strong-model speed lanes rather than `ai_ubuntu_8888` auxiliary AI; and close the ledger with `rayman subagent record/result/review/status`. Codex host subagent ledger records spawned agent tasks, boundaries, results, and primary-agent review. Unreviewed, unresolved, conflict, or overlapping subagent ledger entries block success; unclosed dispatch requests and parse-error ledger entries block success as well.
+- Respect the host execution mode as a capability boundary. If the host is in Plan Mode or otherwise prevents writes, destructive actions, approvals, or long-running execution, do not claim implementation success and do not imply a normal user message can change that mode. Leave a resumable handoff with blocker owner, minimum required input, evidence/checkpoint path, resume command, and automatic resume strategy.
+- Keep gate authority layers separate. A customer project's deliverable gate can prove the requested project closure, while `rayman gate status --check` is Rayman broad readiness and goal/session success close has stricter per-requirement evidence gates. Do not promote a project PASS into Rayman meta PASS, or demote a project PASS because of unrelated long-term meta-governance blockers; report each layer explicitly.
 - Ask or block only for missing permissions/credentials, destructive actions, conflicting requirements, ambiguous project scope that risks editing the wrong workspace, unavailable external services with no fallback, business decisions only the customer can make, or a hard validation/release gate that remains after local repair; repeated failures are diagnostics unless they leave one of those blockers. Every wait must state the blocker owner, minimum input, evidence path, resume command, and automatic resume strategy.
 - Final handoff must state goal status, unfinished requirements, verification evidence, blocked reason if any, and auxiliary AI usage/contribution stats.
 
@@ -111,15 +115,4 @@ Run focused tests for touched behavior, then run a broad check when feasible:
 - Missing validation/development tools are actionable work, not skip reasons: install the standard tool when allowed; if it cannot be installed, build a workspace-local equivalent and run it.
 - Customer program delivery is incomplete until both debug and release builds compile; compile or logic failures trigger automatic repair until the feature loop is coherent and verified.
 
-```text
-cargo fmt --check
-cargo clippy --all-targets -- -D warnings
-cargo test --all
-cargo deny check
-rayman context refresh
-rayman context os --check
-rayman gate status --check
-rayman eval run --profile full
-rayman security audit
-rayman audit
-```
+Core validation includes `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test --all`, `cargo deny check`, `rayman context refresh`, `rayman context os --check`, `rayman gate status --check`, `rayman eval run --profile full`, `rayman security audit`, and `rayman audit`.
