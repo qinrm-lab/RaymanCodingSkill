@@ -5,6 +5,7 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
+use crate::assets::AssetRetirementManager;
 use crate::dependency_policy::{
     DependencyPolicyManager, DependencyPolicyReport, DependencyPolicyRunner,
     default_dependency_runner,
@@ -453,7 +454,26 @@ impl SecurityAuditManager {
     }
 
     fn audit_required_agent_controls(&self, findings: &mut Vec<SecurityFinding>) {
-        let skill_text = read_skill_and_references(&self.workspace).unwrap_or_default();
+        let skill_text = match read_skill_and_references(&self.workspace) {
+            Ok(text) => text,
+            Err(error) => {
+                push_finding(
+                    &self.workspace,
+                    findings,
+                    FindingDraft {
+                        severity: "high",
+                        category: "stale_asset_consumption_guard",
+                        path: &self.workspace.join("SKILL.md"),
+                        line: 1,
+                        message: &format!(
+                            "unable to load current-behavior skill controls: {error}"
+                        ),
+                        remediation: "repair asset retirement state or restore current SKILL.md/references before running security audit",
+                    },
+                );
+                return;
+            }
+        };
         for snippet in [
             "auxiliary AI output are navigation only",
             "never executes, edits, approves, or replaces validation",
@@ -543,6 +563,10 @@ fn is_placeholder_secret(value: &str) -> bool {
 }
 
 fn read_skill_and_references(workspace: &Path) -> Result<String> {
+    let asset_retirement = AssetRetirementManager::new(workspace)?.status()?;
+    if !asset_retirement.is_current_behavior_path("SKILL.md") {
+        bail!("SKILL.md is recorded as a non-current asset");
+    }
     let mut text = read_text(&workspace.join("SKILL.md"))?;
     let references = workspace.join("references");
     if references.exists() {
@@ -550,8 +574,10 @@ fn read_skill_and_references(workspace: &Path) -> Result<String> {
             .into_iter()
             .filter_map(|entry| entry.ok())
         {
+            let relative = display_relative(workspace, entry.path());
             if entry.file_type().is_file()
                 && entry.path().extension().and_then(|ext| ext.to_str()) == Some("md")
+                && asset_retirement.is_current_behavior_path(&relative)
                 && let Ok(reference_text) = read_text(entry.path())
             {
                 text.push('\n');
@@ -560,6 +586,13 @@ fn read_skill_and_references(workspace: &Path) -> Result<String> {
         }
     }
     Ok(text)
+}
+
+fn display_relative(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .replace('\\', "/")
 }
 
 fn yaml_path_bool(value: &Value, path: &[&str]) -> Option<bool> {
@@ -739,6 +772,28 @@ models:
                 .iter()
                 .all(|finding| finding.severity != "critical")
         );
+    }
+
+    #[test]
+    fn skill_security_text_ignores_compatibility_exempt_references() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("references")).unwrap();
+        fs::write(temp.path().join("SKILL.md"), "# skill\ncurrent-control\n").unwrap();
+        let old_reference = temp.path().join("references").join("old-control.md");
+        fs::write(&old_reference, "stale-control\n").unwrap();
+        AssetRetirementManager::new(temp.path())
+            .unwrap()
+            .exempt(crate::assets::AssetExemptRequest {
+                path: old_reference,
+                retention_reason: "temporary audit retention".into(),
+                expires_at: "2999-01-01".into(),
+            })
+            .unwrap();
+
+        let text = read_skill_and_references(temp.path()).unwrap();
+
+        assert!(text.contains("current-control"));
+        assert!(!text.contains("stale-control"));
     }
 
     #[test]

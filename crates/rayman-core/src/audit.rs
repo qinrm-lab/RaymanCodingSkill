@@ -4,7 +4,7 @@ use anyhow::{Result, bail};
 use serde::Serialize;
 use walkdir::WalkDir;
 
-use crate::assets::AssetRetirementManager;
+use crate::assets::{AssetRetirementManager, AssetRetirementReport};
 use crate::auxiliary::AuxiliaryTaskStore;
 use crate::feature_coverage;
 use crate::quality::{
@@ -556,6 +556,19 @@ fn audit_required_text_any(
 }
 
 fn audit_required_skill_text(root: &Path, findings: &mut Vec<AuditFinding>, required: &[&str]) {
+    let asset_retirement = current_behavior_asset_report(root, findings);
+    if !asset_retirement
+        .as_ref()
+        .is_some_and(|report| report.is_current_behavior_path("SKILL.md"))
+    {
+        findings.push(AuditFinding {
+            path: root.join("SKILL.md"),
+            line: 1,
+            pattern: "required execution guarantee".into(),
+            message: "SKILL.md is not available as current-behavior skill text".into(),
+        });
+        return;
+    }
     let path = root.join("SKILL.md");
     let Ok(mut text) = read_text(&path) else {
         findings.push(AuditFinding {
@@ -575,6 +588,13 @@ fn audit_required_skill_text(root: &Path, findings: &mut Vec<AuditFinding>, requ
             if !entry.file_type().is_file() {
                 continue;
             }
+            let relative = display_relative(root, entry.path());
+            if !asset_retirement
+                .as_ref()
+                .is_some_and(|report| report.is_current_behavior_path(&relative))
+            {
+                continue;
+            }
             if entry.path().extension().and_then(|ext| ext.to_str()) == Some("md")
                 && let Ok(reference_text) = read_text(entry.path())
             {
@@ -591,6 +611,29 @@ fn audit_required_skill_text(root: &Path, findings: &mut Vec<AuditFinding>, requ
                 pattern: "required execution guarantee".into(),
                 message: format!("缺少执行保证文本: {snippet}"),
             });
+        }
+    }
+}
+
+fn current_behavior_asset_report(
+    root: &Path,
+    findings: &mut Vec<AuditFinding>,
+) -> Option<AssetRetirementReport> {
+    match AssetRetirementManager::new(root).and_then(|manager| manager.status()) {
+        Ok(report) => Some(report),
+        Err(error) => {
+            findings.push(AuditFinding {
+                path: root
+                    .join(".RaymanCodingSkill")
+                    .join("assets")
+                    .join("retirement.json"),
+                line: 1,
+                pattern: "asset_retirement_blocker".into(),
+                message: format!(
+                    "unable to load asset retirement state for current-behavior filtering: {error}"
+                ),
+            });
+            None
         }
     }
 }
@@ -785,6 +828,29 @@ mod tests {
 
         assert!(skill_fixture.contains(REPEATED_VALUE_CENTRALIZATION_RULE_TITLE));
         assert!(!skill_fixture.contains(&previous_inline_rule_text));
+    }
+
+    #[test]
+    fn required_skill_text_ignores_compatibility_exempt_references() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        fs::create_dir_all(temp.path().join("references"))?;
+        fs::write(temp.path().join("SKILL.md"), "# skill\n")?;
+        let old_reference = temp.path().join("references").join("old-rule.md");
+        fs::write(&old_reference, "stale-only-required-snippet\n")?;
+        AssetRetirementManager::new(temp.path())?.exempt(crate::assets::AssetExemptRequest {
+            path: old_reference,
+            retention_reason: "temporary audit retention".into(),
+            expires_at: "2999-01-01".into(),
+        })?;
+
+        let mut findings = Vec::new();
+        audit_required_skill_text(temp.path(), &mut findings, &["stale-only-required-snippet"]);
+
+        assert!(findings.iter().any(|finding| {
+            finding.pattern == "required execution guarantee"
+                && finding.message.contains("stale-only-required-snippet")
+        }));
+        Ok(())
     }
 
     #[test]

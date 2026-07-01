@@ -1,9 +1,10 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use serde::Serialize;
 
+use crate::assets::AssetRetirementManager;
 use crate::{
     display_path, rayman_cli_install_target, rayman_cli_source_binary,
     rayman_reminder_install_target, rayman_reminder_source_binary, sha256_file,
@@ -81,20 +82,11 @@ impl AgentSkillInstallManager {
     }
 
     pub fn status(&self, targets: &[String]) -> Result<Vec<AgentSkillResult>> {
+        let expected_entry = self.render_entry();
         let mut results = self
             .resolve_targets(targets)?
             .into_iter()
-            .map(|(agent, path)| AgentSkillResult {
-                agent,
-                exists: path.exists(),
-                sha256: if path.exists() {
-                    sha256_file(&path).ok()
-                } else {
-                    None
-                },
-                path,
-                error: None,
-            })
+            .map(|(agent, path)| self.entry_status(agent, path, expected_entry.as_ref()))
             .collect::<Vec<_>>();
         results.push(self.cli_binary_status());
         results.push(self.reminder_binary_status());
@@ -135,6 +127,13 @@ impl AgentSkillInstallManager {
                 subagent_authorization.display()
             );
         }
+        self.assert_current_source_assets(&[
+            (&skill, "canonical SKILL.md"),
+            (
+                &subagent_authorization,
+                "host subagent auto-start authorization",
+            ),
+        ])?;
         let cli = rayman_cli_source_binary(&self.canonical_root)?;
         Ok(format!(
             r#"---
@@ -181,6 +180,23 @@ Workspace opt-in is controlled only by `.RaymanCodingSkill/workspace_skill.yaml`
             subagent_authorization = display_path(&subagent_authorization),
             cli = display_path(&cli)
         ))
+    }
+
+    fn assert_current_source_assets(&self, paths: &[(&Path, &str)]) -> Result<()> {
+        let report = AssetRetirementManager::new(&self.canonical_root)?.status()?;
+        for (path, label) in paths {
+            let relative = path
+                .strip_prefix(&self.canonical_root)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .replace('\\', "/");
+            if !report.is_current_behavior_path(&relative) {
+                bail!(
+                    "{label} is recorded as a non-current asset and cannot be used for agent-skill installation: {relative}"
+                );
+            }
+        }
+        Ok(())
     }
 
     fn cli_target(&self) -> Result<PathBuf> {
@@ -249,6 +265,42 @@ Workspace opt-in is controlled only by `.RaymanCodingSkill/workspace_skill.yaml`
                 sha256: None,
                 error: Some(error.to_string()),
             },
+        }
+    }
+
+    fn entry_status(
+        &self,
+        agent: String,
+        path: PathBuf,
+        expected_entry: std::result::Result<&String, &anyhow::Error>,
+    ) -> AgentSkillResult {
+        let exists = path.exists();
+        let sha256 = exists
+            .then(|| sha256_file(&path))
+            .transpose()
+            .ok()
+            .flatten();
+        let error = match expected_entry {
+            Ok(expected) if exists => match fs::read_to_string(&path) {
+                Ok(current) if current == expected.as_str() => None,
+                Ok(_) => Some(format!(
+                    "installed {agent} skill entry is stale; run rayman agent-skill sync"
+                )),
+                Err(error) => Some(format!(
+                    "unable to read installed {agent} skill entry for freshness check: {error}"
+                )),
+            },
+            Ok(_) => None,
+            Err(error) => Some(format!(
+                "unable to render current {agent} skill entry for freshness check: {error}"
+            )),
+        };
+        AgentSkillResult {
+            agent,
+            path,
+            exists,
+            sha256,
+            error,
         }
     }
 
@@ -542,6 +594,117 @@ mod tests {
 
         assert!(error.contains("host subagent 自动授权规则"));
         assert!(error.contains(SUBAGENT_AUTO_START_AUTHORIZATION_REFERENCE));
+        Ok(())
+    }
+
+    #[test]
+    fn render_entry_rejects_non_current_skill_source() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().join("RaymanCodingSkill");
+        write_minimal_root(&root)?;
+        write_release_cli(&root)?;
+        crate::assets::AssetRetirementManager::new(&root)?.exempt(
+            crate::assets::AssetExemptRequest {
+                path: PathBuf::from("SKILL.md"),
+                retention_reason: "audit retention".into(),
+                expires_at: "2999-01-01".into(),
+            },
+        )?;
+
+        let error = AgentSkillInstallManager::new(&root)?
+            .render_entry()
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("canonical SKILL.md"));
+        assert!(error.contains("non-current"));
+        Ok(())
+    }
+
+    #[test]
+    fn status_reports_non_current_skill_source() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().join("RaymanCodingSkill");
+        write_minimal_root(&root)?;
+        write_release_cli(&root)?;
+        fs::write(
+            root.join("target")
+                .join("release")
+                .join(crate::rayman_reminder_exe_name()),
+            b"new-reminder",
+        )?;
+        crate::assets::AssetRetirementManager::new(&root)?.exempt(
+            crate::assets::AssetExemptRequest {
+                path: PathBuf::from(SUBAGENT_AUTO_START_AUTHORIZATION_REFERENCE),
+                retention_reason: "audit retention".into(),
+                expires_at: "2999-01-01".into(),
+            },
+        )?;
+        let manager = AgentSkillInstallManager::new(&root)?
+            .with_cli_install_target(temp.path().join("install").join("rayman-test"))
+            .with_agent_homes(
+                temp.path().join("codex-home"),
+                temp.path().join("claude-home"),
+            );
+
+        let results = manager.status(&["codex".into()])?;
+        let codex = results
+            .iter()
+            .find(|result| result.agent == "codex")
+            .unwrap();
+
+        assert!(
+            codex
+                .error
+                .as_deref()
+                .is_some_and(|error| error.contains("unable to render current codex skill entry"))
+        );
+        assert!(
+            codex
+                .error
+                .as_deref()
+                .is_some_and(|error| error.contains("non-current"))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn status_reports_stale_installed_agent_entry() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().join("RaymanCodingSkill");
+        write_minimal_root(&root)?;
+        write_release_cli(&root)?;
+        fs::write(
+            root.join("target")
+                .join("release")
+                .join(crate::rayman_reminder_exe_name()),
+            b"new-reminder",
+        )?;
+        let codex_home = temp.path().join("codex-home");
+        let claude_home = temp.path().join("claude-home");
+        let stale_entry = codex_home
+            .join("skills")
+            .join("raymancodingskill")
+            .join("SKILL.md");
+        fs::create_dir_all(stale_entry.parent().unwrap())?;
+        fs::write(&stale_entry, "# stale installed entry\n")?;
+        let manager = AgentSkillInstallManager::new(&root)?
+            .with_cli_install_target(temp.path().join("install").join("rayman-test"))
+            .with_agent_homes(&codex_home, &claude_home);
+
+        let results = manager.status(&["codex".into()])?;
+        let codex = results
+            .iter()
+            .find(|result| result.agent == "codex")
+            .unwrap();
+
+        assert!(codex.exists);
+        assert!(
+            codex
+                .error
+                .as_deref()
+                .is_some_and(|error| error.contains("installed codex skill entry is stale"))
+        );
         Ok(())
     }
 }

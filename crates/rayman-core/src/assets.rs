@@ -139,6 +139,34 @@ impl AssetRetirementReport {
             .map(|record| record.path.clone())
             .collect()
     }
+
+    pub fn is_non_current_path(&self, path: &str) -> bool {
+        let path = normalize_asset_record_path(path);
+        self.records.iter().any(|record| {
+            matches!(
+                record.status,
+                AssetStatus::RetirementCandidate
+                    | AssetStatus::Retired
+                    | AssetStatus::CompatibilityExempt
+            ) && non_current_record_covers_path(&record.path, &path)
+        })
+    }
+
+    pub fn is_current_behavior_path(&self, path: &str) -> bool {
+        !self.is_non_current_path(path)
+    }
+}
+
+fn normalize_asset_record_path(path: &str) -> String {
+    path.replace('\\', "/").trim_matches('/').to_string()
+}
+
+fn non_current_record_covers_path(record_path: &str, path: &str) -> bool {
+    let record_path = normalize_asset_record_path(record_path);
+    if record_path.is_empty() {
+        return false;
+    }
+    path == record_path || path.starts_with(&format!("{record_path}/"))
 }
 
 #[derive(Debug, Clone)]
@@ -953,6 +981,24 @@ mod tests {
                 .iter()
                 .any(|record| record.path == "old.md")
         );
+    }
+
+    #[test]
+    fn directory_non_current_records_cover_child_paths() {
+        let report = AssetRetirementReport {
+            records: vec![ObsoleteAssetRecord {
+                path: "references/legacy".into(),
+                status: AssetStatus::CompatibilityExempt,
+                ..ObsoleteAssetRecord::default()
+            }],
+            ..AssetRetirementReport::default()
+        };
+
+        assert!(report.is_non_current_path("references/legacy"));
+        assert!(report.is_non_current_path("references/legacy/rule.md"));
+        assert!(report.is_non_current_path("references\\legacy\\nested\\rule.md"));
+        assert!(!report.is_non_current_path("references/legacy2/rule.md"));
+        assert!(report.is_current_behavior_path("references/current/rule.md"));
     }
 
     #[test]

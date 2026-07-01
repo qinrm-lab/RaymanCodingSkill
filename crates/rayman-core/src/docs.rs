@@ -1315,7 +1315,8 @@ fn render_docs_maintenance_html(
     model_output: Option<&str>,
     customer_docs: &CustomerDocsReport,
 ) -> Result<DocsMaintenanceDraft> {
-    let evidence = collect_doc_evidence(root, output)?;
+    let obsolete_assets = AssetRetirementManager::new(root.to_path_buf())?.scan()?;
+    let evidence = collect_doc_evidence(root, output, &obsolete_assets)?;
     let boundaries =
         section_from_markdown(&evidence, "SKILL.md", "Boundaries").unwrap_or_else(|| {
             "RaymanCodingSkill is limited to programming workflows in the current workspace.".into()
@@ -1327,7 +1328,6 @@ fn render_docs_maintenance_html(
         .unwrap_or_else(|| "CLI documentation is not present in this workspace.".into());
     let developer_architecture = developer_architecture_summary(&evidence);
     let prompt_summary = prompt_summary(&evidence);
-    let obsolete_assets = AssetRetirementManager::new(root.to_path_buf())?.scan()?;
     let auxiliary_contribution = AuxiliaryContributionStore::new(root.to_path_buf())?
         .report_without_round()
         .unwrap_or(Value::Null);
@@ -1431,7 +1431,11 @@ struct DocEvidenceFile {
     text: String,
 }
 
-fn collect_doc_evidence(root: &Path, output: &Path) -> Result<Vec<DocEvidenceFile>> {
+fn collect_doc_evidence(
+    root: &Path,
+    output: &Path,
+    asset_retirement: &AssetRetirementReport,
+) -> Result<Vec<DocEvidenceFile>> {
     let mut files = Vec::new();
     for entry in WalkDir::new(root)
         .into_iter()
@@ -1443,6 +1447,9 @@ fn collect_doc_evidence(root: &Path, output: &Path) -> Result<Vec<DocEvidenceFil
             continue;
         }
         let relative = display_relative(root, entry.path())?;
+        if !asset_retirement.is_current_behavior_path(&relative) {
+            continue;
+        }
         if is_docs_maintenance_evidence(&relative) {
             let text = fs::read_to_string(entry.path()).unwrap_or_default();
             files.push(DocEvidenceFile {
@@ -2095,6 +2102,53 @@ mod tests {
                 .ok()
                 .is_some_and(|relative| relative == Path::new("docs").join("old-project-docs.html"))
         }));
+    }
+
+    #[test]
+    fn maintain_html_docs_excludes_compatibility_exempt_assets_from_evidence() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("README.md"), "# Demo\n").unwrap();
+        fs::create_dir_all(temp.path().join("docs")).unwrap();
+        let obsolete = temp.path().join("docs").join("old-guide.md");
+        fs::write(&obsolete, "# Old\n\nObsoleteEvidenceMarker\n").unwrap();
+        AssetRetirementManager::new(temp.path())
+            .unwrap()
+            .exempt(crate::assets::AssetExemptRequest {
+                path: obsolete,
+                retention_reason: "temporary audit retention".into(),
+                expires_at: "2999-01-01".into(),
+            })
+            .unwrap();
+        let output = temp.path().join("docs").join("project-docs.html");
+
+        let report = maintain_html_docs(DocsMaintainOptions {
+            root: temp.path().to_path_buf(),
+            output: Some(output.clone()),
+            prompt: None,
+            prompt_file: None,
+            model_output: None,
+            dry_run: false,
+            check: false,
+            apply_prune: false,
+        })
+        .unwrap();
+
+        assert_eq!(report.status, "current");
+        assert!(report.asset_retirement.blockers.is_empty());
+        assert!(
+            report
+                .asset_retirement
+                .exemptions
+                .iter()
+                .any(|record| record.path == "docs/old-guide.md")
+        );
+        assert!(!report.evidence_files.iter().any(|path| {
+            path.strip_prefix(&report.root)
+                .ok()
+                .is_some_and(|relative| relative == Path::new("docs").join("old-guide.md"))
+        }));
+        let html = fs::read_to_string(output).unwrap();
+        assert!(!html.contains("ObsoleteEvidenceMarker"));
     }
 
     #[test]

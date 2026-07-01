@@ -4,8 +4,9 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
-use crate::now_iso;
+use crate::assets::AssetRetirementManager;
 use crate::yaml::{self, Mapping, Value};
+use crate::{now_iso, sha256_file};
 
 const AUXILIARY_SETTINGS_TIMEOUT_SECONDS: u64 = 120;
 pub const DEFAULT_AUXILIARY_PROVIDER_TIMEOUT_SECONDS: u64 = 120;
@@ -107,6 +108,7 @@ impl ConfigManager {
     ) -> Result<Self> {
         let config_path = config_path.into();
         let root = root.into();
+        assert_current_config_asset(&root, &config_path)?;
         let mut config = load_yaml(&config_path)?;
         upgrade_auxiliary_config_format(&config_path, &mut config)?;
         let mut manager = Self {
@@ -753,11 +755,62 @@ fn workspace_canonical_config_path(root: &Path) -> Result<Option<PathBuf>> {
     let Some(skill_file) = get_path(&state, "skill_file").and_then(Value::as_str) else {
         return Ok(None);
     };
-    let Some(skill_root) = Path::new(skill_file).parent() else {
+    let skill_path = Path::new(skill_file);
+    let recorded_hash = get_path(&state, "skill_sha256")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .with_context(|| {
+            format!(
+                "workspace skill state is missing skill_sha256; run rayman workspace-skill mark-used before consuming canonical config: {}",
+                state_path.display()
+            )
+        })?;
+    let current_hash = sha256_file(skill_path).with_context(|| {
+        format!(
+            "unable to hash workspace skill file before consuming canonical config: {}",
+            skill_path.display()
+        )
+    })?;
+    if current_hash != recorded_hash {
+        bail!(
+            "workspace skill state is stale for {}; run rayman workspace-skill mark-used before consuming canonical config",
+            skill_path.display()
+        );
+    }
+    let Some(skill_root) = skill_path.parent() else {
         return Ok(None);
     };
     let config_path = skill_root.join("config").join("default_config.yaml");
+    if config_path.exists() {
+        assert_current_config_asset(skill_root, &config_path)?;
+    }
     Ok(config_path.exists().then_some(config_path))
+}
+
+fn assert_current_config_asset(root: &Path, config_path: &Path) -> Result<()> {
+    if !config_path.exists() {
+        return Ok(());
+    }
+    let workspace = root
+        .canonicalize()
+        .with_context(|| format!("unable to resolve config workspace: {}", root.display()))?;
+    let config_path = config_path
+        .canonicalize()
+        .with_context(|| format!("unable to resolve config path: {}", config_path.display()))?;
+    if !config_path.starts_with(&workspace) {
+        return Ok(());
+    }
+    let relative = config_path
+        .strip_prefix(&workspace)
+        .unwrap_or(&config_path)
+        .to_string_lossy()
+        .replace('\\', "/");
+    let report = AssetRetirementManager::new(&workspace)?.status()?;
+    if !report.is_current_behavior_path(&relative) {
+        bail!("config asset is recorded as non-current and cannot be consumed: {relative}");
+    }
+    Ok(())
 }
 
 fn upgrade_auxiliary_config_format(path: &Path, value: &mut Value) -> Result<()> {
@@ -1453,6 +1506,10 @@ models:
             Value::String("skill_file".into()),
             Value::String(display_path_for_test(&canonical.path().join("SKILL.md"))),
         );
+        state.insert(
+            Value::String("skill_sha256".into()),
+            Value::String(sha256_file(&canonical.path().join("SKILL.md")).unwrap()),
+        );
         fs::write(
             customer
                 .path()
@@ -1470,6 +1527,111 @@ models:
             canonical.path().join("config").join("default_config.yaml")
         );
         assert!(manager.auxiliary_ai_enabled());
+    }
+
+    #[test]
+    fn opted_in_customer_workspace_rejects_stale_skill_hash_before_canonical_config() {
+        let customer = tempfile::tempdir().unwrap();
+        let canonical = tempfile::tempdir().unwrap();
+        fs::create_dir_all(canonical.path().join("config")).unwrap();
+        fs::write(canonical.path().join("SKILL.md"), "# skill v1").unwrap();
+        fs::write(
+            canonical.path().join("config").join("default_config.yaml"),
+            "default_model:\n  type: primary\n  name: model\n",
+        )
+        .unwrap();
+        fs::create_dir_all(customer.path().join(".RaymanCodingSkill")).unwrap();
+        let mut state = Mapping::new();
+        state.insert(Value::String("enabled".into()), Value::Bool(true));
+        state.insert(
+            Value::String("skill_file".into()),
+            Value::String(display_path_for_test(&canonical.path().join("SKILL.md"))),
+        );
+        state.insert(
+            Value::String("skill_sha256".into()),
+            Value::String("old-hash".into()),
+        );
+        fs::write(
+            customer
+                .path()
+                .join(".RaymanCodingSkill")
+                .join("workspace_skill.yaml"),
+            serde_yaml::to_string(&Value::Mapping(state)).unwrap(),
+        )
+        .unwrap();
+
+        let error = ConfigManager::new(customer.path()).unwrap_err().to_string();
+
+        assert!(error.contains("workspace skill state is stale"));
+    }
+
+    #[test]
+    fn local_config_recorded_non_current_is_rejected() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("config")).unwrap();
+        fs::write(
+            temp.path().join("config").join("default_config.yaml"),
+            "default_model:\n  type: primary\n  name: model\n",
+        )
+        .unwrap();
+        crate::assets::AssetRetirementManager::new(temp.path())
+            .unwrap()
+            .exempt(crate::assets::AssetExemptRequest {
+                path: PathBuf::from("config/default_config.yaml"),
+                retention_reason: "audit retention".into(),
+                expires_at: "2999-01-01".into(),
+            })
+            .unwrap();
+
+        let error = ConfigManager::new(temp.path()).unwrap_err().to_string();
+
+        assert!(error.contains("config/default_config.yaml"));
+        assert!(error.contains("non-current"));
+    }
+
+    #[test]
+    fn opted_in_customer_workspace_rejects_non_current_canonical_config() {
+        let customer = tempfile::tempdir().unwrap();
+        let canonical = tempfile::tempdir().unwrap();
+        fs::create_dir_all(canonical.path().join("config")).unwrap();
+        fs::write(canonical.path().join("SKILL.md"), "# skill").unwrap();
+        fs::write(
+            canonical.path().join("config").join("default_config.yaml"),
+            "default_model:\n  type: primary\n  name: model\n",
+        )
+        .unwrap();
+        crate::assets::AssetRetirementManager::new(canonical.path())
+            .unwrap()
+            .exempt(crate::assets::AssetExemptRequest {
+                path: PathBuf::from("config/default_config.yaml"),
+                retention_reason: "audit retention".into(),
+                expires_at: "2999-01-01".into(),
+            })
+            .unwrap();
+        fs::create_dir_all(customer.path().join(".RaymanCodingSkill")).unwrap();
+        let mut state = Mapping::new();
+        state.insert(Value::String("enabled".into()), Value::Bool(true));
+        state.insert(
+            Value::String("skill_file".into()),
+            Value::String(display_path_for_test(&canonical.path().join("SKILL.md"))),
+        );
+        state.insert(
+            Value::String("skill_sha256".into()),
+            Value::String(sha256_file(&canonical.path().join("SKILL.md")).unwrap()),
+        );
+        fs::write(
+            customer
+                .path()
+                .join(".RaymanCodingSkill")
+                .join("workspace_skill.yaml"),
+            serde_yaml::to_string(&Value::Mapping(state)).unwrap(),
+        )
+        .unwrap();
+
+        let error = ConfigManager::new(customer.path()).unwrap_err().to_string();
+
+        assert!(error.contains("config/default_config.yaml"));
+        assert!(error.contains("non-current"));
     }
 
     #[test]

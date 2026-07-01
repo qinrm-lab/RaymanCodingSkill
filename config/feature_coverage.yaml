@@ -539,37 +539,37 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-06-28T23:50:38.691762Z"
+            updated_at: "2026-07-01T00:36:58.953026Z"
           - command: "cargo test -p rayman-core session::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-06-28T23:50:38.691762Z"
+            updated_at: "2026-07-01T00:36:58.953026Z"
           - command: "cargo test -p rayman-core goal::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-06-28T23:50:38.691762Z"
+            updated_at: "2026-07-01T00:36:58.953026Z"
           - command: "cargo test -p rayman-core audit::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-06-28T23:50:38.691762Z"
+            updated_at: "2026-07-01T00:36:58.953026Z"
           - command: "cargo test -p rayman-core gate::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-06-28T23:50:38.691762Z"
+            updated_at: "2026-07-01T00:36:58.953026Z"
           - command: cargo test -p rayman-cli cli_parses_subagent_commands
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-06-28T23:50:38.691762Z"
+            updated_at: "2026-07-01T00:36:58.953026Z"
       - id: codex_host_subagent_performance_contract
         claim: Codex host subagent dispatch has a deterministic planner, auto-start surface, and goal controller integration; non-trivial `goal run` / `goal resume` plan stages emit `HOST_SUBAGENT_DISPATCH_REQUEST {json}` with host-tool-ready spawn_agent request payloads, stop with `host_subagent_dispatch_requested` until the primary AI spawns lanes or records failed/unavailable closeout, bind records to goal_id and dispatch_request_id, keep host subagents as main-model/strong-model speed lanes rather than auxiliary AI, treat standing workspace authorization as equivalent to an explicit `开启subagent` phrase with no per-use prompt precondition, explicit read-only intent suppresses writable worker lanes for audit/review-only work, and damaged ledger JSON or unclosed dispatch requests surface as fail-closed blockers.
         strict_validation: true
@@ -1171,19 +1171,19 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: close_success_requires_actual_evidence"
-            updated_at: "2026-06-27T09:07:16.820343Z"
+            updated_at: "2026-07-01T00:36:58.953026Z"
           - command: "cargo test -p rayman-core session::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: close_success_requires_actual_evidence"
-            updated_at: "2026-06-27T09:07:16.820343Z"
+            updated_at: "2026-07-01T00:36:58.953026Z"
           - command: "cargo test -p rayman-core quality::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: close_success_requires_actual_evidence"
-            updated_at: "2026-06-27T09:07:16.820343Z"
+            updated_at: "2026-07-01T00:36:58.953026Z"
       - id: goal_wait_recovery_contract
         claim: Goal workflows exhaust non-human executable stages before waiting, and every blocked/partial pending-work item records blocker ownership, minimum input, evidence path, resume command, and automatic resume strategy. User-owned blockers are `wait_user`, unavailable outside dependencies are `wait_external`, and remaining validation/release blockers are `hard_gate`.
         implementation_anchors:
@@ -1928,19 +1928,19 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: paper_claim_audit_protocol"
-            updated_at: "2026-06-27T09:07:16.820343Z"
+            updated_at: "2026-07-01T00:36:58.953026Z"
           - command: cargo test -p rayman-cli cli_parses_coverage_status
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: paper_claim_audit_protocol"
-            updated_at: "2026-06-27T09:07:16.820343Z"
+            updated_at: "2026-07-01T00:36:58.953026Z"
           - command: rayman coverage status --check
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: paper_claim_audit_protocol"
-            updated_at: "2026-06-27T09:07:16.820343Z"
+            updated_at: "2026-07-01T00:36:58.953026Z"
       - id: feature_preservation_protocol
         claim: Public CLI/API/runtime surfaces cannot disappear from docs or manifest silently; source-extracted CLI commands and obsolete asset blockers must be resolved, documented, tested, or explicitly retired.
         implementation_anchors:

@@ -7,6 +7,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
+use crate::assets::{AssetRetirementManager, AssetRetirementReport};
 use crate::{display_path, now_iso, read_text, yaml};
 
 pub const FEATURE_COVERAGE_MANIFEST: &str = "config/feature_coverage.yaml";
@@ -125,6 +126,7 @@ struct ValidationRecordCheck<'a> {
     validation_commands: &'a [String],
     validation_records: &'a [ValidationRecord],
     freshness_anchors: &'a [&'a [CoverageAnchor]],
+    asset_retirement: Option<&'a AssetRetirementReport>,
 }
 
 pub fn load_manifest(root: &Path) -> Result<FeatureCoverageManifest> {
@@ -169,10 +171,17 @@ pub fn check_feature_coverage_with_options(
     };
 
     let mut findings = Vec::new();
-    validate_manifest_shape(&root, &manifest, options, &mut findings);
-    validate_document_coverage(&root, &manifest, &mut findings)?;
-    validate_public_commands(&root, &manifest, &mut findings)?;
-    validate_api_endpoints(&root, &manifest, &mut findings)?;
+    let asset_retirement = current_behavior_asset_report(&root, &mut findings);
+    validate_manifest_shape(
+        &root,
+        &manifest,
+        options,
+        asset_retirement.as_ref(),
+        &mut findings,
+    );
+    validate_document_coverage(&root, &manifest, asset_retirement.as_ref(), &mut findings)?;
+    validate_public_commands(&root, &manifest, asset_retirement.as_ref(), &mut findings)?;
+    validate_api_endpoints(&root, &manifest, asset_retirement.as_ref(), &mut findings)?;
 
     Ok(report_from_parts(
         &root,
@@ -267,6 +276,17 @@ pub fn render_feature_coverage_markdown(report: &FeatureCoverageReport) -> Strin
 }
 
 pub fn documented_public_commands(root: &Path) -> Result<Vec<String>> {
+    let asset_retirement = AssetRetirementManager::new(root)?.status()?;
+    documented_public_commands_with_retirement(root, Some(&asset_retirement))
+}
+
+fn documented_public_commands_with_retirement(
+    root: &Path,
+    asset_retirement: Option<&AssetRetirementReport>,
+) -> Result<Vec<String>> {
+    if !is_current_behavior_path(asset_retirement, "docs/CLI.md") {
+        return Ok(Vec::new());
+    }
     let text = read_text(&root.join("docs").join("CLI.md"))?;
     let mut commands = BTreeSet::new();
     for line in text.lines() {
@@ -278,6 +298,17 @@ pub fn documented_public_commands(root: &Path) -> Result<Vec<String>> {
 }
 
 pub fn documented_api_endpoints(root: &Path) -> Result<Vec<String>> {
+    let asset_retirement = AssetRetirementManager::new(root)?.status()?;
+    documented_api_endpoints_with_retirement(root, Some(&asset_retirement))
+}
+
+fn documented_api_endpoints_with_retirement(
+    root: &Path,
+    asset_retirement: Option<&AssetRetirementReport>,
+) -> Result<Vec<String>> {
+    if !is_current_behavior_path(asset_retirement, "docs/API.md") {
+        return Ok(Vec::new());
+    }
     let text = read_text(&root.join("docs").join("API.md"))?;
     let mut endpoints = BTreeSet::new();
     for line in text.lines() {
@@ -291,12 +322,36 @@ pub fn documented_api_endpoints(root: &Path) -> Result<Vec<String>> {
 }
 
 pub fn implemented_public_commands(root: &Path) -> Result<Vec<String>> {
-    let text = read_rust_sources(&root.join("crates").join("rayman-cli").join("src"))?;
-    Ok(extract_cli_command_paths(&text).into_iter().collect())
+    let asset_retirement = AssetRetirementManager::new(root)?.status()?;
+    implemented_public_commands_with_retirement(root, Some(&asset_retirement))
 }
 
 pub fn implemented_api_endpoints(root: &Path) -> Result<Vec<String>> {
-    let text = read_rust_sources(&root.join("crates").join("rayman-api").join("src"))?;
+    let asset_retirement = AssetRetirementManager::new(root)?.status()?;
+    implemented_api_endpoints_with_retirement(root, Some(&asset_retirement))
+}
+
+fn implemented_public_commands_with_retirement(
+    root: &Path,
+    asset_retirement: Option<&AssetRetirementReport>,
+) -> Result<Vec<String>> {
+    let text = read_rust_sources(
+        root,
+        &root.join("crates").join("rayman-cli").join("src"),
+        asset_retirement,
+    )?;
+    Ok(extract_cli_command_paths(&text).into_iter().collect())
+}
+
+fn implemented_api_endpoints_with_retirement(
+    root: &Path,
+    asset_retirement: Option<&AssetRetirementReport>,
+) -> Result<Vec<String>> {
+    let text = read_rust_sources(
+        root,
+        &root.join("crates").join("rayman-api").join("src"),
+        asset_retirement,
+    )?;
     let mut endpoints = BTreeSet::new();
     let mut in_route = false;
     let mut route_balance = 0isize;
@@ -326,7 +381,11 @@ pub fn implemented_api_endpoints(root: &Path) -> Result<Vec<String>> {
     Ok(endpoints.into_iter().collect())
 }
 
-fn read_rust_sources(dir: &Path) -> Result<String> {
+fn read_rust_sources(
+    root: &Path,
+    dir: &Path,
+    asset_retirement: Option<&AssetRetirementReport>,
+) -> Result<String> {
     let mut paths = Vec::new();
     if !dir.exists() {
         return Ok(String::new());
@@ -339,7 +398,10 @@ fn read_rust_sources(dir: &Path) -> Result<String> {
                 .and_then(|ext| ext.to_str())
                 .is_some_and(|ext| ext == "rs")
         {
-            paths.push(entry.path().to_path_buf());
+            let relative = relative_slash(root, entry.path());
+            if is_current_behavior_path(asset_retirement, &relative) {
+                paths.push(entry.path().to_path_buf());
+            }
         }
     }
     paths.sort();
@@ -355,6 +417,7 @@ fn validate_manifest_shape(
     root: &Path,
     manifest: &FeatureCoverageManifest,
     options: FeatureCoverageOptions,
+    asset_retirement: Option<&AssetRetirementReport>,
     findings: &mut Vec<FeatureCoverageFinding>,
 ) {
     if manifest.features.is_empty() {
@@ -394,13 +457,21 @@ fn validate_manifest_shape(
                 "feature title must not be empty",
             );
         }
-        validate_anchor_group(root, findings, feature, "doc_anchor", &feature.doc_anchors);
+        validate_anchor_group(
+            root,
+            findings,
+            feature,
+            "doc_anchor",
+            &feature.doc_anchors,
+            asset_retirement,
+        );
         validate_anchor_group(
             root,
             findings,
             feature,
             "implementation_anchor",
             &feature.implementation_anchors,
+            asset_retirement,
         );
         validate_anchor_group(
             root,
@@ -408,6 +479,7 @@ fn validate_manifest_shape(
             feature,
             "test_anchor",
             &feature.test_anchors,
+            asset_retirement,
         );
         if feature.validation_commands.is_empty() {
             push_feature_finding(
@@ -433,11 +505,12 @@ fn validate_manifest_shape(
                     &feature.implementation_anchors,
                     &feature.test_anchors,
                 ],
+                asset_retirement,
             },
         );
         validate_feature_proofs(root, findings, feature);
-        validate_claim_checks(root, options, findings, feature);
-        validate_ui_surfaces(root, findings, feature);
+        validate_claim_checks(root, options, findings, feature, asset_retirement);
+        validate_ui_surfaces(root, findings, feature, asset_retirement);
     }
 }
 
@@ -494,6 +567,7 @@ fn validate_claim_checks(
     options: FeatureCoverageOptions,
     findings: &mut Vec<FeatureCoverageFinding>,
     feature: &FeatureCoverageItem,
+    asset_retirement: Option<&AssetRetirementReport>,
 ) {
     let mut ids = BTreeSet::new();
     for claim in &feature.claim_checks {
@@ -532,6 +606,7 @@ fn validate_claim_checks(
             feature,
             "claim_doc_anchor",
             &claim.doc_anchors,
+            asset_retirement,
         );
         validate_anchor_group(
             root,
@@ -539,6 +614,7 @@ fn validate_claim_checks(
             feature,
             "claim_implementation_anchor",
             &claim.implementation_anchors,
+            asset_retirement,
         );
         validate_anchor_group(
             root,
@@ -546,6 +622,7 @@ fn validate_claim_checks(
             feature,
             "claim_test_anchor",
             &claim.test_anchors,
+            asset_retirement,
         );
         if claim.validation_commands.is_empty() {
             push_feature_finding(
@@ -571,6 +648,7 @@ fn validate_claim_checks(
                     &claim.implementation_anchors,
                     &claim.test_anchors,
                 ],
+                asset_retirement,
             },
         );
         let claim_proofs = claim
@@ -608,6 +686,7 @@ fn validate_validation_records(
         validation_commands,
         validation_records,
         freshness_anchors,
+        asset_retirement,
     } = check;
     if !strict_enabled {
         return;
@@ -745,6 +824,18 @@ fn validate_validation_records(
                 continue;
             }
         };
+        if !is_current_behavior_path(asset_retirement, evidence_path) {
+            push_feature_finding(
+                root,
+                findings,
+                feature,
+                &format!("{scope}_validation_record_evidence_non_current_asset"),
+                &format!(
+                    "strict {scope} `{scope_id}` validation evidence for `{command}` points to non-current asset `{evidence_path}`"
+                ),
+            );
+            continue;
+        }
         let text = match read_text(&path) {
             Ok(text) => text,
             Err(error) => {
@@ -783,7 +874,8 @@ fn validate_validation_records(
             );
         }
         if let Some(updated_at) = updated_at
-            && let Some(path) = validate_record_freshness(root, updated_at, freshness_anchors)
+            && let Some(path) =
+                validate_record_freshness(root, updated_at, freshness_anchors, asset_retirement)
         {
             push_feature_finding(
                 root,
@@ -847,11 +939,15 @@ fn validate_record_freshness(
     root: &Path,
     updated_at: DateTime<Utc>,
     freshness_anchors: &[&[CoverageAnchor]],
+    asset_retirement: Option<&AssetRetirementReport>,
 ) -> Option<String> {
     let newest_anchor = freshness_anchors
         .iter()
         .flat_map(|anchors| anchors.iter())
         .filter_map(|anchor| {
+            if !is_current_behavior_path(asset_retirement, &anchor.path) {
+                return None;
+            }
             let path = resolve_workspace_relative(root, &anchor.path).ok()?;
             let modified = fs::metadata(&path).ok()?.modified().ok()?;
             Some((anchor.path.as_str(), DateTime::<Utc>::from(modified)))
@@ -869,9 +965,10 @@ fn validate_optional_anchor_group(
     feature: &FeatureCoverageItem,
     kind: &str,
     anchors: &[CoverageAnchor],
+    asset_retirement: Option<&AssetRetirementReport>,
 ) {
     if !anchors.is_empty() {
-        validate_anchor_group(root, findings, feature, kind, anchors);
+        validate_anchor_group(root, findings, feature, kind, anchors, asset_retirement);
     }
 }
 
@@ -881,6 +978,7 @@ fn validate_anchor_group(
     feature: &FeatureCoverageItem,
     kind: &str,
     anchors: &[CoverageAnchor],
+    asset_retirement: Option<&AssetRetirementReport>,
 ) {
     if anchors.is_empty() {
         push_feature_finding(
@@ -893,6 +991,19 @@ fn validate_anchor_group(
         return;
     }
     for anchor in anchors {
+        if !is_current_behavior_path(asset_retirement, &anchor.path) {
+            findings.push(FeatureCoverageFinding {
+                feature_id: Some(feature.id.clone()),
+                path: Some(root.join(&anchor.path)),
+                line: 1,
+                kind: format!("{kind}_non_current_asset"),
+                message: format!(
+                    "anchor points to non-current obsolete asset and cannot prove current behavior: {}",
+                    anchor.path
+                ),
+            });
+            continue;
+        }
         match resolve_workspace_relative(root, &anchor.path) {
             Ok(path) => match read_text(&path) {
                 Ok(text) => {
@@ -932,6 +1043,7 @@ fn validate_ui_surfaces(
     root: &Path,
     findings: &mut Vec<FeatureCoverageFinding>,
     feature: &FeatureCoverageItem,
+    asset_retirement: Option<&AssetRetirementReport>,
 ) {
     for surface in &feature.ui_surfaces {
         if !matches!(surface.as_str(), "cli" | "api_json" | "html_docs") {
@@ -946,6 +1058,9 @@ fn validate_ui_surfaces(
         }
         let marker = format!("@ui:{surface}");
         let has_marker = feature.test_anchors.iter().any(|anchor| {
+            if !is_current_behavior_path(asset_retirement, &anchor.path) {
+                return false;
+            }
             resolve_workspace_relative(root, &anchor.path)
                 .ok()
                 .and_then(|path| read_text(&path).ok())
@@ -966,6 +1081,7 @@ fn validate_ui_surfaces(
 fn validate_document_coverage(
     root: &Path,
     manifest: &FeatureCoverageManifest,
+    asset_retirement: Option<&AssetRetirementReport>,
     findings: &mut Vec<FeatureCoverageFinding>,
 ) -> Result<()> {
     let covered = manifest
@@ -973,8 +1089,9 @@ fn validate_document_coverage(
         .iter()
         .flat_map(|feature| feature.doc_anchors.iter())
         .map(|anchor| normalize_slash(&anchor.path))
+        .filter(|path| is_current_behavior_path(asset_retirement, path))
         .collect::<BTreeSet<_>>();
-    for expected in expected_document_paths(root)? {
+    for expected in expected_document_paths_with_retirement(root, asset_retirement)? {
         if !covered.contains(&expected) {
             findings.push(FeatureCoverageFinding {
                 feature_id: None,
@@ -993,6 +1110,7 @@ fn validate_document_coverage(
 fn validate_public_commands(
     root: &Path,
     manifest: &FeatureCoverageManifest,
+    asset_retirement: Option<&AssetRetirementReport>,
     findings: &mut Vec<FeatureCoverageFinding>,
 ) -> Result<()> {
     let registered = registered_public_commands(manifest);
@@ -1007,7 +1125,7 @@ fn validate_public_commands(
             });
         }
     }
-    for command in documented_public_commands(root)? {
+    for command in documented_public_commands_with_retirement(root, asset_retirement)? {
         if !command_documented_by_registered_surface(&command, &registered) {
             findings.push(FeatureCoverageFinding {
                 feature_id: None,
@@ -1020,7 +1138,7 @@ fn validate_public_commands(
             });
         }
     }
-    for command in implemented_public_commands(root)? {
+    for command in implemented_public_commands_with_retirement(root, asset_retirement)? {
         if !command_surface_registered(&command, &registered) {
             findings.push(FeatureCoverageFinding {
                 feature_id: None,
@@ -1044,10 +1162,11 @@ fn validate_public_commands(
 fn validate_api_endpoints(
     root: &Path,
     manifest: &FeatureCoverageManifest,
+    asset_retirement: Option<&AssetRetirementReport>,
     findings: &mut Vec<FeatureCoverageFinding>,
 ) -> Result<()> {
     let registered = registered_api_endpoints(manifest);
-    for endpoint in documented_api_endpoints(root)? {
+    for endpoint in documented_api_endpoints_with_retirement(root, asset_retirement)? {
         if !registered.contains(&endpoint) {
             findings.push(FeatureCoverageFinding {
                 feature_id: None,
@@ -1060,7 +1179,7 @@ fn validate_api_endpoints(
             });
         }
     }
-    for endpoint in implemented_api_endpoints(root)? {
+    for endpoint in implemented_api_endpoints_with_retirement(root, asset_retirement)? {
         if !registered.contains(&endpoint) {
             findings.push(FeatureCoverageFinding {
                 feature_id: None,
@@ -1089,26 +1208,36 @@ fn report_from_parts(
     findings: Vec<FeatureCoverageFinding>,
     options: FeatureCoverageOptions,
 ) -> FeatureCoverageReport {
+    let asset_retirement = AssetRetirementManager::new(root)
+        .and_then(|manager| manager.status())
+        .ok();
+    let asset_retirement = asset_retirement.as_ref();
     let status = if findings.is_empty() {
         "passed"
     } else {
         "failed"
     };
-    let documented_public_commands = documented_public_commands(root).unwrap_or_default();
-    let implemented_public_commands = implemented_public_commands(root).unwrap_or_default();
+    let documented_public_commands =
+        documented_public_commands_with_retirement(root, asset_retirement).unwrap_or_default();
+    let implemented_public_commands =
+        implemented_public_commands_with_retirement(root, asset_retirement).unwrap_or_default();
     let registered_public_commands = registered_public_commands(&manifest).into_iter().collect();
-    let documented_api_endpoints = documented_api_endpoints(root).unwrap_or_default();
-    let implemented_api_endpoints = implemented_api_endpoints(root).unwrap_or_default();
+    let documented_api_endpoints =
+        documented_api_endpoints_with_retirement(root, asset_retirement).unwrap_or_default();
+    let implemented_api_endpoints =
+        implemented_api_endpoints_with_retirement(root, asset_retirement).unwrap_or_default();
     let registered_api_endpoints = registered_api_endpoints(&manifest).into_iter().collect();
     let covered_document_paths = manifest
         .features
         .iter()
         .flat_map(|feature| feature.doc_anchors.iter())
         .map(|anchor| normalize_slash(&anchor.path))
+        .filter(|path| is_current_behavior_path(asset_retirement, path))
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect();
-    let expected_document_paths = expected_document_paths(root).unwrap_or_default();
+    let expected_document_paths =
+        expected_document_paths_with_retirement(root, asset_retirement).unwrap_or_default();
     let required_actions = if findings.is_empty() {
         vec!["Feature coverage matrix is current.".into()]
     } else {
@@ -1141,10 +1270,13 @@ fn report_from_parts(
     }
 }
 
-fn expected_document_paths(root: &Path) -> Result<Vec<String>> {
+fn expected_document_paths_with_retirement(
+    root: &Path,
+    asset_retirement: Option<&AssetRetirementReport>,
+) -> Result<Vec<String>> {
     let mut paths = BTreeSet::new();
     for relative in ["README.md", "QUICKSTART.md", "SKILL.md"] {
-        if root.join(relative).exists() {
+        if root.join(relative).exists() && is_current_behavior_path(asset_retirement, relative) {
             paths.insert(relative.to_string());
         }
     }
@@ -1160,7 +1292,10 @@ fn expected_document_paths(root: &Path) -> Result<Vec<String>> {
             if entry.path().extension().and_then(|ext| ext.to_str()) != Some("md") {
                 continue;
             }
-            paths.insert(relative_slash(root, entry.path()));
+            let relative = relative_slash(root, entry.path());
+            if is_current_behavior_path(asset_retirement, &relative) {
+                paths.insert(relative);
+            }
         }
     }
     let agents_dir = root.join("agents");
@@ -1176,11 +1311,46 @@ fn expected_document_paths(root: &Path) -> Result<Vec<String>> {
                 entry.path().extension().and_then(|ext| ext.to_str()),
                 Some("yaml" | "yml")
             ) {
-                paths.insert(relative_slash(root, entry.path()));
+                let relative = relative_slash(root, entry.path());
+                if is_current_behavior_path(asset_retirement, &relative) {
+                    paths.insert(relative);
+                }
             }
         }
     }
     Ok(paths.into_iter().collect())
+}
+
+fn current_behavior_asset_report(
+    root: &Path,
+    findings: &mut Vec<FeatureCoverageFinding>,
+) -> Option<AssetRetirementReport> {
+    match AssetRetirementManager::new(root).and_then(|manager| manager.status()) {
+        Ok(report) => Some(report),
+        Err(error) => {
+            findings.push(FeatureCoverageFinding {
+                feature_id: None,
+                path: Some(
+                    root.join(".RaymanCodingSkill")
+                        .join("assets")
+                        .join("retirement.json"),
+                ),
+                line: 1,
+                kind: "asset_retirement_state_unreadable".into(),
+                message: format!(
+                    "unable to load asset retirement state for current-behavior filtering: {error}"
+                ),
+            });
+            None
+        }
+    }
+}
+
+fn is_current_behavior_path(
+    asset_retirement: Option<&AssetRetirementReport>,
+    relative_path: &str,
+) -> bool {
+    asset_retirement.is_some_and(|report| report.is_current_behavior_path(relative_path))
 }
 
 fn registered_public_commands(manifest: &FeatureCoverageManifest) -> BTreeSet<String> {
@@ -2279,6 +2449,101 @@ features:
         assert!(report.findings.iter().any(|finding| {
             finding.kind == "document_unmapped" && finding.message.contains("agents/openai.yaml")
         }));
+    }
+
+    #[test]
+    fn coverage_rejects_non_current_doc_anchor_as_current_proof() {
+        let temp = tempfile::tempdir().unwrap();
+        write_minimal_repo(temp.path());
+        let old_doc = temp.path().join("docs").join("old-cli.md");
+        fs::write(&old_doc, "# CLI\nstale coverage proof\n").unwrap();
+        AssetRetirementManager::new(temp.path())
+            .unwrap()
+            .exempt(crate::assets::AssetExemptRequest {
+                path: old_doc,
+                retention_reason: "temporary audit retention".into(),
+                expires_at: "2999-01-01".into(),
+            })
+            .unwrap();
+        fs::write(
+            temp.path().join(FEATURE_COVERAGE_MANIFEST),
+            r##"
+features:
+  - id: cli
+    title: CLI
+    doc_anchors:
+      - path: docs/old-cli.md
+        contains: stale coverage proof
+    implementation_anchors:
+      - path: crates/rayman-cli/src/main.rs
+        contains: enum Command
+    test_anchors:
+      - path: crates/rayman-cli/tests/ui_contract.rs
+        contains: "@ui:cli"
+        proves:
+          - rayman session status
+    validation_commands:
+      - cargo test -p rayman-cli
+    ui_surfaces:
+      - cli
+    public_commands:
+      - rayman session status
+"##,
+        )
+        .unwrap();
+
+        let report = check_feature_coverage(temp.path()).unwrap();
+
+        assert!(report.findings.iter().any(|finding| {
+            finding.kind == "doc_anchor_non_current_asset"
+                && finding.message.contains("docs/old-cli.md")
+        }));
+        assert!(
+            !report
+                .covered_document_paths
+                .contains(&"docs/old-cli.md".to_string())
+        );
+        assert!(
+            !report
+                .expected_document_paths
+                .contains(&"docs/old-cli.md".to_string())
+        );
+    }
+
+    #[test]
+    fn command_extractors_ignore_non_current_sources_and_docs() {
+        let temp = tempfile::tempdir().unwrap();
+        write_minimal_repo(temp.path());
+        let old_doc = temp.path().join("docs").join("CLI.md");
+        fs::write(&old_doc, "# CLI\nrayman stale doc command\n").unwrap();
+        let old_source = temp
+            .path()
+            .join("crates")
+            .join("rayman-cli")
+            .join("src")
+            .join("old.rs");
+        fs::write(&old_source, "enum Command { StaleSourceCommand }\n").unwrap();
+        let manager = AssetRetirementManager::new(temp.path()).unwrap();
+        manager
+            .exempt(crate::assets::AssetExemptRequest {
+                path: old_doc,
+                retention_reason: "temporary audit retention".into(),
+                expires_at: "2999-01-01".into(),
+            })
+            .unwrap();
+        manager
+            .exempt(crate::assets::AssetExemptRequest {
+                path: old_source,
+                retention_reason: "temporary audit retention".into(),
+                expires_at: "2999-01-01".into(),
+            })
+            .unwrap();
+
+        let documented = documented_public_commands(temp.path()).unwrap();
+        let implemented = implemented_public_commands(temp.path()).unwrap();
+
+        assert!(!documented.contains(&"rayman stale doc command".to_string()));
+        assert!(!implemented.contains(&"rayman stale-source-command".to_string()));
     }
 
     fn write_minimal_repo(root: &Path) {
