@@ -539,37 +539,37 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-07-03T13:51:17.4643223Z"
+            updated_at: "2026-07-03T21:26:30Z"
           - command: "cargo test -p rayman-core session::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-07-03T13:51:17.4643223Z"
+            updated_at: "2026-07-03T21:26:30Z"
           - command: "cargo test -p rayman-core goal::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-07-03T13:51:17.4643223Z"
+            updated_at: "2026-07-03T21:26:30Z"
           - command: "cargo test -p rayman-core audit::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-07-03T13:51:17.4643223Z"
+            updated_at: "2026-07-03T21:26:30Z"
           - command: "cargo test -p rayman-core gate::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-07-03T13:51:17.4643223Z"
+            updated_at: "2026-07-03T21:26:30Z"
           - command: cargo test -p rayman-cli cli_parses_subagent_commands
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-07-03T13:51:17.4643223Z"
+            updated_at: "2026-07-03T21:26:30Z"
       - id: codex_host_subagent_performance_contract
         claim: Codex host subagent dispatch has a deterministic planner, auto-start surface, and goal controller integration; non-trivial `goal run` / `goal resume` plan stages emit `HOST_SUBAGENT_DISPATCH_REQUEST {json}` with host-tool-ready spawn_agent request payloads, stop with `host_subagent_dispatch_requested` until the primary AI spawns lanes or records failed/unavailable closeout, bind records to goal_id and dispatch_request_id, keep host subagents as main-model/strong-model speed lanes rather than auxiliary AI, treat standing workspace authorization as equivalent to an explicit `开启subagent` phrase with no per-use prompt precondition, explicit read-only intent suppresses writable worker lanes for audit/review-only work, and damaged ledger JSON or unclosed dispatch requests surface as fail-closed blockers.
         strict_validation: true
@@ -719,37 +719,37 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-03T13:51:17.4643223Z"
+            updated_at: "2026-07-03T21:26:30Z"
           - command: "cargo test -p rayman-core goal::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-03T13:51:17.4643223Z"
+            updated_at: "2026-07-03T21:26:30Z"
           - command: cargo test -p rayman-core enabled_workspace_subagent_authorization_matches_explicit_phrase
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-03T13:51:17.4643223Z"
+            updated_at: "2026-07-03T21:26:30Z"
           - command: cargo test -p rayman-cli cli_parses_subagent_commands
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-03T13:51:17.4643223Z"
+            updated_at: "2026-07-03T21:26:30Z"
           - command: cargo test -p rayman-cli cli_goal_run_emits_host_subagent_dispatch_request
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-03T13:51:17.4643223Z"
+            updated_at: "2026-07-03T21:26:30Z"
           - command: cargo test -p rayman-cli --test ui_contract cli_subagent_auto_start_emits_spawn_contract
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-03T13:51:17.4643223Z"
+            updated_at: "2026-07-03T21:26:30Z"
       - id: codex_harness_execution_contract
         claim: Codex harness-style self-improvement is treated as a mapping to documented Codex execution controls or current-session capabilities, with quality-gate evidence for sandbox/approval boundaries, AGENTS.md/skills/hooks/MCP-rules instruction surfaces, subagent inheritance plus Rayman ledger review, and non-interactive approval/escalation failure handling.
         doc_anchors:
@@ -1236,19 +1236,19 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: close_success_requires_actual_evidence"
-            updated_at: "2026-07-03T13:36:05.9283003Z"
+            updated_at: "2026-07-03T21:26:30Z"
           - command: "cargo test -p rayman-core session::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: close_success_requires_actual_evidence"
-            updated_at: "2026-07-03T13:36:05.9283003Z"
+            updated_at: "2026-07-03T21:26:30Z"
           - command: "cargo test -p rayman-core quality::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: close_success_requires_actual_evidence"
-            updated_at: "2026-07-03T13:36:05.9283003Z"
+            updated_at: "2026-07-03T21:26:30Z"
       - id: goal_wait_recovery_contract
         claim: Goal workflows exhaust non-human executable stages before waiting, and every blocked/partial pending-work item records blocker ownership, minimum input, evidence path, resume command, and automatic resume strategy. User-owned blockers are `wait_user`, unavailable outside dependencies are `wait_external`, and remaining validation/release blockers are `hard_gate`.
         implementation_anchors:
@@ -1953,6 +1953,120 @@ features:
               - evidence_first_unknown_gate
         validation_commands:
           - "cargo test -p rayman-core evidence:: workflow::"
+      - id: verification_supremacy_over_ai_judgment
+        claim: Executed tests and validation commands outrank primary AI, auxiliary AI, research-agent, and host-subagent correctness claims; AI/model confidence without current evidence stays advisory or unknown, and failed validation blocks goal success until a later successful validation command clears it.
+        strict_validation: true
+        doc_anchors:
+          - path: SKILL.md
+            contains: "Executed tests and validation commands outrank AI judgment"
+          - path: references/skill-proof-and-preservation.md
+            contains: "Executed tests and validation commands have higher authority than AI judgment"
+          - path: docs/QUALITY.md
+            contains: "`verification_supremacy_over_ai_judgment`"
+        implementation_anchors:
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "AI认为"
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn successful_validation_command"
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "pub fn validation_records_from_steps"
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn contains_advisory_marker"
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn contains_blocked_marker"
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "contains_validation_negation(&lower)"
+          - path: crates/rayman-core/src/goal.rs
+            contains: "fn evidence_has_substantive_proof"
+          - path: crates/rayman-core/src/goal.rs
+            contains: "fn unresolved_failed_validation_blockers"
+          - path: crates/rayman-core/src/goal.rs
+            contains: "失败验证未被后续通过覆盖"
+        test_anchors:
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn resolver_verifies_recorded_validation_command"
+            proves:
+              - verification_supremacy_over_ai_judgment
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn resolver_downgrades_ai_correctness_without_current_evidence"
+            proves:
+              - verification_supremacy_over_ai_judgment
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn failed_validation_overrides_ai_correctness_and_path_evidence"
+            proves:
+              - verification_supremacy_over_ai_judgment
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn scan_success_claims_blocks_verified_research_success_without_challenge"
+            proves:
+              - verification_supremacy_over_ai_judgment
+          - path: crates/rayman-core/src/goal.rs
+            contains: "fn goal_close_success_rejects_negated_validation_evidence"
+            proves:
+              - verification_supremacy_over_ai_judgment
+          - path: crates/rayman-core/src/goal.rs
+            contains: "fn validation_failure_enters_repair_loop"
+            proves:
+              - verification_supremacy_over_ai_judgment
+          - path: crates/rayman-core/src/goal.rs
+            contains: "fn goal_close_success_blocks_failed_validation_after_prior_pass"
+            proves:
+              - verification_supremacy_over_ai_judgment
+          - path: crates/rayman-core/src/goal.rs
+            contains: "fn goal_close_success_allows_failed_validation_after_later_pass"
+            proves:
+              - verification_supremacy_over_ai_judgment
+          - path: crates/rayman-core/src/feature_coverage.rs
+            contains: "fn coverage_gate_requires_claim_check_proof_triplet"
+            proves:
+              - verification_supremacy_over_ai_judgment
+          - path: crates/rayman-core/src/feature_coverage.rs
+            contains: "fn strict_claim_requires_validation_records"
+            proves:
+              - verification_supremacy_over_ai_judgment
+        validation_commands:
+          - "cargo test -p rayman-core evidence::"
+          - "cargo test -p rayman-core goal::"
+          - "cargo test -p rayman-core quality::"
+          - "cargo test -p rayman-core feature_coverage::"
+          - cargo test -p rayman-cli cli_parses_coverage_status
+          - rayman coverage status --check
+        validation_records:
+          - command: "cargo test -p rayman-core evidence::"
+            status: passed
+            evidence_path: docs/VALIDATION_RECORDS.md
+            evidence_contains:
+              - "record: verification_supremacy_over_ai_judgment"
+            updated_at: "2026-07-03T21:26:30Z"
+          - command: "cargo test -p rayman-core goal::"
+            status: passed
+            evidence_path: docs/VALIDATION_RECORDS.md
+            evidence_contains:
+              - "record: verification_supremacy_over_ai_judgment"
+            updated_at: "2026-07-03T21:26:30Z"
+          - command: "cargo test -p rayman-core quality::"
+            status: passed
+            evidence_path: docs/VALIDATION_RECORDS.md
+            evidence_contains:
+              - "record: verification_supremacy_over_ai_judgment"
+            updated_at: "2026-07-03T21:26:30Z"
+          - command: "cargo test -p rayman-core feature_coverage::"
+            status: passed
+            evidence_path: docs/VALIDATION_RECORDS.md
+            evidence_contains:
+              - "record: verification_supremacy_over_ai_judgment"
+            updated_at: "2026-07-03T21:26:30Z"
+          - command: cargo test -p rayman-cli cli_parses_coverage_status
+            status: passed
+            evidence_path: docs/VALIDATION_RECORDS.md
+            evidence_contains:
+              - "record: verification_supremacy_over_ai_judgment"
+            updated_at: "2026-07-03T21:26:30Z"
+          - command: rayman coverage status --check
+            status: passed
+            evidence_path: docs/VALIDATION_RECORDS.md
+            evidence_contains:
+              - "record: verification_supremacy_over_ai_judgment"
+            updated_at: "2026-07-03T21:26:30Z"
       - id: success_claim_counterexample_challenge_gate
         claim: Verified success/completion/ready/satisfied claims fail closed unless claim ledger, goal close evidence, session close evidence, and structured JSON success summaries include current evidence_refs, search_effort, and a cleared counterexample/adversarial challenge with explicit evidence refs; fabricated, marker-only, incidental-path-only, stale, unresolved, or internally conflicting blocker/unknown/assumption metadata blocks success instead of producing a plausible false positive, while legacy `.RaymanCodingSkill/goals/*.json` requirement records are not promoted into public structured success summaries and the same lookalike shape outside goal state remains blocked.
         strict_validation: true
@@ -2079,31 +2193,31 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: success_claim_counterexample_challenge_gate"
-            updated_at: "2026-07-03T13:36:05.9283003Z"
+            updated_at: "2026-07-03T21:26:30Z"
           - command: "cargo test -p rayman-core goal::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: success_claim_counterexample_challenge_gate"
-            updated_at: "2026-07-03T13:36:05.9283003Z"
+            updated_at: "2026-07-03T21:26:30Z"
           - command: "cargo test -p rayman-core session::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: success_claim_counterexample_challenge_gate"
-            updated_at: "2026-07-03T13:36:05.9283003Z"
+            updated_at: "2026-07-03T21:26:30Z"
           - command: "cargo test -p rayman-core skills::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: success_claim_counterexample_challenge_gate"
-            updated_at: "2026-07-03T13:36:05.9283003Z"
+            updated_at: "2026-07-03T21:26:30Z"
           - command: cargo test -p rayman-api
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: success_claim_counterexample_challenge_gate"
-            updated_at: "2026-07-03T13:36:05.9283003Z"
+            updated_at: "2026-07-03T21:26:30Z"
       - id: asset_retirement_cascades_retired_test_cases
         claim: Retiring a feature, declaration, command, API, claim, or obsolete asset also retires tests whose only purpose was proving that retired surface; isolated Rust test cases and matching feature-coverage test anchors are cascade candidates that cleanup may delete before deleting the now-unreferenced retired asset, while unisolated stale test references, mixed current/retired proofs, and orphan `test_anchors[].proves` entries block success.
         doc_anchors:

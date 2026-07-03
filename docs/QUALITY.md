@@ -28,6 +28,7 @@ RaymanCodingSkill records repeated customer-reported failures as workspace-local
 - `temporal_fact_evidence`: current facts and relative dates require absolute dates plus current source verification.
 - `debug_release_delivery`: customer programs require both debug and release build evidence; a temporary target can prove a locked executable workaround but does not replace formal release verification.
 - `evidence_first_unknown`: implementation, validation, research, auxiliary, CLI/API, and prompt claims must expose `evidence_status` plus a claim ledger. Unsupported claims are `unknown`, `assumption`, `blocked`, or `advisory`; high confidence, auxiliary output, cached summaries, memory, and research findings do not prove completion.
+- `verification_supremacy_over_ai_judgment`: executed tests and validation commands outrank primary AI, auxiliary AI, research-agent, and host-subagent correctness claims. Failed validation remains a blocker until a later successful validation command clears it; AI confidence without current evidence stays advisory or unknown.
 
 ## Commands
 

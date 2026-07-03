@@ -62,6 +62,7 @@ See [Core Workflow](references/skill-core-workflow.md) for the full rule text.
 See [Proof And Preservation](references/skill-proof-and-preservation.md) for closed-loop delivery, Paper Claim Audit Protocol, and Feature Preservation Protocol rules.
 
 - Primary completion evidence must come from current files, command output, and goal/session/context state; auxiliary AI output and cached summaries are advisory only.
+- Executed tests and validation commands outrank AI judgment. Primary AI, auxiliary AI, research agents, and host subagents may suggest correctness, but they cannot override failed validation, missing validation, or missing current evidence.
 - Follow the [Evidence-First Unknown Rule](references/skill-proof-and-preservation.md#evidence-first-unknown-rule): when proof is missing or advisory-only, report `unknown`/`blocked`/`assumption` instead of plausible success.
 - `goal close --status success` rejects `req_id`-only evidence; every `must` requirement needs an existing current workspace path, a recorded successful validation command, or an existing evidence artifact.
 - Any `success`, `complete`, `verified`, `ready`, or equivalent completion claim must also preserve `evidence_refs`, `search_effort`, and `counterexample_challenges`; a cleared counterexample/adversarial challenge must cite current evidence refs, and missing or fabricated challenge metadata blocks success.

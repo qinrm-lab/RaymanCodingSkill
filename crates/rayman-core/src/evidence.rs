@@ -11,6 +11,15 @@ use crate::{display_path, ensure_within, now_iso};
 const ADVISORY_MARKERS: &[&str] = &[
     "auxiliary",
     "advisory",
+    "ai thinks",
+    "ai says",
+    "ai judged",
+    "llm says",
+    "llm judged",
+    "model says",
+    "model thinks",
+    "model judgment",
+    "primary ai",
     "research",
     "confidence",
     "cached",
@@ -19,7 +28,14 @@ const ADVISORY_MARKERS: &[&str] = &[
     "memory",
     "remembered",
     "summary only",
+    "ai认为",
+    "ai 判断",
+    "ai判断",
+    "模型判断",
+    "模型认为",
     "辅助",
+    "辅助ai",
+    "主力ai",
     "建议",
     "研究",
     "置信",
@@ -1655,6 +1671,26 @@ mod tests {
     }
 
     #[test]
+    fn resolver_downgrades_ai_correctness_without_current_evidence() {
+        let temp = tempfile::tempdir().unwrap();
+        let resolver = EvidenceResolver::new(temp.path()).unwrap();
+
+        let claim = resolver.claim(
+            "req_1",
+            "implementation correctness",
+            "AI认为正确; model says implementation is correct",
+        );
+
+        assert_eq!(claim.status, EvidenceStatus::Advisory);
+        assert!(
+            claim
+                .evidence_refs
+                .iter()
+                .any(|reference| reference.kind == EvidenceRefKind::Advisory)
+        );
+    }
+
+    #[test]
     fn blocked_marker_overrides_path_evidence() {
         let temp = tempfile::tempdir().unwrap();
         fs::write(temp.path().join("README.md"), "# project").unwrap();
@@ -1667,6 +1703,31 @@ mod tests {
         );
 
         assert_eq!(claim.status, EvidenceStatus::Blocked);
+    }
+
+    #[test]
+    fn failed_validation_overrides_ai_correctness_and_path_evidence() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("README.md"), "# project").unwrap();
+        let resolver = EvidenceResolver::with_validation_records(
+            temp.path(),
+            vec!["cargo test passed".into()],
+        )
+        .unwrap();
+
+        let claim = resolver.claim(
+            "req_1",
+            "implementation correctness",
+            "README.md updated; cargo test failed; AI thinks correct",
+        );
+
+        assert_eq!(claim.status, EvidenceStatus::Blocked);
+        assert!(
+            claim
+                .blockers
+                .iter()
+                .any(|blocker| blocker.contains("blocked/failed/unverified"))
+        );
     }
 
     #[test]

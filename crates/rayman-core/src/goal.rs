@@ -850,6 +850,13 @@ impl GoalManager {
         if let Some(blocker) = customer_deploy_success_blocker(record) {
             bail!("目标成功门禁未通过: {blocker}");
         }
+        let unresolved_validation_failures = unresolved_failed_validation_blockers(record);
+        if !unresolved_validation_failures.is_empty() {
+            bail!(
+                "目标成功门禁未通过: 失败验证未被后续通过覆盖:\n{}",
+                unresolved_validation_failures.join("\n")
+            );
+        }
         let missing_requirements =
             missing_must_requirement_evidence(&self.workspace, record, closing_evidence);
         if !missing_requirements.is_empty() {
@@ -2285,6 +2292,26 @@ fn failed_validation_attempts(record: &GoalRecord) -> u32 {
         .iter()
         .filter(|step| step.stage == "validate" && step.status == "failed")
         .count() as u32
+}
+
+fn unresolved_failed_validation_blockers(record: &GoalRecord) -> Vec<String> {
+    let mut unresolved = None;
+    for step in record.steps.iter().filter(|step| step.stage == "validate") {
+        if step.status == "succeeded" && step.exit_code == Some(0) {
+            unresolved = None;
+        } else if step.status == "failed" || step.exit_code.is_some_and(|code| code != 0) {
+            unresolved = Some(step);
+        }
+    }
+    unresolved
+        .map(|step| {
+            vec![format!(
+                "validate attempt {} failed; latest evidence={}",
+                step.attempt,
+                step.evidence.as_deref().unwrap_or("<missing evidence>")
+            )]
+        })
+        .unwrap_or_default()
 }
 
 fn goal_checkpoint(record: &GoalRecord, reason: &str, iteration: u32) -> Value {
@@ -3855,6 +3882,92 @@ mod tests {
         assert_eq!(updated.current_stage, "repair");
         assert_eq!(updated.steps.last().unwrap().stage, "validate");
         assert_eq!(updated.steps.last().unwrap().status, "failed");
+    }
+
+    #[test]
+    fn goal_close_success_blocks_failed_validation_after_prior_pass() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("README.md"), "# project").unwrap();
+        let manager = GoalManager::new(temp.path()).unwrap();
+        let goal = manager
+            .start(
+                "ship feature",
+                "standard_development",
+                &[],
+                &[],
+                &["cargo test".into()],
+                &[],
+            )
+            .unwrap();
+
+        ContextKernel::new(temp.path())
+            .unwrap()
+            .refresh_index()
+            .unwrap();
+        manager.run_next(Some(&goal.id), None).unwrap();
+        manager.run_next(Some(&goal.id), None).unwrap();
+        manager.run_next(Some(&goal.id), None).unwrap();
+        manager
+            .record_validation_result(Some(&goal.id), true, "cargo test passed")
+            .unwrap();
+        manager
+            .record_validation_result(Some(&goal.id), false, "cargo test failed after pass")
+            .unwrap();
+
+        let error = manager
+            .close_goal(
+                Some(&goal.id),
+                "success",
+                &success_evidence("req_1: README.md updated and cargo test passed"),
+                &[],
+            )
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("失败验证未被后续通过覆盖"));
+        assert!(error.contains("cargo test failed after pass"));
+    }
+
+    #[test]
+    fn goal_close_success_allows_failed_validation_after_later_pass() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("README.md"), "# project").unwrap();
+        let manager = GoalManager::new(temp.path()).unwrap();
+        let goal = manager
+            .start(
+                "ship feature",
+                "standard_development",
+                &[],
+                &[],
+                &["cargo test".into()],
+                &[],
+            )
+            .unwrap();
+
+        ContextKernel::new(temp.path())
+            .unwrap()
+            .refresh_index()
+            .unwrap();
+        manager.run_next(Some(&goal.id), None).unwrap();
+        manager.run_next(Some(&goal.id), None).unwrap();
+        manager.run_next(Some(&goal.id), None).unwrap();
+        manager
+            .record_validation_result(Some(&goal.id), false, "cargo test failed first")
+            .unwrap();
+        manager
+            .record_validation_result(Some(&goal.id), true, "cargo test passed after repair")
+            .unwrap();
+
+        let closed = manager
+            .close_goal(
+                Some(&goal.id),
+                "success",
+                &success_evidence("req_1: README.md updated and cargo test passed after repair"),
+                &[],
+            )
+            .unwrap();
+
+        assert_eq!(closed.status, "success");
     }
 
     #[test]
