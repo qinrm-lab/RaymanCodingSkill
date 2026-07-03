@@ -719,37 +719,37 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-03T21:26:30Z"
+            updated_at: "2026-07-03T22:16:37Z"
           - command: "cargo test -p rayman-core goal::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-03T21:26:30Z"
+            updated_at: "2026-07-03T22:16:37Z"
           - command: cargo test -p rayman-core enabled_workspace_subagent_authorization_matches_explicit_phrase
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-03T21:26:30Z"
+            updated_at: "2026-07-03T22:16:37Z"
           - command: cargo test -p rayman-cli cli_parses_subagent_commands
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-03T21:26:30Z"
+            updated_at: "2026-07-03T22:16:37Z"
           - command: cargo test -p rayman-cli cli_goal_run_emits_host_subagent_dispatch_request
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-03T21:26:30Z"
+            updated_at: "2026-07-03T22:16:37Z"
           - command: cargo test -p rayman-cli --test ui_contract cli_subagent_auto_start_emits_spawn_contract
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-03T21:26:30Z"
+            updated_at: "2026-07-03T22:16:37Z"
       - id: codex_harness_execution_contract
         claim: Codex harness-style self-improvement is treated as a mapping to documented Codex execution controls or current-session capabilities, with quality-gate evidence for sandbox/approval boundaries, AGENTS.md/skills/hooks/MCP-rules instruction surfaces, subagent inheritance plus Rayman ledger review, and non-interactive approval/escalation failure handling.
         doc_anchors:
@@ -851,6 +851,35 @@ features:
           - cargo test -p rayman-core host_execution_mode_boundary
           - cargo test -p rayman-core contract_surface_reconciliation
           - cargo test -p rayman-core delivery_gate_stratification
+          - rayman coverage status --check
+      - id: resumable_download_preference
+        claim: RaymanCodingSkill treats software, material, model, dataset, dependency, documentation, and artifact downloads as resumable-first work; success evidence must show a resume-capable transfer mechanism plus cache or partial-file handling, or an explicit unsupported reason before non-resumable fallback.
+        doc_anchors:
+          - path: SKILL.md
+            contains: "resume-capable mechanisms first"
+          - path: docs/QUALITY.md
+            contains: "`resumable_download_preference`"
+          - path: config/performance.yaml
+            contains: "policy: \"prefer_resumable_first\""
+          - path: config/performance.yaml
+            contains: "quality_pattern: \"resumable_download_preference\""
+        implementation_anchors:
+          - path: crates/rayman-core/src/quality.rs
+            contains: "id: \"resumable_download_preference\""
+          - path: crates/rayman-core/src/quality.rs
+            contains: "fn resumable_download_missing"
+        test_anchors:
+          - path: crates/rayman-core/src/quality.rs
+            contains: "fn resumable_download_gate_requires_resume_capable_evidence"
+            proves:
+              - resumable_download_preference
+          - path: crates/rayman-core/src/quality.rs
+            contains: "fn resumable_download_gate_accepts_documented_non_resumable_fallback"
+            proves:
+              - resumable_download_preference
+        validation_commands:
+          - cargo test -p rayman-core resumable_download
+          - "cargo test -p rayman-core quality::"
           - rayman coverage status --check
       - id: repeated_value_centralization
         claim: Repeated literals, thresholds, paths, prompt fragments, and policy values across skill and program surfaces must be inventoried and centralized as a named constant, config key, helper, template variable, or referenced rule section; the rule wording lives in the Repeated Value Centralization Rule section and Rust audit fixtures reuse named constants/helpers instead of copying the rule text.
@@ -1236,19 +1265,19 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: close_success_requires_actual_evidence"
-            updated_at: "2026-07-03T21:26:30Z"
+            updated_at: "2026-07-03T22:16:37Z"
           - command: "cargo test -p rayman-core session::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: close_success_requires_actual_evidence"
-            updated_at: "2026-07-03T21:26:30Z"
+            updated_at: "2026-07-03T22:16:37Z"
           - command: "cargo test -p rayman-core quality::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: close_success_requires_actual_evidence"
-            updated_at: "2026-07-03T21:26:30Z"
+            updated_at: "2026-07-03T22:16:37Z"
       - id: goal_wait_recovery_contract
         claim: Goal workflows exhaust non-human executable stages before waiting, and every blocked/partial pending-work item records blocker ownership, minimum input, evidence path, resume command, and automatic resume strategy. User-owned blockers are `wait_user`, unavailable outside dependencies are `wait_external`, and remaining validation/release blockers are `hard_gate`.
         implementation_anchors:
@@ -2036,37 +2065,37 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: verification_supremacy_over_ai_judgment"
-            updated_at: "2026-07-03T21:26:30Z"
+            updated_at: "2026-07-03T22:16:37Z"
           - command: "cargo test -p rayman-core goal::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: verification_supremacy_over_ai_judgment"
-            updated_at: "2026-07-03T21:26:30Z"
+            updated_at: "2026-07-03T22:16:37Z"
           - command: "cargo test -p rayman-core quality::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: verification_supremacy_over_ai_judgment"
-            updated_at: "2026-07-03T21:26:30Z"
+            updated_at: "2026-07-03T22:16:37Z"
           - command: "cargo test -p rayman-core feature_coverage::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: verification_supremacy_over_ai_judgment"
-            updated_at: "2026-07-03T21:26:30Z"
+            updated_at: "2026-07-03T22:16:37Z"
           - command: cargo test -p rayman-cli cli_parses_coverage_status
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: verification_supremacy_over_ai_judgment"
-            updated_at: "2026-07-03T21:26:30Z"
+            updated_at: "2026-07-03T22:16:37Z"
           - command: rayman coverage status --check
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: verification_supremacy_over_ai_judgment"
-            updated_at: "2026-07-03T21:26:30Z"
+            updated_at: "2026-07-03T22:16:37Z"
       - id: success_claim_counterexample_challenge_gate
         claim: Verified success/completion/ready/satisfied claims fail closed unless claim ledger, goal close evidence, session close evidence, and structured JSON success summaries include current evidence_refs, search_effort, and a cleared counterexample/adversarial challenge with explicit evidence refs; fabricated, marker-only, incidental-path-only, stale, unresolved, or internally conflicting blocker/unknown/assumption metadata blocks success instead of producing a plausible false positive, while legacy `.RaymanCodingSkill/goals/*.json` requirement records are not promoted into public structured success summaries and the same lookalike shape outside goal state remains blocked.
         strict_validation: true
@@ -2193,31 +2222,31 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: success_claim_counterexample_challenge_gate"
-            updated_at: "2026-07-03T21:26:30Z"
+            updated_at: "2026-07-03T22:16:37Z"
           - command: "cargo test -p rayman-core goal::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: success_claim_counterexample_challenge_gate"
-            updated_at: "2026-07-03T21:26:30Z"
+            updated_at: "2026-07-03T22:16:37Z"
           - command: "cargo test -p rayman-core session::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: success_claim_counterexample_challenge_gate"
-            updated_at: "2026-07-03T21:26:30Z"
+            updated_at: "2026-07-03T22:16:37Z"
           - command: "cargo test -p rayman-core skills::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: success_claim_counterexample_challenge_gate"
-            updated_at: "2026-07-03T21:26:30Z"
+            updated_at: "2026-07-03T22:16:37Z"
           - command: cargo test -p rayman-api
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: success_claim_counterexample_challenge_gate"
-            updated_at: "2026-07-03T21:26:30Z"
+            updated_at: "2026-07-03T22:16:37Z"
       - id: asset_retirement_cascades_retired_test_cases
         claim: Retiring a feature, declaration, command, API, claim, or obsolete asset also retires tests whose only purpose was proving that retired surface; isolated Rust test cases and matching feature-coverage test anchors are cascade candidates that cleanup may delete before deleting the now-unreferenced retired asset, while unisolated stale test references, mixed current/retired proofs, and orphan `test_anchors[].proves` entries block success.
         doc_anchors:

@@ -512,6 +512,40 @@ fn default_patterns() -> Vec<QualityPattern> {
             updated_at: now.clone(),
         },
         QualityPattern {
+            id: "resumable_download_preference".into(),
+            name: "Resumable Download Preference".into(),
+            description: "Software, material, model, dataset, dependency, and documentation downloads must prefer resume-capable transfer mechanisms; non-resumable fallback requires an explicit unsupported reason.".into(),
+            source: "builtin".into(),
+            trigger_terms: terms(&[
+                "下载",
+                "download",
+                "下载软件",
+                "下载资料",
+                "软件下载",
+                "资料下载",
+                "模型下载",
+                "数据集下载",
+                "依赖下载",
+                "文档下载",
+                "software download",
+                "material download",
+                "artifact download",
+                "dataset download",
+                "dependency download",
+                "documentation download",
+                "install-tools",
+            ]),
+            required_evidence: vec![
+                "resume-capable downloader, flag, or protocol evidence".into(),
+                "cache or partial-file handling evidence when resume is used".into(),
+                "unsupported fallback reason when resume is unavailable".into(),
+            ],
+            incidents: Vec::new(),
+            hit_count: 0,
+            created_at: now.clone(),
+            updated_at: now.clone(),
+        },
+        QualityPattern {
             id: "obsolete_asset_retirement".into(),
             name: "Obsolete Asset Retirement".into(),
             description: "Review, refactor, and feature replacement work must retire stale code, docs, config, tests, and entrypoints with evidence before success.".into(),
@@ -794,6 +828,7 @@ fn missing_evidence_for_pattern(pattern: &QualityPattern, corpus: &str) -> Vec<S
         "context_relevance" => context_relevance_missing(corpus),
         "project_understanding_freshness" => project_understanding_missing(corpus),
         "managed_temp_freshness" => managed_temp_missing(corpus),
+        "resumable_download_preference" => resumable_download_missing(corpus),
         "obsolete_asset_retirement" => obsolete_asset_retirement_missing(corpus),
         "audit_failure_delivery_gate" => audit_failure_delivery_missing(corpus),
         PATTERN_REPEATED_VALUE_CENTRALIZATION => repeated_value_centralization_missing(corpus),
@@ -986,6 +1021,76 @@ fn managed_temp_missing(corpus: &str) -> Vec<String> {
         ],
     ) {
         missing.push("缺少 no unmanaged system temp evidence".into());
+    }
+    missing
+}
+
+fn resumable_download_missing(corpus: &str) -> Vec<String> {
+    let resumable_evidence = contains_any(
+        corpus,
+        &[
+            "断点续传",
+            "续传",
+            "resumable download",
+            "resume download",
+            "resume-capable",
+            "resume capable",
+            "range request",
+            "http range",
+            "accept-ranges",
+            "curl -c -",
+            "curl --continue-at",
+            "wget -c",
+            "aria2c -c",
+            "start-bitstransfer",
+            "bits",
+            "partial download",
+            "partial file",
+            ".part",
+        ],
+    );
+    let fallback_reason = contains_any(
+        corpus,
+        &[
+            "不支持断点续传",
+            "不支持续传",
+            "does not support range",
+            "no range support",
+            "accept-ranges missing",
+            "range unsupported",
+            "server rejected range",
+            "non-resumable fallback",
+            "fallback reason",
+            "回退原因",
+            "退回非续传",
+        ],
+    );
+    let mut missing = Vec::new();
+    if !resumable_evidence && !fallback_reason {
+        missing.push("缺少断点续传优先证据".into());
+    }
+    if resumable_evidence
+        && !fallback_reason
+        && !contains_any(
+            corpus,
+            &[
+                ".cache/downloads",
+                ".tmp/downloads",
+                "resume cache",
+                "download cache",
+                "partial file",
+                "partial download",
+                ".part",
+                "cache_dir",
+                "temp_dir",
+                "断点缓存",
+                "续传缓存",
+                "部分文件",
+                "临时下载",
+            ],
+        )
+    {
+        missing.push("缺少断点续传缓存或部分文件处理证据".into());
     }
     missing
 }
@@ -1789,6 +1894,11 @@ fn regression_checklist_for_pattern(pattern: &QualityPattern) -> Vec<String> {
             "Run rayman temp status or rayman temp doctor before diagnosing temp failures.".into(),
             "Clean only Rayman-managed temp entries with metadata-backed cleanup.".into(),
             "Verify runtime code uses TempManager or same-directory atomic temp paths.".into(),
+        ],
+        "resumable_download_preference" => vec![
+            "Prefer a resume-capable downloader or flag such as curl -C -, wget -c, aria2c -c, HTTP Range, or PowerShell BITS.".into(),
+            "Record cache, temp, or partial-file handling for resumable transfers.".into(),
+            "If resume is unsupported, record the server/tool reason before using a non-resumable fallback.".into(),
         ],
         "obsolete_asset_retirement" => vec![
             "Inventory obsolete code, docs, config, tests, entrypoints, and generated references before pruning.".into(),
@@ -2610,6 +2720,50 @@ mod tests {
             .gate_goal(
                 &goal,
                 Some("req_1: contract surface inventory covered active contract surfaces; visible requirements and hidden requirements in .RaymanWeb reconciled; generated docs via docs maintain and feature coverage feature_coverage.yaml synchronized; gate script covers hidden with rg --hidden and Get-ChildItem -Force; conflicting old requirement updated and stale requirement retired"),
+            )
+            .unwrap();
+        assert_eq!(passed.status, "passed", "{:?}", passed.missing_evidence);
+    }
+
+    #[test]
+    fn resumable_download_gate_requires_resume_capable_evidence() {
+        let temp = tempfile::tempdir().unwrap();
+        let goals = GoalManager::new(temp.path()).unwrap();
+        let goal = goals
+            .start("下载软件和资料", "standard_development", &[], &[], &[], &[])
+            .unwrap();
+        let quality = QualityManager::new(temp.path()).unwrap();
+
+        let blocked = quality
+            .gate_goal(&goal, Some("req_1: downloaded software package"))
+            .unwrap();
+        assert_eq!(blocked.status, "blocked");
+        assert!(blocked.missing_evidence.iter().any(|item| {
+            item.contains("resumable_download_preference") && item.contains("断点续传")
+        }));
+
+        let passed = quality
+            .gate_goal(
+                &goal,
+                Some("req_1: used curl -C - resumable download into .cache/downloads; partial file handling evidence captured before install"),
+            )
+            .unwrap();
+        assert_eq!(passed.status, "passed", "{:?}", passed.missing_evidence);
+    }
+
+    #[test]
+    fn resumable_download_gate_accepts_documented_non_resumable_fallback() {
+        let temp = tempfile::tempdir().unwrap();
+        let goals = GoalManager::new(temp.path()).unwrap();
+        let goal = goals
+            .start("下载数据集", "standard_development", &[], &[], &[], &[])
+            .unwrap();
+        let quality = QualityManager::new(temp.path()).unwrap();
+
+        let passed = quality
+            .gate_goal(
+                &goal,
+                Some("req_1: server does not support Range and 不支持断点续传; fallback reason captured before non-resumable fallback; sha256 checksum verified"),
             )
             .unwrap();
         assert_eq!(passed.status, "passed", "{:?}", passed.missing_evidence);

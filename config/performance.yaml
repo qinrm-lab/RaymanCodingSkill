@@ -75,6 +75,9 @@ parallel_execution:
 # 断点续传配置
 resumable_downloads:
   enabled: true
+  policy: "prefer_resumable_first"
+  quality_pattern: "resumable_download_preference"
+  fallback_requires_reason: true
   chunk_size: 1048576  # 1MB
   max_retries: 5
   retry_delay: 2  # 秒
