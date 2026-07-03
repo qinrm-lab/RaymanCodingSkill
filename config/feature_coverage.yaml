@@ -539,37 +539,37 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-07-01T00:36:58.953026Z"
+            updated_at: "2026-07-03T07:55:21.427643Z"
           - command: "cargo test -p rayman-core session::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-07-01T00:36:58.953026Z"
+            updated_at: "2026-07-03T07:55:21.427643Z"
           - command: "cargo test -p rayman-core goal::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-07-01T00:36:58.953026Z"
+            updated_at: "2026-07-03T07:55:21.427643Z"
           - command: "cargo test -p rayman-core audit::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-07-01T00:36:58.953026Z"
+            updated_at: "2026-07-03T07:55:21.427643Z"
           - command: "cargo test -p rayman-core gate::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-07-01T00:36:58.953026Z"
+            updated_at: "2026-07-03T07:55:21.427643Z"
           - command: cargo test -p rayman-cli cli_parses_subagent_commands
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-07-01T00:36:58.953026Z"
+            updated_at: "2026-07-03T07:55:21.427643Z"
       - id: codex_host_subagent_performance_contract
         claim: Codex host subagent dispatch has a deterministic planner, auto-start surface, and goal controller integration; non-trivial `goal run` / `goal resume` plan stages emit `HOST_SUBAGENT_DISPATCH_REQUEST {json}` with host-tool-ready spawn_agent request payloads, stop with `host_subagent_dispatch_requested` until the primary AI spawns lanes or records failed/unavailable closeout, bind records to goal_id and dispatch_request_id, keep host subagents as main-model/strong-model speed lanes rather than auxiliary AI, treat standing workspace authorization as equivalent to an explicit `开启subagent` phrase with no per-use prompt precondition, explicit read-only intent suppresses writable worker lanes for audit/review-only work, and damaged ledger JSON or unclosed dispatch requests surface as fail-closed blockers.
         strict_validation: true
@@ -719,37 +719,37 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-01T01:50:49.723302Z"
+            updated_at: "2026-07-03T09:41:14.557340Z"
           - command: "cargo test -p rayman-core goal::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-01T01:50:49.723302Z"
+            updated_at: "2026-07-03T09:41:14.557340Z"
           - command: cargo test -p rayman-core enabled_workspace_subagent_authorization_matches_explicit_phrase
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-01T01:50:49.723302Z"
+            updated_at: "2026-07-03T09:41:14.557340Z"
           - command: cargo test -p rayman-cli cli_parses_subagent_commands
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-01T01:50:49.723302Z"
+            updated_at: "2026-07-03T09:41:14.557340Z"
           - command: cargo test -p rayman-cli cli_goal_run_emits_host_subagent_dispatch_request
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-01T01:50:49.723302Z"
+            updated_at: "2026-07-03T09:41:14.557340Z"
           - command: cargo test -p rayman-cli --test ui_contract cli_subagent_auto_start_emits_spawn_contract
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-01T01:50:49.723302Z"
+            updated_at: "2026-07-03T09:41:14.557340Z"
       - id: codex_harness_execution_contract
         claim: Codex harness-style self-improvement is treated as a mapping to documented Codex execution controls or current-session capabilities, with quality-gate evidence for sandbox/approval boundaries, AGENTS.md/skills/hooks/MCP-rules instruction surfaces, subagent inheritance plus Rayman ledger review, and non-interactive approval/escalation failure handling.
         doc_anchors:
@@ -1277,6 +1277,57 @@ features:
               - goal_wait_recovery_contract
         validation_commands:
           - "cargo test -p rayman-core goal:: session::"
+      - id: long_running_goal_stops_at_safe_evidence_boundary
+        claim: "Long-running goal runs stop at a safe evidence boundary: summary stops keep must requirements pending_evidence instead of claiming success."
+        doc_anchors:
+          - path: docs/GOAL_WORKFLOWS.md
+            contains: "Long-running work can use"
+        implementation_anchors:
+          - path: crates/rayman-core/src/goal.rs
+            contains: "if options.until == GoalRunUntil::Summary"
+          - path: crates/rayman-core/src/goal.rs
+            contains: "summary_requires_completion_evidence"
+        test_anchors:
+          - path: crates/rayman-core/src/goal.rs
+            contains: "fn layered_run_stops_at_summary_without_claiming_success"
+            proves:
+              - long_running_goal_stops_at_safe_evidence_boundary
+        validation_commands:
+          - cargo test -p rayman-core layered_run_stops_at_summary_without_claiming_success
+      - id: blocked_goal_has_resume_command
+        claim: Blocked or partial goals publish a concrete `rayman goal resume --id ... --until blocked` recovery command instead of ending without a machine-resumable path.
+        doc_anchors:
+          - path: docs/GOAL_WORKFLOWS.md
+            contains: "resume_command"
+        implementation_anchors:
+          - path: crates/rayman-core/src/goal.rs
+            contains: "pub fn resume_command"
+          - path: crates/rayman-core/src/goal.rs
+            contains: "blocked or partial state is reopened without claiming success"
+        test_anchors:
+          - path: crates/rayman-core/src/goal.rs
+            contains: "fn resume_reopens_blocked_goal_and_completes_resume_pending"
+            proves:
+              - blocked_goal_has_resume_command
+        validation_commands:
+          - cargo test -p rayman-core resume_reopens_blocked_goal_and_completes_resume_pending
+      - id: repeated_repair_failure_blocks_with_resume_command
+        claim: Repeated repair failures stop at a blocked state with a resume command after the configured max-repair-attempts limit instead of looping or claiming success.
+        doc_anchors:
+          - path: docs/GOAL_WORKFLOWS.md
+            contains: "--max-repair-attempts"
+        implementation_anchors:
+          - path: crates/rayman-core/src/goal.rs
+            contains: "max_repair_attempts_exceeded"
+          - path: crates/rayman-core/src/goal.rs
+            contains: "Self::resume_command(&goal_id)"
+        test_anchors:
+          - path: crates/rayman-core/src/goal.rs
+            contains: "fn layered_run_blocks_after_max_repair_attempts"
+            proves:
+              - repeated_repair_failure_blocks_with_resume_command
+        validation_commands:
+          - cargo test -p rayman-core layered_run_blocks_after_max_repair_attempts
       - id: task_stop_reminder_auto_flow
         claim: After a top-level `rayman goal run`, `rayman goal resume`, `rayman goal close`, or `rayman session close` command ends, the CLI starts the companion `提醒` process in the background exactly once for that command, whether the command succeeds or returns an error; `subagent` / `host-subagent` commands and contexts marked with `RAYMAN_REMINDER_SCOPE=subagent`, `RAYMAN_AGENT_ROLE=subagent`, or `RAYMAN_SUBAGENT=1` do not arm it, and a later continued main-thread command can arm a fresh reminder. `提醒` exits quietly on user mouse/keyboard activity and beeps when the screen is black or there is no mouse/keyboard activity for 10 seconds.
         implementation_anchors:
@@ -1454,6 +1505,18 @@ features:
         contains: "reminder_installed_matches_source"
       - path: crates/rayman-core/src/assets.rs
         contains: "pub struct AssetRetirementManager"
+      - path: crates/rayman-core/src/assets.rs
+        contains: "fn cascade_records_for_report"
+      - path: crates/rayman-core/src/assets.rs
+        contains: "fn feature_coverage_cascade_records"
+      - path: crates/rayman-core/src/assets.rs
+        contains: "fn remove_feature_coverage_test_anchor"
+      - path: crates/rayman-core/src/assets.rs
+        contains: "fn record_marks_whole_path_non_current"
+      - path: crates/rayman-core/src/feature_coverage.rs
+        contains: "fn validate_declared_test_proofs"
+      - path: crates/rayman-core/src/feature_coverage.rs
+        contains: "fn retired_test_anchor_proofs"
       - path: crates/rayman-core/src/temp.rs
         contains: "pub struct TempManager"
       - path: crates/rayman-core/src/temp.rs
@@ -1683,6 +1746,58 @@ features:
         contains: "api_route_extractor_collects_chained_and_multiline_methods"
         proves:
           - feature_preservation_protocol
+      - path: crates/rayman-core/src/assets.rs
+        contains: "fn scan_registers_test_case_cascade_candidate"
+        proves:
+          - asset_retirement_cascades_retired_test_cases
+      - path: crates/rayman-core/src/assets.rs
+        contains: "fn cleanup_apply_deletes_cascaded_test_case_then_obsolete_file"
+        proves:
+          - asset_retirement_cascades_retired_test_cases
+      - path: crates/rayman-core/src/assets.rs
+        contains: "fn cleanup_apply_deletes_multiple_cascaded_test_cases_in_one_file"
+        proves:
+          - asset_retirement_cascades_retired_test_cases
+      - path: crates/rayman-core/src/assets.rs
+        contains: "fn cascade_range_ignores_braces_inside_strings_and_comments"
+        proves:
+          - asset_retirement_cascades_retired_test_cases
+      - path: crates/rayman-core/src/assets.rs
+        contains: "fn unisolated_test_reference_blocks_manual_prune"
+        proves:
+          - asset_retirement_cascades_retired_test_cases
+      - path: crates/rayman-core/src/assets.rs
+        contains: "fn scan_registers_feature_coverage_orphan_test_anchor_cascade_candidate"
+        proves:
+          - asset_retirement_cascades_retired_test_cases
+      - path: crates/rayman-core/src/assets.rs
+        contains: "fn cleanup_apply_deletes_feature_coverage_orphan_test_and_anchor"
+        proves:
+          - asset_retirement_cascades_retired_test_cases
+      - path: crates/rayman-core/src/assets.rs
+        contains: "fn cleanup_apply_deletes_feature_coverage_anchor_when_test_already_gone"
+        proves:
+          - asset_retirement_cascades_retired_test_cases
+      - path: crates/rayman-core/src/assets.rs
+        contains: "fn mixed_feature_coverage_anchor_stays_blocked_when_test_already_gone"
+        proves:
+          - asset_retirement_cascades_retired_test_cases
+      - path: crates/rayman-core/src/assets.rs
+        contains: "fn mixed_feature_coverage_orphan_proof_requires_manual_rewrite"
+        proves:
+          - asset_retirement_cascades_retired_test_cases
+      - path: crates/rayman-core/src/assets.rs
+        contains: "fn line_level_cascade_records_do_not_mark_whole_test_file_non_current"
+        proves:
+          - asset_retirement_cascades_retired_test_cases
+      - path: crates/rayman-core/src/feature_coverage.rs
+        contains: "fn coverage_gate_rejects_test_anchor_proves_unknown_retired_surface"
+        proves:
+          - asset_retirement_cascades_retired_test_cases
+      - path: crates/rayman-core/src/feature_coverage.rs
+        contains: "fn coverage_gate_rejects_removed_subcommand_when_only_parent_is_registered"
+        proves:
+          - asset_retirement_cascades_retired_test_cases
       - path: crates/rayman-cli/tests/ui_contract.rs
         contains: "@ui:cli"
     validation_commands:
@@ -1728,6 +1843,157 @@ features:
       - rayman coverage status
       - rayman audit
     claim_checks:
+      - id: evidence_first_unknown_gate
+        claim: Evidence-first unknown handling downgrades unsupported implementation, validation, research, auxiliary, CLI/API, and prompt claims to unknown, assumption, blocked, or advisory instead of allowing plausible success without current evidence.
+        doc_anchors:
+          - path: references/skill-proof-and-preservation.md
+            contains: "### Evidence-First Unknown Rule"
+          - path: docs/QUALITY.md
+            contains: "`evidence_first_unknown`"
+        implementation_anchors:
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "missing current evidence; report unknown instead of success"
+          - path: crates/rayman-core/src/workflow.rs
+            contains: "pending_evidence"
+        test_anchors:
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn resolver_downgrades_advisory_without_current_evidence"
+            proves:
+              - evidence_first_unknown_gate
+          - path: crates/rayman-core/src/workflow.rs
+            contains: "fn standard_development_records_planning_auxiliary_evidence"
+            proves:
+              - evidence_first_unknown_gate
+        validation_commands:
+          - "cargo test -p rayman-core evidence:: workflow::"
+      - id: asset_retirement_cascades_retired_test_cases
+        claim: Retiring a feature, declaration, command, API, claim, or obsolete asset also retires tests whose only purpose was proving that retired surface; isolated Rust test cases and matching feature-coverage test anchors are cascade candidates that cleanup may delete before deleting the now-unreferenced retired asset, while unisolated stale test references, mixed current/retired proofs, and orphan `test_anchors[].proves` entries block success.
+        doc_anchors:
+          - path: SKILL.md
+            contains: "tests that only prove that retired surface have no current-behavior purpose"
+          - path: references/skill-asset-retirement.md
+            contains: "Retiring a feature, declaration, command, API, or claim also retires tests"
+          - path: docs/CLI.md
+            contains: "cascade test candidates"
+          - path: docs/TESTING.md
+            contains: "test anchor proves an undeclared or retired surface"
+        implementation_anchors:
+          - path: crates/rayman-core/src/assets.rs
+            contains: "fn cascade_records_for_report"
+          - path: crates/rayman-core/src/assets.rs
+            contains: "fn feature_coverage_cascade_records"
+          - path: crates/rayman-core/src/assets.rs
+            contains: "fn remove_feature_coverage_test_anchor"
+          - path: crates/rayman-core/src/assets.rs
+            contains: "fn record_marks_whole_path_non_current"
+          - path: crates/rayman-core/src/assets.rs
+            contains: "fn cascade_test_cleanup_plan_item"
+          - path: crates/rayman-core/src/feature_coverage.rs
+            contains: "fn validate_declared_test_proofs"
+          - path: crates/rayman-core/src/feature_coverage.rs
+            contains: "fn retired_test_anchor_proofs"
+        test_anchors:
+          - path: crates/rayman-core/src/assets.rs
+            contains: "fn scan_registers_test_case_cascade_candidate"
+            proves:
+              - asset_retirement_cascades_retired_test_cases
+          - path: crates/rayman-core/src/assets.rs
+            contains: "fn cleanup_apply_deletes_cascaded_test_case_then_obsolete_file"
+            proves:
+              - asset_retirement_cascades_retired_test_cases
+          - path: crates/rayman-core/src/assets.rs
+            contains: "fn cleanup_apply_deletes_multiple_cascaded_test_cases_in_one_file"
+            proves:
+              - asset_retirement_cascades_retired_test_cases
+          - path: crates/rayman-core/src/assets.rs
+            contains: "fn cascade_range_ignores_braces_inside_strings_and_comments"
+            proves:
+              - asset_retirement_cascades_retired_test_cases
+          - path: crates/rayman-core/src/assets.rs
+            contains: "fn unisolated_test_reference_blocks_manual_prune"
+            proves:
+              - asset_retirement_cascades_retired_test_cases
+          - path: crates/rayman-core/src/assets.rs
+            contains: "fn scan_registers_feature_coverage_orphan_test_anchor_cascade_candidate"
+            proves:
+              - asset_retirement_cascades_retired_test_cases
+          - path: crates/rayman-core/src/assets.rs
+            contains: "fn cleanup_apply_deletes_feature_coverage_orphan_test_and_anchor"
+            proves:
+              - asset_retirement_cascades_retired_test_cases
+          - path: crates/rayman-core/src/assets.rs
+            contains: "fn mixed_feature_coverage_orphan_proof_requires_manual_rewrite"
+            proves:
+              - asset_retirement_cascades_retired_test_cases
+          - path: crates/rayman-core/src/assets.rs
+            contains: "fn line_level_cascade_records_do_not_mark_whole_test_file_non_current"
+            proves:
+              - asset_retirement_cascades_retired_test_cases
+          - path: crates/rayman-core/src/feature_coverage.rs
+            contains: "fn coverage_gate_rejects_test_anchor_proves_unknown_retired_surface"
+            proves:
+              - asset_retirement_cascades_retired_test_cases
+          - path: crates/rayman-core/src/feature_coverage.rs
+            contains: "fn coverage_gate_rejects_claim_test_anchor_proves_removed_claim"
+            proves:
+              - asset_retirement_cascades_retired_test_cases
+        validation_commands:
+          - "cargo test -p rayman-core assets:: feature_coverage::"
+      - id: feature_coverage_canonical_markdown_strict_output
+        claim: Canonical `docs/FEATURE_COVERAGE.md` output is generated from a strict feature coverage report by default, so writing the matrix and later running `--check` compare the same strict semantics instead of producing a non-strict stale matrix.
+        doc_anchors:
+          - path: docs/CLI.md
+            contains: "Canonical `docs/FEATURE_COVERAGE.md` output uses strict validation by default"
+        implementation_anchors:
+          - path: crates/rayman-cli/src/main.rs
+            contains: "fn is_canonical_feature_coverage_output"
+          - path: crates/rayman-cli/src/main.rs
+            contains: "args.strict || args.check || canonical_markdown_output"
+        test_anchors:
+          - path: crates/rayman-cli/tests/ui_contract.rs
+            contains: "fn cli_coverage_canonical_markdown_output_is_strict_by_default"
+            proves:
+              - feature_coverage_canonical_markdown_strict_output
+        validation_commands:
+          - cargo test -p rayman-cli cli_coverage_canonical_markdown_output_is_strict_by_default
+      - id: customer_release_artifact_paths_are_configurable
+        claim: customer release artifacts can be configured without hardcoded binary names
+        doc_anchors:
+          - path: docs/CLI.md
+            contains: "Release evidence validates configured `customer_deploy.artifact_paths` first"
+          - path: docs/TESTING.md
+            contains: "configured `customer_deploy.artifact_paths`"
+        implementation_anchors:
+          - path: crates/rayman-core/src/release.rs
+            contains: "fn customer_deploy_release_artifact_paths"
+          - path: crates/rayman-core/src/release.rs
+            contains: "resolve_workspace_artifact_path"
+        test_anchors:
+          - path: crates/rayman-core/src/release.rs
+            contains: "fn release_evidence_uses_customer_deploy_artifact_paths"
+            proves:
+              - customer release artifacts can be configured without hardcoded binary names
+        validation_commands:
+          - cargo test -p rayman-core release_evidence_uses_customer_deploy_artifact_paths
+      - id: cargo_bin_release_artifacts_are_discovered
+        claim: Cargo bin release artifacts are discovered without project-specific enumeration
+        doc_anchors:
+          - path: docs/CLI.md
+            contains: "otherwise Cargo bin release artifacts discovered from `cargo metadata`"
+          - path: docs/TESTING.md
+            contains: "Cargo bin artifact discovery"
+        implementation_anchors:
+          - path: crates/rayman-core/src/release.rs
+            contains: "fn cargo_release_artifact_paths"
+          - path: crates/rayman-core/src/release.rs
+            contains: "--format-version"
+        test_anchors:
+          - path: crates/rayman-core/src/release.rs
+            contains: "fn release_evidence_discovers_cargo_bin_artifacts_for_customer_workspace"
+            proves:
+              - Cargo bin release artifacts are discovered without project-specific enumeration
+        validation_commands:
+          - cargo test -p rayman-core release_evidence_discovers_cargo_bin_artifacts_for_customer_workspace
       - id: readiness_gate_aggregates_readiness_checks
         claim: "`rayman gate status --check` aggregates workspace-skill, Context Index freshness, Context OS state graph freshness, auxiliary task state, Codex host subagent ledger state, managed temp, strict feature coverage, docs maintenance, dependency policy, security audit, repository audit, and no-write release evidence, reuses the dependency-policy report inside the same gate run, and exits non-zero for any blocker."
         strict_validation: true
@@ -1993,19 +2259,19 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: paper_claim_audit_protocol"
-            updated_at: "2026-07-01T02:27:15.777558Z"
+            updated_at: "2026-07-03T09:28:54.680328Z"
           - command: cargo test -p rayman-cli cli_parses_coverage_status
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: paper_claim_audit_protocol"
-            updated_at: "2026-07-01T02:27:15.777558Z"
+            updated_at: "2026-07-03T09:28:54.680328Z"
           - command: rayman coverage status --check
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: paper_claim_audit_protocol"
-            updated_at: "2026-07-01T02:27:15.777558Z"
+            updated_at: "2026-07-03T09:28:54.680328Z"
       - id: feature_preservation_protocol
         claim: Public CLI/API/runtime surfaces cannot disappear from docs or manifest silently; source-extracted CLI commands and obsolete asset blockers must be resolved, documented, tested, or explicitly retired.
         implementation_anchors:

@@ -139,7 +139,7 @@ rayman benchmark run --smoke
 <p>After a top-level `rayman goal run`, `rayman goal resume`, `rayman goal close`, or `rayman session close` command ends, the CLI starts the companion `提醒` program in the background exactly once for that command, whether the command succeeds or returns an error. `subagent` / `host-subagent` commands do not arm this reminder, and child-agent contexts can suppress it with `RAYMAN_REMINDER_SCOPE=subagent`, `RAYMAN_AGENT_ROLE=subagent`, or `RAYMAN_SUBAGENT=1`. A later continued main-thread command can arm a fresh reminder. `提醒` has no visible window; it exits quietly if the user moves the mouse or presses a key, and plays a short beep pattern when the screen is black or no mouse/keyboard activity is detected for 10 seconds.</p>
 <p>See [Context Kernel](../references/cli-context-kernel.md) for the full rule text.</p>
 <p>See [Project Intelligence](../references/cli-project-intelligence.md) for the full rule text.</p>
-<p>`rayman assets status` reports workspace-local obsolete asset retirement state from `.RaymanCodingSkill/assets/retirement.json`, including controller scope, ignored scan roots, blockers, candidates, retired assets still present, compatibility exemptions, cleanup plan, detected references, required actions, and source policy.</p>
+<p>`rayman assets status` reports workspace-local obsolete asset retirement state from `.RaymanCodingSkill/assets/retirement.json`, including controller scope, ignored scan roots, blockers, candidates, cascade test candidates, retired assets still present, compatibility exemptions, cleanup plan with optional line ranges, detected references, required actions, and source policy.</p>
 <p>[truncated for generated HTML documentation]</p>
 
 </section>

@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::Path;
 use std::process::{Command, Output};
 
 fn rayman() -> &'static str {
@@ -38,6 +39,55 @@ fn cli_coverage_help_lists_gate_options() {
     assert!(stdout.contains("--format"));
     assert!(stdout.contains("--check"));
     assert!(stdout.contains("--output"));
+}
+
+#[test]
+fn cli_coverage_canonical_markdown_output_is_strict_by_default() {
+    let temp = tempfile::tempdir().unwrap();
+    write_minimal_coverage_workspace(temp.path());
+
+    let output = Command::new(rayman())
+        .args([
+            "coverage",
+            "status",
+            "--format",
+            "markdown",
+            "--output",
+            "docs/FEATURE_COVERAGE.md",
+        ])
+        .env("RAYMAN_DISABLE_REMINDER", "1")
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let markdown =
+        fs::read_to_string(temp.path().join("docs").join("FEATURE_COVERAGE.md")).unwrap();
+    assert!(markdown.contains("- Strict validation: `true`"));
+
+    let check = Command::new(rayman())
+        .args([
+            "coverage",
+            "status",
+            "--format",
+            "markdown",
+            "--check",
+            "--output",
+            "docs/FEATURE_COVERAGE.md",
+        ])
+        .env("RAYMAN_DISABLE_REMINDER", "1")
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
 }
 
 #[test]
@@ -395,4 +445,88 @@ fn cli_task_stop_reminder_trace_ignores_subagent_commands_and_scope() {
 
     assert!(!scoped_output.status.success());
     assert!(!scoped_trace.exists());
+}
+
+fn write_minimal_coverage_workspace(root: &Path) {
+    fs::create_dir_all(root.join("config")).unwrap();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::create_dir_all(root.join("crates").join("rayman-cli").join("src")).unwrap();
+    fs::create_dir_all(root.join("crates").join("rayman-cli").join("tests")).unwrap();
+    fs::create_dir_all(root.join("crates").join("rayman-api").join("src")).unwrap();
+    fs::write(
+        root.join("docs").join("CLI.md"),
+        "# CLI\nrayman session status\n",
+    )
+    .unwrap();
+    fs::write(root.join("docs").join("API.md"), "# API\n").unwrap();
+    fs::write(
+        root.join("docs").join("FEATURE_COVERAGE.md"),
+        "# Feature Coverage\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("crates")
+            .join("rayman-cli")
+            .join("src")
+            .join("main.rs"),
+        "enum Command {}\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("crates")
+            .join("rayman-cli")
+            .join("tests")
+            .join("ui_contract.rs"),
+        "// @ui:cli\nfn cli_help() {}\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("crates")
+            .join("rayman-api")
+            .join("src")
+            .join("lib.rs"),
+        "pub fn app() {}\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("config").join("feature_coverage.yaml"),
+        r##"
+features:
+  - id: cli
+    title: CLI
+    doc_anchors:
+      - path: docs/CLI.md
+        contains: "# CLI"
+      - path: docs/FEATURE_COVERAGE.md
+        contains: "Feature Coverage"
+    implementation_anchors:
+      - path: crates/rayman-cli/src/main.rs
+        contains: enum Command
+    test_anchors:
+      - path: crates/rayman-cli/tests/ui_contract.rs
+        contains: "@ui:cli"
+        proves:
+          - rayman session status
+    validation_commands:
+      - cargo test -p rayman-cli
+    ui_surfaces:
+      - cli
+    public_commands:
+      - rayman session status
+  - id: api
+    title: API
+    doc_anchors:
+      - path: docs/API.md
+        contains: "# API"
+    implementation_anchors:
+      - path: crates/rayman-api/src/lib.rs
+        contains: pub fn app
+    test_anchors:
+      - path: crates/rayman-cli/tests/ui_contract.rs
+        contains: "@ui:cli"
+    validation_commands:
+      - cargo test -p rayman-api
+"##,
+    )
+    .unwrap();
 }

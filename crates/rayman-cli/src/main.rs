@@ -1485,22 +1485,33 @@ fn cmd_coverage(command: CoverageCommand) -> Result<()> {
     match command {
         CoverageCommand::Status(args) => {
             let workspace_root = root()?;
+            let output = args
+                .output
+                .map(|output| {
+                    ensure_within(
+                        &output,
+                        &workspace_root,
+                        "coverage output escaped workspace",
+                    )
+                })
+                .transpose()?;
+            let canonical_markdown_output = match (&args.format, output.as_deref()) {
+                (CoverageOutputFormat::Markdown, Some(output)) => {
+                    is_canonical_feature_coverage_output(&workspace_root, output)?
+                }
+                _ => false,
+            };
             let report = feature_coverage::check_feature_coverage_with_options(
                 &workspace_root,
                 feature_coverage::FeatureCoverageOptions {
-                    strict: args.strict || args.check,
+                    strict: args.strict || args.check || canonical_markdown_output,
                 },
             )?;
             let text = match args.format {
                 CoverageOutputFormat::Json => serde_json::to_string_pretty(&report)?,
                 CoverageOutputFormat::Markdown => render_feature_coverage_markdown(&report),
             };
-            if let Some(output) = args.output {
-                let output = ensure_within(
-                    &output,
-                    &workspace_root,
-                    "coverage output escaped workspace",
-                )?;
+            if let Some(output) = output {
                 if args.check {
                     let current = output
                         .exists()
@@ -1532,6 +1543,15 @@ fn cmd_coverage(command: CoverageCommand) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn is_canonical_feature_coverage_output(workspace_root: &Path, output: &Path) -> Result<bool> {
+    let canonical = ensure_within(
+        Path::new(feature_coverage::FEATURE_COVERAGE_MARKDOWN),
+        workspace_root,
+        "canonical feature coverage path escaped workspace",
+    )?;
+    Ok(output == canonical)
 }
 
 fn cmd_stats() -> Result<()> {

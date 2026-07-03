@@ -129,6 +129,21 @@ struct ValidationRecordCheck<'a> {
     asset_retirement: Option<&'a AssetRetirementReport>,
 }
 
+#[derive(Debug, Clone, Default)]
+struct ProofRegistry {
+    exact: BTreeSet<String>,
+    prefix_surfaces: BTreeSet<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RetiredTestAnchorProof {
+    pub feature_id: String,
+    pub anchor_path: String,
+    pub anchor_contains: String,
+    pub orphan_proofs: Vec<String>,
+    pub has_current_proofs: bool,
+}
+
 pub fn load_manifest(root: &Path) -> Result<FeatureCoverageManifest> {
     let manifest_path = root.join(FEATURE_COVERAGE_MANIFEST);
     let text = read_text(&manifest_path).with_context(|| {
@@ -140,6 +155,27 @@ pub fn load_manifest(root: &Path) -> Result<FeatureCoverageManifest> {
 
 pub fn check_feature_coverage(root: &Path) -> Result<FeatureCoverageReport> {
     check_feature_coverage_with_options(root, FeatureCoverageOptions::default())
+}
+
+pub(crate) fn retired_test_anchor_proofs(root: &Path) -> Result<Vec<RetiredTestAnchorProof>> {
+    if !root.join(FEATURE_COVERAGE_MANIFEST).exists() {
+        return Ok(Vec::new());
+    }
+    let manifest = load_manifest(root)?;
+    let registry = manifest_proof_registry(&manifest);
+    let mut records = Vec::new();
+    for feature in &manifest.features {
+        collect_retired_anchor_proofs(&feature.id, &feature.test_anchors, &registry, &mut records);
+        for claim in &feature.claim_checks {
+            collect_retired_anchor_proofs(
+                &format!("{}::{}", feature.id, claim.id),
+                &claim.test_anchors,
+                &registry,
+                &mut records,
+            );
+        }
+    }
+    Ok(records)
 }
 
 pub fn check_feature_coverage_with_options(
@@ -430,6 +466,7 @@ fn validate_manifest_shape(
             message: "feature coverage manifest must contain at least one feature".into(),
         });
     }
+    let proof_registry = manifest_proof_registry(manifest);
     let mut ids = BTreeSet::new();
     for feature in &manifest.features {
         if feature.id.trim().is_empty() {
@@ -511,6 +548,7 @@ fn validate_manifest_shape(
         );
         validate_feature_proofs(root, findings, feature);
         validate_claim_checks(root, options, findings, feature, asset_retirement);
+        validate_declared_test_proofs(root, findings, feature, &proof_registry);
         validate_ui_surfaces(root, findings, feature, asset_retirement);
     }
 }
@@ -1351,7 +1389,10 @@ fn is_current_behavior_path(
     asset_retirement: Option<&AssetRetirementReport>,
     relative_path: &str,
 ) -> bool {
-    asset_retirement.is_some_and(|report| report.is_current_behavior_path(relative_path))
+    match asset_retirement {
+        Some(report) => report.is_current_behavior_path(relative_path),
+        None => true,
+    }
 }
 
 fn registered_public_commands(manifest: &FeatureCoverageManifest) -> BTreeSet<String> {
@@ -1399,10 +1440,163 @@ fn feature_proofs(feature: &FeatureCoverageItem) -> BTreeSet<String> {
     proofs
 }
 
+fn validate_declared_test_proofs(
+    root: &Path,
+    findings: &mut Vec<FeatureCoverageFinding>,
+    feature: &FeatureCoverageItem,
+    proof_registry: &ProofRegistry,
+) {
+    for anchor in &feature.test_anchors {
+        validate_anchor_proves_known(
+            root,
+            findings,
+            feature,
+            "test_anchor_unknown_proof",
+            anchor,
+            proof_registry,
+        );
+    }
+    for claim in &feature.claim_checks {
+        for anchor in &claim.test_anchors {
+            validate_anchor_proves_known(
+                root,
+                findings,
+                feature,
+                "claim_test_anchor_unknown_proof",
+                anchor,
+                proof_registry,
+            );
+        }
+    }
+}
+
+fn validate_anchor_proves_known(
+    root: &Path,
+    findings: &mut Vec<FeatureCoverageFinding>,
+    feature: &FeatureCoverageItem,
+    kind: &str,
+    anchor: &CoverageAnchor,
+    proof_registry: &ProofRegistry,
+) {
+    for proof in &anchor.proves {
+        let proof = proof.trim();
+        if proof_is_registered(proof, proof_registry) {
+            continue;
+        }
+        findings.push(FeatureCoverageFinding {
+            feature_id: Some(feature.id.clone()),
+            path: Some(root.join(FEATURE_COVERAGE_MANIFEST)),
+            line: 1,
+            kind: kind.into(),
+            message: format!(
+                "test anchor in {} proves undeclared or retired surface `{proof}`",
+                anchor.path
+            ),
+        });
+    }
+}
+
+fn collect_retired_anchor_proofs(
+    feature_id: &str,
+    anchors: &[CoverageAnchor],
+    proof_registry: &ProofRegistry,
+    records: &mut Vec<RetiredTestAnchorProof>,
+) {
+    for anchor in anchors {
+        let mut orphan_proofs = Vec::new();
+        let mut has_current_proofs = false;
+        for proof in anchor.proves.iter().map(|proof| proof.trim()) {
+            if proof.is_empty() {
+                continue;
+            }
+            if proof_is_registered(proof, proof_registry) {
+                has_current_proofs = true;
+            } else {
+                orphan_proofs.push(proof.to_string());
+            }
+        }
+        if orphan_proofs.is_empty() {
+            continue;
+        }
+        orphan_proofs.sort();
+        orphan_proofs.dedup();
+        records.push(RetiredTestAnchorProof {
+            feature_id: feature_id.to_string(),
+            anchor_path: anchor.path.clone(),
+            anchor_contains: anchor.contains.clone(),
+            orphan_proofs,
+            has_current_proofs,
+        });
+    }
+}
+
+fn manifest_proof_registry(manifest: &FeatureCoverageManifest) -> ProofRegistry {
+    let mut registry = ProofRegistry::default();
+    for feature in &manifest.features {
+        insert_nonempty(&mut registry.exact, &feature.id);
+        for command in &feature.public_commands {
+            insert_nonempty(&mut registry.exact, command);
+            insert_nonempty(&mut registry.prefix_surfaces, command);
+        }
+        for endpoint in &feature.api_endpoints {
+            insert_nonempty(&mut registry.exact, endpoint);
+            insert_nonempty(&mut registry.prefix_surfaces, endpoint);
+        }
+        for claim in &feature.claim_checks {
+            insert_nonempty(&mut registry.exact, &claim.id);
+            insert_nonempty(&mut registry.exact, &claim.claim);
+        }
+    }
+    registry
+}
+
+fn insert_nonempty(values: &mut BTreeSet<String>, value: &str) {
+    let value = value.trim();
+    if !value.is_empty() {
+        values.insert(value.to_string());
+    }
+}
+
+fn proof_is_registered(proof: &str, registry: &ProofRegistry) -> bool {
+    proof.is_empty()
+        || registry.exact.contains(proof)
+        || proof_registered_by_prefix(proof, registry)
+}
+
 fn command_registered_by_prefix(command: &str, registered: &BTreeSet<String>) -> bool {
     registered
         .iter()
         .any(|entry| command == entry || command.starts_with(&format!("{entry} ")))
+}
+
+fn proof_registered_by_prefix(proof: &str, registry: &ProofRegistry) -> bool {
+    registry.prefix_surfaces.iter().any(|entry| {
+        if proof == entry {
+            return true;
+        }
+        let Some(suffix) = proof.strip_prefix(&format!("{entry} ")) else {
+            return false;
+        };
+        proof_suffix_allowed_for_registered_surface(entry, suffix, registry)
+    })
+}
+
+fn proof_suffix_allowed_for_registered_surface(
+    entry: &str,
+    suffix: &str,
+    _registry: &ProofRegistry,
+) -> bool {
+    if !entry.starts_with("rayman ") {
+        return true;
+    }
+    if suffix
+        .split_whitespace()
+        .next()
+        .is_some_and(|token| token.starts_with('-'))
+    {
+        return true;
+    }
+    false
 }
 
 fn command_documented_by_registered_surface(command: &str, registered: &BTreeSet<String>) -> bool {
@@ -2107,6 +2301,350 @@ features:
         assert!(report.findings.iter().any(|finding| {
             finding.kind == "test_anchor_unproven_api_endpoint"
                 && finding.message.contains("GET /api/items")
+        }));
+    }
+
+    #[test]
+    fn coverage_gate_rejects_test_anchor_proves_unknown_retired_surface() {
+        let temp = tempfile::tempdir().unwrap();
+        write_minimal_repo(temp.path());
+        fs::write(
+            temp.path().join(FEATURE_COVERAGE_MANIFEST),
+            r##"
+features:
+  - id: cli
+    title: CLI
+    doc_anchors:
+      - path: docs/CLI.md
+        contains: "# CLI"
+    implementation_anchors:
+      - path: crates/rayman-cli/src/main.rs
+        contains: enum Command
+    test_anchors:
+      - path: crates/rayman-cli/tests/ui_contract.rs
+        contains: "@ui:cli"
+        proves:
+          - rayman session status
+          - rayman retired command
+    validation_commands:
+      - cargo test -p rayman-cli
+    ui_surfaces:
+      - cli
+    public_commands:
+      - rayman session status
+"##,
+        )
+        .unwrap();
+
+        let report = check_feature_coverage(temp.path()).unwrap();
+
+        assert!(report.findings.iter().any(|finding| {
+            finding.kind == "test_anchor_unknown_proof"
+                && finding.message.contains("rayman retired command")
+        }));
+    }
+
+    #[test]
+    fn coverage_gate_rejects_removed_subcommand_under_registered_parent() {
+        let temp = tempfile::tempdir().unwrap();
+        write_minimal_repo(temp.path());
+        fs::write(
+            temp.path().join(FEATURE_COVERAGE_MANIFEST),
+            r##"
+features:
+  - id: cli
+    title: CLI
+    doc_anchors:
+      - path: docs/CLI.md
+        contains: "# CLI"
+    implementation_anchors:
+      - path: crates/rayman-cli/src/main.rs
+        contains: enum Command
+    test_anchors:
+      - path: crates/rayman-cli/tests/ui_contract.rs
+        contains: "@ui:cli"
+        proves:
+          - rayman goal retired-subcommand
+    validation_commands:
+      - cargo test -p rayman-cli
+    ui_surfaces:
+      - cli
+    public_commands:
+      - rayman goal
+      - rayman goal run
+"##,
+        )
+        .unwrap();
+
+        let report = check_feature_coverage(temp.path()).unwrap();
+
+        assert!(report.findings.iter().any(|finding| {
+            finding.kind == "test_anchor_unknown_proof"
+                && finding.message.contains("rayman goal retired-subcommand")
+        }));
+    }
+
+    #[test]
+    fn coverage_gate_rejects_removed_subcommand_when_only_parent_is_registered() {
+        let temp = tempfile::tempdir().unwrap();
+        write_minimal_repo(temp.path());
+        fs::write(
+            temp.path().join(FEATURE_COVERAGE_MANIFEST),
+            r##"
+features:
+  - id: cli
+    title: CLI
+    doc_anchors:
+      - path: docs/CLI.md
+        contains: "# CLI"
+    implementation_anchors:
+      - path: crates/rayman-cli/src/main.rs
+        contains: enum Command
+    test_anchors:
+      - path: crates/rayman-cli/tests/ui_contract.rs
+        contains: "@ui:cli"
+        proves:
+          - rayman goal
+          - rayman goal retired-subcommand
+    validation_commands:
+      - cargo test -p rayman-cli
+    ui_surfaces:
+      - cli
+    public_commands:
+      - rayman goal
+"##,
+        )
+        .unwrap();
+
+        let report = check_feature_coverage(temp.path()).unwrap();
+
+        assert!(report.findings.iter().any(|finding| {
+            finding.kind == "test_anchor_unknown_proof"
+                && finding.message.contains("rayman goal retired-subcommand")
+        }));
+    }
+
+    #[test]
+    fn coverage_gate_accepts_option_suffix_under_registered_parent() {
+        let temp = tempfile::tempdir().unwrap();
+        write_minimal_repo(temp.path());
+        fs::write(
+            temp.path().join(FEATURE_COVERAGE_MANIFEST),
+            r##"
+features:
+  - id: cli
+    title: CLI
+    doc_anchors:
+      - path: docs/CLI.md
+        contains: "# CLI"
+    implementation_anchors:
+      - path: crates/rayman-cli/src/main.rs
+        contains: enum Command
+    test_anchors:
+      - path: crates/rayman-cli/tests/ui_contract.rs
+        contains: "@ui:cli"
+        proves:
+          - rayman goal --help
+    validation_commands:
+      - cargo test -p rayman-cli
+    ui_surfaces:
+      - cli
+    public_commands:
+      - rayman goal
+      - rayman goal run
+"##,
+        )
+        .unwrap();
+
+        let report = check_feature_coverage(temp.path()).unwrap();
+
+        assert!(!report.findings.iter().any(|finding| {
+            finding.kind == "test_anchor_unknown_proof"
+                && finding.message.contains("rayman goal --help")
+        }));
+    }
+
+    #[test]
+    fn coverage_gate_accepts_test_anchor_proves_current_claim() {
+        let temp = tempfile::tempdir().unwrap();
+        write_minimal_repo(temp.path());
+        fs::write(
+            temp.path().join(FEATURE_COVERAGE_MANIFEST),
+            r##"
+features:
+  - id: cli
+    title: CLI
+    doc_anchors:
+      - path: docs/CLI.md
+        contains: "# CLI"
+    implementation_anchors:
+      - path: crates/rayman-cli/src/main.rs
+        contains: enum Command
+    test_anchors:
+      - path: crates/rayman-cli/tests/ui_contract.rs
+        contains: "@ui:cli"
+        proves:
+          - rayman session status
+          - active_claim
+    validation_commands:
+      - cargo test -p rayman-cli
+    ui_surfaces:
+      - cli
+    public_commands:
+      - rayman session status
+    claim_checks:
+      - id: active_claim
+        claim: Current claim has executable proof.
+        implementation_anchors:
+          - path: crates/rayman-cli/src/main.rs
+            contains: enum Command
+        test_anchors:
+          - path: crates/rayman-cli/tests/ui_contract.rs
+            contains: "@ui:cli"
+            proves:
+              - active_claim
+        validation_commands:
+          - cargo test -p rayman-cli
+"##,
+        )
+        .unwrap();
+
+        let report = check_feature_coverage(temp.path()).unwrap();
+
+        assert!(!report.findings.iter().any(|finding| {
+            finding.kind == "test_anchor_unknown_proof"
+                || finding.kind == "claim_test_anchor_unknown_proof"
+        }));
+    }
+
+    #[test]
+    fn coverage_gate_accepts_cross_feature_current_proofs() {
+        let temp = tempfile::tempdir().unwrap();
+        write_minimal_repo(temp.path());
+        fs::create_dir_all(temp.path().join("crates").join("rayman-api").join("src")).unwrap();
+        fs::write(
+            temp.path()
+                .join("crates")
+                .join("rayman-api")
+                .join("src")
+                .join("tests.rs"),
+            "// @ui:api_json\n",
+        )
+        .unwrap();
+        fs::write(
+            temp.path().join(FEATURE_COVERAGE_MANIFEST),
+            r##"
+features:
+  - id: api
+    title: API
+    doc_anchors:
+      - path: docs/API.md
+        contains: "# API"
+    implementation_anchors:
+      - path: crates/rayman-api/src/lib.rs
+        contains: pub fn app
+    test_anchors:
+      - path: crates/rayman-api/src/tests.rs
+        contains: "@ui:api_json"
+        proves:
+          - POST /api/goals/{id}/run long-run report
+    validation_commands:
+      - cargo test -p rayman-api
+    api_endpoints:
+      - POST /api/goals/{id}/run
+    claim_checks:
+      - id: api_long_run_report
+        claim: API goal run responses expose long-run report details.
+        implementation_anchors:
+          - path: crates/rayman-api/src/lib.rs
+            contains: pub fn app
+        test_anchors:
+          - path: crates/rayman-api/src/tests.rs
+            contains: "@ui:api_json"
+            proves:
+              - api_long_run_report
+        validation_commands:
+          - cargo test -p rayman-api
+  - id: cli
+    title: CLI
+    doc_anchors:
+      - path: docs/CLI.md
+        contains: "# CLI"
+    implementation_anchors:
+      - path: crates/rayman-cli/src/main.rs
+        contains: enum Command
+    test_anchors:
+      - path: crates/rayman-cli/tests/ui_contract.rs
+        contains: "@ui:cli"
+        proves:
+          - api_long_run_report
+          - POST /api/goals/{id}/run long-run report
+    validation_commands:
+      - cargo test -p rayman-cli
+    ui_surfaces:
+      - cli
+"##,
+        )
+        .unwrap();
+
+        let report = check_feature_coverage(temp.path()).unwrap();
+
+        assert!(!report.findings.iter().any(|finding| {
+            finding.kind == "test_anchor_unknown_proof"
+                || finding.kind == "claim_test_anchor_unknown_proof"
+        }));
+    }
+
+    #[test]
+    fn coverage_gate_rejects_claim_test_anchor_proves_removed_claim() {
+        let temp = tempfile::tempdir().unwrap();
+        write_minimal_repo(temp.path());
+        fs::write(
+            temp.path().join(FEATURE_COVERAGE_MANIFEST),
+            r##"
+features:
+  - id: cli
+    title: CLI
+    doc_anchors:
+      - path: docs/CLI.md
+        contains: "# CLI"
+    implementation_anchors:
+      - path: crates/rayman-cli/src/main.rs
+        contains: enum Command
+    test_anchors:
+      - path: crates/rayman-cli/tests/ui_contract.rs
+        contains: "@ui:cli"
+        proves:
+          - rayman session status
+          - active_claim
+    validation_commands:
+      - cargo test -p rayman-cli
+    ui_surfaces:
+      - cli
+    public_commands:
+      - rayman session status
+    claim_checks:
+      - id: active_claim
+        claim: Current claim has executable proof.
+        implementation_anchors:
+          - path: crates/rayman-cli/src/main.rs
+            contains: enum Command
+        test_anchors:
+          - path: crates/rayman-cli/tests/ui_contract.rs
+            contains: "@ui:cli"
+            proves:
+              - retired_claim
+        validation_commands:
+          - cargo test -p rayman-cli
+"##,
+        )
+        .unwrap();
+
+        let report = check_feature_coverage(temp.path()).unwrap();
+
+        assert!(report.findings.iter().any(|finding| {
+            finding.kind == "claim_test_anchor_unknown_proof"
+                && finding.message.contains("retired_claim")
         }));
     }
 
