@@ -70,6 +70,8 @@ pub(crate) enum Command {
     #[command(subcommand)]
     Quality(QualityCommand),
     #[command(subcommand)]
+    Risk(RiskCommand),
+    #[command(subcommand)]
     Goal(GoalCommand),
     #[command(subcommand)]
     Research(ResearchCommand),
@@ -728,6 +730,26 @@ pub(crate) enum QualityCommand {
 #[derive(Subcommand)]
 pub(crate) enum QualityIncidentCommand {
     Add(QualityIncidentAddArgs),
+}
+
+#[derive(Subcommand)]
+pub(crate) enum RiskCommand {
+    Scan {
+        #[arg(long = "no-write")]
+        no_write: bool,
+    },
+    Plan,
+    Fix(RiskFixArgs),
+    Verify,
+    Learn,
+}
+
+#[derive(Args)]
+pub(crate) struct RiskFixArgs {
+    #[arg(long = "safe-only")]
+    pub(crate) safe_only: bool,
+    #[arg(long = "guarded")]
+    pub(crate) guarded: bool,
 }
 
 #[derive(Subcommand)]
@@ -1576,6 +1598,48 @@ mod tests {
             cli.command,
             Command::Quality(QualityCommand::Incident(QualityIncidentCommand::Add(_)))
         ));
+    }
+
+    #[test]
+    fn cli_parses_risk_commands() {
+        let cli = Cli::try_parse_from(["rayman", "risk", "scan"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Risk(RiskCommand::Scan { no_write: false })
+        ));
+
+        let cli = Cli::try_parse_from(["rayman", "risk", "scan", "--no-write"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Risk(RiskCommand::Scan { no_write: true })
+        ));
+
+        let cli = Cli::try_parse_from(["rayman", "risk", "plan"]).unwrap();
+        assert!(matches!(cli.command, Command::Risk(RiskCommand::Plan)));
+
+        let cli = Cli::try_parse_from(["rayman", "risk", "fix", "--safe-only"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Risk(RiskCommand::Fix(RiskFixArgs {
+                safe_only: true,
+                guarded: false
+            }))
+        ));
+
+        let cli = Cli::try_parse_from(["rayman", "risk", "fix", "--guarded"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Risk(RiskCommand::Fix(RiskFixArgs {
+                safe_only: false,
+                guarded: true
+            }))
+        ));
+
+        let cli = Cli::try_parse_from(["rayman", "risk", "verify"]).unwrap();
+        assert!(matches!(cli.command, Command::Risk(RiskCommand::Verify)));
+
+        let cli = Cli::try_parse_from(["rayman", "risk", "learn"]).unwrap();
+        assert!(matches!(cli.command, Command::Risk(RiskCommand::Learn)));
     }
 
     #[test]

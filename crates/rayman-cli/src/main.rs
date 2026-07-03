@@ -27,6 +27,7 @@ use rayman_core::project::{ProjectAnalyzer, run_benchmark_smoke};
 use rayman_core::quality::{QualityIncidentDraft, QualityManager};
 use rayman_core::regression_history::RegressionHistoryManager;
 use rayman_core::research::ResearchManager;
+use rayman_core::risk::{RiskFixOptions, RiskManager, RiskScanOptions};
 use rayman_core::selfcheck::SelfManager;
 use rayman_core::session::SessionManager;
 use rayman_core::skills;
@@ -172,6 +173,7 @@ async fn run() -> Result<()> {
         Command::Instruction(command) => cmd_instruction(command)?,
         Command::Auxiliary(command) => cmd_auxiliary(command)?,
         Command::Quality(command) => cmd_quality(command)?,
+        Command::Risk(command) => cmd_risk(command)?,
         Command::Goal(command) => cmd_goal(command)?,
         Command::Research(command) => cmd_research(command)?,
         Command::Subagent(command) => cmd_subagent(command)?,
@@ -1149,6 +1151,53 @@ fn cmd_quality(command: QualityCommand) -> Result<()> {
                     report.missing_evidence.join("; ")
                 );
             }
+        }
+    }
+    Ok(())
+}
+
+fn cmd_risk(command: RiskCommand) -> Result<()> {
+    let manager = RiskManager::new(root()?)?;
+    match command {
+        RiskCommand::Scan { no_write } => {
+            let report = manager.scan(RiskScanOptions {
+                write_ledger: !no_write,
+                include_expensive: true,
+            })?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            if report.unresolved_high_critical_count > 0 {
+                bail!(
+                    "风险扫描存在未解决 high/critical 风险: {}",
+                    report.unresolved_high_critical_count
+                );
+            }
+        }
+        RiskCommand::Plan => {
+            println!("{}", serde_json::to_string_pretty(&manager.plan()?)?);
+        }
+        RiskCommand::Fix(args) => {
+            let safe_only = !args.guarded;
+            let report = manager.fix(RiskFixOptions {
+                safe_only: args.safe_only || safe_only,
+                guarded: args.guarded,
+            })?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            if report.post_scan.unresolved_high_critical_count > 0 {
+                bail!(
+                    "风险自动修复后仍阻塞: {}",
+                    report.required_actions.join("; ")
+                );
+            }
+        }
+        RiskCommand::Verify => {
+            let report = manager.verify()?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            if report.status != "passed" {
+                bail!("风险验证未通过: {}", report.required_actions.join("; "));
+            }
+        }
+        RiskCommand::Learn => {
+            println!("{}", serde_json::to_string_pretty(&manager.learn()?)?);
         }
     }
     Ok(())

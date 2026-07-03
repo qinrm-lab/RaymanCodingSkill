@@ -2,7 +2,7 @@
 
 This file records current passed validation commands used by strict feature coverage entries.
 
-updated_at: 2026-07-03T11:16:32.5948972Z
+updated_at: 2026-07-03T13:51:17.4643223Z
 status: passed
 
 ## close_success_requires_actual_evidence
@@ -59,3 +59,11 @@ status: passed
 command: cargo test -p rayman-core feature_coverage::
 command: cargo test -p rayman-cli cli_parses_coverage_status
 command: rayman coverage status --check
+
+## proactive_risk_governance
+
+record: proactive_risk_governance
+status: passed
+command: cargo test -p rayman-core risk::
+command: cargo test -p rayman-cli cli_parses_risk_commands
+command: cargo test -p rayman-core gate::

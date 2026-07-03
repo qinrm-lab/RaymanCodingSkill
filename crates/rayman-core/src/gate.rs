@@ -13,6 +13,7 @@ use crate::docs::{self, DocsMaintainOptions};
 use crate::evidence::{EvidenceCheckOptions, check_workspace_evidence, scan_success_claims};
 use crate::feature_coverage;
 use crate::release::{ReleaseEvidenceManager, ReleaseEvidenceOptions};
+use crate::risk::{RiskManager, RiskScanOptions};
 use crate::security::SecurityAuditManager;
 use crate::subagent::SubagentLedgerManager;
 use crate::temp::TempManager;
@@ -77,6 +78,7 @@ impl GateManager {
             self.security_check(&dependency_policy)?,
             self.audit_check()?,
             self.evidence_check()?,
+            self.risk_check()?,
             self.release_check(options.require_provenance, &dependency_policy)?,
         ];
 
@@ -470,6 +472,30 @@ impl GateManager {
             details: serde_json::to_value(report)?,
         })
     }
+
+    fn risk_check(&self) -> Result<GateCheck> {
+        let report = RiskManager::new(&self.workspace)?.scan(RiskScanOptions {
+            write_ledger: false,
+            include_expensive: false,
+        })?;
+        let passed = report.unresolved_high_critical_count == 0;
+        Ok(GateCheck {
+            id: "risk_ledger".into(),
+            title: "Proactive risk ledger".into(),
+            status: gate_status(passed),
+            severity: "blocker".into(),
+            summary: format!(
+                "risk status={} findings={} unresolved_high_critical={}",
+                report.status, report.finding_count, report.unresolved_high_critical_count
+            ),
+            required_actions: if passed {
+                Vec::new()
+            } else {
+                report.required_actions.clone()
+            },
+            details: serde_json::to_value(report)?,
+        })
+    }
 }
 
 fn gate_status(passed: bool) -> String {
@@ -649,6 +675,25 @@ mod tests {
                 .iter()
                 .any(|action| action.contains("context os --write"))
         );
+    }
+
+    #[test]
+    fn readiness_gate_has_first_class_risk_check() {
+        let temp = tempfile::tempdir().unwrap();
+
+        let report = GateManager::new(temp.path())
+            .unwrap()
+            .status(GateOptions::default())
+            .unwrap();
+
+        let risk = report
+            .checks
+            .iter()
+            .find(|check| check.id == "risk_ledger")
+            .expect("risk ledger check");
+
+        assert_eq!(risk.severity, "blocker");
+        assert!(risk.summary.contains("unresolved_high_critical"));
     }
 
     #[test]

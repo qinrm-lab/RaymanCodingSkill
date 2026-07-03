@@ -21,6 +21,7 @@ pub mod quality;
 pub mod regression_history;
 pub mod release;
 pub mod research;
+pub mod risk;
 pub mod security;
 pub mod selfcheck;
 pub mod session;
