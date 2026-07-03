@@ -2,7 +2,7 @@
 
 This file records current passed validation commands used by strict feature coverage entries.
 
-updated_at: 2026-07-03T09:41:14.557340Z
+updated_at: 2026-07-03T11:16:32.5948972Z
 status: passed
 
 ## close_success_requires_actual_evidence
@@ -12,6 +12,16 @@ status: passed
 command: cargo test -p rayman-core goal::
 command: cargo test -p rayman-core session::
 command: cargo test -p rayman-core quality::
+
+## success_claim_counterexample_challenge_gate
+
+record: success_claim_counterexample_challenge_gate
+status: passed
+command: cargo test -p rayman-core evidence::
+command: cargo test -p rayman-core goal::
+command: cargo test -p rayman-core session::
+command: cargo test -p rayman-core skills::
+command: cargo test -p rayman-api
 
 ## codex_host_subagent_ledger_gate
 

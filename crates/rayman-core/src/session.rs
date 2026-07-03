@@ -10,7 +10,10 @@ use crate::assets::AssetRetirementManager;
 use crate::audit;
 use crate::auxiliary::AuxiliaryTaskStore;
 use crate::context::ContextKernel;
-use crate::evidence::scan_success_claims;
+use crate::evidence::{
+    EvidenceResolver, counterexample_blockers_for_success_evidence_with_resolver,
+    scan_success_claims,
+};
 use crate::goal::GoalManager;
 use crate::research::ResearchManager;
 use crate::subagent::SubagentLedgerManager;
@@ -213,6 +216,12 @@ impl SessionManager {
         }
         if status == "success" {
             let mut blockers = manual_remote_validation_gap_blockers(summary, next_steps);
+            let resolver = EvidenceResolver::new(&self.workspace)?;
+            blockers.extend(
+                counterexample_blockers_for_success_evidence_with_resolver(summary, &resolver)
+                    .into_iter()
+                    .map(|blocker| format!("success_counterexample_blocker: {blocker}")),
+            );
             blockers.extend(self.success_blockers()?);
             if !blockers.is_empty() {
                 bail!("session close success 门禁未通过:\n{}", blockers.join("\n"));
@@ -666,6 +675,10 @@ mod tests {
     use crate::goal::GoalManager;
     use std::fs;
 
+    fn session_success_evidence() -> &'static str {
+        "checked: README.md current evidence\nnegative check: stale success evidence not found; evidence: README.md"
+    }
+
     #[test]
     fn pending_state_round_trip() {
         let temp = tempfile::tempdir().unwrap();
@@ -969,16 +982,37 @@ mod tests {
     #[test]
     fn success_close_passes_when_session_gates_are_clear() {
         let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("README.md"), "# project").unwrap();
         ContextKernel::new(temp.path())
             .unwrap()
             .refresh_index()
             .unwrap();
         let manager = SessionManager::new(temp.path()).unwrap();
 
-        let result = manager.close_session("success", "done", &[]).unwrap();
+        let result = manager
+            .close_session("success", session_success_evidence(), &[])
+            .unwrap();
 
         assert_eq!(result["status"], "success");
         assert_eq!(result["blocked"], false);
+    }
+
+    #[test]
+    fn success_close_blocks_missing_counterexample_challenge() {
+        let temp = tempfile::tempdir().unwrap();
+        ContextKernel::new(temp.path())
+            .unwrap()
+            .refresh_index()
+            .unwrap();
+        let manager = SessionManager::new(temp.path()).unwrap();
+
+        let error = manager
+            .close_session("success", "done", &[])
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("success_counterexample_blocker"));
+        assert!(error.contains("missing_counterexample_challenge"));
     }
 
     #[test]
@@ -1022,6 +1056,7 @@ mod tests {
     #[test]
     fn success_close_allows_negated_manual_remote_gap_statement() {
         let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("README.md"), "# project").unwrap();
         ContextKernel::new(temp.path())
             .unwrap()
             .refresh_index()
@@ -1031,7 +1066,10 @@ mod tests {
         let result = manager
             .close_session(
                 "success",
-                "no manual validation gap; remote validation completed",
+                &format!(
+                    "no manual validation gap; remote validation completed\n{}",
+                    session_success_evidence()
+                ),
                 &[],
             )
             .unwrap();

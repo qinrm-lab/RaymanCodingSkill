@@ -1073,7 +1073,7 @@ async fn goals_api_starts_runs_gets_and_closes_goal() {
                 .body(Body::from(
                     serde_json::json!({
                         "status": "success",
-                        "message": "req_1: implemented and cargo test passed"
+                        "message": "req_1: implemented and cargo test passed\nchecked: cargo test passed\nnegative check: stale success evidence not found; evidence: cargo test passed"
                     })
                     .to_string(),
                 ))

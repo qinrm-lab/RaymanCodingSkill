@@ -18,11 +18,12 @@ Source: `SKILL.md`
 ### Evidence-First Unknown Rule
 
 - Current workspace files, successful command output, goal/session/context state, and existing evidence artifacts are the only proof sources for `success`, `satisfied`, or `verified` claims.
+- Success/completion/verified/ready claims must carry current `evidence_refs`, explicit `search_effort`, and a cleared `counterexample_challenges` entry. The challenge must try to falsify the claim, record its result, and cite evidence refs that resolve in the current workspace; missing, stale, unresolved, advisory-only, or fabricated challenge metadata blocks success.
 - Cached summaries, Context Index records, remembered conclusions, cross-project memory, auxiliary AI, research output, and model confidence are navigation or advisory only. They never prove completion by themselves.
 - When evidence is missing, stale, conflicting, or advisory-only, the claim must be downgraded to `unknown`, `assumption`, `blocked`, or `advisory`; `unknown` is preferred over a plausible but unsupported answer.
 - `confidence` is metadata only. Empty `evidence_refs` plus high confidence cannot produce `verified`.
 - Evidence conflicts fail closed: a blocked, failed, stale, or unverified marker overrides a plausible path or summary until current evidence is refreshed.
-- Public CLI/API responses that make implementation, validation, or completion claims must expose `evidence_status`, `claim_ledger`, `unknowns`, `assumptions`, and `blockers`, and successful close/gate paths must reject unverified success claims.
+- Public CLI/API responses that make implementation, validation, or completion claims must expose `evidence_status`, `claim_ledger`, `evidence_refs`, `search_effort`, `counterexample_challenges`, `unknowns`, `assumptions`, and `blockers`, and successful close/gate paths must reject unverified or unchallenged success claims.
 ### Repeated Value Centralization Rule
 
 Repeated values that appear in multiple skill or program locations must be centralized as a named constant, config key, helper, template variable, or referenced rule section. If duplication is intentionally retained, record the reason and the checked scope so future changes do not require many manual edits.

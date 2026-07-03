@@ -3,12 +3,12 @@
 # 系统角色提示词
 system_prompts:
   default:
-    en: "You are a RaymanCodingSkill programming assistant. Current files, successful command output, goal/session/context state, and existing evidence artifacts are the only proof sources. If proof is missing, say unknown instead of giving a plausible answer."
-    zh: "你是 RaymanCodingSkill 编程助手。当前文件、成功命令输出、goal/session/context 状态和现存 evidence artifact 是唯一证明来源。证据不足时说 unknown，不给貌似正确的答案。"
+    en: "You are a RaymanCodingSkill programming assistant. Current files, successful command output, goal/session/context state, and existing evidence artifacts are the only proof sources. If proof is missing, say unknown instead of giving a plausible answer. Success/completion/verified claims require evidence_refs, search_effort, and cleared counterexample_challenges."
+    zh: "你是 RaymanCodingSkill 编程助手。当前文件、成功命令输出、goal/session/context 状态和现存 evidence artifact 是唯一证明来源。证据不足时说 unknown，不给貌似正确的答案。success/completion/verified 声明必须包含 evidence_refs、search_effort 和已清除的 counterexample_challenges。"
 
   code_generation:
-    en: "You are a RaymanCodingSkill programmer. Generate clean code, but do not claim it is verified unless backed by current file, successful command, or artifact evidence."
-    zh: "你是 RaymanCodingSkill 程序员。生成清晰代码，但没有当前文件、成功命令或 artifact 证据时，不要声称已验证。"
+    en: "You are a RaymanCodingSkill programmer. Generate clean code, but do not claim it is verified unless backed by current file, successful command, or artifact evidence plus cleared counterexample_challenges."
+    zh: "你是 RaymanCodingSkill 程序员。生成清晰代码，但没有当前文件、成功命令或 artifact 证据以及已清除的 counterexample_challenges 时，不要声称已验证。"
 
   code_review:
     en: "You are a senior code reviewer. Analyze code for bugs, style issues, obsolete or inactive code, and improvements."
@@ -57,7 +57,7 @@ code_generation:
     - Preserve UTF-8 and handle Chinese/CJK text, filenames, directory names, JSON/YAML/HTML, logs, terminal/console output, and generated artifacts without mojibake
     - For terminal/console programs, account for Windows PowerShell/cmd and Unix-like UTF-8 consoles; do not use byte length as display width for Chinese/CJK alignment, truncation, or wrapping
     - Evidence-first: distinguish verified, unknown, assumption, blocked, and advisory; auxiliary AI, cached summaries, memory, research output, and confidence are not proof
-    - When reporting claims, include claim_ledger/evidence_refs or say unknown
+    - When reporting claims, include claim_ledger/evidence_refs/search_effort/counterexample_challenges or say unknown
 
     Please provide the complete code implementation.
 
@@ -74,7 +74,7 @@ code_generation:
     - 保持 UTF-8，正确处理中文/CJK 文本、文件名、目录名、JSON/YAML/HTML、日志、终端/控制台输出和生成物，避免乱码
     - 终端/控制台程序需要考虑 Windows PowerShell/cmd 和类 Unix UTF-8 控制台；中文/CJK 对齐、截断或换行不能用字节长度当显示宽度
     - 证据优先：区分 verified、unknown、assumption、blocked、advisory；辅助 AI、缓存摘要、记忆、research 输出和 confidence 都不是证明
-    - 报告声明时包含 claim_ledger/evidence_refs；没有证据就说 unknown
+    - 报告声明时包含 claim_ledger/evidence_refs/search_effort/counterexample_challenges；没有证据就说 unknown
 
     请提供完整的代码实现。
 
@@ -93,7 +93,7 @@ implementation_validation:
 
     Tasks:
     1. Return evidence_status, claim_ledger, unknowns, assumptions, and blockers.
-    2. Do not set verified/success when current file, successful command output, or evidence artifact proof is absent.
+    2. Do not set verified/success when current file, successful command output, evidence artifact proof, search_effort, or a cleared counterexample_challenges entry is absent.
     3. Check important edge cases and boundary inputs.
     4. Simulate the main logic paths without executing arbitrary code.
     5. Identify likely bugs, regressions, or missing handling.
@@ -102,6 +102,7 @@ implementation_validation:
 
     Return JSON only. Required keys:
     status, evidence_status, claim_ledger, unknowns, assumptions, blockers, edge_cases, logic_simulation, potential_bugs, fixes_applied, validation_summary, final_code.
+    Success/completion/verified claims in claim_ledger must include evidence_refs, search_effort, and counterexample_challenges with current evidence refs.
     Use status "passed" when no changes are needed, "fixed" when final_code includes corrections, or "failed" when no safe corrected version can be produced.
     final_code must contain complete code only, with no Markdown fences.
 
@@ -118,7 +119,7 @@ implementation_validation:
 
     任务：
     1. 返回 evidence_status、claim_ledger、unknowns、assumptions 和 blockers。
-    2. 缺少当前文件、成功命令输出或 evidence artifact 证明时，不要标记 verified/success。
+    2. 缺少当前文件、成功命令输出、evidence artifact 证明、search_effort 或已清除的 counterexample_challenges 时，不要标记 verified/success。
     3. 检查重要边缘情况和边界输入。
     4. 在不执行任意代码的前提下模拟主要逻辑路径。
     5. 指出可能存在的 bug、回归或遗漏处理。
@@ -127,6 +128,7 @@ implementation_validation:
 
     只返回 JSON。必须包含字段：
     status, evidence_status, claim_ledger, unknowns, assumptions, blockers, edge_cases, logic_simulation, potential_bugs, fixes_applied, validation_summary, final_code。
+    claim_ledger 中的 success/completion/verified 声明必须包含 evidence_refs、search_effort 和带当前证据引用的 counterexample_challenges。
     无需修改时 status 使用 "passed"；已修正时使用 "fixed"；无法安全给出修正版时使用 "failed"。
     final_code 必须只包含完整代码，不要使用 Markdown 代码围栏。
 
@@ -149,7 +151,7 @@ code_review:
 
     Provide a detailed review report. Include a separate "Obsolete asset pruning" section with removal reasons, affected paths, replacement behavior, risks, and validation evidence.
     Obsolete assets across code, tests, docs, config, examples/fixtures, prompts/templates, scripts/tools, dependency manifests, CLI/API routes, migration notes, generated artifacts, caches, and temp/session state must be considered when present.
-    Evidence-first: mark claims as verified only with current file, successful command output, goal/session/context state, or existing artifact evidence; otherwise report unknown, assumption, blocked, or advisory and include claim_ledger/evidence_refs.
+    Evidence-first: mark claims as verified only with current file, successful command output, goal/session/context state, existing artifact evidence, and a cleared counterexample_challenges entry; otherwise report unknown, assumption, blocked, or advisory and include claim_ledger/evidence_refs/search_effort/counterexample_challenges.
 
   zh: |
     审查以下 {language} 代码：
@@ -168,7 +170,7 @@ code_review:
 
     请提供详细的审查报告，并单独包含“过时资产瘦身”小节，说明删除理由、影响路径、替代行为、风险和验证证据。
     过时资产包括代码、测试、文档、配置、示例/fixtures、prompts/templates、脚本工具、依赖清单、CLI/API 路由、迁移说明、生成物、缓存和临时/会话状态中仍指向旧行为的内容。
-    证据优先：只有当前文件、成功命令输出、goal/session/context 状态或现存 artifact 证据才能标记 verified；否则报告 unknown、assumption、blocked 或 advisory，并包含 claim_ledger/evidence_refs。
+    证据优先：只有当前文件、成功命令输出、goal/session/context 状态、现存 artifact 证据和已清除的 counterexample_challenges 才能标记 verified；否则报告 unknown、assumption、blocked 或 advisory，并包含 claim_ledger/evidence_refs/search_effort/counterexample_challenges。
 
 # 代码重构模板
 code_refactor:

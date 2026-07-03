@@ -539,37 +539,37 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-07-03T07:55:21.427643Z"
+            updated_at: "2026-07-03T11:41:28.8763056Z"
           - command: "cargo test -p rayman-core session::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-07-03T07:55:21.427643Z"
+            updated_at: "2026-07-03T11:41:28.8763056Z"
           - command: "cargo test -p rayman-core goal::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-07-03T07:55:21.427643Z"
+            updated_at: "2026-07-03T11:41:28.8763056Z"
           - command: "cargo test -p rayman-core audit::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-07-03T07:55:21.427643Z"
+            updated_at: "2026-07-03T11:41:28.8763056Z"
           - command: "cargo test -p rayman-core gate::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-07-03T07:55:21.427643Z"
+            updated_at: "2026-07-03T11:41:28.8763056Z"
           - command: cargo test -p rayman-cli cli_parses_subagent_commands
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-07-03T07:55:21.427643Z"
+            updated_at: "2026-07-03T11:41:28.8763056Z"
       - id: codex_host_subagent_performance_contract
         claim: Codex host subagent dispatch has a deterministic planner, auto-start surface, and goal controller integration; non-trivial `goal run` / `goal resume` plan stages emit `HOST_SUBAGENT_DISPATCH_REQUEST {json}` with host-tool-ready spawn_agent request payloads, stop with `host_subagent_dispatch_requested` until the primary AI spawns lanes or records failed/unavailable closeout, bind records to goal_id and dispatch_request_id, keep host subagents as main-model/strong-model speed lanes rather than auxiliary AI, treat standing workspace authorization as equivalent to an explicit `开启subagent` phrase with no per-use prompt precondition, explicit read-only intent suppresses writable worker lanes for audit/review-only work, and damaged ledger JSON or unclosed dispatch requests surface as fail-closed blockers.
         strict_validation: true
@@ -719,37 +719,37 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-03T09:41:14.557340Z"
+            updated_at: "2026-07-03T11:41:28.8763056Z"
           - command: "cargo test -p rayman-core goal::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-03T09:41:14.557340Z"
+            updated_at: "2026-07-03T11:41:28.8763056Z"
           - command: cargo test -p rayman-core enabled_workspace_subagent_authorization_matches_explicit_phrase
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-03T09:41:14.557340Z"
+            updated_at: "2026-07-03T11:41:28.8763056Z"
           - command: cargo test -p rayman-cli cli_parses_subagent_commands
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-03T09:41:14.557340Z"
+            updated_at: "2026-07-03T11:41:28.8763056Z"
           - command: cargo test -p rayman-cli cli_goal_run_emits_host_subagent_dispatch_request
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-03T09:41:14.557340Z"
+            updated_at: "2026-07-03T11:41:28.8763056Z"
           - command: cargo test -p rayman-cli --test ui_contract cli_subagent_auto_start_emits_spawn_contract
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-03T09:41:14.557340Z"
+            updated_at: "2026-07-03T11:41:28.8763056Z"
       - id: codex_harness_execution_contract
         claim: Codex harness-style self-improvement is treated as a mapping to documented Codex execution controls or current-session capabilities, with quality-gate evidence for sandbox/approval boundaries, AGENTS.md/skills/hooks/MCP-rules instruction surfaces, subagent inheritance plus Rayman ledger review, and non-interactive approval/escalation failure handling.
         doc_anchors:
@@ -1236,19 +1236,19 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: close_success_requires_actual_evidence"
-            updated_at: "2026-07-01T02:28:14.451769Z"
+            updated_at: "2026-07-03T11:55:14.6070759Z"
           - command: "cargo test -p rayman-core session::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: close_success_requires_actual_evidence"
-            updated_at: "2026-07-01T02:28:14.451769Z"
+            updated_at: "2026-07-03T11:55:14.6070759Z"
           - command: "cargo test -p rayman-core quality::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: close_success_requires_actual_evidence"
-            updated_at: "2026-07-01T02:28:14.451769Z"
+            updated_at: "2026-07-03T11:55:14.6070759Z"
       - id: goal_wait_recovery_contract
         claim: Goal workflows exhaust non-human executable stages before waiting, and every blocked/partial pending-work item records blocker ownership, minimum input, evidence path, resume command, and automatic resume strategy. User-owned blockers are `wait_user`, unavailable outside dependencies are `wait_external`, and remaining validation/release blockers are `hard_gate`.
         implementation_anchors:
@@ -1594,6 +1594,30 @@ features:
         contains: "pending_evidence"
         proves:
           - evidence_first_unknown_gate
+      - path: crates/rayman-core/src/evidence.rs
+        contains: "fn resolver_blocks_success_claim_without_counterexample_challenge"
+        proves:
+          - success_claim_counterexample_challenge_gate
+      - path: crates/rayman-core/src/evidence.rs
+        contains: "fn scan_success_claims_blocks_fabricated_structured_challenge_metadata"
+        proves:
+          - success_claim_counterexample_challenge_gate
+      - path: crates/rayman-core/src/evidence.rs
+        contains: "fn scan_success_claims_blocks_summary_status_success_without_challenge"
+        proves:
+          - success_claim_counterexample_challenge_gate
+      - path: crates/rayman-core/src/goal.rs
+        contains: "fn goal_close_success_blocks_missing_counterexample_challenge"
+        proves:
+          - success_claim_counterexample_challenge_gate
+      - path: crates/rayman-core/src/session.rs
+        contains: "fn success_close_blocks_missing_counterexample_challenge"
+        proves:
+          - success_claim_counterexample_challenge_gate
+      - path: crates/rayman-core/src/skills.rs
+        contains: "fn validation_public_json_preserves_evidence_contract_fields"
+        proves:
+          - success_claim_counterexample_challenge_gate
       - path: crates/rayman-core/src/audit.rs
         contains: "fn required_cli_guarantees_can_live_in_split_reference_docs"
         proves:
@@ -1866,6 +1890,157 @@ features:
               - evidence_first_unknown_gate
         validation_commands:
           - "cargo test -p rayman-core evidence:: workflow::"
+      - id: success_claim_counterexample_challenge_gate
+        claim: Verified success/completion/ready/satisfied claims fail closed unless claim ledger, goal close evidence, session close evidence, and structured JSON success summaries include current evidence_refs, search_effort, and a cleared counterexample/adversarial challenge with explicit evidence refs; fabricated, marker-only, incidental-path-only, stale, unresolved, or internally conflicting blocker/unknown/assumption metadata blocks success instead of producing a plausible false positive, while legacy `.RaymanCodingSkill/goals/*.json` requirement records are not promoted into public structured success summaries and the same lookalike shape outside goal state remains blocked.
+        strict_validation: true
+        doc_anchors:
+          - path: SKILL.md
+            contains: "counterexample_challenges"
+          - path: references/skill-proof-and-preservation.md
+            contains: "Success/completion/verified/ready claims"
+          - path: config/prompts.yaml
+            contains: "counterexample_challenges"
+          - path: docs/TESTING.md
+            contains: "Success claim counterexample gate tests"
+          - path: docs/GOAL_WORKFLOWS.md
+            contains: "cleared `counterexample_challenges`"
+          - path: docs/API.md
+            contains: "claim ledger entries must preserve current `evidence_refs`, `search_effort`, and cleared `counterexample_challenges`"
+        implementation_anchors:
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "pub struct SearchEffort"
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "pub struct CounterexampleChallenge"
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "counterexample_blockers_for_success_evidence_with_resolver"
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn claim_counterexample_blockers"
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn success_claim_conflict_blockers"
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn counterexample_evidence_refs"
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn structured_success_claim"
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn looks_like_legacy_goal_requirement_record"
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn is_goal_state_file"
+          - path: crates/rayman-core/src/goal.rs
+            contains: "fn success_evidence_counterexample_blockers"
+          - path: crates/rayman-core/src/session.rs
+            contains: "success_counterexample_blocker"
+          - path: crates/rayman-core/src/gate.rs
+            contains: "scan_success_claims(self.workspace.clone())"
+          - path: crates/rayman-core/src/skills.rs
+            contains: "counterexample_challenges"
+          - path: crates/rayman-api/src/lib.rs
+            contains: "counterexample_challenges: Vec::new()"
+        test_anchors:
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn resolver_blocks_success_claim_without_counterexample_challenge"
+            proves:
+              - success_claim_counterexample_challenge_gate
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn claim_from_status_blocks_satisfied_status_without_counterexample"
+            proves:
+              - success_claim_counterexample_challenge_gate
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn marker_only_counterexample_evidence_stays_blocked"
+            proves:
+              - success_claim_counterexample_challenge_gate
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn free_form_counterexample_requires_explicit_evidence_ref"
+            proves:
+              - success_claim_counterexample_challenge_gate
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn free_form_counterexample_accepts_explicit_current_evidence_ref"
+            proves:
+              - success_claim_counterexample_challenge_gate
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn scan_success_claims_blocks_fabricated_structured_challenge_metadata"
+            proves:
+              - success_claim_counterexample_challenge_gate
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn scan_success_claims_blocks_success_summary_with_conflicting_blockers"
+            proves:
+              - success_claim_counterexample_challenge_gate
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn scan_success_claims_accepts_cleared_challenge_with_current_path"
+            proves:
+              - success_claim_counterexample_challenge_gate
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn scan_success_claims_blocks_summary_status_success_without_challenge"
+            proves:
+              - success_claim_counterexample_challenge_gate
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn scan_success_claims_ignores_legacy_goal_requirement_records_in_goal_state"
+            proves:
+              - success_claim_counterexample_challenge_gate
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn scan_success_claims_blocks_goal_requirement_shape_outside_goal_state"
+            proves:
+              - success_claim_counterexample_challenge_gate
+          - path: crates/rayman-core/src/evidence.rs
+            contains: "fn scan_success_claims_accepts_summary_status_with_current_challenge"
+            proves:
+              - success_claim_counterexample_challenge_gate
+          - path: crates/rayman-core/src/goal.rs
+            contains: "fn goal_close_success_blocks_missing_counterexample_challenge"
+            proves:
+              - success_claim_counterexample_challenge_gate
+          - path: crates/rayman-core/src/goal.rs
+            contains: "fn goal_close_success_requires_counterexample_for_each_must_requirement"
+            proves:
+              - success_claim_counterexample_challenge_gate
+          - path: crates/rayman-core/src/session.rs
+            contains: "fn success_close_blocks_missing_counterexample_challenge"
+            proves:
+              - success_claim_counterexample_challenge_gate
+          - path: crates/rayman-core/src/skills.rs
+            contains: "fn validation_public_json_preserves_evidence_contract_fields"
+            proves:
+              - success_claim_counterexample_challenge_gate
+          - path: crates/rayman-api/src/tests.rs
+            contains: "fn goals_api_starts_runs_gets_and_closes_goal"
+            proves:
+              - success_claim_counterexample_challenge_gate
+        validation_commands:
+          - "cargo test -p rayman-core evidence::"
+          - "cargo test -p rayman-core goal::"
+          - "cargo test -p rayman-core session::"
+          - "cargo test -p rayman-core skills::"
+          - cargo test -p rayman-api
+        validation_records:
+          - command: "cargo test -p rayman-core evidence::"
+            status: passed
+            evidence_path: docs/VALIDATION_RECORDS.md
+            evidence_contains:
+              - "record: success_claim_counterexample_challenge_gate"
+            updated_at: "2026-07-03T11:55:14.6070759Z"
+          - command: "cargo test -p rayman-core goal::"
+            status: passed
+            evidence_path: docs/VALIDATION_RECORDS.md
+            evidence_contains:
+              - "record: success_claim_counterexample_challenge_gate"
+            updated_at: "2026-07-03T11:55:14.6070759Z"
+          - command: "cargo test -p rayman-core session::"
+            status: passed
+            evidence_path: docs/VALIDATION_RECORDS.md
+            evidence_contains:
+              - "record: success_claim_counterexample_challenge_gate"
+            updated_at: "2026-07-03T11:55:14.6070759Z"
+          - command: "cargo test -p rayman-core skills::"
+            status: passed
+            evidence_path: docs/VALIDATION_RECORDS.md
+            evidence_contains:
+              - "record: success_claim_counterexample_challenge_gate"
+            updated_at: "2026-07-03T11:55:14.6070759Z"
+          - command: cargo test -p rayman-api
+            status: passed
+            evidence_path: docs/VALIDATION_RECORDS.md
+            evidence_contains:
+              - "record: success_claim_counterexample_challenge_gate"
+            updated_at: "2026-07-03T11:55:14.6070759Z"
       - id: asset_retirement_cascades_retired_test_cases
         claim: Retiring a feature, declaration, command, API, claim, or obsolete asset also retires tests whose only purpose was proving that retired surface; isolated Rust test cases and matching feature-coverage test anchors are cascade candidates that cleanup may delete before deleting the now-unreferenced retired asset, while unisolated stale test references, mixed current/retired proofs, and orphan `test_anchors[].proves` entries block success.
         doc_anchors:

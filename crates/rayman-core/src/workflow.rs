@@ -259,6 +259,8 @@ fn blocked_report(
                 text: requirement.text.clone(),
                 status: EvidenceStatus::Blocked,
                 evidence_refs: Vec::new(),
+                search_effort: Vec::new(),
+                counterexample_challenges: Vec::new(),
                 blockers: vec![
                     "pending or unfinished work blocked review gate; do not claim success".into(),
                 ],

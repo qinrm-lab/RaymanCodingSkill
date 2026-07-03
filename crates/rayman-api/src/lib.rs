@@ -117,6 +117,8 @@ fn api_unknown_evidence(text: &str) -> Result<ApiEvidenceFields> {
         text: text.into(),
         status: EvidenceStatus::Unknown,
         evidence_refs: Vec::new(),
+        search_effort: Vec::new(),
+        counterexample_challenges: Vec::new(),
         blockers: vec![
             "API model output has no current workspace path, successful validation command, or evidence artifact attached".into(),
         ],

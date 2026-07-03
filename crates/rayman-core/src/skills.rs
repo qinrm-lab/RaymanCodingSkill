@@ -4,11 +4,16 @@ use serde_json::{Value, json};
 
 use crate::models::AgentManager;
 
-const EVIDENCE_FIRST_PROMPT: &str = "Evidence-first unknown rule: current workspace files, successful command output, goal/session/context state, and existing evidence artifacts are the only proof sources. If proof is missing, say unknown or assumption instead of a plausible answer. Distinguish verified, unknown, assumption, blocked, and advisory. Auxiliary AI, cached summaries, memory, research output, and confidence are advisory only and cannot prove completion. When reporting claims, include or preserve a claim ledger with evidence_refs, unknowns, assumptions, and blockers.";
+const EVIDENCE_FIRST_PROMPT: &str = "Evidence-first unknown rule: current workspace files, successful command output, goal/session/context state, and existing evidence artifacts are the only proof sources. If proof is missing, say unknown or assumption instead of a plausible answer. Distinguish verified, unknown, assumption, blocked, and advisory. Auxiliary AI, cached summaries, memory, research output, and confidence are advisory only and cannot prove completion. When reporting success/completion/verified claims, include or preserve a claim ledger with evidence_refs, search_effort, counterexample_challenges, unknowns, assumptions, and blockers; do not mark verified/success until a counterexample or adversarial challenge is cleared with current evidence.";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationResult {
     pub status: String,
+    pub evidence_status: String,
+    pub claim_ledger: Value,
+    pub unknowns: Vec<Value>,
+    pub assumptions: Vec<Value>,
+    pub blockers: Vec<Value>,
     pub final_code: String,
     pub edge_cases: Vec<Value>,
     pub logic_simulation: Value,
@@ -20,6 +25,11 @@ pub struct ValidationResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReviewResult {
     pub review: String,
+    pub evidence_status: String,
+    pub claim_ledger: Value,
+    pub unknowns: Vec<Value>,
+    pub assumptions: Vec<Value>,
+    pub blockers: Vec<Value>,
     pub issues: Vec<Value>,
     pub suggestions: Vec<String>,
     pub score: Option<i64>,
@@ -60,6 +70,18 @@ pub fn validate_and_fix(
             .and_then(Value::as_str)
             .unwrap_or("validated")
             .to_string(),
+        evidence_status: parsed
+            .get("evidence_status")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown")
+            .to_string(),
+        claim_ledger: parsed
+            .get("claim_ledger")
+            .cloned()
+            .unwrap_or_else(|| json!({"claims": []})),
+        unknowns: value_array(parsed.get("unknowns")),
+        assumptions: value_array(parsed.get("assumptions")),
+        blockers: value_array(parsed.get("blockers")),
         final_code,
         edge_cases: value_array(parsed.get("edge_cases")),
         logic_simulation: parsed
@@ -94,7 +116,7 @@ fn code_generation_prompt(prompt: &str, language: &str) -> String {
 
 fn implementation_validation_prompt(code: &str, requirement: &str, language: &str) -> String {
     format!(
-        "Validate this {language} implementation against the requirement. Return JSON with keys status, evidence_status, claim_ledger, unknowns, assumptions, blockers, final_code, edge_cases, logic_simulation, potential_bugs, fixes_applied, validation_summary. Do not set evidence_status=verified without current file, successful command output, or evidence artifact proof.\n{}\n{}\nRequirement:\n{requirement}\n\nCode:\n{code}",
+        "Validate this {language} implementation against the requirement. Return JSON with keys status, evidence_status, claim_ledger, unknowns, assumptions, blockers, final_code, edge_cases, logic_simulation, potential_bugs, fixes_applied, validation_summary. The claim_ledger claims must include evidence_refs, search_effort, and counterexample_challenges for success/completion/verified claims. Do not set evidence_status=verified without current file, successful command output, evidence artifact proof, and a cleared counterexample/adversarial challenge.\n{}\n{}\nRequirement:\n{requirement}\n\nCode:\n{code}",
         EVIDENCE_FIRST_PROMPT,
         chinese_text_and_path_requirements()
     )
@@ -112,7 +134,7 @@ pub fn review_code(
     reviewed_path: Option<&str>,
 ) -> Result<ReviewResult> {
     let prompt = format!(
-        "Review this {language} code. Lead with bugs, risks, regressions, missing tests, and obsolete code that can be removed. Return JSON if practical with keys review, evidence_status, claim_ledger, unknowns, assumptions, blockers, issues, suggestions, score. {}\nWorkspace: {}\nReviewed path: {}\n\nCode:\n{code}",
+        "Review this {language} code. Lead with bugs, risks, regressions, missing tests, and obsolete code that can be removed. Return JSON if practical with keys review, evidence_status, claim_ledger, unknowns, assumptions, blockers, issues, suggestions, score. Success/completion/verified findings in claim_ledger must include evidence_refs, search_effort, and counterexample_challenges. {}\nWorkspace: {}\nReviewed path: {}\n\nCode:\n{code}",
         EVIDENCE_FIRST_PROMPT,
         workspace_path.unwrap_or(""),
         reviewed_path.unwrap_or("")
@@ -126,6 +148,18 @@ pub fn review_code(
                 .and_then(Value::as_str)
                 .unwrap_or(&response)
                 .to_string(),
+            evidence_status: parsed
+                .get("evidence_status")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown")
+                .to_string(),
+            claim_ledger: parsed
+                .get("claim_ledger")
+                .cloned()
+                .unwrap_or_else(|| json!({"claims": []})),
+            unknowns: value_array(parsed.get("unknowns")),
+            assumptions: value_array(parsed.get("assumptions")),
+            blockers: value_array(parsed.get("blockers")),
             issues: value_array(parsed.get("issues")),
             suggestions: parsed
                 .get("suggestions")
@@ -144,6 +178,11 @@ pub fn review_code(
     }
     Ok(ReviewResult {
         review: response,
+        evidence_status: "unknown".into(),
+        claim_ledger: json!({"claims": []}),
+        unknowns: Vec::new(),
+        assumptions: Vec::new(),
+        blockers: Vec::new(),
         issues: Vec::new(),
         suggestions: Vec::new(),
         score: None,
@@ -284,6 +323,7 @@ mod tests {
         assert!(prompt.contains("Do not use byte length"));
         assert!(prompt.contains("Evidence-first unknown rule"));
         assert!(prompt.contains("claim ledger"));
+        assert!(prompt.contains("counterexample_challenges"));
     }
 
     #[test]
@@ -298,7 +338,55 @@ mod tests {
         assert!(prompt.contains("terminal or console"));
         assert!(prompt.contains("directory names"));
         assert!(prompt.contains("evidence_status"));
+        assert!(prompt.contains("search_effort"));
+        assert!(prompt.contains("counterexample_challenges"));
         assert!(prompt.contains("confidence"));
+    }
+
+    #[test]
+    fn review_prompt_requires_counterexample_challenges() {
+        let prompt = format!(
+            "Review this rust code. Lead with bugs, risks, regressions, missing tests, and obsolete code that can be removed. Return JSON if practical with keys review, evidence_status, claim_ledger, unknowns, assumptions, blockers, issues, suggestions, score. Success/completion/verified findings in claim_ledger must include evidence_refs, search_effort, and counterexample_challenges. {}",
+            EVIDENCE_FIRST_PROMPT
+        );
+
+        assert!(prompt.contains("counterexample_challenges"));
+        assert!(prompt.contains("search_effort"));
+    }
+
+    #[test]
+    fn validation_public_json_preserves_evidence_contract_fields() {
+        let result = ValidationResult {
+            status: "passed".into(),
+            evidence_status: "verified".into(),
+            claim_ledger: json!({
+                "claims": [{
+                    "id": "claim_1",
+                    "text": "feature completed",
+                    "search_effort": [],
+                    "counterexample_challenges": []
+                }]
+            }),
+            unknowns: vec![json!("unknown")],
+            assumptions: vec![json!("assumption")],
+            blockers: vec![json!("blocker")],
+            final_code: "fn main() {}".into(),
+            edge_cases: Vec::new(),
+            logic_simulation: Value::Null,
+            potential_bugs: Vec::new(),
+            fixes_applied: Vec::new(),
+            validation_summary: "ok".into(),
+        };
+
+        let value = validation_public_json(&result).unwrap();
+
+        assert_eq!(value["evidence_status"], "verified");
+        assert!(
+            value["claim_ledger"]["claims"][0]
+                .get("counterexample_challenges")
+                .is_some()
+        );
+        assert_eq!(value["blockers"][0], "blocker");
     }
 
     #[test]

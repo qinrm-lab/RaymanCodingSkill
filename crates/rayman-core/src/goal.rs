@@ -12,7 +12,8 @@ use crate::auxiliary::AuxiliaryTaskStore;
 use crate::context::ContextKernel;
 use crate::customer_deploy::CustomerDeployManager;
 use crate::evidence::{
-    EvidenceResolver, EvidenceStatus, scan_success_claims, validation_records_from_steps,
+    EvidenceResolver, EvidenceStatus, counterexample_blockers_for_success_evidence_with_resolver,
+    scan_success_claims, validation_records_from_steps,
 };
 use crate::models::AgentManager;
 use crate::project::ProjectAnalyzer;
@@ -939,6 +940,14 @@ impl GoalManager {
             bail!(
                 "目标成功门禁未通过: Context OS state 过期或缺失: {}",
                 context_stale_gate_detail(&context)
+            );
+        }
+        let counterexample_blockers =
+            success_evidence_counterexample_blockers(&self.workspace, record, closing_evidence);
+        if !counterexample_blockers.is_empty() {
+            bail!(
+                "目标成功门禁未通过: success evidence 缺少反例质证或搜索努力:\n{}",
+                counterexample_blockers.join("\n")
             );
         }
         QualityManager::new(self.workspace.clone())?.assert_goal_gate(record, closing_evidence)
@@ -2046,6 +2055,54 @@ fn evidence_has_substantive_proof(workspace: &Path, record: &GoalRecord, evidenc
         .unwrap_or(false)
 }
 
+fn success_evidence_counterexample_blockers(
+    workspace: &Path,
+    record: &GoalRecord,
+    closing_evidence: Option<&str>,
+) -> Vec<String> {
+    let validation_records = validation_records_from_steps(record.steps.iter().map(|step| {
+        (
+            step.stage.as_str(),
+            step.status.as_str(),
+            step.exit_code,
+            step.evidence.as_deref(),
+        )
+    }));
+    let resolver = match EvidenceResolver::with_validation_records(workspace, validation_records) {
+        Ok(resolver) => resolver,
+        Err(error) => {
+            return vec![format!("counterexample_evidence_resolver_error: {error}")];
+        }
+    };
+    let mut blockers = Vec::new();
+    let Some(evidence) = closing_evidence else {
+        return vec![
+            "missing_success_evidence: success requires current evidence plus counterexample challenge"
+                .into(),
+        ];
+    };
+    for requirement in record
+        .contract
+        .requirements
+        .iter()
+        .filter(|requirement| requirement.priority == "must")
+    {
+        let Some(segment) = requirement_evidence_segment(evidence, &requirement.id) else {
+            blockers.push(format!(
+                "{}: missing_counterexample_evidence_segment",
+                requirement.id
+            ));
+            continue;
+        };
+        for blocker in
+            counterexample_blockers_for_success_evidence_with_resolver(segment, &resolver)
+        {
+            blockers.push(format!("{}: {blocker}", requirement.id));
+        }
+    }
+    blockers
+}
+
 fn advance_stage(record: &mut GoalRecord) {
     if record.current_stage == "repair" {
         record.current_stage = "validate".into();
@@ -2368,6 +2425,12 @@ fn high_intervention_policy() -> Vec<String> {
 mod tests {
     use super::*;
 
+    fn success_evidence(req_evidence: &str) -> String {
+        format!(
+            "{req_evidence}\nchecked: {req_evidence}\nnegative check: stale success evidence not found; evidence: {req_evidence}"
+        )
+    }
+
     #[test]
     fn goal_contract_round_trips_and_closes() {
         let temp = tempfile::tempdir().unwrap();
@@ -2400,7 +2463,9 @@ mod tests {
             .close_goal(
                 Some(&goal.id),
                 "success",
-                "req_1: crates/rayman-core/src/goal.rs updated and cargo test passed",
+                &success_evidence(
+                    "req_1: crates/rayman-core/src/goal.rs updated and cargo test passed",
+                ),
                 &[],
             )
             .unwrap();
@@ -2452,10 +2517,79 @@ mod tests {
         manager.run_next(Some(&goal.id), None).unwrap();
 
         let closed = manager
-            .close_goal(Some(&goal.id), "success", "req_1: README.md updated", &[])
+            .close_goal(
+                Some(&goal.id),
+                "success",
+                &success_evidence("req_1: README.md updated"),
+                &[],
+            )
             .unwrap();
 
         assert_eq!(closed.status, "success");
+    }
+
+    #[test]
+    fn goal_close_success_blocks_missing_counterexample_challenge() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("README.md"), "# project").unwrap();
+        let manager = GoalManager::new(temp.path()).unwrap();
+        let goal = manager
+            .start("ship feature", "standard_development", &[], &[], &[], &[])
+            .unwrap();
+
+        ContextKernel::new(temp.path())
+            .unwrap()
+            .refresh_index()
+            .unwrap();
+        manager.run_next(Some(&goal.id), None).unwrap();
+        manager.run_next(Some(&goal.id), None).unwrap();
+        manager.run_next(Some(&goal.id), None).unwrap();
+
+        let error = manager
+            .close_goal(Some(&goal.id), "success", "req_1: README.md updated", &[])
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("success evidence 缺少反例质证或搜索努力"));
+        assert!(error.contains("missing_counterexample_challenge"));
+    }
+
+    #[test]
+    fn goal_close_success_requires_counterexample_for_each_must_requirement() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("README.md"), "# project").unwrap();
+        let manager = GoalManager::new(temp.path()).unwrap();
+        let goal = manager
+            .start(
+                "ship feature",
+                "standard_development",
+                &["first must".into(), "second must".into()],
+                &[],
+                &[],
+                &[],
+            )
+            .unwrap();
+
+        ContextKernel::new(temp.path())
+            .unwrap()
+            .refresh_index()
+            .unwrap();
+        manager.run_next(Some(&goal.id), None).unwrap();
+        manager.run_next(Some(&goal.id), None).unwrap();
+        manager.run_next(Some(&goal.id), None).unwrap();
+
+        let evidence = [
+            success_evidence("req_1: README.md updated"),
+            "req_2: README.md updated".into(),
+        ]
+        .join("\n");
+        let error = manager
+            .close_goal(Some(&goal.id), "success", &evidence, &[])
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("req_2: missing_search_effort"));
+        assert!(error.contains("req_2: missing_counterexample_challenge"));
     }
 
     #[test]
@@ -2881,7 +3015,12 @@ mod tests {
         manager.run_next(Some(&goal.id), None).unwrap();
 
         let closed = manager
-            .close_goal(Some(&goal.id), "success", "req_1: README.md updated", &[])
+            .close_goal(
+                Some(&goal.id),
+                "success",
+                &success_evidence("req_1: README.md updated"),
+                &[],
+            )
             .unwrap();
 
         assert_eq!(closed.status, "success");
@@ -3279,7 +3418,7 @@ mod tests {
             .close_goal(
                 Some(&goal.id),
                 "success",
-                "req_1: docs/CLI.md updated and cargo test passed",
+                &success_evidence("req_1: docs/CLI.md updated and cargo test passed"),
                 &[],
             )
             .unwrap_err();
@@ -3817,7 +3956,9 @@ mod tests {
             .close_goal(
                 Some(&record.id),
                 "success",
-                "req_1: crates/rayman-cli/src/main.rs implemented and cargo test passed",
+                &success_evidence(
+                    "req_1: crates/rayman-cli/src/main.rs implemented and cargo test passed",
+                ),
                 &[],
             )
             .unwrap();
