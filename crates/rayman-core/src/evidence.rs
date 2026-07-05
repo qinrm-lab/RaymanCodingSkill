@@ -78,6 +78,7 @@ impl EvidenceStatus {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum EvidenceRefKind {
+    FilePresence,
     WorkspacePath,
     ValidationCommand,
     Artifact,
@@ -583,11 +584,9 @@ pub fn check_workspace_evidence(
     match options.scope.as_str() {
         "workspace" => {
             for path in workspace_claim_paths(&workspace) {
-                let evidence = path.to_string_lossy().to_string();
-                claims.push(resolver.claim(
+                claims.push(file_presence_claim(
                     format!("workspace_{}", claims.len() + 1),
-                    format!("workspace evidence file {}", display_path(&path)),
-                    &evidence,
+                    &path,
                 ));
             }
             if claims.is_empty() {
@@ -709,6 +708,24 @@ pub fn check_workspace_evidence(
         options.scope,
         ClaimLedger::new(claims),
     ))
+}
+
+fn file_presence_claim(id: String, path: &Path) -> Claim {
+    Claim {
+        id,
+        text: format!("workspace file presence {}", display_path(path)),
+        status: EvidenceStatus::Verified,
+        evidence_refs: vec![EvidenceRef {
+            kind: EvidenceRefKind::FilePresence,
+            status: EvidenceStatus::Verified,
+            value: display_path(path),
+            detail: "current workspace path exists; this proves file presence only, not a completion or success claim".into(),
+        }],
+        search_effort: Vec::new(),
+        counterexample_challenges: Vec::new(),
+        blockers: Vec::new(),
+        checked_at: now_iso(),
+    }
 }
 
 pub fn validation_records_from_steps<'a>(
@@ -1623,6 +1640,41 @@ mod tests {
                 .iter()
                 .any(|reference| reference.kind == EvidenceRefKind::WorkspacePath)
         );
+    }
+
+    #[test]
+    fn workspace_scope_reports_file_presence_not_success_claims() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("README.md"), "# project").unwrap();
+        fs::write(temp.path().join("SKILL.md"), "# skill").unwrap();
+        fs::write(temp.path().join("Cargo.toml"), "[workspace]\n").unwrap();
+        fs::create_dir_all(temp.path().join("config")).unwrap();
+        fs::write(
+            temp.path().join("config").join("feature_coverage.yaml"),
+            "features: []\n",
+        )
+        .unwrap();
+
+        let report = check_workspace_evidence(
+            temp.path(),
+            EvidenceCheckOptions {
+                scope: "workspace".into(),
+                goal_id: None,
+                include_advisory: false,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(report.status, EvidenceStatus::Verified);
+        assert!(report.claim_ledger.claims.iter().all(|claim| {
+            claim.text.starts_with("workspace file presence ")
+                && claim.search_effort.is_empty()
+                && claim.counterexample_challenges.is_empty()
+                && claim
+                    .evidence_refs
+                    .iter()
+                    .all(|reference| reference.kind == EvidenceRefKind::FilePresence)
+        }));
     }
 
     #[test]

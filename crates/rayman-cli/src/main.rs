@@ -1,6 +1,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::{Command as ProcessCommand, Stdio};
 use std::thread;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, ValueEnum};
@@ -134,7 +136,7 @@ fn nonzero_code_page(code_page: u32) -> Option<u32> {
 async fn run() -> Result<()> {
     load_dotenv();
     let cli = Cli::parse();
-    let print_contribution_footer = !command_prints_auxiliary_stats(&cli.command);
+    let print_contribution_footer = cli.show_stats && !command_prints_auxiliary_stats(&cli.command);
     let _reminder_guard =
         reminder_trigger_for_command(&cli.command).map(reminder::ReminderGuard::arm);
     match cli.command {
@@ -179,6 +181,7 @@ async fn run() -> Result<()> {
         Command::Subagent(command) => cmd_subagent(command)?,
         Command::CustomerDeploy(command) => cmd_customer_deploy(command)?,
         Command::Coverage(command) => cmd_coverage(command)?,
+        Command::Doctor(command) => cmd_doctor(command)?,
         Command::Stats => cmd_stats()?,
         Command::Audit => cmd_audit()?,
     }
@@ -1557,6 +1560,7 @@ fn cmd_coverage(command: CoverageCommand) -> Result<()> {
                 },
             )?;
             let text = match args.format {
+                CoverageOutputFormat::Text => render_feature_coverage_text_summary(&report),
                 CoverageOutputFormat::Json => serde_json::to_string_pretty(&report)?,
                 CoverageOutputFormat::Markdown => render_feature_coverage_markdown(&report),
             };
@@ -1592,6 +1596,276 @@ fn cmd_coverage(command: CoverageCommand) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn render_feature_coverage_text_summary(
+    report: &feature_coverage::FeatureCoverageReport,
+) -> String {
+    let mut lines = vec![
+        format!("Feature coverage: {}", report.status),
+        format!(
+            "  features={} findings={} strict={}",
+            report.feature_count, report.finding_count, report.strict
+        ),
+        format!(
+            "  public_commands documented={} implemented={} registered={}",
+            report.documented_public_commands.len(),
+            report.implemented_public_commands.len(),
+            report.registered_public_commands.len()
+        ),
+        format!(
+            "  api_endpoints documented={} implemented={} registered={}",
+            report.documented_api_endpoints.len(),
+            report.implemented_api_endpoints.len(),
+            report.registered_api_endpoints.len()
+        ),
+    ];
+    if report.findings.is_empty() {
+        lines.push("  findings: none".into());
+    } else {
+        lines.push("  findings:".into());
+        for finding in report.findings.iter().take(20) {
+            let path = finding
+                .path
+                .as_ref()
+                .map(|path| display_path(path))
+                .unwrap_or_else(|| "<manifest>".into());
+            lines.push(format!(
+                "    - {}:{} {}: {}",
+                path, finding.line, finding.kind, finding.message
+            ));
+        }
+        if report.findings.len() > 20 {
+            lines.push(format!(
+                "    - ... {} more findings omitted; rerun with --format json for full detail",
+                report.findings.len() - 20
+            ));
+        }
+    }
+    for action in &report.required_actions {
+        lines.push(format!("  action: {action}"));
+    }
+    lines.join("\n")
+}
+
+fn cmd_doctor(command: DoctorCommand) -> Result<()> {
+    match command {
+        DoctorCommand::Shell => cmd_doctor_shell(),
+    }
+}
+
+fn cmd_doctor_shell() -> Result<()> {
+    println!("Rayman shell doctor:");
+    println!("  workspace: {}", display_path(&root()?));
+    println!(
+        "  rayman_exe: {}",
+        std::env::current_exe()
+            .map(|path| display_path(&path))
+            .unwrap_or_else(|_| "<unknown>".into())
+    );
+    println!(
+        "  recommendation: prefer target\\release\\rayman.exe or a NoProfile shell when PowerShell profile output pollutes CLI results"
+    );
+    for candidate in ["pwsh", "powershell"] {
+        let report = probe_powershell(candidate);
+        println!(
+            "  {}: status={} profile_load={} no_profile={} detail={}",
+            candidate, report.status, report.profile_load, report.no_profile, report.detail
+        );
+    }
+    Ok(())
+}
+
+struct ShellProbeReport {
+    status: String,
+    profile_load: String,
+    no_profile: String,
+    detail: String,
+}
+
+fn probe_powershell(exe: &str) -> ShellProbeReport {
+    const PROFILE_MARKER: &str = "RAYMAN_PROFILE_PROBE";
+    const NO_PROFILE_MARKER: &str = "RAYMAN_NO_PROFILE_PROBE";
+    let profile = run_shell_probe(
+        exe,
+        &[
+            "-NoLogo",
+            "-NonInteractive",
+            "-Command",
+            "Write-Output RAYMAN_PROFILE_PROBE",
+        ],
+    );
+    let no_profile = run_shell_probe(
+        exe,
+        &[
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "Write-Output RAYMAN_NO_PROFILE_PROBE",
+        ],
+    );
+    let profile_noise = probe_noise_detail(&profile, PROFILE_MARKER);
+    let no_profile_noise = probe_noise_detail(&no_profile, NO_PROFILE_MARKER);
+    let profile_clean = profile.ok && profile_noise.is_none();
+    let no_profile_clean = no_profile.ok && no_profile_noise.is_none();
+    let status = if profile_clean && no_profile_clean {
+        "clean"
+    } else if no_profile_clean {
+        "profile_noise"
+    } else {
+        "unavailable"
+    }
+    .to_string();
+    let detail = if let Some(noise) = profile_noise {
+        noise
+    } else if !profile.error.is_empty() {
+        profile.error.clone()
+    } else if let Some(noise) = no_profile_noise {
+        noise
+    } else if !no_profile.error.is_empty() {
+        no_profile.error.clone()
+    } else {
+        "probe completed".into()
+    };
+    ShellProbeReport {
+        status,
+        profile_load: probe_state(&profile, PROFILE_MARKER),
+        no_profile: probe_state(&no_profile, NO_PROFILE_MARKER),
+        detail,
+    }
+}
+
+struct ShellProbe {
+    ok: bool,
+    timed_out: bool,
+    stdout: String,
+    stderr: String,
+    error: String,
+}
+
+fn run_shell_probe(exe: &str, args: &[&str]) -> ShellProbe {
+    let mut child = match ProcessCommand::new(exe)
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(child) => child,
+        Err(error) => {
+            return ShellProbe {
+                ok: false,
+                timed_out: false,
+                stdout: String::new(),
+                stderr: String::new(),
+                error: error.to_string(),
+            };
+        }
+    };
+    let started = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if started.elapsed() < Duration::from_secs(3) => {
+                thread::sleep(Duration::from_millis(50));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let output = child.wait_with_output().ok();
+                return ShellProbe {
+                    ok: false,
+                    timed_out: true,
+                    stdout: output
+                        .as_ref()
+                        .map(|output| String::from_utf8_lossy(&output.stdout).to_string())
+                        .unwrap_or_default(),
+                    stderr: output
+                        .as_ref()
+                        .map(|output| String::from_utf8_lossy(&output.stderr).to_string())
+                        .unwrap_or_default(),
+                    error: "probe timed out after 3 seconds".into(),
+                };
+            }
+            Err(error) => {
+                return ShellProbe {
+                    ok: false,
+                    timed_out: false,
+                    stdout: String::new(),
+                    stderr: String::new(),
+                    error: error.to_string(),
+                };
+            }
+        }
+    }
+    match child.wait_with_output() {
+        Ok(output) => ShellProbe {
+            ok: output.status.success(),
+            timed_out: false,
+            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            error: if output.status.success() {
+                String::new()
+            } else {
+                format!("exit_code={:?}", output.status.code())
+            },
+        },
+        Err(error) => ShellProbe {
+            ok: false,
+            timed_out: false,
+            stdout: String::new(),
+            stderr: String::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+fn probe_state(probe: &ShellProbe, expected_stdout_marker: &str) -> String {
+    if probe.timed_out {
+        "timeout".into()
+    } else if !probe.ok {
+        "failed".into()
+    } else if !probe.stderr.trim().is_empty() {
+        "stderr".into()
+    } else if stdout_noise_line(&probe.stdout, expected_stdout_marker).is_some() {
+        "stdout".into()
+    } else {
+        "clean".into()
+    }
+}
+
+fn probe_noise_detail(probe: &ShellProbe, expected_stdout_marker: &str) -> Option<String> {
+    if !probe.stderr.trim().is_empty() {
+        Some(first_line(&probe.stderr))
+    } else {
+        stdout_noise_line(&probe.stdout, expected_stdout_marker)
+    }
+}
+
+fn stdout_noise_line(stdout: &str, expected_marker: &str) -> Option<String> {
+    let mut saw_marker = false;
+    for line in stdout
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
+        if line == expected_marker {
+            saw_marker = true;
+        } else {
+            return Some(line.to_string());
+        }
+    }
+    if saw_marker {
+        None
+    } else {
+        Some(format!("missing expected stdout marker {expected_marker}"))
+    }
+}
+
+fn first_line(text: &str) -> String {
+    text.lines()
+        .find(|line| !line.trim().is_empty())
+        .map(|line| line.trim().to_string())
+        .unwrap_or_else(|| "<empty stderr>".into())
 }
 
 fn is_canonical_feature_coverage_output(workspace_root: &Path, output: &Path) -> Result<bool> {
@@ -1986,6 +2260,7 @@ mod tests {
     #[test]
     fn model_commands_get_contribution_footer() {
         let cli = Cli::try_parse_from(["rayman", "session", "status"]).unwrap();
+        assert!(!cli.show_stats);
         assert!(!command_prints_auxiliary_stats(&cli.command));
     }
 
@@ -1993,6 +2268,143 @@ mod tests {
     fn model_backed_commands_avoid_duplicate_contribution_footer() {
         let cli = Cli::try_parse_from(["rayman", "stats"]).unwrap();
         assert!(command_prints_auxiliary_stats(&cli.command));
+    }
+
+    #[test]
+    fn global_show_stats_is_required_for_default_footer() {
+        let cli = Cli::try_parse_from(["rayman", "--show-stats", "session", "status"]).unwrap();
+        assert!(cli.show_stats);
+        assert!(!command_prints_auxiliary_stats(&cli.command));
+    }
+
+    #[test]
+    fn coverage_text_summary_is_compact_and_human_readable() {
+        let report = feature_coverage::FeatureCoverageReport {
+            workspace_path: PathBuf::from("workspace"),
+            generated_at: "now".into(),
+            manifest_path: PathBuf::from("config/feature_coverage.yaml"),
+            status: "passed".into(),
+            strict: true,
+            feature_count: 2,
+            finding_count: 0,
+            findings: Vec::new(),
+            covered_document_paths: Vec::new(),
+            expected_document_paths: Vec::new(),
+            documented_public_commands: vec!["rayman coverage status".into()],
+            implemented_public_commands: vec!["rayman coverage".into()],
+            registered_public_commands: vec!["rayman coverage status".into()],
+            documented_api_endpoints: Vec::new(),
+            implemented_api_endpoints: Vec::new(),
+            registered_api_endpoints: Vec::new(),
+            required_actions: vec!["Feature coverage matrix is current.".into()],
+            features: Vec::new(),
+        };
+
+        let text = render_feature_coverage_text_summary(&report);
+
+        assert!(text.contains("Feature coverage: passed"));
+        assert!(text.contains("features=2 findings=0 strict=true"));
+        assert!(text.contains("findings: none"));
+        assert!(!text.contains("\"features\""));
+    }
+
+    #[test]
+    fn shell_probe_state_names_profile_noise_and_timeouts() {
+        assert_eq!(
+            probe_state(
+                &ShellProbe {
+                    ok: true,
+                    timed_out: false,
+                    stdout: "RAYMAN_PROFILE_PROBE\n".into(),
+                    stderr: String::new(),
+                    error: String::new(),
+                },
+                "RAYMAN_PROFILE_PROBE"
+            ),
+            "clean"
+        );
+        assert_eq!(
+            probe_state(
+                &ShellProbe {
+                    ok: true,
+                    timed_out: false,
+                    stdout: "RAYMAN_PROFILE_PROBE\n".into(),
+                    stderr: "profile error".into(),
+                    error: String::new(),
+                },
+                "RAYMAN_PROFILE_PROBE"
+            ),
+            "stderr"
+        );
+        assert_eq!(
+            probe_state(
+                &ShellProbe {
+                    ok: true,
+                    timed_out: false,
+                    stdout: "profile banner\nRAYMAN_PROFILE_PROBE\n".into(),
+                    stderr: String::new(),
+                    error: String::new(),
+                },
+                "RAYMAN_PROFILE_PROBE"
+            ),
+            "stdout"
+        );
+        assert_eq!(
+            probe_state(
+                &ShellProbe {
+                    ok: true,
+                    timed_out: false,
+                    stdout: String::new(),
+                    stderr: String::new(),
+                    error: String::new(),
+                },
+                "RAYMAN_PROFILE_PROBE"
+            ),
+            "stdout"
+        );
+        assert_eq!(
+            probe_state(
+                &ShellProbe {
+                    ok: false,
+                    timed_out: true,
+                    stdout: String::new(),
+                    stderr: String::new(),
+                    error: String::new(),
+                },
+                "RAYMAN_PROFILE_PROBE"
+            ),
+            "timeout"
+        );
+    }
+
+    #[test]
+    fn shell_probe_noise_detail_reports_stdout_profile_noise() {
+        assert_eq!(
+            probe_noise_detail(
+                &ShellProbe {
+                    ok: true,
+                    timed_out: false,
+                    stdout: "profile banner\nRAYMAN_PROFILE_PROBE\n".into(),
+                    stderr: String::new(),
+                    error: String::new(),
+                },
+                "RAYMAN_PROFILE_PROBE"
+            ),
+            Some("profile banner".into())
+        );
+        assert_eq!(
+            probe_noise_detail(
+                &ShellProbe {
+                    ok: true,
+                    timed_out: false,
+                    stdout: "RAYMAN_PROFILE_PROBE\n".into(),
+                    stderr: String::new(),
+                    error: String::new(),
+                },
+                "RAYMAN_PROFILE_PROBE"
+            ),
+            None
+        );
     }
 
     #[test]

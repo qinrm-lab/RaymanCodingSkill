@@ -91,7 +91,7 @@ fn cli_coverage_canonical_markdown_output_is_strict_by_default() {
 }
 
 #[test]
-fn cli_json_stdout_remains_parseable_with_footer_on_stderr() {
+fn cli_json_stdout_remains_parseable_without_default_stats_footer() {
     let output = run_in_temp(&["context", "explain"]);
 
     assert!(output.status.success());
@@ -99,6 +99,31 @@ fn cli_json_stdout_remains_parseable_with_footer_on_stderr() {
     let stderr = String::from_utf8(output.stderr).unwrap();
     let value: serde_json::Value = serde_json::from_str(&stdout).unwrap();
     assert!(value["source_policy"].as_str().is_some());
+    assert!(!stderr.contains("辅助AI使用价值"));
+    assert!(!stderr.contains("实现验证纠错贡献"));
+}
+
+#[test]
+fn cli_show_stats_keeps_project_footer_on_stderr() {
+    let output = run_in_temp(&["--show-stats", "context", "explain"]);
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    let value: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert!(value["source_policy"].as_str().is_some());
+    assert!(stderr.contains("辅助AI使用价值"));
+    assert!(stderr.contains("实现验证纠错贡献"));
+}
+
+#[test]
+fn cli_show_stats_applies_to_doctor_shell() {
+    let output = run_in_temp(&["--show-stats", "doctor", "shell"]);
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stdout.contains("Rayman shell doctor:"));
     assert!(stderr.contains("辅助AI使用价值"));
     assert!(stderr.contains("实现验证纠错贡献"));
 }

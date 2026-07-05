@@ -773,12 +773,12 @@ fn release_input_paths(workspace: &Path, binary_only: bool) -> Result<Vec<PathBu
         paths.push(workspace.join("SKILL.md"));
     }
     for source_dir in ["crates", "apps", "src"] {
-        collect_release_source_paths(&workspace.join(source_dir), &mut paths);
+        collect_release_source_paths(&workspace.join(source_dir), &mut paths, binary_only);
     }
     Ok(paths)
 }
 
-fn collect_release_source_paths(root: &Path, paths: &mut Vec<PathBuf>) {
+fn collect_release_source_paths(root: &Path, paths: &mut Vec<PathBuf>, binary_only: bool) {
     if !root.exists() {
         return;
     }
@@ -790,6 +790,9 @@ fn collect_release_source_paths(root: &Path, paths: &mut Vec<PathBuf>) {
             continue;
         }
         let path = entry.path();
+        if binary_only && is_test_only_release_input(path) {
+            continue;
+        }
         let file_name = path
             .file_name()
             .and_then(|name| name.to_str())
@@ -799,6 +802,13 @@ fn collect_release_source_paths(root: &Path, paths: &mut Vec<PathBuf>) {
             paths.push(path.to_path_buf());
         }
     }
+}
+
+fn is_test_only_release_input(path: &Path) -> bool {
+    path.components().any(|component| {
+        let value = component.as_os_str().to_string_lossy();
+        value == "tests" || value == "benches"
+    })
 }
 
 fn safe_file_component(value: &str) -> String {
@@ -1048,6 +1058,104 @@ mod tests {
         assert_eq!(report.status, "partial");
         assert!(
             report
+                .required_actions
+                .iter()
+                .any(|action| action.contains("rebuild configured release artifact"))
+        );
+    }
+
+    #[test]
+    fn release_evidence_does_not_rebuild_for_test_only_source_changes() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("Cargo.lock"), "# lock").unwrap();
+        fs::write(temp.path().join("Cargo.toml"), "[workspace]\n").unwrap();
+        fs::write(temp.path().join("SKILL.md"), "# skill").unwrap();
+        append_future_passed_regression(temp.path());
+        fs::create_dir_all(temp.path().join("target").join("release")).unwrap();
+        fs::write(
+            temp.path()
+                .join("target")
+                .join("release")
+                .join(rayman_exe_name()),
+            "binary",
+        )
+        .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        fs::create_dir_all(temp.path().join("crates").join("rayman-cli").join("tests")).unwrap();
+        fs::write(
+            temp.path()
+                .join("crates")
+                .join("rayman-cli")
+                .join("tests")
+                .join("ui_contract.rs"),
+            "#[test]\nfn changed() {}\n",
+        )
+        .unwrap();
+
+        let report = release_manager(temp.path())
+            .generate("test", false)
+            .unwrap();
+
+        assert_eq!(report.status, "ready");
+        assert!(
+            !report
+                .required_actions
+                .iter()
+                .any(|action| action.contains("rebuild configured release artifact"))
+        );
+    }
+
+    #[test]
+    fn release_evidence_reruns_regression_for_test_only_source_changes() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("Cargo.lock"), "# lock").unwrap();
+        fs::write(temp.path().join("Cargo.toml"), "[workspace]\n").unwrap();
+        fs::write(temp.path().join("SKILL.md"), "# skill").unwrap();
+        RegressionHistoryManager::new(temp.path())
+            .unwrap()
+            .append(&RegressionRunRecord {
+                id: "regression_full_1".into(),
+                profile: "full".into(),
+                status: "passed".into(),
+                started_at: "2026-06-08T00:00:00Z".into(),
+                finished_at: "2026-06-08T00:00:01Z".into(),
+                duration_ms: 1000,
+                steps: Vec::new(),
+            })
+            .unwrap();
+        fs::create_dir_all(temp.path().join("target").join("release")).unwrap();
+        fs::write(
+            temp.path()
+                .join("target")
+                .join("release")
+                .join(rayman_exe_name()),
+            "binary",
+        )
+        .unwrap();
+        fs::create_dir_all(temp.path().join("crates").join("rayman-cli").join("tests")).unwrap();
+        fs::write(
+            temp.path()
+                .join("crates")
+                .join("rayman-cli")
+                .join("tests")
+                .join("ui_contract.rs"),
+            "#[test]\nfn changed() {}\n",
+        )
+        .unwrap();
+
+        let report = release_manager(temp.path())
+            .generate("test", false)
+            .unwrap();
+
+        assert_eq!(report.status, "partial");
+        assert!(
+            report
+                .required_actions
+                .iter()
+                .any(|action| action.contains("rerun rayman regression run"))
+        );
+        assert!(
+            !report
                 .required_actions
                 .iter()
                 .any(|action| action.contains("rebuild configured release artifact"))

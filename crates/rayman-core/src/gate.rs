@@ -63,24 +63,51 @@ impl GateManager {
     }
 
     pub fn status(&self, options: GateOptions) -> Result<GateReport> {
+        self.status_with_progress(options, |_, _| {})
+    }
+
+    pub fn status_with_progress<F>(
+        &self,
+        options: GateOptions,
+        mut progress: F,
+    ) -> Result<GateReport>
+    where
+        F: FnMut(&str, &str),
+    {
+        progress("dependency-policy", "Dependency policy");
         let dependency_policy = DependencyPolicyManager::new(&self.workspace)?.audit()?;
-        let checks = vec![
-            self.workspace_skill_check()?,
-            self.context_freshness_check()?,
-            self.context_os_check()?,
-            self.auxiliary_task_check()?,
-            self.asset_retirement_check()?,
-            self.subagent_ledger_check()?,
-            self.temp_check()?,
-            self.coverage_check()?,
-            self.docs_check()?,
-            self.dependency_policy_check(&dependency_policy)?,
-            self.security_check(&dependency_policy)?,
-            self.audit_check()?,
-            self.evidence_check()?,
-            self.risk_check()?,
-            self.release_check(options.require_provenance, &dependency_policy)?,
-        ];
+        let mut checks = Vec::new();
+
+        progress("workspace_skill", "Workspace skill activation");
+        checks.push(self.workspace_skill_check()?);
+        progress("context_freshness", "Fresh Context Index");
+        checks.push(self.context_freshness_check()?);
+        progress("context_os", "Context OS state graph");
+        checks.push(self.context_os_check()?);
+        progress("auxiliary_tasks", "Auxiliary AI task state");
+        checks.push(self.auxiliary_task_check()?);
+        progress("asset_retirement", "Obsolete asset retirement");
+        checks.push(self.asset_retirement_check()?);
+        progress("subagent_ledger", "Codex host subagent ledger");
+        checks.push(self.subagent_ledger_check()?);
+        progress("managed_temp", "Managed temp cleanup");
+        checks.push(self.temp_check()?);
+        progress("feature_coverage", "Feature coverage matrix");
+        checks.push(self.coverage_check()?);
+        progress("docs_maintain", "Generated developer docs");
+        checks.push(self.docs_check()?);
+        progress("dependency-policy", "Dependency policy result");
+        checks.push(self.dependency_policy_check(&dependency_policy)?);
+        progress("security_audit", "LLM security audit");
+        checks.push(self.security_check(&dependency_policy)?);
+        progress("repository_audit", "Repository policy audit");
+        checks.push(self.audit_check()?);
+        progress("evidence_claims", "Evidence-backed claims");
+        checks.push(self.evidence_check()?);
+        progress("risk_ledger", "Proactive risk ledger");
+        checks.push(self.risk_check()?);
+        progress("release_evidence", "Release evidence");
+        checks.push(self.release_check(options.require_provenance, &dependency_policy)?);
 
         let blocking_count = checks
             .iter()
@@ -118,15 +145,33 @@ impl GateManager {
 
     pub fn assert_passed(&self, options: GateOptions) -> Result<GateReport> {
         let report = self.status(options)?;
-        if report.status != "passed" {
-            bail!(
-                "readiness gate blocked:\n{}",
-                report.required_actions.join("\n")
-            );
-        }
-        Ok(report)
+        assert_gate_report_passed(report)
     }
 
+    pub fn assert_passed_with_progress<F>(
+        &self,
+        options: GateOptions,
+        progress: F,
+    ) -> Result<GateReport>
+    where
+        F: FnMut(&str, &str),
+    {
+        let report = self.status_with_progress(options, progress)?;
+        assert_gate_report_passed(report)
+    }
+}
+
+fn assert_gate_report_passed(report: GateReport) -> Result<GateReport> {
+    if report.status != "passed" {
+        bail!(
+            "readiness gate blocked:\n{}",
+            report.required_actions.join("\n")
+        );
+    }
+    Ok(report)
+}
+
+impl GateManager {
     fn workspace_skill_check(&self) -> Result<GateCheck> {
         let status = WorkspaceActivationManager::new(&self.workspace)?.status()?;
         let enabled = status
@@ -462,7 +507,7 @@ impl GateManager {
             severity: "blocker".into(),
             summary: if passed {
                 format!(
-                    "evidence claims checked; workspace status={}",
+                    "success claims checked; workspace file-presence status={}",
                     report.status.as_str()
                 )
             } else {
@@ -547,6 +592,23 @@ mod tests {
             release_gate_classification("ready", "not_git", true),
             ("blocked".into(), "blocker".into())
         );
+    }
+
+    #[test]
+    fn readiness_gate_progress_reports_each_stage() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut stages = Vec::new();
+
+        let _ = GateManager::new(temp.path())
+            .unwrap()
+            .status_with_progress(GateOptions::default(), |id, _title| {
+                stages.push(id.to_string());
+            })
+            .unwrap();
+
+        assert!(stages.contains(&"workspace_skill".to_string()));
+        assert!(stages.contains(&"feature_coverage".to_string()));
+        assert!(stages.contains(&"release_evidence".to_string()));
     }
 
     #[test]

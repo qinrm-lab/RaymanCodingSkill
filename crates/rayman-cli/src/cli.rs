@@ -7,6 +7,8 @@ use crate::governance::{EvalCommand, GateCommand, ReleaseCommand, SecurityComman
 #[derive(Parser)]
 #[command(name = "rayman", version, about = "RaymanCodingSkill Rust CLI")]
 pub(crate) struct Cli {
+    #[arg(long = "show-stats", global = true)]
+    pub(crate) show_stats: bool,
     #[command(subcommand)]
     pub(crate) command: Command,
 }
@@ -82,6 +84,8 @@ pub(crate) enum Command {
     CustomerDeploy(CustomerDeployCommand),
     #[command(subcommand)]
     Coverage(CoverageCommand),
+    #[command(subcommand)]
+    Doctor(DoctorCommand),
     Stats,
     Audit,
 }
@@ -584,7 +588,7 @@ pub(crate) enum CoverageCommand {
 
 #[derive(Args)]
 pub(crate) struct CoverageStatusArgs {
-    #[arg(long = "format", value_enum, default_value = "json")]
+    #[arg(long = "format", value_enum, default_value = "text")]
     pub(crate) format: CoverageOutputFormat,
     #[arg(long = "check")]
     pub(crate) check: bool,
@@ -596,8 +600,14 @@ pub(crate) struct CoverageStatusArgs {
 
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CoverageOutputFormat {
+    Text,
     Json,
     Markdown,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum DoctorCommand {
+    Shell,
 }
 
 #[derive(Args)]
@@ -2012,6 +2022,26 @@ mod tests {
                 ..
             }))
         ));
+    }
+
+    #[test]
+    fn cli_coverage_status_defaults_to_text_summary() {
+        let cli = Cli::try_parse_from(["rayman", "coverage", "status", "--check"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Coverage(CoverageCommand::Status(CoverageStatusArgs {
+                format: CoverageOutputFormat::Text,
+                check: true,
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn cli_parses_doctor_shell_and_global_show_stats() {
+        let cli = Cli::try_parse_from(["rayman", "--show-stats", "doctor", "shell"]).unwrap();
+        assert!(cli.show_stats);
+        assert!(matches!(cli.command, Command::Doctor(DoctorCommand::Shell)));
     }
 
     #[test]

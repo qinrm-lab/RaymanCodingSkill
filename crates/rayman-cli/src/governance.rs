@@ -144,7 +144,15 @@ pub(crate) fn cmd_gate(command: GateCommand) -> Result<()> {
             let manager = GateManager::new(root()?)?;
             let options = GateOptions { require_provenance };
             let report = if check {
-                manager.assert_passed(options)?
+                match format {
+                    GateOutputFormat::Text => {
+                        eprintln!("RaymanCodingSkill readiness gate: running checks");
+                        manager.assert_passed_with_progress(options, |id, title| {
+                            eprintln!("  running {id}: {title}");
+                        })?
+                    }
+                    GateOutputFormat::Json => manager.assert_passed(options)?,
+                }
             } else {
                 manager.status(options)?
             };
