@@ -1,10 +1,11 @@
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::quality::QualityManager;
-use crate::{display_path, now_iso};
+use crate::{display_path, ensure_within, now_iso};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AgentEvalProfile {
@@ -44,6 +45,50 @@ pub struct AgentEvalCaseResult {
     pub matched_patterns: Vec<String>,
     pub missing_patterns: Vec<String>,
     pub rationale: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EvalDataset {
+    pub id: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub cases: Vec<EvalCase>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EvalCase {
+    pub id: String,
+    pub input: String,
+    #[serde(default)]
+    pub expected_patterns: Vec<String>,
+    #[serde(default)]
+    pub forbidden_patterns: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GraderResult {
+    pub case_id: String,
+    pub status: String,
+    pub matched_patterns: Vec<String>,
+    pub missing_patterns: Vec<String>,
+    pub forbidden_matches: Vec<String>,
+    pub rationale: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EvalDatasetReport {
+    pub id: String,
+    pub workspace_path: String,
+    pub generated_at: String,
+    pub dataset_path: String,
+    pub dataset_id: String,
+    pub grader_id: String,
+    pub status: String,
+    pub passed: usize,
+    pub failed: usize,
+    pub cases: Vec<GraderResult>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub report_path: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -142,6 +187,81 @@ impl AgentEvalManager {
                 .collect::<Vec<_>>();
             bail!("agent eval failed: {}", failed.join("; "));
         }
+        Ok(report)
+    }
+
+    pub fn run_dataset(
+        &self,
+        dataset_path: impl AsRef<Path>,
+        grader_id: &str,
+    ) -> Result<EvalDatasetReport> {
+        if !matches!(grader_id, "contains" | "substring") {
+            bail!("unsupported eval grader: {grader_id}");
+        }
+        let dataset_path = ensure_within(
+            dataset_path.as_ref(),
+            &self.workspace,
+            "eval dataset path must stay inside workspace",
+        )?;
+        let dataset: EvalDataset = serde_json::from_str(&fs::read_to_string(&dataset_path)?)?;
+        if dataset.cases.is_empty() {
+            bail!("eval dataset must contain at least one case");
+        }
+        let mut cases = Vec::new();
+        for case in &dataset.cases {
+            let input_lower = case.input.to_ascii_lowercase();
+            let matched_patterns = case
+                .expected_patterns
+                .iter()
+                .filter(|pattern| input_lower.contains(&pattern.to_ascii_lowercase()))
+                .cloned()
+                .collect::<Vec<_>>();
+            let missing_patterns = case
+                .expected_patterns
+                .iter()
+                .filter(|pattern| !input_lower.contains(&pattern.to_ascii_lowercase()))
+                .cloned()
+                .collect::<Vec<_>>();
+            let forbidden_matches = case
+                .forbidden_patterns
+                .iter()
+                .filter(|pattern| input_lower.contains(&pattern.to_ascii_lowercase()))
+                .cloned()
+                .collect::<Vec<_>>();
+            let status = if missing_patterns.is_empty() && forbidden_matches.is_empty() {
+                "passed"
+            } else {
+                "failed"
+            };
+            cases.push(GraderResult {
+                case_id: case.id.clone(),
+                status: status.into(),
+                matched_patterns,
+                missing_patterns,
+                forbidden_matches,
+                rationale: "contains grader checks required and forbidden substrings".into(),
+            });
+        }
+        let failed = cases.iter().filter(|case| case.status != "passed").count();
+        let passed = cases.len() - failed;
+        let status = if failed == 0 { "passed" } else { "failed" };
+        let id = format!("dataset_eval_{}", dataset.id);
+        let mut report = EvalDatasetReport {
+            id,
+            workspace_path: display_path(&self.workspace),
+            generated_at: now_iso(),
+            dataset_path: display_path(&dataset_path),
+            dataset_id: dataset.id,
+            grader_id: grader_id.into(),
+            status: status.into(),
+            passed,
+            failed,
+            cases,
+            report_path: None,
+        };
+        let value = serde_json::to_value(&report)?;
+        let path = crate::trace::write_eval_report(&self.workspace, &value)?;
+        report.report_path = Some(display_path(&path));
         Ok(report)
     }
 }
@@ -351,5 +471,49 @@ mod tests {
         assert_eq!(report.status, "passed");
         assert!(report.cases.iter().any(|case| case.id == "debug_release"));
         assert!(report.cases.iter().any(|case| case.id == "obsolete_assets"));
+    }
+
+    #[test]
+    fn dataset_eval_writes_report_and_blocks_failed_case() {
+        let temp = tempfile::tempdir().unwrap();
+        let dataset_path = temp.path().join("dataset.json");
+        std::fs::write(
+            &dataset_path,
+            serde_json::json!({
+                "id": "modern_agent_contract",
+                "cases": [
+                    {
+                        "id": "pass",
+                        "input": "trace replay and eval gate passed",
+                        "expected_patterns": ["trace replay", "eval gate"]
+                    },
+                    {
+                        "id": "fail",
+                        "input": "semantic hit only",
+                        "expected_patterns": ["current file evidence"],
+                        "forbidden_patterns": ["semantic hit only"]
+                    }
+                ]
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let report = AgentEvalManager::new(temp.path())
+            .unwrap()
+            .run_dataset(&dataset_path, "contains")
+            .unwrap();
+
+        assert_eq!(report.status, "failed");
+        assert_eq!(report.passed, 1);
+        assert_eq!(report.failed, 1);
+        assert!(
+            report
+                .report_path
+                .as_deref()
+                .unwrap()
+                .contains(".RaymanCodingSkill")
+        );
+        assert!(std::path::Path::new(report.report_path.as_ref().unwrap()).exists());
     }
 }

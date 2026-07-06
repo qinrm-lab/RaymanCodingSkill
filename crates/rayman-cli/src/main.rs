@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcessCommand, Stdio};
 use std::thread;
@@ -15,6 +16,7 @@ use rayman_core::backup::BackupManager;
 use rayman_core::compile::{AutoCompileResult, auto_compile_generated, compile_result_summary};
 use rayman_core::config::{ConfigManager, ModelRef, parse_scalar};
 use rayman_core::context::ContextKernel;
+use rayman_core::control::ControlPlaneManager;
 use rayman_core::customer_deploy::{CredentialRef, CustomerDeployManager, CustomerDeployUpdate};
 use rayman_core::docs;
 use rayman_core::evidence::{EvidenceCheckOptions, check_workspace_evidence};
@@ -24,6 +26,8 @@ use rayman_core::goal::{
     render_goal_clarification_text,
 };
 use rayman_core::instruction;
+use rayman_core::integrations::IntegrationManager;
+use rayman_core::model_catalog::ModelCatalogManager;
 use rayman_core::models::AgentManager;
 use rayman_core::project::{ProjectAnalyzer, run_benchmark_smoke};
 use rayman_core::quality::{QualityIncidentDraft, QualityManager};
@@ -31,15 +35,17 @@ use rayman_core::regression_history::RegressionHistoryManager;
 use rayman_core::research::ResearchManager;
 use rayman_core::risk::{RiskFixOptions, RiskManager, RiskScanOptions};
 use rayman_core::selfcheck::SelfManager;
+use rayman_core::semantic::SemanticContextManager;
 use rayman_core::session::SessionManager;
 use rayman_core::skills;
 use rayman_core::stats::{AuxiliaryContributionStore, AuxiliaryUsageStore};
 use rayman_core::subagent::{
-    SubagentLedgerManager, SubagentPlanRequest, SubagentRecordRequest, SubagentResultRequest,
-    SubagentReviewRequest,
+    SubagentDispatchRequest, SubagentLedgerManager, SubagentPlanRequest, SubagentRecordRequest,
+    SubagentResultRequest, SubagentReviewRequest,
 };
 use rayman_core::temp::{TempCleanupOptions, TempManager};
 use rayman_core::tools;
+use rayman_core::trace::TraceManager;
 use rayman_core::workflow;
 use rayman_core::workspace::WorkspaceActivationManager;
 use rayman_core::{display_path, ensure_within, yaml};
@@ -160,6 +166,7 @@ async fn run() -> Result<()> {
         Command::Assets(command) => cmd_assets(command)?,
         Command::Impact(args) => cmd_impact(args)?,
         Command::Regression(command) => cmd_regression(command)?,
+        Command::Trace(command) => cmd_trace(command)?,
         Command::Eval(command) => cmd_eval(command)?,
         Command::Security(command) => cmd_security(command)?,
         Command::Release(command) => cmd_release(command)?,
@@ -168,6 +175,8 @@ async fn run() -> Result<()> {
         Command::SelfCommand(command) => cmd_self(command)?,
         Command::Benchmark(command) => cmd_benchmark(command)?,
         Command::Temp(command) => cmd_temp(command)?,
+        Command::Mcp(command) => cmd_mcp(command).await?,
+        Command::Plugin(command) => cmd_plugin(command)?,
         Command::Api(ApiCommand::Serve { host, port }) => {
             rayman_api::serve(root()?, &host, port).await?;
         }
@@ -179,6 +188,9 @@ async fn run() -> Result<()> {
         Command::Goal(command) => cmd_goal(command)?,
         Command::Research(command) => cmd_research(command)?,
         Command::Subagent(command) => cmd_subagent(command)?,
+        Command::Models(command) => cmd_models(command)?,
+        Command::Control(command) => cmd_control(command)?,
+        Command::Workflow(command) => cmd_workflow(command)?,
         Command::CustomerDeploy(command) => cmd_customer_deploy(command)?,
         Command::Coverage(command) => cmd_coverage(command)?,
         Command::Doctor(command) => cmd_doctor(command)?,
@@ -849,6 +861,30 @@ fn cmd_context(command: ContextCommand) -> Result<()> {
                 serde_json::to_string_pretty(&kernel.task_context(&query)?)?
             );
         }
+        ContextCommand::Semantic(command) => {
+            let semantic = SemanticContextManager::new(root()?)?;
+            match command {
+                SemanticCommand::Build => {
+                    println!("{}", serde_json::to_string_pretty(&semantic.build()?)?);
+                }
+                SemanticCommand::Query { query } => {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&semantic.query(&query)?)?
+                    );
+                }
+                SemanticCommand::Status { check } => {
+                    let status = semantic.status();
+                    if check && status.status != "passed" {
+                        bail!(
+                            "semantic context status blocked: {}",
+                            status.blockers.join("; ")
+                        );
+                    }
+                    println!("{}", serde_json::to_string_pretty(&status)?);
+                }
+            }
+        }
         ContextCommand::List => {
             let summary = kernel.collect()?;
             for record in summary.records {
@@ -937,6 +973,27 @@ fn cmd_regression(command: RegressionCommand) -> Result<()> {
     Ok(())
 }
 
+fn cmd_trace(command: TraceCommand) -> Result<()> {
+    let manager = TraceManager::new(root()?)?;
+    match command {
+        TraceCommand::Record {
+            kind,
+            message,
+            evidence,
+        } => {
+            let event = manager.record(&kind, &message, &evidence)?;
+            println!("{}", serde_json::to_string_pretty(&event)?);
+        }
+        TraceCommand::Status => {
+            println!("{}", serde_json::to_string_pretty(&manager.status())?);
+        }
+        TraceCommand::Replay => {
+            println!("{}", serde_json::to_string_pretty(&manager.replay()?)?);
+        }
+    }
+    Ok(())
+}
+
 fn cmd_self(command: SelfCommand) -> Result<()> {
     let manager = SelfManager::new(root()?)?;
     match command {
@@ -1000,6 +1057,131 @@ fn cmd_temp(command: TempCommand) -> Result<()> {
             if report.status == "failed" {
                 bail!("temp doctor failed");
             }
+        }
+    }
+    Ok(())
+}
+
+async fn cmd_mcp(command: McpCommand) -> Result<()> {
+    let manager = IntegrationManager::new(root()?)?;
+    match command {
+        McpCommand::Schema => {
+            println!("{}", serde_json::to_string_pretty(&manager.schema())?);
+        }
+        McpCommand::Serve(args) => {
+            if args.stdio == args.http {
+                bail!("choose exactly one MCP transport: --stdio or --http");
+            }
+            if args.stdio {
+                serve_mcp_stdio(manager)?;
+            } else {
+                if !is_loopback_host(&args.host) {
+                    bail!(
+                        "MCP HTTP transport must bind to loopback host unless an external proxy adds its own security boundary"
+                    );
+                }
+                eprintln!(
+                    "rayman MCP HTTP listening on http://{}:{}/mcp",
+                    args.host, args.port
+                );
+                rayman_api::serve_mcp(root()?, &args.host, args.port).await?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn is_loopback_host(host: &str) -> bool {
+    matches!(host, "127.0.0.1" | "localhost" | "::1")
+}
+
+fn serve_mcp_stdio(manager: IntegrationManager) -> Result<()> {
+    let stdin = io::stdin();
+    let mut stdout = io::stdout();
+    for line in stdin.lock().lines() {
+        let line = line?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let payload: JsonValue = serde_json::from_str(&line)?;
+        if let Some(response) = manager.mcp_rpc_response(payload) {
+            writeln!(stdout, "{}", serde_json::to_string(&response)?)?;
+            stdout.flush()?;
+        }
+    }
+    Ok(())
+}
+
+fn cmd_plugin(command: PluginCommand) -> Result<()> {
+    let manager = IntegrationManager::new(root()?)?;
+    match command {
+        PluginCommand::Export => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&manager.export_plugin()?)?
+            );
+        }
+    }
+    Ok(())
+}
+
+fn cmd_models(command: ModelsCommand) -> Result<()> {
+    let manager = ModelCatalogManager::new(root()?)?;
+    match command {
+        ModelsCommand::Refresh { dry_run, apply } => {
+            let apply = apply && !dry_run;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&manager.refresh(apply)?)?
+            );
+        }
+        ModelsCommand::Status { check } => {
+            let status = if check {
+                manager.assert_passed()?
+            } else {
+                manager.status()?
+            };
+            println!("{}", serde_json::to_string_pretty(&status)?);
+        }
+    }
+    Ok(())
+}
+
+fn cmd_control(command: ControlCommand) -> Result<()> {
+    match command {
+        ControlCommand::Status { format } => {
+            let snapshot = ControlPlaneManager::new(root()?)?.snapshot()?;
+            match format {
+                ControlOutputFormat::Json => {
+                    println!("{}", serde_json::to_string_pretty(&snapshot)?);
+                }
+                ControlOutputFormat::Text => {
+                    println!("RaymanCodingSkill control status: {}", snapshot.status);
+                    println!("  工作区: {}", snapshot.workspace_path);
+                    println!("  required_actions={}", snapshot.required_actions.len());
+                    for action in snapshot.required_actions.iter().take(20) {
+                        println!("    - {action}");
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn cmd_workflow(command: WorkflowCommand) -> Result<()> {
+    let manager = workflow::WorkflowLearningManager::new(root()?)?;
+    match command {
+        WorkflowCommand::Learn { name, evidence } => {
+            let candidate = manager.learn(&name, &evidence)?;
+            println!("{}", serde_json::to_string_pretty(&candidate)?);
+        }
+        WorkflowCommand::Promote { id } => {
+            let candidate = manager.promote(&id)?;
+            println!("{}", serde_json::to_string_pretty(&candidate)?);
+        }
+        WorkflowCommand::Status => {
+            println!("{}", serde_json::to_string_pretty(&manager.status()?)?);
         }
     }
     Ok(())
@@ -1379,6 +1561,23 @@ fn cmd_subagent(command: SubagentCommand) -> Result<()> {
                 max_lanes: args.max_lanes,
             })?;
             println!("{}", serde_json::to_string_pretty(&plan)?);
+        }
+        SubagentCommand::Dispatch(args) => {
+            let record = manager.dispatch(SubagentDispatchRequest {
+                task: args.task,
+                paths: args.path,
+                read_only: args.read_only,
+                max_lanes: args.max_lanes,
+                create_worktree: args.create_worktree,
+            })?;
+            println!("{}", serde_json::to_string_pretty(&record)?);
+        }
+        SubagentCommand::Reconcile => {
+            let report = manager.reconcile()?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            if report["status"].as_str().unwrap_or("blocked") != "passed" {
+                bail!("subagent reconcile blocked");
+            }
         }
         SubagentCommand::Record(args) => {
             let record = manager.record(SubagentRecordRequest {

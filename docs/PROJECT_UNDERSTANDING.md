@@ -10,6 +10,7 @@ Use this sequence for non-trivial implementation, review, refactor, or documenta
 rayman context status
 rayman context os --check
 rayman context task "<task>"
+rayman context semantic status --check
 rayman assets status
 rayman project detect
 rayman impact --path <changed-or-reviewed-file>
@@ -21,10 +22,11 @@ The layered flow is:
 1. Read the workspace Context Index as a navigation layer.
 2. Check the workspace Context OS state graph and event log. Missing or stale state means `.RaymanCodingSkill/context/state.json` no longer matches current index, goal/session, asset, audit, or pending-work evidence.
 3. Use task-scoped context to identify likely files, symbols, entry points, and verification commands.
-4. Check asset retirement state; obsolete, retired, or compatibility-exempt assets are not current-behavior evidence.
-5. Reread the referenced current source, docs, configs, manifests, and command output from disk before editing or review.
-6. Refresh stale context when hashes differ, files are added, files are removed, or indexed evidence conflicts with current files.
-7. Record completion evidence from current files and validation output for every `must` requirement.
+4. Optionally check semantic context when navigation would help. Semantic hits are hash-bound and navigation-only.
+5. Check asset retirement state; obsolete, retired, or compatibility-exempt assets are not current-behavior evidence.
+6. Reread the referenced current source, docs, configs, manifests, and command output from disk before editing or review.
+7. Refresh stale context when hashes differ, files are added, files are removed, or indexed evidence conflicts with current files.
+8. Record completion evidence from current files and validation output for every `must` requirement.
 
 ## Stale Context
 
@@ -37,6 +39,10 @@ rayman context task "<task>"
 ```
 
 Then reread the files listed under changed, missing, or new file details. Cached context is still only a map; it never replaces current source files, tests, command output, or goal/session state.
+
+## Semantic Context
+
+`rayman context semantic build` writes `.RaymanCodingSkill/context/semantic/index.jsonl` from current Context Index file inventory and per-file hashes. `rayman context semantic query "<query>"` returns ranked navigation hits with `evidence_status=navigation_only` when hashes are current and `stale_navigation_only` when they are not. `rayman context semantic status --check` blocks on stale hashes or parse errors. A semantic hit can identify likely files, but it cannot satisfy completion evidence until the primary agent rereads current files or records validation output.
 
 ## Context OS State Graph
 

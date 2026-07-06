@@ -80,6 +80,8 @@ features:
         contains: "pub struct ResearchManager"
       - path: crates/rayman-core/src/research.rs
         contains: "fn run_research_role_jobs"
+      - path: crates/rayman-core/src/execution.rs
+        contains: "pub struct ExecutionPolicy"
       - path: crates/rayman-core/src/quality.rs
         contains: "pub struct QualityManager"
       - path: crates/rayman-core/src/quality.rs
@@ -135,6 +137,8 @@ features:
           - rayman subagent
           - rayman subagent plan
           - rayman subagent auto-start
+          - rayman subagent dispatch
+          - rayman subagent reconcile
           - rayman subagent record
           - rayman subagent result
           - rayman subagent review
@@ -142,6 +146,8 @@ features:
           - rayman host-subagent
           - rayman host-subagent plan
           - rayman host-subagent auto-start
+          - rayman host-subagent dispatch
+          - rayman host-subagent reconcile
           - rayman host-subagent record
           - rayman host-subagent result
           - rayman host-subagent review
@@ -253,6 +259,8 @@ features:
       - rayman subagent
       - rayman subagent plan
       - rayman subagent auto-start
+      - rayman subagent dispatch
+      - rayman subagent reconcile
       - rayman subagent record
       - rayman subagent result
       - rayman subagent review
@@ -260,6 +268,8 @@ features:
       - rayman host-subagent
       - rayman host-subagent plan
       - rayman host-subagent auto-start
+      - rayman host-subagent dispatch
+      - rayman host-subagent reconcile
       - rayman host-subagent record
       - rayman host-subagent result
       - rayman host-subagent review
@@ -411,12 +421,14 @@ features:
           - "cargo test -p rayman-core stats::"
           - cargo test -p rayman-cli usage_scope_format_uses_success_call_main_ai_ratio
       - id: research_agents_policy_enforced_except_allow_network
-        claim: research_agents.yaml enforces enabled/scientist authority/max_parallel_agents/argv whitelist/shell-operator/hard workspace cwd/diff-check policy and runtime timeout cap; full-suite validation commands stay on the primary validation path; allow_network is loaded as policy metadata and is not yet an execution-layer network blocker.
+        claim: research_agents.yaml enforces enabled/scientist authority/max_parallel_agents/argv whitelist/shell-operator/hard workspace cwd/diff-check policy and runtime timeout cap; full-suite validation commands stay on the primary validation path; allow_network=false is enforced by the execution layer and blocks network-looking commands even when a command is otherwise whitelisted.
         implementation_anchors:
           - path: crates/rayman-core/src/research.rs
             contains: "impl ResearchConfig"
           - path: crates/rayman-core/src/research.rs
             contains: "fn validate_command"
+          - path: crates/rayman-core/src/execution.rs
+            contains: "pub struct ExecutionPolicy"
           - path: crates/rayman-core/src/research.rs
             contains: "fn bounded_experiment_timeout"
           - path: crates/rayman-core/src/security.rs
@@ -428,6 +440,10 @@ features:
               - research_agents_policy_enforced_except_allow_network
           - path: crates/rayman-core/src/research.rs
             contains: "fn policy_rejects_shell_operators_inside_argv"
+            proves:
+              - research_agents_policy_enforced_except_allow_network
+          - path: crates/rayman-core/src/research.rs
+            contains: "fn policy_rejects_network_command_even_when_whitelisted"
             proves:
               - research_agents_policy_enforced_except_allow_network
           - path: crates/rayman-core/src/research.rs
@@ -452,6 +468,7 @@ features:
               - research_agents_policy_enforced_except_allow_network
         validation_commands:
           - "cargo test -p rayman-core research:: security::"
+          - cargo test -p rayman-core policy_rejects_network_command_even_when_whitelisted
       - id: research_roles_primary_route_override
         claim: research role findings use AgentManager.primary_advisory through cloned primary-route agents, persist route attempts per finding, and API explicit route failures are hard errors instead of local synthesis.
         implementation_anchors:
@@ -539,37 +556,37 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-07-05T00:14:34Z"
+            updated_at: "2026-07-06T14:21:30Z"
           - command: "cargo test -p rayman-core session::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-07-05T00:14:34Z"
+            updated_at: "2026-07-06T14:21:30Z"
           - command: "cargo test -p rayman-core goal::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-07-05T00:14:34Z"
+            updated_at: "2026-07-06T14:21:30Z"
           - command: "cargo test -p rayman-core audit::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-07-05T00:14:34Z"
+            updated_at: "2026-07-06T14:21:30Z"
           - command: "cargo test -p rayman-core gate::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-07-05T00:14:34Z"
+            updated_at: "2026-07-06T14:21:30Z"
           - command: cargo test -p rayman-cli cli_parses_subagent_commands
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_ledger_gate"
-            updated_at: "2026-07-05T00:14:34Z"
+            updated_at: "2026-07-06T14:21:30Z"
       - id: codex_host_subagent_performance_contract
         claim: Codex host subagent dispatch has a deterministic planner, auto-start surface, and goal controller integration; non-trivial `goal run` / `goal resume` plan stages emit `HOST_SUBAGENT_DISPATCH_REQUEST {json}` with host-tool-ready spawn_agent request payloads, stop with `host_subagent_dispatch_requested` until the primary AI spawns lanes or records failed/unavailable closeout, bind records to goal_id and dispatch_request_id, keep host subagents as main-model/strong-model speed lanes rather than auxiliary AI, treat standing workspace authorization as equivalent to an explicit `开启subagent` phrase with no per-use prompt precondition, explicit read-only intent suppresses writable worker lanes for audit/review-only work, and damaged ledger JSON or unclosed dispatch requests surface as fail-closed blockers.
         strict_validation: true
@@ -719,37 +736,37 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-05T00:14:34Z"
+            updated_at: "2026-07-06T14:21:30Z"
           - command: "cargo test -p rayman-core goal::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-05T00:14:34Z"
+            updated_at: "2026-07-06T14:21:30Z"
           - command: cargo test -p rayman-core enabled_workspace_subagent_authorization_matches_explicit_phrase
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-05T00:14:34Z"
+            updated_at: "2026-07-06T14:21:30Z"
           - command: cargo test -p rayman-cli cli_parses_subagent_commands
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-05T00:14:34Z"
+            updated_at: "2026-07-06T14:21:30Z"
           - command: cargo test -p rayman-cli cli_goal_run_emits_host_subagent_dispatch_request
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-05T00:14:34Z"
+            updated_at: "2026-07-06T14:21:30Z"
           - command: cargo test -p rayman-cli --test ui_contract cli_subagent_auto_start_emits_spawn_contract
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: codex_host_subagent_performance_contract"
-            updated_at: "2026-07-05T00:14:34Z"
+            updated_at: "2026-07-06T14:21:30Z"
       - id: codex_harness_execution_contract
         claim: Codex harness-style self-improvement is treated as a mapping to documented Codex execution controls or current-session capabilities, with quality-gate evidence for sandbox/approval boundaries, AGENTS.md/skills/hooks/MCP-rules instruction surfaces, subagent inheritance plus Rayman ledger review, and non-interactive approval/escalation failure handling.
         doc_anchors:
@@ -1265,19 +1282,19 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: close_success_requires_actual_evidence"
-            updated_at: "2026-07-04T22:19:06Z"
+            updated_at: "2026-07-06T14:21:30Z"
           - command: "cargo test -p rayman-core session::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: close_success_requires_actual_evidence"
-            updated_at: "2026-07-04T22:19:06Z"
+            updated_at: "2026-07-06T14:21:30Z"
           - command: "cargo test -p rayman-core quality::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: close_success_requires_actual_evidence"
-            updated_at: "2026-07-04T22:19:06Z"
+            updated_at: "2026-07-06T14:21:30Z"
       - id: goal_wait_recovery_contract
         claim: Goal workflows exhaust non-human executable stages before waiting, and every blocked/partial pending-work item records blocker ownership, minimum input, evidence path, resume command, and automatic resume strategy. User-owned blockers are `wait_user`, unavailable outside dependencies are `wait_external`, and remaining validation/release blockers are `hard_gate`.
         implementation_anchors:
@@ -2088,37 +2105,37 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: verification_supremacy_over_ai_judgment"
-            updated_at: "2026-07-04T22:19:06Z"
+            updated_at: "2026-07-06T14:21:30Z"
           - command: "cargo test -p rayman-core goal::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: verification_supremacy_over_ai_judgment"
-            updated_at: "2026-07-04T22:19:06Z"
+            updated_at: "2026-07-06T14:21:30Z"
           - command: "cargo test -p rayman-core quality::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: verification_supremacy_over_ai_judgment"
-            updated_at: "2026-07-04T22:19:06Z"
+            updated_at: "2026-07-06T14:21:30Z"
           - command: "cargo test -p rayman-core feature_coverage::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: verification_supremacy_over_ai_judgment"
-            updated_at: "2026-07-04T22:19:06Z"
+            updated_at: "2026-07-06T14:21:30Z"
           - command: cargo test -p rayman-cli cli_parses_coverage_status
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: verification_supremacy_over_ai_judgment"
-            updated_at: "2026-07-04T22:19:06Z"
+            updated_at: "2026-07-06T14:21:30Z"
           - command: rayman coverage status --check
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: verification_supremacy_over_ai_judgment"
-            updated_at: "2026-07-04T22:19:06Z"
+            updated_at: "2026-07-06T14:21:30Z"
       - id: success_claim_counterexample_challenge_gate
         claim: Verified success/completion/ready/satisfied claims fail closed unless claim ledger, goal close evidence, session close evidence, and structured JSON success summaries include current evidence_refs, search_effort, and a cleared counterexample/adversarial challenge with explicit evidence refs; fabricated, marker-only, incidental-path-only, stale, unresolved, or internally conflicting blocker/unknown/assumption metadata blocks success instead of producing a plausible false positive, while legacy `.RaymanCodingSkill/goals/*.json` requirement records are not promoted into public structured success summaries and the same lookalike shape outside goal state remains blocked.
         strict_validation: true
@@ -2245,31 +2262,31 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: success_claim_counterexample_challenge_gate"
-            updated_at: "2026-07-04T22:19:06Z"
+            updated_at: "2026-07-06T14:21:30Z"
           - command: "cargo test -p rayman-core goal::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: success_claim_counterexample_challenge_gate"
-            updated_at: "2026-07-04T22:19:06Z"
+            updated_at: "2026-07-06T14:21:30Z"
           - command: "cargo test -p rayman-core session::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: success_claim_counterexample_challenge_gate"
-            updated_at: "2026-07-04T22:19:06Z"
+            updated_at: "2026-07-06T14:21:30Z"
           - command: "cargo test -p rayman-core skills::"
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: success_claim_counterexample_challenge_gate"
-            updated_at: "2026-07-04T22:19:06Z"
+            updated_at: "2026-07-06T14:21:30Z"
           - command: cargo test -p rayman-api
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: success_claim_counterexample_challenge_gate"
-            updated_at: "2026-07-04T22:19:06Z"
+            updated_at: "2026-07-06T14:21:30Z"
       - id: asset_retirement_cascades_retired_test_cases
         claim: Retiring a feature, declaration, command, API, claim, or obsolete asset also retires tests whose only purpose was proving that retired surface; isolated Rust test cases and matching feature-coverage test anchors are cascade candidates that cleanup may delete before deleting the now-unreferenced retired asset, while unisolated stale test references, mixed current/retired proofs, and orphan `test_anchors[].proves` entries block success.
         doc_anchors:
@@ -2443,13 +2460,13 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: readiness_gate_aggregates_readiness_checks"
-            updated_at: "2026-07-04T22:19:06Z"
+            updated_at: "2026-07-06T14:21:30Z"
           - command: cargo test -p rayman-cli cli_parses_governance_commands
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: readiness_gate_aggregates_readiness_checks"
-            updated_at: "2026-07-04T22:19:06Z"
+            updated_at: "2026-07-06T14:21:30Z"
       - id: agent_skill_sync_installs_reminder
         claim: "`rayman agent-skill sync` and `rayman self install` install the companion `提醒` background reminder next to the installed `rayman` binary, and status reports stale or missing reminder binaries as `rayman-reminder` instead of silently losing automatic task-stop notifications."
         implementation_anchors:
@@ -2663,19 +2680,19 @@ features:
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: paper_claim_audit_protocol"
-            updated_at: "2026-07-04T22:19:06Z"
+            updated_at: "2026-07-06T14:21:30Z"
           - command: cargo test -p rayman-cli cli_parses_coverage_status
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: paper_claim_audit_protocol"
-            updated_at: "2026-07-04T22:19:06Z"
+            updated_at: "2026-07-06T14:21:30Z"
           - command: rayman coverage status --check
             status: passed
             evidence_path: docs/VALIDATION_RECORDS.md
             evidence_contains:
               - "record: paper_claim_audit_protocol"
-            updated_at: "2026-07-04T22:19:06Z"
+            updated_at: "2026-07-06T14:21:30Z"
       - id: feature_preservation_protocol
         claim: Public CLI/API/runtime surfaces cannot disappear from docs or manifest silently; source-extracted CLI commands and obsolete asset blockers must be resolved, documented, tested, or explicitly retired.
         implementation_anchors:
@@ -2832,6 +2849,424 @@ features:
         validation_commands:
           - "cargo test -p rayman-core temp:: backup:: session::"
 
+  - id: modern_agent_control_plane
+    title: MCP/plugin integration, trace/eval/replay, semantic context, subagent dispatch, model catalog governance, control status, and workflow learning
+    doc_anchors:
+      - path: docs/CLI.md
+        contains: "Trace, Eval, Integrations, And Control"
+      - path: docs/API.md
+        contains: "`POST /mcp` is the foreground MCP HTTP JSON-RPC endpoint"
+      - path: README.md
+        contains: "trace/eval/replay"
+      - path: docs/PROJECT_UNDERSTANDING.md
+        contains: "Semantic Context"
+      - path: docs/GOAL_WORKFLOWS.md
+        contains: "Trace/eval/replay is the repeatability layer"
+      - path: docs/MODEL_ROUTING.md
+        contains: "unknown or deprecated automatic/default routes"
+      - path: references/cli-model-and-config.md
+        contains: "`rayman subagent dispatch` writes a durable dispatch record"
+    implementation_anchors:
+      - path: crates/rayman-core/src/integrations.rs
+        contains: "pub struct McpToolDescriptor"
+      - path: crates/rayman-core/src/integrations.rs
+        contains: "pub struct PluginManifest"
+      - path: crates/rayman-core/src/trace.rs
+        contains: "pub struct TraceEvent"
+      - path: crates/rayman-core/src/trace.rs
+        contains: "pub struct ReplayReport"
+      - path: crates/rayman-core/src/eval.rs
+        contains: "pub struct EvalDataset"
+      - path: crates/rayman-core/src/eval.rs
+        contains: "pub struct EvalCase"
+      - path: crates/rayman-core/src/eval.rs
+        contains: "pub struct GraderResult"
+      - path: crates/rayman-core/src/semantic.rs
+        contains: "pub struct SemanticIndexRecord"
+      - path: crates/rayman-core/src/execution.rs
+        contains: "pub struct ExecutionPolicy"
+      - path: crates/rayman-core/src/subagent.rs
+        contains: "pub struct SubagentDispatchRecord"
+      - path: crates/rayman-core/src/model_catalog.rs
+        contains: "pub struct ModelCatalogStatus"
+      - path: crates/rayman-core/src/control.rs
+        contains: "pub struct ControlPlaneSnapshot"
+      - path: crates/rayman-core/src/workflow.rs
+        contains: "pub struct WorkflowPatternCandidate"
+      - path: crates/rayman-cli/src/cli.rs
+        contains: "fn cli_parses_modern_control_plane_commands"
+      - path: crates/rayman-api/src/lib.rs
+        contains: "async fn mcp_tools_handler"
+    test_anchors:
+      - path: crates/rayman-cli/src/cli.rs
+        contains: "fn cli_parses_modern_control_plane_commands"
+        proves:
+          - rayman mcp schema
+          - rayman mcp serve
+          - rayman plugin export
+          - rayman trace status
+          - rayman trace record
+          - rayman trace replay
+          - rayman eval dataset run
+          - rayman context semantic build
+          - rayman context semantic query
+          - rayman context semantic status
+          - rayman context semantic status --check
+          - rayman models refresh
+          - rayman models refresh --dry-run
+          - rayman models refresh --apply
+          - rayman models status
+          - rayman models status --check
+          - rayman control status
+          - rayman control status --format json
+          - rayman control status --format text
+          - rayman workflow learn
+          - rayman workflow promote
+          - rayman workflow status
+      - path: crates/rayman-cli/src/cli.rs
+        contains: "fn cli_parses_subagent_commands"
+        proves:
+          - rayman subagent dispatch
+          - rayman subagent reconcile
+          - rayman host-subagent dispatch
+          - rayman host-subagent reconcile
+      - path: crates/rayman-core/src/integrations.rs
+        contains: "fn mcp_schema_exposes_core_control_tools"
+        proves:
+          - modern_mcp_plugin_contract
+      - path: crates/rayman-core/src/integrations.rs
+        contains: "fn mcp_json_rpc_supports_initialize_and_lists_tools"
+        proves:
+          - modern_mcp_plugin_contract
+      - path: crates/rayman-core/src/integrations.rs
+        contains: "fn mcp_json_rpc_tool_call_returns_content"
+        proves:
+          - modern_mcp_plugin_contract
+      - path: crates/rayman-core/src/integrations.rs
+        contains: "fn plugin_export_writes_workspace_local_manifest"
+        proves:
+          - modern_mcp_plugin_contract
+      - path: crates/rayman-core/src/trace.rs
+        contains: "fn trace_replay_is_deterministic"
+        proves:
+          - trace_eval_replay_contract
+      - path: crates/rayman-core/src/trace.rs
+        contains: "fn malformed_trace_blocks_status"
+        proves:
+          - trace_eval_replay_contract
+      - path: crates/rayman-core/src/trace.rs
+        contains: "fn trace_eval_gate_requires_passed_eval_report"
+        proves:
+          - trace_eval_replay_contract
+      - path: crates/rayman-core/src/eval.rs
+        contains: "fn dataset_eval_writes_report_and_blocks_failed_case"
+        proves:
+          - trace_eval_replay_contract
+          - rayman eval dataset run
+      - path: crates/rayman-core/src/semantic.rs
+        contains: "fn semantic_status_blocks_when_hash_is_stale"
+        proves:
+          - semantic_context_navigation_only
+      - path: crates/rayman-core/src/semantic.rs
+        contains: "fn semantic_query_is_navigation_only"
+        proves:
+          - semantic_context_navigation_only
+      - path: crates/rayman-core/src/subagent.rs
+        contains: "fn subagent_dispatch_file_blocks_until_unavailable_closeout"
+        proves:
+          - subagent_dispatch_reconcile_contract
+      - path: crates/rayman-core/src/subagent.rs
+        contains: "fn subagent_dispatch_worktree_request_blocks_when_not_git"
+        proves:
+          - subagent_dispatch_reconcile_contract
+      - path: crates/rayman-core/src/execution.rs
+        contains: "fn default_policy_denies_network_commands"
+        proves:
+          - execution_policy_network_cwd_env_deny
+      - path: crates/rayman-core/src/execution.rs
+        contains: "fn default_policy_denies_workspace_escape_cwd"
+        proves:
+          - execution_policy_network_cwd_env_deny
+      - path: crates/rayman-core/src/execution.rs
+        contains: "fn default_policy_denies_undeclared_secret_env_arg"
+        proves:
+          - execution_policy_network_cwd_env_deny
+      - path: crates/rayman-core/src/research.rs
+        contains: "fn policy_rejects_network_command_even_when_whitelisted"
+        proves:
+          - execution_policy_network_cwd_env_deny
+      - path: crates/rayman-core/src/model_catalog.rs
+        contains: "fn model_status_blocks_unknown_route_model"
+        proves:
+          - model_catalog_governance
+      - path: crates/rayman-core/src/model_catalog.rs
+        contains: "fn model_status_blocks_deprecated_default_model"
+        proves:
+          - model_catalog_governance
+      - path: crates/rayman-core/src/model_catalog.rs
+        contains: "fn model_status_blocks_stale_catalog_cache"
+        proves:
+          - model_catalog_governance
+      - path: crates/rayman-core/src/gate.rs
+        contains: "fn readiness_gate_has_first_class_model_catalog_check"
+        proves:
+          - model_catalog_governance
+      - path: crates/rayman-core/src/config.rs
+        contains: "fn auto_model_routing_filters_unknown_and_deprecated_catalog_entries"
+        proves:
+          - model_catalog_governance
+      - path: crates/rayman-core/src/control.rs
+        contains: "fn control_snapshot_has_required_sections"
+        proves:
+          - control_workflow_learning_contract
+      - path: crates/rayman-core/src/workflow.rs
+        contains: "fn workflow_promotion_requires_replay_eval_and_gate_evidence"
+        proves:
+          - control_workflow_learning_contract
+      - path: crates/rayman-api/src/tests.rs
+        contains: "fn mcp_and_plugin_endpoints_return_integration_metadata"
+        proves:
+          - GET /api/mcp/tools
+          - GET /api/mcp/resources
+          - GET /api/plugin/manifest
+          - modern_mcp_plugin_contract
+      - path: crates/rayman-api/src/tests.rs
+        contains: "fn mcp_rpc_endpoint_handles_tools_list"
+        proves:
+          - POST /mcp
+          - modern_mcp_plugin_contract
+    validation_commands:
+      - cargo test -p rayman-cli cli_parses_modern_control_plane_commands
+      - cargo test -p rayman-cli cli_parses_subagent_commands
+      - "cargo test -p rayman-core integrations:: trace:: eval:: semantic:: execution:: subagent:: model_catalog:: control:: workflow::"
+      - cargo test -p rayman-core auto_model_routing_filters_unknown_and_deprecated_catalog_entries
+      - cargo test -p rayman-api mcp_and_plugin_endpoints_return_integration_metadata
+      - rayman coverage status --check
+    ui_surfaces:
+      - api_json
+    public_commands:
+      - rayman mcp schema
+      - rayman mcp serve
+      - rayman plugin export
+      - rayman trace status
+      - rayman trace record
+      - rayman trace replay
+      - rayman eval dataset run
+      - rayman context semantic build
+      - rayman context semantic query
+      - rayman context semantic status
+      - rayman context semantic status --check
+      - rayman subagent dispatch
+      - rayman subagent reconcile
+      - rayman host-subagent dispatch
+      - rayman host-subagent reconcile
+      - rayman models refresh
+      - rayman models refresh --dry-run
+      - rayman models refresh --apply
+      - rayman models status
+      - rayman models status --check
+      - rayman control status
+      - rayman control status --format text
+      - rayman control status --format json
+      - rayman workflow learn
+      - rayman workflow promote
+      - rayman workflow status
+    api_endpoints:
+      - GET /api/mcp/tools
+      - GET /api/mcp/resources
+      - GET /api/plugin/manifest
+      - POST /mcp
+    claim_checks:
+      - id: modern_mcp_plugin_contract
+        claim: MCP and plugin export surfaces expose Rayman goal/context/gate/evidence/risk/subagent/model/control descriptors through local JSON metadata and foreground JSON-RPC transports while preserving current files, validation commands, and Rayman evidence as the only completion authority.
+        implementation_anchors:
+          - path: crates/rayman-core/src/integrations.rs
+            contains: "pub fn mcp_tools"
+          - path: crates/rayman-core/src/integrations.rs
+            contains: "pub fn mcp_rpc_response"
+          - path: crates/rayman-core/src/integrations.rs
+            contains: "pub fn plugin_manifest"
+          - path: crates/rayman-api/src/lib.rs
+            contains: "async fn plugin_manifest_handler"
+          - path: crates/rayman-api/src/lib.rs
+            contains: "async fn mcp_rpc_handler"
+        test_anchors:
+          - path: crates/rayman-core/src/integrations.rs
+            contains: "fn mcp_schema_exposes_core_control_tools"
+            proves:
+              - modern_mcp_plugin_contract
+          - path: crates/rayman-core/src/integrations.rs
+            contains: "fn mcp_json_rpc_supports_initialize_and_lists_tools"
+            proves:
+              - modern_mcp_plugin_contract
+          - path: crates/rayman-core/src/integrations.rs
+            contains: "fn mcp_json_rpc_tool_call_returns_content"
+            proves:
+              - modern_mcp_plugin_contract
+          - path: crates/rayman-core/src/integrations.rs
+            contains: "fn plugin_export_writes_workspace_local_manifest"
+            proves:
+              - modern_mcp_plugin_contract
+          - path: crates/rayman-api/src/tests.rs
+            contains: "fn mcp_and_plugin_endpoints_return_integration_metadata"
+            proves:
+              - modern_mcp_plugin_contract
+          - path: crates/rayman-api/src/tests.rs
+            contains: "fn mcp_rpc_endpoint_handles_tools_list"
+            proves:
+              - modern_mcp_plugin_contract
+        validation_commands:
+          - "cargo test -p rayman-core integrations::"
+          - cargo test -p rayman-api mcp_
+      - id: trace_eval_replay_contract
+        claim: Trace events are JSONL, deterministic replay reports stable transcript hashes, malformed trace blocks status, dataset eval writes reports under .RaymanCodingSkill/evals/reports, trace_eval blocks until at least one eval report passes, and trace/eval evidence is repeatability proof rather than completion proof.
+        implementation_anchors:
+          - path: crates/rayman-core/src/trace.rs
+            contains: "pub fn trace_eval_gate_status"
+          - path: crates/rayman-core/src/eval.rs
+            contains: "pub fn run_dataset"
+          - path: crates/rayman-core/src/gate.rs
+            contains: "trace_eval"
+        test_anchors:
+          - path: crates/rayman-core/src/trace.rs
+            contains: "fn trace_replay_is_deterministic"
+            proves:
+              - trace_eval_replay_contract
+          - path: crates/rayman-core/src/trace.rs
+            contains: "fn malformed_trace_blocks_status"
+            proves:
+              - trace_eval_replay_contract
+          - path: crates/rayman-core/src/trace.rs
+            contains: "fn trace_eval_gate_requires_passed_eval_report"
+            proves:
+              - trace_eval_replay_contract
+          - path: crates/rayman-core/src/eval.rs
+            contains: "fn dataset_eval_writes_report_and_blocks_failed_case"
+            proves:
+              - trace_eval_replay_contract
+        validation_commands:
+          - "cargo test -p rayman-core trace:: eval::"
+      - id: semantic_context_navigation_only
+        claim: Semantic context is optional hash-bound navigation state; stale hashes block status and query hits remain navigation_only or stale_navigation_only until current files or validation output are reread.
+        implementation_anchors:
+          - path: crates/rayman-core/src/semantic.rs
+            contains: "SemanticIndexRecord"
+          - path: crates/rayman-core/src/semantic.rs
+            contains: "evidence_status"
+        test_anchors:
+          - path: crates/rayman-core/src/semantic.rs
+            contains: "fn semantic_status_blocks_when_hash_is_stale"
+            proves:
+              - semantic_context_navigation_only
+          - path: crates/rayman-core/src/semantic.rs
+            contains: "fn semantic_query_is_navigation_only"
+            proves:
+              - semantic_context_navigation_only
+        validation_commands:
+          - "cargo test -p rayman-core semantic::"
+      - id: subagent_dispatch_reconcile_contract
+        claim: Host-subagent dispatch records persist host request, local worktree lane, and non-overlapping scope state; requested local worktrees are real git worktree lanes under .RaymanCodingSkill/worktrees; reconcile blocks unclosed dispatches, missing review, conflicts, scope overlap, out-of-bound writes, unavailable lanes without failed/not-used closeout, or failed/unavailable requested worktrees.
+        implementation_anchors:
+          - path: crates/rayman-core/src/subagent.rs
+            contains: "pub struct SubagentDispatchRecord"
+          - path: crates/rayman-core/src/subagent.rs
+            contains: "pub fn reconcile"
+          - path: crates/rayman-core/src/subagent.rs
+            contains: "fn local_worktree_record"
+        test_anchors:
+          - path: crates/rayman-core/src/subagent.rs
+            contains: "fn subagent_dispatch_file_blocks_until_unavailable_closeout"
+            proves:
+              - subagent_dispatch_reconcile_contract
+          - path: crates/rayman-core/src/subagent.rs
+            contains: "fn subagent_dispatch_request_requires_closeout_record"
+            proves:
+              - subagent_dispatch_reconcile_contract
+          - path: crates/rayman-core/src/subagent.rs
+            contains: "fn subagent_dispatch_worktree_request_blocks_when_not_git"
+            proves:
+              - subagent_dispatch_reconcile_contract
+        validation_commands:
+          - "cargo test -p rayman-core subagent::"
+      - id: execution_policy_network_cwd_env_deny
+        claim: ExecutionPolicy rejects network-looking commands when allow_network=false, rejects shell operators, enforces workspace cwd boundaries, and blocks undeclared secret-like environment arguments before research or automated experiments run.
+        implementation_anchors:
+          - path: crates/rayman-core/src/execution.rs
+            contains: "pub fn validate_command"
+          - path: crates/rayman-core/src/research.rs
+            contains: "allow_network: self.config.command_policy.allow_network"
+        test_anchors:
+          - path: crates/rayman-core/src/execution.rs
+            contains: "fn default_policy_denies_network_commands"
+            proves:
+              - execution_policy_network_cwd_env_deny
+          - path: crates/rayman-core/src/execution.rs
+            contains: "fn default_policy_denies_workspace_escape_cwd"
+            proves:
+              - execution_policy_network_cwd_env_deny
+          - path: crates/rayman-core/src/execution.rs
+            contains: "fn default_policy_denies_undeclared_secret_env_arg"
+            proves:
+              - execution_policy_network_cwd_env_deny
+          - path: crates/rayman-core/src/research.rs
+            contains: "fn policy_rejects_network_command_even_when_whitelisted"
+            proves:
+              - execution_policy_network_cwd_env_deny
+        validation_commands:
+          - "cargo test -p rayman-core execution:: research::"
+      - id: model_catalog_governance
+        claim: Model catalog status blocks unknown or deprecated default/automatic route models, malformed or stale catalog cache state, refresh writes only a local catalog cache with route-config hashes, gate status includes model catalog governance, and automatic route selection filters unknown/deprecated catalog entries away from best/default candidates.
+        implementation_anchors:
+          - path: crates/rayman-core/src/model_catalog.rs
+            contains: "pub struct ModelCatalogStatus"
+          - path: crates/rayman-core/src/model_catalog.rs
+            contains: "fn source_hashes"
+          - path: crates/rayman-core/src/gate.rs
+            contains: "fn model_catalog_check"
+          - path: crates/rayman-core/src/config.rs
+            contains: "catalog_status"
+        test_anchors:
+          - path: crates/rayman-core/src/model_catalog.rs
+            contains: "fn model_status_blocks_unknown_route_model"
+            proves:
+              - model_catalog_governance
+          - path: crates/rayman-core/src/model_catalog.rs
+            contains: "fn model_status_blocks_deprecated_default_model"
+            proves:
+              - model_catalog_governance
+          - path: crates/rayman-core/src/model_catalog.rs
+            contains: "fn model_status_blocks_stale_catalog_cache"
+            proves:
+              - model_catalog_governance
+          - path: crates/rayman-core/src/gate.rs
+            contains: "fn readiness_gate_has_first_class_model_catalog_check"
+            proves:
+              - model_catalog_governance
+          - path: crates/rayman-core/src/config.rs
+            contains: "fn auto_model_routing_filters_unknown_and_deprecated_catalog_entries"
+            proves:
+              - model_catalog_governance
+        validation_commands:
+          - "cargo test -p rayman-core model_catalog:: config::"
+      - id: control_workflow_learning_contract
+        claim: Control status aggregates gate/risk/trace/subagent/model/context state, and workflow promotion remains blocked until replay, eval dataset report, and readiness-gate evidence prove a repeated workflow pattern.
+        implementation_anchors:
+          - path: crates/rayman-core/src/control.rs
+            contains: "pub struct ControlPlaneSnapshot"
+          - path: crates/rayman-core/src/workflow.rs
+            contains: "pub struct WorkflowPatternCandidate"
+        test_anchors:
+          - path: crates/rayman-core/src/control.rs
+            contains: "fn control_snapshot_has_required_sections"
+            proves:
+              - control_workflow_learning_contract
+          - path: crates/rayman-core/src/workflow.rs
+            contains: "fn workflow_promotion_requires_replay_eval_and_gate_evidence"
+            proves:
+              - control_workflow_learning_contract
+        validation_commands:
+          - "cargo test -p rayman-core control:: workflow::"
+
   - id: api_surface
     title: HTTP API authentication, routes, and summarized JSON request/response contracts
     doc_anchors:
@@ -2858,6 +3293,9 @@ features:
           - GET /api/models
           - GET /api/models/status
           - POST /api/models/update
+          - GET /api/mcp/tools
+          - GET /api/mcp/resources
+          - GET /api/plugin/manifest
           - GET /api/context
           - GET /api/context/os
           - POST /api/context/os
@@ -2892,6 +3330,9 @@ features:
           - GET /api/models
           - GET /api/models/status
           - POST /api/models/update
+          - GET /api/mcp/tools
+          - GET /api/mcp/resources
+          - GET /api/plugin/manifest
           - GET /api/context
           - GET /api/context/os
           - POST /api/context/os
@@ -2930,6 +3371,9 @@ features:
       - GET /api/models
       - GET /api/models/status
       - POST /api/models/update
+      - GET /api/mcp/tools
+      - GET /api/mcp/resources
+      - GET /api/plugin/manifest
       - GET /api/context
       - GET /api/context/os
       - POST /api/context/os

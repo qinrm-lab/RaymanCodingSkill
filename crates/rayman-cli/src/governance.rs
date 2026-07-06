@@ -15,6 +15,18 @@ pub(crate) enum EvalCommand {
         #[arg(long = "profile", value_enum, default_value = "core")]
         profile: EvalRunProfile,
     },
+    #[command(subcommand)]
+    Dataset(EvalDatasetCommand),
+}
+
+#[derive(Subcommand)]
+pub(crate) enum EvalDatasetCommand {
+    Run {
+        #[arg(long = "dataset")]
+        dataset: PathBuf,
+        #[arg(long = "grader")]
+        grader: String,
+    },
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
@@ -81,6 +93,14 @@ pub(crate) fn cmd_eval(command: EvalCommand) -> Result<()> {
             let manager = AgentEvalManager::new(root()?)?;
             let report = manager.assert_passed(profile.into())?;
             println!("{}", serde_json::to_string_pretty(&report)?);
+        }
+        EvalCommand::Dataset(EvalDatasetCommand::Run { dataset, grader }) => {
+            let manager = AgentEvalManager::new(root()?)?;
+            let report = manager.run_dataset(dataset, &grader)?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            if report.status != "passed" {
+                bail!("eval dataset failed: failed={}", report.failed);
+            }
         }
     }
     Ok(())

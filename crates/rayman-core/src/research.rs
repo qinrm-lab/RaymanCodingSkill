@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use walkdir::WalkDir;
 
+use crate::execution::ExecutionPolicy;
 use crate::models::{AgentManager, RouteAttempt};
 use crate::session::SessionManager;
 use crate::{display_path, ensure_within, now_iso};
@@ -52,6 +53,8 @@ pub struct ResearchCommandPolicy {
     pub require_workspace_cwd: bool,
     pub reject_shell_operators: bool,
     pub diff_check_repo_tracked_files: bool,
+    #[serde(default)]
+    pub allowed_env: Vec<String>,
     pub allowed: Vec<Vec<String>>,
 }
 
@@ -62,6 +65,7 @@ impl Default for ResearchCommandPolicy {
             require_workspace_cwd: true,
             reject_shell_operators: true,
             diff_check_repo_tracked_files: true,
+            allowed_env: Vec::new(),
             allowed: vec![
                 words("rayman context status"),
                 words("rayman context task"),
@@ -687,16 +691,20 @@ impl ResearchManager {
         if self.config.autonomy.can_close_goals {
             bail!("scientist cannot close goals");
         }
-        if self.config.command_policy.reject_shell_operators {
-            for arg in &command.argv {
-                if arg
-                    .chars()
-                    .any(|ch| matches!(ch, '|' | '&' | ';' | '<' | '>' | '`'))
-                {
-                    bail!("scientist experiment argv contains shell operator: {arg}");
-                }
-            }
+        let cwd = self.command_cwd(command)?;
+        ExecutionPolicy {
+            allow_network: self.config.command_policy.allow_network,
+            require_workspace_cwd: self.config.command_policy.require_workspace_cwd,
+            reject_shell_operators: self.config.command_policy.reject_shell_operators,
+            allowed_env: self.config.command_policy.allowed_env.clone(),
         }
+        .validate_command(&command.argv, Some(&cwd), &self.workspace)
+        .map_err(|error| {
+            anyhow!(
+                "scientist experiment execution policy rejected command: {}: {error}",
+                command.argv.join(" ")
+            )
+        })?;
         if !self
             .config
             .command_policy
@@ -913,6 +921,13 @@ impl ResearchConfig {
                 .get("diff_check_repo_tracked_files")
                 .and_then(Value::as_bool)
                 .unwrap_or(out.command_policy.diff_check_repo_tracked_files);
+            if let Some(allowed_env) = policy.get("allowed_env").and_then(Value::as_array) {
+                out.command_policy.allowed_env = allowed_env
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect();
+            }
             if let Some(allowed) = policy.get("allowed").and_then(Value::as_array) {
                 out.command_policy.allowed = allowed
                     .iter()
@@ -1298,6 +1313,38 @@ mod tests {
         let error = manager.validate_command(&command).unwrap_err().to_string();
 
         assert!(error.contains("shell operator"));
+    }
+
+    #[test]
+    fn policy_rejects_network_command_even_when_whitelisted() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("config")).unwrap();
+        fs::write(
+            temp.path().join("config").join("research_agents.yaml"),
+            r#"
+research_agents:
+  enabled: true
+  scientist:
+    can_run_experiments: true
+    can_edit_files: false
+    can_close_goals: false
+  command_policy:
+    allow_network: false
+    allowed:
+      - ["curl"]
+"#,
+        )
+        .unwrap();
+        let manager = ResearchManager::new(temp.path()).unwrap();
+        let command = ExperimentCommand {
+            argv: vec!["curl".into(), "https://example.com".into()],
+            cwd: None,
+            timeout_seconds: 1,
+        };
+
+        let error = manager.validate_command(&command).unwrap_err().to_string();
+
+        assert!(error.contains("allow_network=false"));
     }
 
     #[test]

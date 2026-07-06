@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use rayman_core::assets::{
@@ -17,6 +18,7 @@ use rayman_core::evidence::{
 use rayman_core::goal::{
     GoalManager, GoalRunOptions, GoalRunReport, GoalRunUntil, build_goal_clarification,
 };
+use rayman_core::integrations::IntegrationManager;
 use rayman_core::models::AgentManager;
 use rayman_core::now_iso;
 use rayman_core::project::ProjectAnalyzer;
@@ -54,6 +56,9 @@ pub fn app(root: impl Into<PathBuf>) -> Router {
         .route("/api/models", get(models_handler))
         .route("/api/models/status", get(models_status_handler))
         .route("/api/models/update", post(models_update_handler))
+        .route("/api/mcp/tools", get(mcp_tools_handler))
+        .route("/api/mcp/resources", get(mcp_resources_handler))
+        .route("/api/plugin/manifest", get(plugin_manifest_handler))
         .route("/api/context", get(context_handler))
         .route(
             "/api/context/os",
@@ -86,6 +91,14 @@ pub fn app(root: impl Into<PathBuf>) -> Router {
         .layer(cors_layer())
 }
 
+pub fn mcp_app(root: impl Into<PathBuf>) -> Router {
+    Router::new()
+        .route("/", get(mcp_root_handler))
+        .route("/mcp", post(mcp_rpc_handler))
+        .with_state(ApiState { root: root.into() })
+        .layer(cors_layer())
+}
+
 pub async fn serve(root: impl Into<PathBuf>, host: &str, port: u16) -> Result<()> {
     let addr: SocketAddr = format!("{host}:{port}")
         .parse()
@@ -95,12 +108,42 @@ pub async fn serve(root: impl Into<PathBuf>, host: &str, port: u16) -> Result<()
     Ok(())
 }
 
+pub async fn serve_mcp(root: impl Into<PathBuf>, host: &str, port: u16) -> Result<()> {
+    let addr: SocketAddr = format!("{host}:{port}")
+        .parse()
+        .with_context(|| format!("无效 MCP 监听地址: {host}:{port}"))?;
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, mcp_app(root)).await?;
+    Ok(())
+}
+
 async fn root_handler() -> Json<Value> {
     Json(json!({"name": "RaymanCodingSkill API", "version": "1.0.0", "status": "running"}))
 }
 
 async fn health_handler() -> Json<Value> {
     Json(json!({"status": "healthy", "version": "1.0.0"}))
+}
+
+async fn mcp_root_handler() -> Json<Value> {
+    Json(json!({
+        "name": "RaymanCodingSkill MCP",
+        "version": "1.0.0",
+        "status": "running",
+        "endpoint": "/mcp",
+        "source_policy": "MCP is a read-only integration surface; Rayman evidence remains authoritative."
+    }))
+}
+
+async fn mcp_rpc_handler(
+    State(state): State<ApiState>,
+    Json(payload): Json<Value>,
+) -> Result<Response, ApiError> {
+    let manager = IntegrationManager::new(state.root)?;
+    Ok(match manager.mcp_rpc_response(payload) {
+        Some(response) => Json(response).into_response(),
+        None => StatusCode::ACCEPTED.into_response(),
+    })
 }
 
 struct ApiEvidenceFields {
@@ -407,6 +450,39 @@ async fn models_update_handler(
             "model auto-update disabled; use force=true to check metadata"
         }
     })))
+}
+
+async fn mcp_tools_handler(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, ApiError> {
+    require_api_key(&headers)?;
+    let manager = IntegrationManager::new(state.root)?;
+    Ok(Json(json!({
+        "tools": manager.mcp_tools(),
+        "source_policy": "MCP descriptors are integration metadata; current workspace evidence remains authoritative."
+    })))
+}
+
+async fn mcp_resources_handler(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, ApiError> {
+    require_api_key(&headers)?;
+    let manager = IntegrationManager::new(state.root)?;
+    Ok(Json(json!({
+        "resources": manager.mcp_resources(),
+        "source_policy": "MCP resources are integration metadata; current workspace evidence remains authoritative."
+    })))
+}
+
+async fn plugin_manifest_handler(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, ApiError> {
+    require_api_key(&headers)?;
+    let manager = IntegrationManager::new(state.root)?;
+    Ok(Json(serde_json::to_value(manager.plugin_manifest())?))
 }
 
 async fn context_handler(

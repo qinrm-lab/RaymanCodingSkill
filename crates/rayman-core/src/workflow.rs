@@ -1,12 +1,17 @@
-use anyhow::Result;
+use std::fs;
+use std::path::PathBuf;
+
+use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::evidence::{ClaimLedger, EvidenceResolver, EvidenceStatus};
+use crate::gate::{GateManager, GateOptions};
 use crate::models::AgentManager;
-use crate::now_iso;
 use crate::session::SessionManager;
 use crate::skills;
+use crate::trace::{TraceManager, trace_eval_gate_status};
+use crate::{display_path, ensure_within, now_iso, read_text, write_text};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CustomerRequirement {
@@ -52,6 +57,157 @@ pub struct ExecutionReport {
     pub next_steps: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct WorkflowPatternCandidate {
+    pub id: String,
+    pub name: String,
+    pub status: String,
+    #[serde(default)]
+    pub evidence_refs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replay_status: Option<String>,
+    #[serde(default)]
+    pub eval_report_count: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gate_status: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+struct WorkflowPatternState {
+    version: u32,
+    workspace_path: String,
+    updated_at: String,
+    candidates: Vec<WorkflowPatternCandidate>,
+}
+
+pub struct WorkflowLearningManager {
+    workspace: PathBuf,
+    state_path: PathBuf,
+}
+
+impl WorkflowLearningManager {
+    pub fn new(workspace: impl Into<PathBuf>) -> Result<Self> {
+        let workspace = workspace
+            .into()
+            .canonicalize()
+            .context("无法解析工作区路径")?;
+        let state_path = ensure_within(
+            &workspace
+                .join(".RaymanCodingSkill")
+                .join("workflows")
+                .join("patterns.json"),
+            &workspace,
+            "workflow pattern 状态必须位于工作区内",
+        )?;
+        Ok(Self {
+            workspace,
+            state_path,
+        })
+    }
+
+    pub fn learn(&self, name: &str, evidence_refs: &[String]) -> Result<WorkflowPatternCandidate> {
+        if name.trim().is_empty() {
+            bail!("workflow pattern name is required");
+        }
+        let now = now_iso();
+        let candidate = WorkflowPatternCandidate {
+            id: workflow_pattern_id(name, &now),
+            name: name.trim().to_string(),
+            status: "candidate".into(),
+            evidence_refs: evidence_refs
+                .iter()
+                .map(|item| item.trim().to_string())
+                .filter(|item| !item.is_empty())
+                .collect(),
+            replay_status: None,
+            eval_report_count: 0,
+            gate_status: None,
+            created_at: now.clone(),
+            updated_at: now,
+        };
+        let mut state = self.state()?;
+        state.candidates.push(candidate.clone());
+        self.write_state(state)?;
+        Ok(candidate)
+    }
+
+    pub fn promote(&self, id: &str) -> Result<WorkflowPatternCandidate> {
+        let replay = TraceManager::new(&self.workspace)?.replay()?;
+        let trace_eval = trace_eval_gate_status(&self.workspace)?;
+        let eval_report_count = trace_eval
+            .get("passed_eval_reports")
+            .and_then(Value::as_u64)
+            .unwrap_or(0) as usize;
+        let gate = GateManager::new(&self.workspace)?.status(GateOptions::default())?;
+        if replay.status != "passed" {
+            bail!("workflow promote requires passed trace replay");
+        }
+        if eval_report_count == 0 {
+            bail!("workflow promote requires at least one passed eval dataset report");
+        }
+        if gate.status != "passed" {
+            bail!("workflow promote requires passed readiness gate");
+        }
+        let mut state = self.state()?;
+        let candidate = state
+            .candidates
+            .iter_mut()
+            .find(|candidate| candidate.id == id)
+            .with_context(|| format!("workflow pattern candidate not found: {id}"))?;
+        candidate.status = "promoted".into();
+        candidate.replay_status = Some(replay.status);
+        candidate.eval_report_count = eval_report_count;
+        candidate.gate_status = Some(gate.status);
+        candidate.updated_at = now_iso();
+        let promoted = candidate.clone();
+        self.write_state(state)?;
+        Ok(promoted)
+    }
+
+    pub fn status(&self) -> Result<Value> {
+        let state = self.state()?;
+        Ok(json!({
+            "workspace_path": display_path(&self.workspace),
+            "state_path": display_path(&self.state_path),
+            "candidate_count": state.candidates.len(),
+            "promoted_count": state.candidates.iter().filter(|candidate| candidate.status == "promoted").count(),
+            "candidates": state.candidates,
+        }))
+    }
+
+    fn state(&self) -> Result<WorkflowPatternState> {
+        if !self.state_path.exists() {
+            return Ok(WorkflowPatternState {
+                version: 1,
+                workspace_path: display_path(&self.workspace),
+                updated_at: now_iso(),
+                candidates: Vec::new(),
+            });
+        }
+        let text = read_text(&self.state_path)?;
+        serde_json::from_str(&text).with_context(|| {
+            format!(
+                "无法解析 workflow pattern 状态: {}",
+                self.state_path.display()
+            )
+        })
+    }
+
+    fn write_state(&self, mut state: WorkflowPatternState) -> Result<()> {
+        if let Some(parent) = self.state_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        state.updated_at = now_iso();
+        state.workspace_path = display_path(&self.workspace);
+        let text = serde_json::to_string_pretty(&state)?;
+        let _: WorkflowPatternState =
+            serde_json::from_str(&text).context("workflow pattern state round-trip failed")?;
+        write_text(&self.state_path, &text)
+    }
+}
+
 impl GoalContract {
     pub fn build(
         goal: &str,
@@ -82,6 +238,28 @@ impl GoalContract {
             created_at: now_iso(),
         }
     }
+}
+
+fn workflow_pattern_id(name: &str, created_at: &str) -> String {
+    let stem = name
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .take(16)
+        .collect::<String>();
+    let suffix = created_at
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .rev()
+        .take(10)
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect::<String>();
+    format!(
+        "workflow_{}_{}",
+        if stem.is_empty() { "pattern" } else { &stem },
+        suffix
+    )
 }
 
 pub fn run_workflow(
@@ -524,6 +702,22 @@ auxiliary_ai:
             report.artifacts["auxiliary_ai"]["summary"]["task"].as_str(),
             Some("workflow_summary")
         );
+    }
+
+    #[test]
+    fn workflow_promotion_requires_replay_eval_and_gate_evidence() {
+        let temp = tempfile::tempdir().unwrap();
+        let manager = WorkflowLearningManager::new(temp.path()).unwrap();
+        let candidate = manager
+            .learn("repeatable modernization lane", &["cargo test".into()])
+            .unwrap();
+
+        let error = manager.promote(&candidate.id).unwrap_err().to_string();
+
+        assert!(error.contains("passed eval dataset report"));
+        let status = manager.status().unwrap();
+        assert_eq!(status["candidate_count"], 1);
+        assert_eq!(status["promoted_count"], 0);
     }
 
     fn openai_sequence_server(contents: Vec<&'static str>) -> String {

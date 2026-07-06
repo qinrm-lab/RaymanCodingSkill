@@ -10,6 +10,7 @@ rayman api serve --host 127.0.0.1 --port 8000
 
 - `GET /`: service name, version, and status.
 - `GET /health`: health check.
+- `POST /mcp`: foreground MCP JSON-RPC endpoint when started with `rayman mcp serve --http`; accepts `initialize`, `tools/list`, `tools/call`, `resources/list`, and `resources/read`.
 
 ## Protected Endpoints
 
@@ -23,7 +24,12 @@ CORS defaults to `http://127.0.0.1:8000` and `http://localhost:8000`. Override i
 - `GET /api/models`
 - `GET /api/models/status`
 - `POST /api/models/update`
+- `GET /api/mcp/tools`
+- `GET /api/mcp/resources`
+- `GET /api/plugin/manifest`
 - `GET /api/context`
+- `GET /api/context/os`
+- `POST /api/context/os`
 - `GET /api/project`
 - `POST /api/project/index`
 - `POST /api/impact`
@@ -66,6 +72,8 @@ Evidence requests accept optional query parameters `scope` (`workspace`, `goal`,
 `model_type` and `model_name` must be provided together or omitted together. Review requests return `409 Conflict` when pending work or unfinished code markers block the review gate.
 
 Model update status reads `config/model_updates.yaml`. `POST /api/models/update` checks metadata only when automatic updates are enabled or `force=true`; it does not mutate the model catalog without a configured updater.
+
+MCP and plugin metadata endpoints expose integration descriptors. `POST /mcp` is the foreground MCP HTTP JSON-RPC endpoint used by `rayman mcp serve --http`; it is read-only and binds to loopback by default. `GET /api/mcp/tools` returns Rayman tool descriptors for goal, context, gate, evidence, risk, subagent, model, and control-plane status. `GET /api/mcp/resources` returns JSON resource descriptors such as `rayman://context`, `rayman://gate`, `rayman://evidence`, `rayman://subagents`, and `rayman://models`. `GET /api/plugin/manifest` returns the same plugin manifest shape as `rayman plugin export`. These endpoints do not create a daemon, database, or external authority; current files, validation commands, and Rayman evidence remain authoritative.
 
 Context reads workspace activation, pending work, project input files, backup indexes, review blockers, audit findings, asset retirement state, the workspace-local Context Index, and the workspace-local Context OS state graph from local files. It does not create a daemon, database, vector index, or cross-project memory.
 

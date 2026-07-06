@@ -33,7 +33,7 @@ impl ModelRef {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModelCatalogFinding {
     pub source: String,
     pub model: String,
@@ -585,7 +585,7 @@ impl ConfigManager {
             .and_then(Value::as_bool)
             .unwrap_or(true);
         if !enabled {
-            return vec![self.default_model()];
+            return self.auto_routable_candidates(vec![self.default_model()]);
         }
         let mode = route_mode
             .or_else(|| {
@@ -625,10 +625,38 @@ impl ConfigManager {
                 }
             }
         }
-        if out.is_empty() {
+        if mode == "auto" {
+            out = self.auto_routable_candidates(out);
+        }
+        if out.is_empty() && mode != "auto" {
             out.push(self.default_model());
         }
         out
+    }
+
+    fn auto_routable_candidates(&self, models: Vec<ModelRef>) -> Vec<ModelRef> {
+        if self.model_catalog().is_none() {
+            return models;
+        }
+        models
+            .into_iter()
+            .filter(|model| self.model_is_auto_routable(model))
+            .collect()
+    }
+
+    fn model_is_auto_routable(&self, model: &ModelRef) -> bool {
+        let Some(provider) = self.model_catalog_provider(&model.provider) else {
+            return false;
+        };
+        let Some(models) = mapping_get(provider, "models") else {
+            return false;
+        };
+        let Some(entry) = mapping_get(models, &model.model) else {
+            return false;
+        };
+        !mapping_get(entry, "catalog_status")
+            .and_then(Value::as_str)
+            .is_some_and(|status| status.eq_ignore_ascii_case("deprecated"))
     }
 
     fn load_referenced(&mut self) -> Result<()> {
@@ -1150,6 +1178,52 @@ model_routing:
                 .map(ModelRef::as_string)
                 .collect::<Vec<_>>(),
             vec!["default/default-model"]
+        );
+    }
+
+    #[test]
+    fn auto_model_routing_filters_unknown_and_deprecated_catalog_entries() {
+        let config: Value = serde_yaml::from_str(
+            r#"
+default_model:
+  type: openai
+  name: old-model
+model_routing:
+  enabled: true
+  mode: auto
+  fallback_on_failure: true
+  routes:
+    default:
+      primary: openai/old-model
+      fallback:
+        - openai/missing-model
+        - openai/current-model
+"#,
+        )
+        .unwrap();
+        let catalog: Value = serde_yaml::from_str(
+            r#"
+openai:
+  models:
+    old-model:
+      catalog_status: deprecated
+    current-model:
+      catalog_status: active
+"#,
+        )
+        .unwrap();
+        let manager = ConfigManager {
+            root: PathBuf::from("."),
+            config_path: PathBuf::from("config/default_config.yaml"),
+            config,
+            referenced: HashMap::from([("models".to_string(), catalog)]),
+        };
+
+        let routes = manager.route_candidates(Some("default"), Some("auto"), None, false);
+
+        assert_eq!(
+            routes.iter().map(ModelRef::as_string).collect::<Vec<_>>(),
+            vec!["openai/current-model"]
         );
     }
 

@@ -12,11 +12,13 @@ use crate::dependency_policy::{DependencyPolicyManager, DependencyPolicyReport};
 use crate::docs::{self, DocsMaintainOptions};
 use crate::evidence::{EvidenceCheckOptions, check_workspace_evidence, scan_success_claims};
 use crate::feature_coverage;
+use crate::model_catalog::ModelCatalogManager;
 use crate::release::{ReleaseEvidenceManager, ReleaseEvidenceOptions};
 use crate::risk::{RiskManager, RiskScanOptions};
 use crate::security::SecurityAuditManager;
 use crate::subagent::SubagentLedgerManager;
 use crate::temp::TempManager;
+use crate::trace::trace_eval_gate_status;
 use crate::workspace::WorkspaceActivationManager;
 use crate::{display_path, now_iso};
 
@@ -106,6 +108,10 @@ impl GateManager {
         checks.push(self.evidence_check()?);
         progress("risk_ledger", "Proactive risk ledger");
         checks.push(self.risk_check()?);
+        progress("model_catalog", "Model catalog governance");
+        checks.push(self.model_catalog_check()?);
+        progress("trace_eval", "Trace replay and eval reports");
+        checks.push(self.trace_eval_check()?);
         progress("release_evidence", "Release evidence");
         checks.push(self.release_check(options.require_provenance, &dependency_policy)?);
 
@@ -541,6 +547,58 @@ impl GateManager {
             details: serde_json::to_value(report)?,
         })
     }
+
+    fn trace_eval_check(&self) -> Result<GateCheck> {
+        let report = trace_eval_gate_status(&self.workspace)?;
+        let passed = report.get("status").and_then(Value::as_str) == Some("passed");
+        Ok(GateCheck {
+            id: "trace_eval".into(),
+            title: "Trace replay and eval reports".into(),
+            status: gate_status(passed),
+            severity: "blocker".into(),
+            summary: format!(
+                "trace_eval status={} passed_eval_reports={}",
+                report
+                    .get("status")
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown"),
+                report
+                    .get("passed_eval_reports")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0)
+            ),
+            required_actions: report
+                .get("required_actions")
+                .and_then(Value::as_array)
+                .map(|items| strings_from_json_array(items))
+                .unwrap_or_default(),
+            details: report,
+        })
+    }
+
+    fn model_catalog_check(&self) -> Result<GateCheck> {
+        let report = ModelCatalogManager::new(&self.workspace)?.status()?;
+        let passed = report.status == "passed";
+        Ok(GateCheck {
+            id: "model_catalog".into(),
+            title: "Model catalog governance".into(),
+            status: gate_status(passed),
+            severity: "blocker".into(),
+            summary: format!(
+                "models status={} cache_present={} unknown_routes={} deprecated_routes={}",
+                report.status,
+                report.cache_present,
+                report.unknown_routes.len(),
+                report.deprecated_routes.len()
+            ),
+            required_actions: if passed {
+                Vec::new()
+            } else {
+                report.required_actions.clone()
+            },
+            details: serde_json::to_value(report)?,
+        })
+    }
 }
 
 fn gate_status(passed: bool) -> String {
@@ -608,6 +666,7 @@ mod tests {
 
         assert!(stages.contains(&"workspace_skill".to_string()));
         assert!(stages.contains(&"feature_coverage".to_string()));
+        assert!(stages.contains(&"model_catalog".to_string()));
         assert!(stages.contains(&"release_evidence".to_string()));
     }
 
@@ -756,6 +815,30 @@ mod tests {
 
         assert_eq!(risk.severity, "blocker");
         assert!(risk.summary.contains("unresolved_high_critical"));
+    }
+
+    #[test]
+    fn readiness_gate_has_first_class_model_catalog_check() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(temp.path().join("config")).unwrap();
+        std::fs::write(
+            temp.path().join("config").join("default_config.yaml"),
+            "default_model:\n  type: openai\n  name: missing\n",
+        )
+        .unwrap();
+
+        let report = GateManager::new(temp.path())
+            .unwrap()
+            .status(GateOptions::default())
+            .unwrap();
+        let models = report
+            .checks
+            .iter()
+            .find(|check| check.id == "model_catalog")
+            .expect("model catalog check");
+
+        assert_eq!(models.status, "blocked");
+        assert!(models.summary.contains("models status=blocked"));
     }
 
     #[test]

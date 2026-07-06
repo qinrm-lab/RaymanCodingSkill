@@ -1,6 +1,7 @@
 use std::{
     fs::{self, OpenOptions},
     path::{Path, PathBuf},
+    process::Command,
     thread,
     time::Duration,
 };
@@ -83,6 +84,33 @@ pub struct SubagentPlanRequest {
     pub max_lanes: usize,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SubagentDispatchRecord {
+    pub id: String,
+    pub task: String,
+    pub status: String,
+    pub dispatch_record_state: String,
+    pub host_request_state: String,
+    pub local_worktree_lane_state: String,
+    pub read_only: bool,
+    pub write_paths: Vec<String>,
+    pub host_payload: Value,
+    pub recommended_lanes: Vec<Value>,
+    #[serde(default)]
+    pub local_worktree: Option<Value>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SubagentDispatchRequest {
+    pub task: String,
+    pub paths: Vec<PathBuf>,
+    pub read_only: bool,
+    pub max_lanes: usize,
+    pub create_worktree: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct SubagentLedgerState {
     version: u32,
@@ -95,6 +123,7 @@ pub struct SubagentLedgerManager {
     workspace: PathBuf,
     state_path: PathBuf,
     lock_path: PathBuf,
+    dispatch_dir: PathBuf,
 }
 
 impl SubagentLedgerManager {
@@ -110,10 +139,19 @@ impl SubagentLedgerManager {
         let state_path =
             ensure_within(&state_path, &workspace, "subagent ledger 必须位于工作区内")?;
         let lock_path = state_path.with_extension("lock");
+        let dispatch_dir = ensure_within(
+            &workspace
+                .join(".RaymanCodingSkill")
+                .join("subagents")
+                .join("dispatches"),
+            &workspace,
+            "subagent dispatch 状态目录必须位于工作区内",
+        )?;
         Ok(Self {
             workspace,
             state_path,
             lock_path,
+            dispatch_dir,
         })
     }
 
@@ -140,8 +178,11 @@ impl SubagentLedgerManager {
             .dispatch_request_id
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty());
-        if dispatch_request_id.is_some() && goal_id.is_none() {
-            bail!("dispatch_request_id requires goal_id");
+        if let Some(dispatch_request_id) = dispatch_request_id.as_deref()
+            && goal_id.is_none()
+            && !self.dispatch_path(dispatch_request_id)?.exists()
+        {
+            bail!("dispatch_request_id without goal_id requires a subagent dispatch record");
         }
 
         let write_paths = request
@@ -280,15 +321,18 @@ impl SubagentLedgerManager {
         };
         let blockers = self.success_blockers_from_records(&state.records)?;
         let dispatch_requests = self.goal_dispatch_requests_for_records(&state.records)?;
+        let dispatches = self.dispatch_records()?;
         Ok(json!({
             "workspace_path": display_path(&self.workspace),
             "state_path": display_path(&self.state_path),
             "record_count": state.records.len(),
             "dispatch_request_count": dispatch_requests.len(),
+            "dispatch_file_count": dispatches.len(),
             "blocking_count": blockers.len(),
             "status": if blockers.is_empty() { "passed" } else { "blocked" },
             "blockers": blockers,
             "dispatch_requests": dispatch_requests,
+            "dispatches": dispatches,
             "records": state.records,
         }))
     }
@@ -592,6 +636,194 @@ impl SubagentLedgerManager {
         }))
     }
 
+    pub fn dispatch(&self, request: SubagentDispatchRequest) -> Result<SubagentDispatchRecord> {
+        let plan = self.plan(SubagentPlanRequest {
+            task: request.task.clone(),
+            paths: request.paths.clone(),
+            read_only: request.read_only,
+            max_lanes: request.max_lanes,
+        })?;
+        let recommended_lanes = plan
+            .get("recommended_lanes")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        validate_lane_write_scopes(&recommended_lanes)?;
+        let write_paths = recommended_lanes
+            .iter()
+            .flat_map(|lane| {
+                lane.get("write_paths")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default()
+            })
+            .filter_map(|value| value.as_str().map(str::to_string))
+            .collect::<Vec<_>>();
+        let created_at = now_iso();
+        let id = subagent_dispatch_id(&request.task, &created_at);
+        let local_worktree =
+            self.local_worktree_record(&id, request.create_worktree, &write_paths)?;
+        let local_worktree_lane_state = local_worktree
+            .get("state")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown")
+            .to_string();
+        let auto_start_ready = plan
+            .get("auto_start_ready")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let record = SubagentDispatchRecord {
+            id: id.clone(),
+            task: request.task.trim().to_string(),
+            status: if auto_start_ready { "open" } else { "skipped" }.into(),
+            dispatch_record_state: "recorded".into(),
+            host_request_state: if auto_start_ready {
+                "requested"
+            } else {
+                "not_recommended"
+            }
+            .into(),
+            local_worktree_lane_state,
+            read_only: request.read_only,
+            write_paths,
+            host_payload: json!({
+                "host_tool": "multi_agent_v1.spawn_agent",
+                "request_id": id,
+                "spawn_agent_requests": recommended_lanes
+                    .iter()
+                    .filter_map(|lane| lane.get("spawn_agent_request").cloned())
+                    .collect::<Vec<_>>(),
+            }),
+            recommended_lanes,
+            local_worktree: Some(local_worktree),
+            created_at: created_at.clone(),
+            updated_at: created_at,
+        };
+        self.write_dispatch(&record)?;
+        Ok(record)
+    }
+
+    fn local_worktree_record(
+        &self,
+        dispatch_id: &str,
+        create_worktree: bool,
+        write_paths: &[String],
+    ) -> Result<Value> {
+        if write_paths.is_empty() {
+            return Ok(json!({
+                "state": "none",
+                "status": "not_applicable",
+                "reason": "dispatch has no writable local lane"
+            }));
+        }
+        let worktree_path = ensure_within(
+            &self
+                .workspace
+                .join(".RaymanCodingSkill")
+                .join("worktrees")
+                .join(dispatch_id),
+            &self.workspace,
+            "subagent worktree path must stay inside workspace",
+        )?;
+        let command = vec![
+            "git".to_string(),
+            "-C".to_string(),
+            display_path(&self.workspace),
+            "worktree".to_string(),
+            "add".to_string(),
+            "--detach".to_string(),
+            display_path(&worktree_path),
+            "HEAD".to_string(),
+        ];
+        if !create_worktree {
+            return Ok(json!({
+                "state": "declared_not_created",
+                "status": "not_requested",
+                "path": display_path(&worktree_path),
+                "command": command,
+                "reason": "pass --create-worktree to create an isolated local checkout for writable lanes"
+            }));
+        }
+        if !self.workspace.join(".git").exists() {
+            return Ok(json!({
+                "state": "unavailable_not_git",
+                "status": "blocked",
+                "path": display_path(&worktree_path),
+                "command": command,
+                "reason": "workspace is not a git worktree"
+            }));
+        }
+        if let Some(parent) = worktree_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(&self.workspace)
+            .arg("worktree")
+            .arg("add")
+            .arg("--detach")
+            .arg(&worktree_path)
+            .arg("HEAD")
+            .output()
+            .context("failed to execute git worktree add")?;
+        if output.status.success() {
+            Ok(json!({
+                "state": "created",
+                "status": "passed",
+                "path": display_path(&worktree_path),
+                "command": command,
+                "stdout": String::from_utf8_lossy(&output.stdout).trim(),
+                "stderr": String::from_utf8_lossy(&output.stderr).trim()
+            }))
+        } else {
+            Ok(json!({
+                "state": "failed",
+                "status": "blocked",
+                "path": display_path(&worktree_path),
+                "command": command,
+                "exit_code": output.status.code(),
+                "stdout": String::from_utf8_lossy(&output.stdout).trim(),
+                "stderr": String::from_utf8_lossy(&output.stderr).trim()
+            }))
+        }
+    }
+
+    pub fn reconcile(&self) -> Result<Value> {
+        let state = self.state()?;
+        let dispatches = self.dispatch_records()?;
+        let mut blockers = Vec::new();
+        for record in &dispatches {
+            if record.status == "skipped" {
+                continue;
+            }
+            if dispatch_file_closeout_record(&state.records, &record.id).is_none() {
+                blockers.push(format!(
+                    "subagent_dispatch_unclosed dispatch_request_id={}: record result/review closeout or mark host unavailable",
+                    record.id
+                ));
+            }
+            validate_lane_write_scopes(&record.recommended_lanes)
+                .map_err(|error| anyhow::anyhow!("{}: {error}", record.id))?;
+            if matches!(
+                record.local_worktree_lane_state.as_str(),
+                "failed" | "unavailable_not_git"
+            ) {
+                blockers.push(format!(
+                    "subagent_dispatch_worktree_blocked dispatch_request_id={} state={}",
+                    record.id, record.local_worktree_lane_state
+                ));
+            }
+        }
+        Ok(json!({
+            "workspace_path": display_path(&self.workspace),
+            "dispatch_dir": display_path(&self.dispatch_dir),
+            "status": if blockers.is_empty() { "passed" } else { "blocked" },
+            "dispatch_count": dispatches.len(),
+            "blockers": blockers,
+            "dispatches": dispatches,
+        }))
+    }
+
     pub fn success_blockers(&self) -> Result<Vec<String>> {
         match self.state() {
             Ok(state) => self.success_blockers_from_records(&state.records),
@@ -710,6 +942,17 @@ impl SubagentLedgerManager {
                     .unwrap_or("<unknown>");
                 blockers.push(format!(
                     "subagent_dispatch_unclosed goal_id={goal_id} dispatch_request_id={request_id}: call host spawn_agent for recommended lanes, or record failed/unavailable closeout with rayman subagent record/result/review"
+                ));
+            }
+        }
+        for dispatch in self.dispatch_records()? {
+            if dispatch.status == "skipped" {
+                continue;
+            }
+            if dispatch_file_closeout_record(records, &dispatch.id).is_none() {
+                blockers.push(format!(
+                    "subagent_dispatch_unclosed dispatch_request_id={}: call host spawn_agent for recommended lanes, or record failed/unavailable closeout with rayman subagent record/result/review",
+                    dispatch.id
                 ));
             }
         }
@@ -867,6 +1110,47 @@ impl SubagentLedgerManager {
             display_path(&self.state_path),
             error
         )
+    }
+
+    fn dispatch_path(&self, id: &str) -> Result<PathBuf> {
+        validate_required("dispatch_request_id", id)?;
+        let name = format!("{}.json", safe_state_file_stem(id));
+        ensure_within(
+            &self.dispatch_dir.join(name),
+            &self.workspace,
+            "subagent dispatch 状态文件必须位于工作区内",
+        )
+    }
+
+    fn write_dispatch(&self, record: &SubagentDispatchRecord) -> Result<()> {
+        fs::create_dir_all(&self.dispatch_dir)?;
+        let path = self.dispatch_path(&record.id)?;
+        let text = serde_json::to_string_pretty(record)?;
+        let _: SubagentDispatchRecord = serde_json::from_str(&text)
+            .context("subagent dispatch round-trip validation failed")?;
+        write_text(&path, &text)
+    }
+
+    fn dispatch_records(&self) -> Result<Vec<SubagentDispatchRecord>> {
+        if !self.dispatch_dir.exists() {
+            return Ok(Vec::new());
+        }
+        let mut records: Vec<SubagentDispatchRecord> = Vec::new();
+        for entry in fs::read_dir(&self.dispatch_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+                continue;
+            }
+            let text = read_text(&path)?;
+            records.push(
+                serde_json::from_str(&text).with_context(|| {
+                    format!("无法解析 subagent dispatch 状态: {}", path.display())
+                })?,
+            );
+        }
+        records.sort_by(|left, right| left.id.cmp(&right.id));
+        Ok(records)
     }
 }
 
@@ -1084,6 +1368,18 @@ fn dispatch_closeout_record<'a>(
     })
 }
 
+fn dispatch_file_closeout_record<'a>(
+    records: &'a [SubagentRecord],
+    dispatch_request_id: &str,
+) -> Option<&'a SubagentRecord> {
+    records.iter().find(|record| {
+        record.dispatch_request_id.as_deref() == Some(dispatch_request_id)
+            && record.result_summary.is_some()
+            && record.primary_review.is_some()
+            && matches!(record.status.as_str(), "reviewed" | "conflict")
+    })
+}
+
 fn subagent_record_id(agent_id: &str, created_at: &str) -> String {
     let sanitized = agent_id
         .chars()
@@ -1108,6 +1404,85 @@ fn subagent_record_id(agent_id: &str, created_at: &str) -> String {
         },
         suffix
     )
+}
+
+fn subagent_dispatch_id(task: &str, created_at: &str) -> String {
+    let sanitized = task
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .take(12)
+        .collect::<String>();
+    let suffix = created_at
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .rev()
+        .take(10)
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect::<String>();
+    format!(
+        "dispatch_{}_{}",
+        if sanitized.is_empty() {
+            "request"
+        } else {
+            &sanitized
+        },
+        suffix
+    )
+}
+
+fn safe_state_file_stem(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+fn validate_lane_write_scopes(lanes: &[Value]) -> Result<()> {
+    let mut scopes = Vec::new();
+    for lane in lanes {
+        let read_only = lane
+            .get("read_only")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+        let write_paths = lane
+            .get("write_paths")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|value| value.as_str().map(str::to_string))
+            .collect::<Vec<_>>();
+        if read_only && !write_paths.is_empty() {
+            bail!("read-only lane declares write_paths");
+        }
+        for write_path in write_paths {
+            scopes.push((
+                lane.get("lane_id")
+                    .and_then(Value::as_str)
+                    .unwrap_or("lane")
+                    .to_string(),
+                write_path,
+            ));
+        }
+    }
+    for (left_index, (left_lane, left_path)) in scopes.iter().enumerate() {
+        for (right_lane, right_path) in scopes.iter().skip(left_index + 1) {
+            if path_overlaps(left_path, right_path) {
+                bail!(
+                    "subagent dispatch lanes overlap: {left_lane}:{left_path} <-> {right_lane}:{right_path}"
+                );
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1428,6 +1803,92 @@ mod tests {
         assert_eq!(
             status["dispatch_requests"][0]["closeout_status"].as_str(),
             Some("closed")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn subagent_dispatch_file_blocks_until_unavailable_closeout() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        fs::create_dir_all(temp.path().join("src"))?;
+        fs::write(temp.path().join("src").join("lib.rs"), "pub fn x() {}\n")?;
+        let manager = SubagentLedgerManager::new(temp.path())?;
+
+        let dispatch = manager.dispatch(SubagentDispatchRequest {
+            task: "implement broad subagent dispatch workflow".into(),
+            paths: vec![PathBuf::from("src")],
+            read_only: false,
+            max_lanes: 3,
+            create_worktree: false,
+        })?;
+
+        assert_eq!(dispatch.status, "open");
+        assert!(
+            manager
+                .success_blockers()?
+                .iter()
+                .any(|blocker| blocker.contains("subagent_dispatch_unclosed"))
+        );
+        assert_eq!(manager.reconcile()?["status"].as_str(), Some("blocked"));
+
+        let record = manager.record(SubagentRecordRequest {
+            host_agent_id: "agent-unavailable".into(),
+            goal_id: None,
+            dispatch_request_id: Some(dispatch.id.clone()),
+            nickname: Some("unavailable".into()),
+            task: "host subagent unavailable".into(),
+            boundary: "record unavailable host-subagent lane".into(),
+            read_only: true,
+            write_paths: Vec::new(),
+        })?;
+        manager.record_result(
+            &record.id,
+            SubagentResultRequest {
+                status: "failed".into(),
+                summary: "host subagent unavailable; primary path continued".into(),
+                evidence_refs: vec!["host_tool=unavailable".into()],
+                changed_paths: Vec::new(),
+            },
+        )?;
+        manager.record_review(
+            &record.id,
+            SubagentReviewRequest {
+                verdict: "not_used".into(),
+                summary: "primary reviewed unavailable closeout".into(),
+                overlap_resolution: None,
+            },
+        )?;
+
+        assert!(manager.success_blockers()?.is_empty());
+        assert_eq!(manager.reconcile()?["status"].as_str(), Some("passed"));
+        Ok(())
+    }
+
+    #[test]
+    fn subagent_dispatch_worktree_request_blocks_when_not_git() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        fs::create_dir_all(temp.path().join("src"))?;
+        fs::write(temp.path().join("src").join("lib.rs"), "pub fn x() {}\n")?;
+        let manager = SubagentLedgerManager::new(temp.path())?;
+
+        let dispatch = manager.dispatch(SubagentDispatchRequest {
+            task: "implement broad subagent dispatch workflow".into(),
+            paths: vec![PathBuf::from("src")],
+            read_only: false,
+            max_lanes: 3,
+            create_worktree: true,
+        })?;
+
+        assert_eq!(dispatch.local_worktree_lane_state, "unavailable_not_git");
+        assert!(
+            manager.reconcile()?["blockers"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|blocker| blocker
+                    .as_str()
+                    .unwrap()
+                    .contains("subagent_dispatch_worktree_blocked"))
         );
         Ok(())
     }

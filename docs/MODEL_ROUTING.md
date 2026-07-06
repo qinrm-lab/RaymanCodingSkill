@@ -18,6 +18,8 @@ Auto mode uses `primary` first and then tries each `fallback` model when the req
 rayman route-models --task code_generation --route-mode auto
 ```
 
+When `config/models.yaml` declares a catalog entry with `catalog_status: deprecated`, or when a route references a model missing from the catalog, automatic routing filters that model out of best/default candidates. `rayman models status --check` reports unknown or deprecated automatic/default routes as blockers. `rayman models refresh --dry-run` and `rayman models refresh --apply` write a local metadata snapshot to `.RaymanCodingSkill/models/catalog_cache.json` with hashes for `config/models.yaml` and `config/default_config.yaml`; status blocks if the cache is missing, malformed, or stale after route-config changes. `rayman gate status --check` includes this governance check. The cache is governance evidence only; cost-sensitive or capability-sensitive routing still needs current provider documentation before changing defaults.
+
 ## Provider Configuration
 
 Each provider declares authentication and an optional base URL under `models`. Authenticated providers must use `api_key_env` to name a local environment variable; plaintext YAML `api_key` values are blocked by `rayman security audit` and must not be stored in repository configuration.

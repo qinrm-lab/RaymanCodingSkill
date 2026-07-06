@@ -76,6 +76,9 @@ rayman context list
 rayman context refresh
 rayman context os --write
 rayman context os --check
+rayman context semantic build
+rayman context semantic query "trace eval"
+rayman context semantic status --check
 rayman context task "review the context kernel"
 rayman context explain
 rayman project detect
@@ -89,7 +92,11 @@ rayman regression plan --path crates/rayman-core/src/context.rs
 rayman regression run --profile auto
 rayman regression run --profile parallel-full
 rayman regression history --limit 5
+rayman trace record --kind tool -m "rayman context status" --evidence ".RaymanCodingSkill/context/index.json"
+rayman trace status
+rayman trace replay
 rayman eval run --profile full
+rayman eval dataset run --dataset .RaymanCodingSkill/evals/dataset.json --grader contains
 cargo deny check
 rayman security audit
 rayman release evidence --label local
@@ -106,7 +113,23 @@ rayman evidence check --scope goal --goal-id <id>
 rayman evidence check --scope research --include-advisory
 rayman subagent plan --task "审计 subagent 性能提速策略" --path crates/rayman-core/src/subagent.rs --read-only --max-lanes 4
 rayman subagent auto-start --task "审计 subagent 性能提速策略" --path crates/rayman-core/src/subagent.rs --read-only --max-lanes 4
+rayman subagent dispatch --task "implement independent docs lane" --path docs --max-lanes 2
+rayman subagent dispatch --task "implement isolated core lane" --path crates/rayman-core --create-worktree
+rayman subagent reconcile
 rayman subagent record --agent-id <host-agent-id> --goal-id <goal-id> --dispatch-request-id <request-id> --task "host subagent unavailable" --boundary "unavailable closeout" --read-only
+rayman models refresh --dry-run
+rayman models refresh --apply
+rayman models status --check
+rayman mcp schema
+rayman mcp serve --stdio
+rayman mcp serve --http
+rayman mcp serve --http --host 127.0.0.1 --port 39231
+rayman plugin export
+rayman control status --format text
+rayman control status --format json
+rayman workflow learn --name "repeatable repair" --evidence "rayman trace replay" --evidence "rayman eval dataset run"
+rayman workflow promote --id <workflow-id>
+rayman workflow status
 rayman quality gate --goal-id <id>
 rayman self status
 rayman benchmark run --smoke
@@ -122,7 +145,25 @@ For non-trivial goal plan stages, `rayman goal run` and `rayman goal resume` pri
 
 Use `rayman subagent plan --read-only` or `rayman subagent auto-start --read-only` for audit/review-only work. Read-only intent suppresses writable worker lanes, emits only read-only explorer lanes, and includes `--read-only` in the ledger record command templates.
 
+`rayman subagent dispatch` persists a dispatch record under `.RaymanCodingSkill/subagents/dispatches/` with host-ready payload, task scope, non-overlap metadata, local worktree-lane state, and closeout requirements. `--create-worktree` creates an isolated detached checkout under `.RaymanCodingSkill/worktrees/<dispatch-id>` for writable lanes; without that flag the dispatch records `declared_not_created` instead of pretending a worktree exists. `rayman subagent reconcile` blocks while a dispatch is still open, unreviewed, conflicting, out of scope, missing an unavailable/failed closeout, or backed by a failed/unavailable requested worktree. Dispatch records are coordination state only; the primary agent still owns review, integration, and validation.
+
 After a top-level `rayman goal run`, `rayman goal resume`, `rayman goal close`, or `rayman session close` command ends, the CLI starts the companion `提醒` program in the background exactly once for that command, whether the command succeeds or returns an error. `subagent` / `host-subagent` commands do not arm this reminder, and child-agent contexts can suppress it with `RAYMAN_REMINDER_SCOPE=subagent`, `RAYMAN_AGENT_ROLE=subagent`, or `RAYMAN_SUBAGENT=1`. A later continued main-thread command can arm a fresh reminder. `提醒` has no visible window; it exits quietly if the user moves the mouse or presses a key, and plays a short beep pattern when the screen is black or no mouse/keyboard activity is detected for 10 seconds.
+
+## Trace, Eval, Integrations, And Control
+
+`rayman trace record`, `rayman trace status`, and `rayman trace replay` write and check replayable local trace events in `.RaymanCodingSkill/traces/events.jsonl`. Replay is deterministic over the JSONL transcript and feeds the `trace_eval` gate. The gate is fail-closed: trace parse/replay must pass and at least one eval dataset report must pass. A trace is still evidence about process execution; it does not prove a feature complete without current files and validation output.
+
+`rayman eval dataset run --dataset <path> --grader contains` runs a JSON dataset with `cases[].input`, `expected_patterns`, and optional `forbidden_patterns`, then writes a report under `.RaymanCodingSkill/evals/reports/`. Failed cases block the command and the report can be used by workflow promotion checks.
+
+`rayman context semantic build`, `rayman context semantic query`, and `rayman context semantic status --check` maintain the optional hash-bound semantic index at `.RaymanCodingSkill/context/semantic/index.jsonl`. Semantic query hits are navigation only. If a file hash changes, `status --check` blocks and callers must rebuild the index and reread current files before using the hit.
+
+`rayman mcp schema` prints MCP-compatible tool/resource descriptors. `rayman mcp serve --stdio` runs a newline-delimited JSON-RPC MCP loop on stdio. `rayman mcp serve --http` runs a foreground loopback HTTP JSON-RPC endpoint at `/mcp` with default `127.0.0.1:39231`. The server handles `initialize`, `tools/list`, `tools/call`, `resources/list`, and `resources/read`; tool/resource responses are read-only control-plane snapshots. `rayman plugin export` writes `.RaymanCodingSkill/integrations/plugin-manifest.json` and `.RaymanCodingSkill/integrations/mcp-tools.json`. These integration outputs expose control-plane metadata; they do not replace Rayman gate or evidence authority.
+
+`rayman models refresh --dry-run` and `rayman models refresh --apply` create a local model-catalog snapshot at `.RaymanCodingSkill/models/catalog_cache.json` with source config hashes. `rayman models status --check` blocks when automatic/default routes point to unknown or deprecated catalog entries, when dynamic catalog metadata has not been cached, when the cache is malformed, or when route config hashes changed after the cache was written. `rayman gate status --check` includes this model catalog check.
+
+`rayman control status --format text` and `rayman control status --format json` aggregate gate, risk, trace, subagent, model, and context status into one control-plane snapshot. JSON output is intended for tools; text output is intended for quick human triage.
+
+`rayman workflow learn`, `rayman workflow promote`, and `rayman workflow status` store repeated workflow candidates in `.RaymanCodingSkill/workflows/`. Promotion is fail-closed: replay, eval dataset report, and readiness-gate evidence must all be present before a candidate becomes a reusable pattern.
 
 ## Context Kernel
 See [Context Kernel](../references/cli-context-kernel.md) for the full rule text.

@@ -2,7 +2,7 @@
 
 This file records current passed validation commands used by strict feature coverage entries.
 
-updated_at: 2026-07-05T00:14:34Z
+updated_at: 2026-07-06T13:55:00Z
 status: passed
 
 ## close_success_requires_actual_evidence
@@ -78,3 +78,26 @@ status: passed
 command: cargo test -p rayman-core risk::
 command: cargo test -p rayman-cli cli_parses_risk_commands
 command: cargo test -p rayman-core gate::
+
+## modern_agent_control_plane
+
+record: modern_agent_control_plane
+status: passed
+command: cargo test -p rayman-core
+command: cargo test -p rayman-api -p rayman-cli
+command: cargo test -p rayman-core integrations:: trace:: eval:: semantic:: execution:: subagent:: model_catalog:: control:: workflow::
+command: cargo test -p rayman-core integrations::
+command: cargo test -p rayman-core trace::
+command: cargo test -p rayman-core eval::
+command: cargo test -p rayman-core semantic::
+command: cargo test -p rayman-core execution::
+command: cargo test -p rayman-core subagent::
+command: cargo test -p rayman-core model_catalog::
+command: cargo test -p rayman-core control::
+command: cargo test -p rayman-core workflow::
+command: cargo test -p rayman-core auto_model_routing_filters_unknown_and_deprecated_catalog_entries
+command: cargo test -p rayman-api mcp_
+command: cargo test -p rayman-api mcp_and_plugin_endpoints_return_integration_metadata
+command: cargo test -p rayman-cli cli_parses_modern_control_plane_commands
+command: cargo test -p rayman-cli cli_parses_subagent_commands
+command: rayman coverage status --check

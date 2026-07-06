@@ -45,6 +45,8 @@ pub(crate) enum Command {
     #[command(subcommand)]
     Regression(RegressionCommand),
     #[command(subcommand)]
+    Trace(TraceCommand),
+    #[command(subcommand)]
     Eval(EvalCommand),
     #[command(subcommand)]
     Security(SecurityCommand),
@@ -61,6 +63,10 @@ pub(crate) enum Command {
     Benchmark(BenchmarkCommand),
     #[command(subcommand)]
     Temp(TempCommand),
+    #[command(subcommand)]
+    Mcp(McpCommand),
+    #[command(subcommand)]
+    Plugin(PluginCommand),
     #[command(subcommand)]
     Api(ApiCommand),
     #[command(subcommand)]
@@ -80,6 +86,12 @@ pub(crate) enum Command {
     #[command(name = "subagent", alias = "host-subagent")]
     #[command(subcommand)]
     Subagent(SubagentCommand),
+    #[command(subcommand)]
+    Models(ModelsCommand),
+    #[command(subcommand)]
+    Control(ControlCommand),
+    #[command(subcommand)]
+    Workflow(WorkflowCommand),
     #[command(subcommand)]
     CustomerDeploy(CustomerDeployCommand),
     #[command(subcommand)]
@@ -316,7 +328,21 @@ pub(crate) enum ContextCommand {
     Task {
         query: String,
     },
+    #[command(subcommand)]
+    Semantic(SemanticCommand),
     Explain,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum SemanticCommand {
+    Build,
+    Query {
+        query: String,
+    },
+    Status {
+        #[arg(long = "check")]
+        check: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -384,6 +410,20 @@ pub(crate) enum RegressionCommand {
         #[arg(long = "limit", default_value_t = 10)]
         limit: usize,
     },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum TraceCommand {
+    Record {
+        #[arg(long = "kind")]
+        kind: String,
+        #[arg(short = 'm', long = "message")]
+        message: String,
+        #[arg(long = "evidence")]
+        evidence: Vec<String>,
+    },
+    Status,
+    Replay,
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
@@ -673,6 +713,29 @@ pub(crate) enum ApiCommand {
 }
 
 #[derive(Subcommand)]
+pub(crate) enum McpCommand {
+    Serve(McpServeArgs),
+    Schema,
+}
+
+#[derive(Args)]
+pub(crate) struct McpServeArgs {
+    #[arg(long = "stdio")]
+    pub(crate) stdio: bool,
+    #[arg(long = "http")]
+    pub(crate) http: bool,
+    #[arg(long = "host", default_value = "127.0.0.1")]
+    pub(crate) host: String,
+    #[arg(long = "port", default_value_t = 39231)]
+    pub(crate) port: u16,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum PluginCommand {
+    Export,
+}
+
+#[derive(Subcommand)]
 pub(crate) enum DocsCommand {
     Maintain(DocsMaintainArgs),
     #[command(hide = true)]
@@ -789,6 +852,8 @@ pub(crate) enum SubagentCommand {
     Plan(SubagentPlanArgs),
     #[command(name = "auto-start")]
     AutoStart(SubagentPlanArgs),
+    Dispatch(SubagentPlanArgs),
+    Reconcile,
     Record(SubagentRecordArgs),
     Result(SubagentResultArgs),
     Review(SubagentReviewArgs),
@@ -805,6 +870,8 @@ pub(crate) struct SubagentPlanArgs {
     pub(crate) read_only: bool,
     #[arg(long = "max-lanes", default_value_t = 4)]
     pub(crate) max_lanes: usize,
+    #[arg(long = "create-worktree")]
+    pub(crate) create_worktree: bool,
 }
 
 #[derive(Args)]
@@ -879,6 +946,49 @@ pub(crate) struct ResearchRunArgs {
     pub(crate) route_mode: Option<String>,
     #[arg(long = "no-fallback")]
     pub(crate) no_fallback: bool,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum ModelsCommand {
+    Refresh {
+        #[arg(long = "dry-run", conflicts_with = "apply")]
+        dry_run: bool,
+        #[arg(long = "apply")]
+        apply: bool,
+    },
+    Status {
+        #[arg(long = "check")]
+        check: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum ControlCommand {
+    Status {
+        #[arg(long = "format", value_enum, default_value = "text")]
+        format: ControlOutputFormat,
+    },
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ControlOutputFormat {
+    Json,
+    Text,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum WorkflowCommand {
+    Learn {
+        #[arg(long = "name")]
+        name: String,
+        #[arg(long = "evidence")]
+        evidence: Vec<String>,
+    },
+    Promote {
+        #[arg(long = "id")]
+        id: String,
+    },
+    Status,
 }
 
 #[derive(Args)]
@@ -1852,6 +1962,189 @@ mod tests {
         assert!(matches!(
             cli.command,
             Command::Subagent(SubagentCommand::Status)
+        ));
+
+        let cli = Cli::try_parse_from([
+            "rayman",
+            "subagent",
+            "dispatch",
+            "--task",
+            "实现现代 dispatch",
+            "--path",
+            "crates/rayman-core/src/subagent.rs",
+            "--max-lanes",
+            "2",
+        ])
+        .unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Subagent(SubagentCommand::Dispatch(_))
+        ));
+
+        let cli = Cli::try_parse_from(["rayman", "subagent", "reconcile"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Subagent(SubagentCommand::Reconcile)
+        ));
+
+        let cli = Cli::try_parse_from([
+            "rayman",
+            "host-subagent",
+            "dispatch",
+            "--task",
+            "实现现代 dispatch",
+            "--path",
+            "crates/rayman-core/src/subagent.rs",
+            "--create-worktree",
+        ])
+        .unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Subagent(SubagentCommand::Dispatch(_))
+        ));
+
+        let cli = Cli::try_parse_from(["rayman", "host-subagent", "reconcile"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Subagent(SubagentCommand::Reconcile)
+        ));
+    }
+
+    #[test]
+    fn cli_parses_modern_control_plane_commands() {
+        let cli = Cli::try_parse_from(["rayman", "mcp", "schema"]).unwrap();
+        assert!(matches!(cli.command, Command::Mcp(McpCommand::Schema)));
+
+        let cli = Cli::try_parse_from(["rayman", "mcp", "serve", "--stdio"]).unwrap();
+        assert!(matches!(cli.command, Command::Mcp(McpCommand::Serve(_))));
+
+        let cli = Cli::try_parse_from(["rayman", "plugin", "export"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Plugin(PluginCommand::Export)
+        ));
+
+        let cli = Cli::try_parse_from(["rayman", "trace", "status"]).unwrap();
+        assert!(matches!(cli.command, Command::Trace(TraceCommand::Status)));
+
+        let cli = Cli::try_parse_from([
+            "rayman",
+            "trace",
+            "record",
+            "--kind",
+            "tool",
+            "-m",
+            "rayman context status",
+            "--evidence",
+            "context output",
+        ])
+        .unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Trace(TraceCommand::Record { .. })
+        ));
+
+        let cli = Cli::try_parse_from(["rayman", "trace", "replay"]).unwrap();
+        assert!(matches!(cli.command, Command::Trace(TraceCommand::Replay)));
+
+        let cli = Cli::try_parse_from([
+            "rayman",
+            "eval",
+            "dataset",
+            "run",
+            "--dataset",
+            "evals/sample.json",
+            "--grader",
+            "contains",
+        ])
+        .unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Eval(EvalCommand::Dataset(_))
+        ));
+
+        let cli = Cli::try_parse_from(["rayman", "context", "semantic", "build"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Context(ContextCommand::Semantic(SemanticCommand::Build))
+        ));
+
+        let cli =
+            Cli::try_parse_from(["rayman", "context", "semantic", "query", "trace eval"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Context(ContextCommand::Semantic(SemanticCommand::Query { .. }))
+        ));
+
+        let cli =
+            Cli::try_parse_from(["rayman", "context", "semantic", "status", "--check"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Context(ContextCommand::Semantic(SemanticCommand::Status {
+                check: true
+            }))
+        ));
+
+        let cli = Cli::try_parse_from(["rayman", "models", "refresh", "--dry-run"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Models(ModelsCommand::Refresh { dry_run: true, .. })
+        ));
+
+        let cli = Cli::try_parse_from(["rayman", "models", "refresh", "--apply"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Models(ModelsCommand::Refresh { apply: true, .. })
+        ));
+
+        let cli = Cli::try_parse_from(["rayman", "models", "status", "--check"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Models(ModelsCommand::Status { check: true })
+        ));
+
+        let cli = Cli::try_parse_from(["rayman", "control", "status", "--format", "json"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Control(ControlCommand::Status {
+                format: ControlOutputFormat::Json
+            })
+        ));
+
+        let cli = Cli::try_parse_from(["rayman", "control", "status", "--format", "text"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Control(ControlCommand::Status {
+                format: ControlOutputFormat::Text
+            })
+        ));
+
+        let cli = Cli::try_parse_from([
+            "rayman",
+            "workflow",
+            "learn",
+            "--name",
+            "repeatable repair",
+            "--evidence",
+            "cargo test",
+        ])
+        .unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Workflow(WorkflowCommand::Learn { .. })
+        ));
+
+        let cli =
+            Cli::try_parse_from(["rayman", "workflow", "promote", "--id", "workflow_1"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Workflow(WorkflowCommand::Promote { .. })
+        ));
+
+        let cli = Cli::try_parse_from(["rayman", "workflow", "status"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Workflow(WorkflowCommand::Status)
         ));
     }
 

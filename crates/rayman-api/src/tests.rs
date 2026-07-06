@@ -163,6 +163,113 @@ async fn models_status_reads_model_update_config() {
 }
 
 #[tokio::test]
+async fn mcp_and_plugin_endpoints_return_integration_metadata() {
+    let _guard = env_lock().await;
+    unsafe {
+        std::env::set_var("RAYMAN_API_KEY", "secret");
+    }
+    let temp = tempfile::tempdir().unwrap();
+
+    let response = app(temp.path())
+        .oneshot(
+            Request::builder()
+                .uri("/api/mcp/tools")
+                .header("X-API-Key", "secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let value: Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(
+        value["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "rayman.control.status")
+    );
+
+    let response = app(temp.path())
+        .oneshot(
+            Request::builder()
+                .uri("/api/mcp/resources")
+                .header("X-API-Key", "secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = app(temp.path())
+        .oneshot(
+            Request::builder()
+                .uri("/api/plugin/manifest")
+                .header("X-API-Key", "secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    unsafe {
+        std::env::remove_var("RAYMAN_API_KEY");
+    }
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let value: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(value["name"], "raymancodingskill");
+    assert!(
+        value["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool == "rayman.gate.status")
+    );
+}
+
+#[tokio::test]
+async fn mcp_rpc_endpoint_handles_tools_list() {
+    let temp = tempfile::tempdir().unwrap();
+    let response = mcp_app(temp.path())
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/mcp")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/list"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let value: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(value["jsonrpc"], "2.0");
+    assert!(
+        value["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "rayman.control.status")
+    );
+}
+
+#[tokio::test]
 async fn review_is_blocked_by_pending_work_before_model_config_load() {
     let _guard = env_lock().await;
     unsafe {
