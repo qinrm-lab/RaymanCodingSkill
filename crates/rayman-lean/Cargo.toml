@@ -1,0 +1,23 @@
+[package]
+name = "rayman-lean"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+authors = ["Rayman"]
+description = "Lean v2 of RaymanCodingSkill: load-bearing coding-agent context/goal/assets/temp tooling without the governance overgrowth."
+
+[[bin]]
+name = "rayman-lean"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true }
+ignore = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
