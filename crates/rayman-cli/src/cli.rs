@@ -709,6 +709,9 @@ pub(crate) enum ApiCommand {
         host: String,
         #[arg(long = "port", default_value_t = 8000)]
         port: u16,
+        /// 允许绑定非 loopback 主机（明文 HTTP，无 TLS）。仅在前置反向代理提供安全边界时使用。
+        #[arg(long = "allow-remote")]
+        allow_remote: bool,
     },
 }
 
@@ -1635,9 +1638,14 @@ mod tests {
     fn cli_parses_api_serve_defaults() {
         let cli = Cli::try_parse_from(["rayman", "api", "serve"]).unwrap();
         match cli.command {
-            Command::Api(ApiCommand::Serve { host, port }) => {
+            Command::Api(ApiCommand::Serve {
+                host,
+                port,
+                allow_remote,
+            }) => {
                 assert_eq!(host, "127.0.0.1");
                 assert_eq!(port, 8000);
+                assert!(!allow_remote);
             }
             _ => panic!("unexpected command"),
         }

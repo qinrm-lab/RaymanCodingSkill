@@ -141,6 +141,8 @@ fn parse_history_records(text: &str) -> Result<Vec<RegressionRunRecord>> {
         }
     }
 
+    // 回归历史是 release/gate 的 fail-closed 证据来源：单行损坏必须报错，由上层（release evidence）
+    // 降级为 partial/blocked，而不是在这里静默跳过让损坏历史看起来“正常”。
     text.lines()
         .enumerate()
         .filter(|(_, line)| !line.trim().is_empty())

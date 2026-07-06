@@ -177,7 +177,22 @@ async fn run() -> Result<()> {
         Command::Temp(command) => cmd_temp(command)?,
         Command::Mcp(command) => cmd_mcp(command).await?,
         Command::Plugin(command) => cmd_plugin(command)?,
-        Command::Api(ApiCommand::Serve { host, port }) => {
+        Command::Api(ApiCommand::Serve {
+            host,
+            port,
+            allow_remote,
+        }) => {
+            if !allow_remote && !is_loopback_host(&host) {
+                bail!(
+                    "api serve 默认只允许绑定 loopback 主机（明文 HTTP、无 TLS）。\
+                     如确需对外暴露，请前置带安全边界的反向代理并显式加 --allow-remote。"
+                );
+            }
+            if allow_remote && !is_loopback_host(&host) {
+                eprintln!(
+                    "警告: api serve 正在绑定非 loopback 主机 {host} 且无 TLS；请确保前置代理提供加密与鉴权边界。"
+                );
+            }
             rayman_api::serve(root()?, &host, port).await?;
         }
         Command::Docs(command) => cmd_docs(command)?,

@@ -201,11 +201,8 @@ pub fn read_text(path: &Path) -> Result<String> {
 }
 
 pub fn write_text(path: &Path, text: &str) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("无法创建目录: {}", parent.display()))?;
-    }
-    fs::write(path, text).with_context(|| format!("无法写入文件: {}", path.display()))
+    // 崩溃安全：同目录临时文件 + 原子 rename 替换，避免写到一半截断治理状态文件。
+    temp::write_atomic(path, text, "state")
 }
 
 #[cfg(test)]

@@ -16,6 +16,11 @@ logs/
 .env
 .env.local
 
+# 本地配置覆盖 / 敏感端点：私有代理、局域网地址、密钥等放这里，不提交进仓库
+config/*.local.yaml
+config/secrets.yaml
+config/*.secret.yaml
+
 # Editors and OS
 .vscode/
 .idea/

@@ -791,7 +791,11 @@ impl ContextKernel {
             if should_skip_index_entry(path, &self.workspace) {
                 continue;
             }
-            files.push(indexed_file(&self.workspace, path, &classify_file(path))?);
+            files.push(indexed_file(
+                &self.workspace,
+                path,
+                &classify_file(&self.workspace, path),
+            )?);
         }
         files.sort_by(|left, right| left.path.cmp(&right.path));
         Ok(files)
@@ -1101,8 +1105,11 @@ fn file_inventory(files: Vec<IndexedFile>) -> FileInventory {
     }
 }
 
-fn classify_file(path: &Path) -> String {
+fn classify_file(workspace: &Path, path: &Path) -> String {
+    // 只在工作区相对路径上分类：否则工作区若位于含 "test" 的祖先目录下，整个文件清单会被误判为测试。
     let relative = path
+        .strip_prefix(workspace)
+        .unwrap_or(path)
         .to_string_lossy()
         .replace('\\', "/")
         .to_ascii_lowercase();
@@ -1111,12 +1118,20 @@ fn classify_file(path: &Path) -> String {
         .and_then(|ext| ext.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
-    if relative.contains("/tests/")
-        || relative.contains("/test/")
-        || TEST_NAME_MARKERS.iter().any(|marker| {
-            relative.contains(marker) && SOURCE_EXTENSIONS.contains(&extension.as_str())
-        })
-    {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    // 目录判定按路径分量精确匹配（兼顾顶层 tests/ 与嵌套 .../test/）；名称标记只作用于文件名，不再吃整条路径。
+    let in_test_dir = relative
+        .split('/')
+        .any(|component| component == "test" || component == "tests");
+    let name_marks_test = SOURCE_EXTENSIONS.contains(&extension.as_str())
+        && TEST_NAME_MARKERS
+            .iter()
+            .any(|marker| file_name.contains(marker));
+    if in_test_dir || name_marks_test {
         "test".into()
     } else if ["md", "mdx", "rst", "txt"].contains(&extension.as_str()) {
         "docs".into()
@@ -1367,10 +1382,23 @@ fn compare_cached_index(index_path: &Path, current: &ContextIndex) -> Result<Val
             "required_actions": required_actions_for_index_details("missing", &json!({})),
         }));
     }
-    let text = fs::read_to_string(index_path)
-        .with_context(|| format!("无法读取上下文索引: {}", index_path.display()))?;
-    let cached: ContextIndex = serde_json::from_str(&text)
-        .with_context(|| format!("无法解析上下文索引: {}", index_path.display()))?;
+    // 缓存损坏/截断（例如写到一半崩溃）不应让整条命令报错：降级为 stale，提示刷新重建。
+    let cached: ContextIndex = match fs::read_to_string(index_path)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+    {
+        Some(cached) => cached,
+        None => {
+            return Ok(json!({
+                "status": "stale",
+                "index_path": display_path(index_path),
+                "reason": "上下文索引缓存损坏或无法解析，运行 rayman context refresh 重建",
+                "source_policy": current.source_policy,
+                "stale_files": { "changed": [], "missing": [], "new": [] },
+                "required_actions": required_actions_for_index_details("stale", &json!({})),
+            }));
+        }
+    };
     let cached_files = indexed_file_map(&cached);
     let current_files = indexed_file_map(current);
     let mut changed_files = Vec::new();
@@ -1435,10 +1463,23 @@ fn compare_cached_context_os(state_path: &Path, current: &ContextOsState) -> Res
             "current_source_digest": current.source_digest,
         }));
     }
-    let text = fs::read_to_string(state_path)
-        .with_context(|| format!("无法读取 Context OS state: {}", state_path.display()))?;
-    let cached: ContextOsState = serde_json::from_str(&text)
-        .with_context(|| format!("无法解析 Context OS state: {}", state_path.display()))?;
+    // 状态图损坏/截断降级为 stale（需要 rayman context os --write 重建），不让整条命令报错。
+    let cached: ContextOsState = match fs::read_to_string(state_path)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+    {
+        Some(cached) => cached,
+        None => {
+            return Ok(json!({
+                "status": "stale",
+                "stale": true,
+                "state_path": display_path(state_path),
+                "event_log_path": CONTEXT_OS_EVENTS_RELATIVE_PATH,
+                "reason": "Context OS state 损坏或无法解析，运行 rayman context os --write 重建",
+                "current_source_digest": current.source_digest,
+            }));
+        }
+    };
     let mut stale_reasons = Vec::new();
     if cached.version != current.version {
         stale_reasons.push("version_changed".to_string());
@@ -1864,6 +1905,30 @@ fn stale_file_summary(details: &Value) -> String {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn classify_file_uses_workspace_relative_path_not_ancestor_dirs() {
+        // 工作区位于名字含 "test" 的祖先目录下时，源码文件不应被误判为测试。
+        let workspace = Path::new("/home/user/my-test-projects/app");
+        assert_eq!(
+            classify_file(workspace, &workspace.join("src").join("main.rs")),
+            "source"
+        );
+        // 真正位于 tests/ 目录或文件名带 test 标记的才算测试。
+        assert_eq!(
+            classify_file(workspace, &workspace.join("tests").join("ui.rs")),
+            "test"
+        );
+        assert_eq!(
+            classify_file(workspace, &workspace.join("src").join("user_test.rs")),
+            "test"
+        );
+        // 顶层文档/配置分类不受祖先目录影响。
+        assert_eq!(
+            classify_file(workspace, &workspace.join("README.md")),
+            "docs"
+        );
+    }
 
     #[test]
     fn context_collects_workspace_session_backup_and_audit_state() {

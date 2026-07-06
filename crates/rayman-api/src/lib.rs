@@ -137,8 +137,11 @@ async fn mcp_root_handler() -> Json<Value> {
 
 async fn mcp_rpc_handler(
     State(state): State<ApiState>,
+    headers: HeaderMap,
     Json(payload): Json<Value>,
 ) -> Result<Response, ApiError> {
+    // MCP over HTTP 暴露工作区治理状态，必须与 /api/* 一样鉴权（stdio 传输不受影响）。
+    require_api_key(&headers)?;
     let manager = IntegrationManager::new(state.root)?;
     Ok(match manager.mcp_rpc_response(payload) {
         Some(response) => Json(response).into_response(),

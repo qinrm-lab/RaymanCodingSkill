@@ -1029,11 +1029,15 @@ impl AgentManager {
         timeout_seconds: u64,
         proxy: Option<&ProviderProxyConfig>,
     ) -> Result<reqwest::blocking::RequestBuilder> {
+        let auth_required = self.config.auth_required(provider);
+        if auth_required {
+            ensure_key_host_trusted(provider, &url)?;
+        }
         let request = self
             .client(provider, timeout_seconds, proxy)?
             .post(url)
             .json(body);
-        if self.config.auth_required(provider) {
+        if auth_required {
             Ok(request.bearer_auth(self.api_key(provider)?))
         } else {
             Ok(request)
@@ -1052,6 +1056,8 @@ impl AgentManager {
             .base_url(&model_ref.provider)
             .unwrap_or_else(|| "https://api.anthropic.com/v1".to_string());
         let url = format!("{}/messages", base.trim_end_matches('/'));
+        // 与 OpenAI 路径对齐：仅在需要鉴权且目标主机可信时才附加密钥，杜绝工作区配置篡改导致的密钥外泄。
+        ensure_key_host_trusted(&model_ref.provider, &url)?;
         let body = json!({
             "model": model_ref.model,
             "max_tokens": 4096,
@@ -1314,6 +1320,140 @@ fn proxy_label(proxy: Option<&ProviderProxyConfig>) -> &'static str {
 
 fn format_error_chain(error: &anyhow::Error) -> String {
     format!("{error:#}")
+}
+
+/// 从 URL 中提取主机名（去掉 scheme、userinfo、端口和路径），用于密钥外泄防护。
+fn host_of(url: &str) -> String {
+    let without_scheme = url.split("://").nth(1).unwrap_or(url);
+    let authority = without_scheme
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or(without_scheme);
+    let host_port = authority.rsplit('@').next().unwrap_or(authority);
+    let host = host_port
+        .rsplit_once(':')
+        .map(|(host, _)| host)
+        .unwrap_or(host_port);
+    host.trim().to_ascii_lowercase()
+}
+
+/// 主机是否匹配某个允许后缀（精确匹配或子域匹配）。
+fn host_matches(host: &str, suffix: &str) -> bool {
+    let suffix = suffix.trim().to_ascii_lowercase();
+    if suffix.is_empty() {
+        return false;
+    }
+    host == suffix || host.ends_with(&format!(".{suffix}"))
+}
+
+/// 只有内置的高价值密钥 provider（openai / anthropic，密钥来自用户环境变量）才启用
+/// 主机白名单强制。第三方/本地 provider 的 base_url 是用户显式配置的端点，保持原有行为。
+fn official_key_host(provider: &str) -> Option<&'static str> {
+    match provider {
+        "openai" => Some("api.openai.com"),
+        "anthropic" => Some("api.anthropic.com"),
+        _ => None,
+    }
+}
+
+/// 判断是否可以把 `provider` 的密钥发往 `url` 解析出的主机。
+///
+/// 威胁模型：恶意工作区通过 `config/*.yaml` 把 openai/anthropic 的 base_url 改指向攻击者
+/// 主机，从而窃取用户环境里的 OPENAI_API_KEY / ANTHROPIC_API_KEY。仅当满足以下之一才附加密钥：
+/// (1) 主机是该 provider 的官方主机；(2) 机器级环境变量 `{PROVIDER}_BASE_URL` 已显式设置
+///     （运维在机器层面主动选择的端点）；(3) 主机后缀在机器级 `RAYMAN_ALLOWED_KEY_HOSTS` 中。
+fn key_host_trusted(provider: &str, url: &str) -> bool {
+    let Some(official) = official_key_host(provider) else {
+        // 非内置密钥 provider：端点由用户显式配置，保持既有行为。
+        return true;
+    };
+    let host = host_of(url);
+    if host.is_empty() {
+        return false;
+    }
+    if host_matches(&host, official) {
+        return true;
+    }
+    let env_override = format!("{}_BASE_URL", provider.to_ascii_uppercase());
+    if std::env::var(&env_override)
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false)
+    {
+        return true;
+    }
+    if let Ok(allowed) = std::env::var("RAYMAN_ALLOWED_KEY_HOSTS")
+        && allowed.split(',').any(|suffix| host_matches(&host, suffix))
+    {
+        return true;
+    }
+    false
+}
+
+/// 在附加密钥前强制主机白名单：不受信任时 fail-closed（报错而非静默把密钥发出去）。
+fn ensure_key_host_trusted(provider: &str, url: &str) -> Result<()> {
+    if key_host_trusted(provider, url) {
+        return Ok(());
+    }
+    bail!(
+        "拒绝把 {provider} 密钥发往不受信任的主机 {}：疑似工作区配置篡改 base_url。\
+         若确需该端点，请在机器级设置环境变量 {}_BASE_URL 或将主机加入 RAYMAN_ALLOWED_KEY_HOSTS。",
+        host_of(url),
+        provider.to_ascii_uppercase()
+    )
+}
+
+#[cfg(test)]
+mod key_host_policy_tests {
+    use super::{host_matches, host_of, key_host_trusted};
+
+    #[test]
+    fn host_of_strips_scheme_userinfo_port_and_path() {
+        assert_eq!(
+            host_of("https://api.anthropic.com/v1/messages"),
+            "api.anthropic.com"
+        );
+        assert_eq!(
+            host_of("https://user:pass@Attacker.COM:8443/x"),
+            "attacker.com"
+        );
+        assert_eq!(host_of("http://192.168.15.204:11434/api"), "192.168.15.204");
+    }
+
+    #[test]
+    fn host_matches_exact_and_subdomain_only() {
+        assert!(host_matches("api.openai.com", "api.openai.com"));
+        assert!(host_matches("eu.api.openai.com", "api.openai.com"));
+        assert!(!host_matches("api.openai.com.evil.com", "api.openai.com"));
+        assert!(!host_matches("api.openai.com", ""));
+    }
+
+    #[test]
+    fn builtin_key_provider_trusts_only_official_host_by_default() {
+        // 官方主机可信。
+        assert!(key_host_trusted(
+            "anthropic",
+            "https://api.anthropic.com/v1/messages"
+        ));
+        assert!(key_host_trusted(
+            "openai",
+            "https://api.openai.com/v1/chat/completions"
+        ));
+        // 攻击者主机在无机器级豁免时被拒（CI/测试环境不设置相关环境变量）。
+        assert!(!key_host_trusted(
+            "anthropic",
+            "https://attacker.example/v1/messages"
+        ));
+        assert!(!key_host_trusted("openai", "https://attacker.example/v1"));
+    }
+
+    #[test]
+    fn non_builtin_provider_keeps_configured_endpoint() {
+        // 第三方 provider 的端点由用户显式配置，不受官方主机白名单限制。
+        assert!(key_host_trusted(
+            "thirdparty_a",
+            "https://sapi.quan2go.com/openai/chat/completions"
+        ));
+    }
 }
 
 #[cfg(test)]

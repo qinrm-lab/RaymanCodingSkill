@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::auxiliary::AuxiliaryProviderAttempt;
-use crate::temp::atomic_temp_path;
 use crate::{display_path, ensure_within, now_iso};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -681,23 +680,8 @@ fn stats_state_lock() -> Result<std::sync::MutexGuard<'static, ()>> {
 }
 
 fn write_state_file(path: &Path, text: &str) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("无法创建统计状态目录: {}", parent.display()))?;
-    }
-    let temp = atomic_temp_path(path, "stats");
-    fs::write(&temp, text).with_context(|| format!("无法写入临时统计状态: {}", temp.display()))?;
-    if path.exists() {
-        fs::remove_file(path).with_context(|| format!("无法替换旧统计状态: {}", path.display()))?;
-    }
-    fs::rename(&temp, path).with_context(|| {
-        let _ = fs::remove_file(&temp);
-        format!(
-            "无法替换统计状态文件: {} -> {}",
-            temp.display(),
-            path.display()
-        )
-    })
+    // 直接走原子替换助手：不再先删目标再 rename，消除崩溃丢失数据的窗口。
+    crate::temp::write_atomic(path, text, "stats")
 }
 
 #[cfg(test)]

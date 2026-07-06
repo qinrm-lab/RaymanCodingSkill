@@ -235,6 +235,10 @@ async fn mcp_and_plugin_endpoints_return_integration_metadata() {
 
 #[tokio::test]
 async fn mcp_rpc_endpoint_handles_tools_list() {
+    let _guard = env_lock().await;
+    unsafe {
+        std::env::set_var("RAYMAN_API_KEY", "secret");
+    }
     let temp = tempfile::tempdir().unwrap();
     let response = mcp_app(temp.path())
         .oneshot(
@@ -242,6 +246,7 @@ async fn mcp_rpc_endpoint_handles_tools_list() {
                 .method(Method::POST)
                 .uri("/mcp")
                 .header(header::CONTENT_TYPE, "application/json")
+                .header("X-API-Key", "secret")
                 .body(Body::from(
                     serde_json::json!({
                         "jsonrpc": "2.0",
@@ -267,6 +272,41 @@ async fn mcp_rpc_endpoint_handles_tools_list() {
             .iter()
             .any(|tool| tool["name"] == "rayman.control.status")
     );
+    unsafe {
+        std::env::remove_var("RAYMAN_API_KEY");
+    }
+}
+
+#[tokio::test]
+async fn mcp_rpc_endpoint_rejects_unauthenticated_requests() {
+    // 回归防护：MCP over HTTP 暴露治理状态，缺少/错误的 API key 必须被拒（此前无鉴权）。
+    let _guard = env_lock().await;
+    unsafe {
+        std::env::set_var("RAYMAN_API_KEY", "secret");
+    }
+    let temp = tempfile::tempdir().unwrap();
+    let response = mcp_app(temp.path())
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/mcp")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/list"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    unsafe {
+        std::env::remove_var("RAYMAN_API_KEY");
+    }
 }
 
 #[tokio::test]
