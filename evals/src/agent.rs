@@ -120,7 +120,7 @@ pub fn run_agent(model: &dyn Model, workspace: &Path, cfg: &AgentConfig) -> Atte
 
     while steps < cfg.max_steps {
         steps += 1;
-        let assistant = match model.respond(&system, &messages, &tools) {
+        let assistant = match respond_nonempty(model, &system, &messages, &tools) {
             Ok(assistant) => assistant,
             Err(error) => {
                 return AttemptLog {
@@ -132,6 +132,23 @@ pub fn run_agent(model: &dyn Model, workspace: &Path, cfg: &AgentConfig) -> Atte
                 };
             }
         };
+        if std::env::var_os("EVAL_DEBUG").is_some() {
+            let names: Vec<&str> = assistant
+                .tool_calls
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect();
+            eprintln!(
+                "    · step {steps}: {} tool_call(s) {:?}; content={}",
+                assistant.tool_calls.len(),
+                names,
+                serde_json::to_string(&assistant.content)
+                    .unwrap_or_default()
+                    .chars()
+                    .take(300)
+                    .collect::<String>()
+            );
+        }
         messages.push(json!({"role": "assistant", "content": assistant.content}));
 
         if assistant.tool_calls.is_empty() {
@@ -175,6 +192,52 @@ pub fn run_agent(model: &dyn Model, workspace: &Path, cfg: &AgentConfig) -> Atte
         error: None,
         rayman_invocations,
     }
+}
+
+/// content 数组里是否有非空文本块（用于区分“正常收尾（有文本）”与“退化空响应”）。
+fn has_text(content: &Value) -> bool {
+    content
+        .as_array()
+        .map(|blocks| {
+            blocks.iter().any(|block| {
+                block.get("type").and_then(Value::as_str) == Some("text")
+                    && !block
+                        .get("text")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .trim()
+                        .is_empty()
+            })
+        })
+        .unwrap_or(false)
+}
+
+/// 调后端，重试退化的空响应（无工具调用且无文本——多为 responses/中转的 reasoning-only 抖动）。
+/// 连续空到底则报错，让该次尝试显式失败而非被静默记成“干净结束”。
+fn respond_nonempty(
+    model: &dyn Model,
+    system: &str,
+    messages: &[Value],
+    tools: &Value,
+) -> Result<Assistant> {
+    const RETRIES: usize = 2;
+    let debug = std::env::var_os("EVAL_DEBUG").is_some();
+    let mut assistant = model.respond(system, messages, tools)?;
+    let mut attempt = 0;
+    while assistant.tool_calls.is_empty() && !has_text(&assistant.content) && attempt < RETRIES {
+        attempt += 1;
+        if debug {
+            eprintln!("    · 空响应，重试 {attempt}/{RETRIES}");
+        }
+        assistant = model.respond(system, messages, tools)?;
+    }
+    if assistant.tool_calls.is_empty() && !has_text(&assistant.content) {
+        anyhow::bail!(
+            "后端连续 {} 次返回空响应（无工具调用、无文本）",
+            RETRIES + 1
+        );
+    }
+    Ok(assistant)
 }
 
 /// 执行单个工具，返回 (内容, 是否错误)。读/写限制在工作区内。

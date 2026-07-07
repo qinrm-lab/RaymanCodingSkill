@@ -63,7 +63,12 @@ pub fn setup_workspace(task: &Task, dest: &Path) -> Result<()> {
         std::fs::remove_dir_all(dest)
             .with_context(|| format!("无法清理旧工作区: {}", dest.display()))?;
     }
-    copy_dir(&task.fixture_dir, dest)
+    copy_dir(&task.fixture_dir, dest)?;
+    // 关键：给每个 fixture 一个 .RaymanCodingSkill/ 标记，让 rayman 把这个副本当作工作区根，
+    // 否则它会沿目录向上找到真实仓库的 .git，把整个仓库当工作区（污染 + 超时）。
+    std::fs::create_dir_all(dest.join(".RaymanCodingSkill"))
+        .with_context(|| format!("无法创建工作区标记: {}", dest.display()))?;
+    Ok(())
 }
 
 fn copy_dir(src: &Path, dest: &Path) -> Result<()> {
