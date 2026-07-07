@@ -1,3 +1,6 @@
 /target
 /.runs
 Cargo.lock
+
+# Your real backend config (endpoints/models); keep secrets in env vars.
+backends.json

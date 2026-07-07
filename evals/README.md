@@ -25,16 +25,56 @@ Mock backend (free — proves the orchestration and grading end-to-end; the no-o
 cargo run -- --backend mock
 ```
 
-Real backend (needs `ANTHROPIC_API_KEY`; **spends API credits**):
+Anthropic backend (needs `ANTHROPIC_API_KEY`; **spends API credits**):
 
 ```
 export ANTHROPIC_API_KEY=sk-ant-...      # PowerShell: $env:ANTHROPIC_API_KEY="sk-ant-..."
 cargo run -- --backend anthropic --trials 3
 ```
 
-Useful flags: `--task <name>` (one task only, e.g. a cheap smoke), `--model <id>` (default `claude-opus-4-8`), `--trials N`, `--max-steps N`, `--runs-dir <dir>`.
+### OpenAI-compatible backend (DeepSeek / local Ollama / any OpenAI-compatible endpoint)
 
-A cheap real smoke: `cargo run -- --backend anthropic --task fix-failing-test` (2 agent runs).
+Endpoints and models change often, so they live in a **gitignored config file** — edit the file, not the code. The secret stays in an env var.
+
+1. Copy the example to your real config (gitignored):
+
+   ```
+   cp evals/backends.example.json evals/backends.json
+   ```
+
+2. Edit `evals/backends.json` — each top-level key is a `--backend` name; set its `base_url`, `model`, and `api_key_env` (the name of the env var that holds the key; omit it for a keyless local endpoint):
+
+   ```json
+   {
+     "backends": {
+       "deepseek": {
+         "base_url": "https://api.deepseek.com/v1",
+         "model": "deepseek-chat",
+         "api_key_env": "DEEPSEEK_API_KEY"
+       }
+     }
+   }
+   ```
+
+3. Set the secret in the env var you named:
+
+   ```
+   $env:DEEPSEEK_API_KEY="sk-..."      # bash: export DEEPSEEK_API_KEY=sk-...
+   ```
+
+4. Run it:
+
+   ```
+   cargo run -- --backend deepseek --trials 3
+   ```
+
+Config file path is `evals/backends.json` by default; override with `--backends <path>`.
+
+### Flags
+
+`--backend <name>` (`mock` | `anthropic` | any name from `backends.json`), `--task <name>` (one task only, e.g. a cheap smoke), `--model <id>` (override the backend's default model), `--trials N`, `--max-steps N`, `--backends <path>`, `--runs-dir <dir>`.
+
+A cheap real smoke: `cargo run -- --backend deepseek --task fix-failing-test` (2 agent runs).
 
 ## Adding a task
 

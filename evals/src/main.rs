@@ -4,13 +4,14 @@
 mod agent;
 mod anthropic;
 mod grade;
+mod openai;
 mod report;
 mod task;
 
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 
 use agent::{AgentConfig, MockModel, Model, run_agent};
 use report::{CONTROL, EvalReport, TrialResult, WITH_SKILL};
@@ -35,12 +36,15 @@ struct Cli {
     /// 每个 (任务×组) 的重复次数
     #[arg(long, default_value_t = 1)]
     trials: usize,
-    /// 后端：mock（免费，验证编排）| anthropic（真实，需 ANTHROPIC_API_KEY）
-    #[arg(long, value_enum, default_value_t = Backend::Mock)]
-    backend: Backend,
-    /// 模型 id（anthropic 后端）
-    #[arg(long, default_value = anthropic::DEFAULT_MODEL)]
-    model: String,
+    /// 后端：`mock`（免费）| `anthropic`（需 ANTHROPIC_API_KEY）| backends.json 里的任意命名后端（DeepSeek/本地等）
+    #[arg(long, default_value = "mock")]
+    backend: String,
+    /// 覆盖模型 id（不填则用后端默认：anthropic=claude-opus-4-8，命名后端=配置里的 model）
+    #[arg(long)]
+    model: Option<String>,
+    /// OpenAI 兼容后端配置文件（默认 evals/backends.json）
+    #[arg(long)]
+    backends: Option<PathBuf>,
     /// 技能文件（默认仓库根 SKILL.md）
     #[arg(long)]
     skill: Option<PathBuf>,
@@ -52,14 +56,40 @@ struct Cli {
     runs_dir: Option<PathBuf>,
 }
 
-#[derive(Copy, Clone, ValueEnum)]
-enum Backend {
-    Mock,
-    Anthropic,
-}
-
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+}
+
+/// 按 `--backend` 名字构建模型后端。mock/anthropic 内建，其余名字从配置文件查表（OpenAI 兼容）。
+fn build_model(cli: &Cli) -> Result<Box<dyn Model>> {
+    match cli.backend.as_str() {
+        // mock：no-op agent，用来验证整套编排/评分/报告链路（两组都会 0 通过）。
+        "mock" => Ok(Box::new(MockModel::new("mock(noop)", Vec::new()))),
+        "anthropic" => {
+            let model = cli.model.as_deref().unwrap_or(anthropic::DEFAULT_MODEL);
+            Ok(Box::new(anthropic::AnthropicModel::from_env(model)?))
+        }
+        name => {
+            let path = cli
+                .backends
+                .clone()
+                .unwrap_or_else(|| manifest_dir().join("backends.json"));
+            let config = openai::BackendsConfig::load(&path)?;
+            let cfg = config.backends.get(name).with_context(|| {
+                let known: Vec<&str> = config.backends.keys().map(String::as_str).collect();
+                format!(
+                    "配置 {} 里没有后端 `{name}`（已知: mock, anthropic, {}）",
+                    path.display(),
+                    known.join(", ")
+                )
+            })?;
+            Ok(Box::new(openai::OpenAiModel::new(
+                name,
+                cfg,
+                cli.model.as_deref(),
+            )?))
+        }
+    }
 }
 
 fn main() {
@@ -71,6 +101,10 @@ fn main() {
 
 fn run() -> Result<()> {
     let cli = Cli::parse();
+    // 先构建后端（借用完整的 cli），再消费 cli 里的 Option 字段。
+    let model = build_model(&cli)?;
+    let model_label = model.label();
+
     let tasks_dir = cli.tasks.unwrap_or_else(|| manifest_dir().join("tasks"));
     let skill_path = cli
         .skill
@@ -84,16 +118,9 @@ fn run() -> Result<()> {
         anyhow::bail!("没有匹配的任务");
     }
 
-    let model: Box<dyn Model> = match cli.backend {
-        // mock：no-op agent，用来验证整套编排/评分/报告链路（两组都会 0 通过）。
-        Backend::Mock => Box::new(MockModel::new("mock(noop)", Vec::new())),
-        Backend::Anthropic => Box::new(anthropic::AnthropicModel::from_env(&cli.model)?),
-    };
-
     eprintln!(
-        "后端={} 模型={} 任务={} 每格重复={}",
-        model.label(),
-        cli.model,
+        "后端={} 任务={} 每格重复={}",
+        model_label,
         tasks.len(),
         cli.trials
     );
@@ -133,7 +160,7 @@ fn run() -> Result<()> {
     }
 
     let report = EvalReport {
-        model: cli.model.clone(),
+        model: model_label,
         trials_per_cell: cli.trials,
         results,
     };
