@@ -220,7 +220,9 @@ fn respond_nonempty(
     messages: &[Value],
     tools: &Value,
 ) -> Result<Assistant> {
-    const RETRIES: usize = 2;
+    // 中转（如 yunyi）在负载高时会成串返回空完成（status=completed/failed, output=[]），
+    // 多重试几次以穿过坏窗口；仍空到底才判该次尝试失败。
+    const RETRIES: usize = 3;
     let debug = std::env::var_os("EVAL_DEBUG").is_some();
     let mut assistant = model.respond(system, messages, tools)?;
     let mut attempt = 0;

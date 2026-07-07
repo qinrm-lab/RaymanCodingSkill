@@ -414,8 +414,53 @@ fn read_responses(text: &str) -> Result<Assistant> {
         }
     }
     match last_response {
-        Some(response) => parse_responses(&response),
+        Some(response) => {
+            let assistant = parse_responses(&response)?;
+            debug_empty(&response, &assistant);
+            Ok(assistant)
+        }
         None => bail!("无法从 responses 响应中提取最终结果: {}", head(text)),
+    }
+}
+
+/// EVAL_DEBUG 下，当一条 responses 解析为空（无工具调用、无文本）时，打印其 status /
+/// incomplete_details / output 各项 type，用来判定是“reasoning-only 截断”还是解析漏抓。
+fn debug_empty(response: &Value, assistant: &Assistant) {
+    if std::env::var_os("EVAL_DEBUG").is_none() {
+        return;
+    }
+    let has_text = assistant
+        .content
+        .as_array()
+        .map(|blocks| {
+            blocks
+                .iter()
+                .any(|b| b.get("type").and_then(Value::as_str) == Some("text"))
+        })
+        .unwrap_or(false);
+    if assistant.tool_calls.is_empty() && !has_text {
+        let types: Vec<&str> = response
+            .get("output")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .map(|i| i.get("type").and_then(Value::as_str).unwrap_or("?"))
+                    .collect()
+            })
+            .unwrap_or_default();
+        eprintln!(
+            "    [responses EMPTY] status={} incomplete={} output_types={:?}",
+            response
+                .get("status")
+                .and_then(Value::as_str)
+                .unwrap_or("?"),
+            response
+                .get("incomplete_details")
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "null".into()),
+            types
+        );
     }
 }
 
