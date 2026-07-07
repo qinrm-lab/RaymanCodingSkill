@@ -1,5 +1,8 @@
 [workspace]
 members = ["crates/rayman"]
+# evals/ is a separate dev/research project (agent A/B outcome eval). It is
+# intentionally excluded so it never enters the shipped tool's dep tree or CI.
+exclude = ["evals"]
 resolver = "2"
 
 [workspace.package]
