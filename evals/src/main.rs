@@ -60,6 +60,30 @@ fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
+fn rayman_exe() -> &'static str {
+    if cfg!(windows) {
+        "rayman.exe"
+    } else {
+        "rayman"
+    }
+}
+
+/// 找到 `rayman` 所在目录，供 with_skill 组注入 `run` 工具的 PATH。
+/// 顺序：安装位置 → 仓库 release → 仓库 debug。找不到返回 None（with_skill 退化为纯文本）。
+fn find_rayman_bin() -> Option<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+        candidates.push(PathBuf::from(local).join("Rayman").join("bin"));
+    }
+    if let Some(repo) = manifest_dir().parent() {
+        candidates.push(repo.join("target").join("release"));
+        candidates.push(repo.join("target").join("debug"));
+    }
+    candidates
+        .into_iter()
+        .find(|dir| dir.join(rayman_exe()).exists())
+}
+
 /// 按 `--backend` 名字构建模型后端。mock/anthropic 内建，其余名字从配置文件查表（OpenAI 兼容）。
 fn build_model(cli: &Cli) -> Result<Box<dyn Model>> {
     match cli.backend.as_str() {
@@ -118,6 +142,15 @@ fn run() -> Result<()> {
         anyhow::bail!("没有匹配的任务");
     }
 
+    let rayman_bin = find_rayman_bin();
+    match &rayman_bin {
+        Some(dir) => eprintln!("with_skill 组 rayman 可用: {}", dir.display()),
+        None => eprintln!(
+            "⚠ 未找到 rayman 可执行文件；with_skill 组只能用 SKILL.md 文本，无法真正调用 CLI。\
+             \n  装好后再跑更公平：cargo build --release（或安装到 %LOCALAPPDATA%\\Rayman\\bin）。"
+        ),
+    }
+
     eprintln!(
         "后端={} 任务={} 每格重复={}",
         model_label,
@@ -137,9 +170,16 @@ fn run() -> Result<()> {
                     skill_text: skill.clone(),
                     task_prompt: task.prompt.clone(),
                     max_steps: cli.max_steps,
+                    // 只有 with_skill 组把 rayman 注入 run 工具的 PATH。
+                    rayman_bin: if condition == WITH_SKILL {
+                        rayman_bin.clone()
+                    } else {
+                        None
+                    },
                 };
                 let log = run_agent(model.as_ref(), &workspace, &cfg);
-                let graded = grade::run_shell(&workspace, &task.grade_cmd);
+                let graded =
+                    grade::run_shell(&workspace, &task.grade_cmd, None, grade::GRADE_TIMEOUT);
                 if let Some(error) = &log.error {
                     eprintln!("    agent 错误: {error}");
                 }

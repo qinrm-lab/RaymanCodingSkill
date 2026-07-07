@@ -9,7 +9,7 @@ use anyhow::Result;
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use crate::grade::run_shell;
+use crate::grade::{RUN_TIMEOUT, run_shell};
 
 pub const MAX_STEPS: usize = 24;
 
@@ -77,6 +77,9 @@ pub struct AgentConfig {
     pub skill_text: Option<String>,
     pub task_prompt: String,
     pub max_steps: usize,
+    /// with_skill 组：`rayman` 所在目录，注入 `run` 工具的 PATH，让“rayman 可用”名副其实。
+    /// control 组为 None。
+    pub rayman_bin: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -154,7 +157,7 @@ pub fn run_agent(model: &dyn Model, workspace: &Path, cfg: &AgentConfig) -> Atte
             {
                 rayman_invocations += 1;
             }
-            let (content, is_error) = exec_tool(workspace, call);
+            let (content, is_error) = exec_tool(workspace, call, cfg.rayman_bin.as_deref());
             results.push(json!({
                 "type": "tool_result",
                 "tool_use_id": call.id,
@@ -175,7 +178,7 @@ pub fn run_agent(model: &dyn Model, workspace: &Path, cfg: &AgentConfig) -> Atte
 }
 
 /// 执行单个工具，返回 (内容, 是否错误)。读/写限制在工作区内。
-fn exec_tool(workspace: &Path, call: &ToolCall) -> (String, bool) {
+fn exec_tool(workspace: &Path, call: &ToolCall, rayman_bin: Option<&Path>) -> (String, bool) {
     match call.name.as_str() {
         "list_files" => (list_files(workspace), false),
         "read_file" => match safe_path(workspace, str_arg(&call.input, "path")) {
@@ -198,7 +201,12 @@ fn exec_tool(workspace: &Path, call: &ToolCall) -> (String, bool) {
             Err(error) => (error, true),
         },
         "run" => {
-            let result = run_shell(workspace, str_arg(&call.input, "command"));
+            let result = run_shell(
+                workspace,
+                str_arg(&call.input, "command"),
+                rayman_bin,
+                RUN_TIMEOUT,
+            );
             let content = format!(
                 "exit={}\n--- stdout ---\n{}\n--- stderr ---\n{}",
                 result.exit, result.stdout, result.stderr
@@ -341,6 +349,7 @@ mod tests {
             skill_text: None,
             task_prompt: "do it".into(),
             max_steps: MAX_STEPS,
+            rayman_bin: None,
         };
         let log = run_agent(&model, workspace, &cfg);
         assert!(log.finished);
@@ -365,15 +374,14 @@ mod tests {
             skill_text: Some("SKILL-BODY".into()),
             task_prompt: "t".into(),
             max_steps: 1,
+            rayman_bin: None,
         };
         let control = AgentConfig {
+            system_base: "BASE".into(),
             skill_text: None,
-            ..AgentConfig {
-                system_base: "BASE".into(),
-                skill_text: None,
-                task_prompt: "t".into(),
-                max_steps: 1,
-            }
+            task_prompt: "t".into(),
+            max_steps: 1,
+            rayman_bin: None,
         };
         assert!(system_prompt(&with).contains("SKILL-BODY"));
         assert!(!system_prompt(&control).contains("SKILL-BODY"));
