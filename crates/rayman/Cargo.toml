@@ -1,13 +1,13 @@
 [package]
-name = "rayman-lean"
-version = "0.1.0"
+name = "rayman"
+version = "2.0.0"
 edition = "2024"
 license = "MIT"
 authors = ["Rayman"]
-description = "Lean v2 of RaymanCodingSkill: load-bearing coding-agent context/goal/assets/temp tooling without the governance overgrowth."
+description = "RaymanCodingSkill: lean coding-agent tooling — workspace context indexing, a minimal goal contract, read-only asset scan, and managed temp."
 
 [[bin]]
-name = "rayman-lean"
+name = "rayman"
 path = "src/main.rs"
 
 [dependencies]

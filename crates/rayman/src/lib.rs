@@ -1,4 +1,4 @@
-//! rayman-lean：RaymanCodingSkill 的精简 v2 核心。
+//! rayman：RaymanCodingSkill 的精简 v2 核心。
 //! 只保留 load-bearing 能力：上下文索引、最小目标契约、只读资产扫描、托管临时目录。
 
 pub mod assets;

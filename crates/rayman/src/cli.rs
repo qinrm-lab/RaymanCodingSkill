@@ -2,7 +2,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
 #[command(
-    name = "rayman-lean",
+    name = "rayman",
     version,
     about = "RaymanCodingSkill v2（精简）：上下文索引 / 目标 / 只读检查 / 资产 / 临时目录"
 )]
@@ -138,7 +138,7 @@ mod tests {
     #[test]
     fn parses_goal_start_with_requirements() {
         let cli = Cli::try_parse_from([
-            "rayman-lean",
+            "rayman",
             "goal",
             "start",
             "add parser",
@@ -167,7 +167,7 @@ mod tests {
 
     #[test]
     fn parses_check() {
-        let cli = Cli::try_parse_from(["rayman-lean", "check"]).unwrap();
+        let cli = Cli::try_parse_from(["rayman", "check"]).unwrap();
         assert!(matches!(cli.command, Command::Check));
     }
 }

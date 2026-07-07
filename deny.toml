@@ -31,8 +31,7 @@ wildcards = "deny"
 highlight = "all"
 allow = []
 deny = []
-# ring currently pulls windows-sys 0.52 while the Windows CLI path uses 0.61.
-skip = [{ name = "windows-sys", version = "0.52.0" }]
+skip = []
 skip-tree = []
 
 [sources]

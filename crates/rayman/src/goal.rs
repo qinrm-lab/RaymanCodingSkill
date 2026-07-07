@@ -156,7 +156,7 @@ impl GoalStore {
                 .collect();
             if !missing.is_empty() {
                 bail!(
-                    "拒绝关闭为 success：以下 must 需求缺少证据: {}。用 `rayman-lean goal evidence` 记录后再关闭。",
+                    "拒绝关闭为 success：以下 must 需求缺少证据: {}。用 `rayman goal evidence` 记录后再关闭。",
                     missing.join(", ")
                 );
             }

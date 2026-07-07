@@ -8,7 +8,7 @@ use cli::{
     Cli, Command, ContextAction, ContextCmd, Format, GoalAction, GoalCmd, PendingAction,
     PendingCmd, TempAction, TempCmd,
 };
-use rayman_lean::{assets, context, goal, temp, workspace_root};
+use rayman::{assets, context, goal, temp, workspace_root};
 
 fn main() {
     if let Err(error) = run() {
@@ -37,7 +37,7 @@ fn run() -> Result<()> {
                         report.removed.len()
                     );
                     if report.status != "ready" {
-                        println!("  运行 `rayman-lean context refresh` 更新索引。");
+                        println!("  运行 `rayman context refresh` 更新索引。");
                     }
                 }
             }
@@ -227,7 +227,7 @@ fn run_check(root: &std::path::Path, json: bool) -> Result<()> {
             "  上下文: {}{}",
             freshness.status,
             if context_blocked {
-                " → 运行 `rayman-lean context refresh`"
+                " → 运行 `rayman context refresh`"
             } else {
                 ""
             }
