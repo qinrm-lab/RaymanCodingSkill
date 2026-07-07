@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
@@ -33,6 +35,39 @@ pub enum Command {
     Assets,
     /// 托管临时目录
     Temp(TempCmd),
+    /// 工作树快照：整树本地拷贝，便于断电/切换 AI 工具后恢复
+    Checkpoint(CheckpointCmd),
+}
+
+#[derive(Args)]
+pub struct CheckpointCmd {
+    #[command(subcommand)]
+    pub action: CheckpointAction,
+    /// 快照根目录（默认用户级：Windows 为 %LOCALAPPDATA%\Rayman\checkpoints）
+    #[arg(long, global = true)]
+    pub dir: Option<PathBuf>,
+}
+
+#[derive(Subcommand)]
+pub enum CheckpointAction {
+    /// 保存当前工作树快照，然后清理旧快照
+    Save {
+        /// 保留最近 N 个快照（默认 3）
+        #[arg(long, default_value_t = rayman::checkpoint::DEFAULT_KEEP)]
+        keep: usize,
+    },
+    /// 列出已有快照
+    List,
+    /// 恢复快照到工作区（默认最近；会覆盖同名文件）
+    Restore {
+        /// 快照 id 或 "latest"（默认最近）
+        id: Option<String>,
+        /// 确认覆盖工作区文件（恢复是破坏性操作，必须显式确认）
+        #[arg(long)]
+        yes: bool,
+    },
+    /// 显示最近一次快照的状态
+    Status,
 }
 
 #[derive(Args)]

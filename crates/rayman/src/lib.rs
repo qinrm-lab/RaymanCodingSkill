@@ -2,6 +2,7 @@
 //! 只保留 load-bearing 能力：上下文索引、最小目标契约、只读资产扫描、托管临时目录。
 
 pub mod assets;
+pub mod checkpoint;
 pub mod context;
 pub mod fsutil;
 pub mod goal;

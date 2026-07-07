@@ -28,6 +28,7 @@ Use in a workspace that has a `.RaymanCodingSkill/` directory, or when the user 
 - `rayman goal pending add|list|resolve` — carry unfinished work across sessions; never report done while pending items remain.
 - `rayman assets` — read-only scan for obsolete-looking files and TODO/FIXME/未完成 markers. It never deletes anything; deciding what to remove is yours.
 - `rayman temp scratch <label> | status | cleanup` — put throwaway runtime files under `.RaymanCodingSkill/tmp/`, not system temp.
+- `rayman checkpoint save | list | status | restore` — snapshot the whole working tree (gitignore-aware) plus task state to a user-level store, keeping the newest few; for crash recovery and handing off between AI assistants. `restore` needs `--yes`. See `tools/README.md` for the menu + Windows auto-save task.
 
 ## Evidence and honesty
 

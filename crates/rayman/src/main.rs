@@ -1,14 +1,14 @@
 mod cli;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::Parser;
 use serde_json::json;
 
 use cli::{
-    Cli, Command, ContextAction, ContextCmd, Format, GoalAction, GoalCmd, PendingAction,
-    PendingCmd, TempAction, TempCmd,
+    CheckpointAction, CheckpointCmd, Cli, Command, ContextAction, ContextCmd, Format, GoalAction,
+    GoalCmd, PendingAction, PendingCmd, TempAction, TempCmd,
 };
-use rayman::{assets, context, goal, temp, workspace_root};
+use rayman::{assets, checkpoint, context, goal, temp, workspace_root};
 
 fn main() {
     if let Err(error) = run() {
@@ -99,6 +99,126 @@ fn run() -> Result<()> {
         },
 
         Command::Check => return run_check(&root, json),
+
+        Command::Checkpoint(cmd) => return run_checkpoint(&root, json, cmd),
+    }
+    Ok(())
+}
+
+fn run_checkpoint(root: &std::path::Path, json: bool, cmd: CheckpointCmd) -> Result<()> {
+    let dir = cmd.dir.as_deref();
+    match cmd.action {
+        CheckpointAction::Save { keep } => {
+            let outcome = checkpoint::save(root, dir, keep)?;
+            let mb = outcome.total_bytes as f64 / 1_048_576.0;
+            if json {
+                print(&json!({
+                    "id": outcome.id,
+                    "path": outcome.path.display().to_string(),
+                    "file_count": outcome.file_count,
+                    "skipped_count": outcome.skipped_count,
+                    "total_bytes": outcome.total_bytes,
+                    "pruned": outcome.pruned,
+                }));
+            } else {
+                println!(
+                    "已保存快照 {} — {} 个文件 ({:.1} MB){}，清理旧快照 {} 个",
+                    outcome.id,
+                    outcome.file_count,
+                    mb,
+                    if outcome.skipped_count > 0 {
+                        format!("，跳过 {}（锁定/无权限）", outcome.skipped_count)
+                    } else {
+                        String::new()
+                    },
+                    outcome.pruned
+                );
+                println!("  位置: {}", rayman::fsutil::display_path(&outcome.path));
+            }
+        }
+        CheckpointAction::List => {
+            let checkpoints = checkpoint::list(root, dir)?;
+            if json {
+                let items: Vec<_> = checkpoints
+                    .iter()
+                    .map(|c| {
+                        json!({
+                            "id": c.id,
+                            "created_at": c.manifest.as_ref().map(|m| m.created_at.clone()),
+                            "file_count": c.manifest.as_ref().map(|m| m.file_count),
+                            "total_bytes": c.manifest.as_ref().map(|m| m.total_bytes),
+                        })
+                    })
+                    .collect();
+                print(&serde_json::to_value(&items)?);
+            } else if checkpoints.is_empty() {
+                println!("当前工作区暂无快照。运行 `rayman checkpoint save` 创建一个。");
+            } else {
+                println!("快照（旧→新）:");
+                for c in &checkpoints {
+                    match &c.manifest {
+                        Some(m) => println!(
+                            "  {}  {} 个文件  {:.1} MB",
+                            c.id,
+                            m.file_count,
+                            m.total_bytes as f64 / 1_048_576.0
+                        ),
+                        None => println!("  {}  (缺 manifest)", c.id),
+                    }
+                }
+            }
+        }
+        CheckpointAction::Status => {
+            let latest = checkpoint::latest(root, dir)?;
+            if json {
+                print(&json!({
+                    "has_checkpoint": latest.is_some(),
+                    "latest": latest.as_ref().map(|c| json!({
+                        "id": c.id,
+                        "created_at": c.manifest.as_ref().map(|m| m.created_at.clone()),
+                        "file_count": c.manifest.as_ref().map(|m| m.file_count),
+                    })),
+                }));
+            } else {
+                match latest {
+                    Some(c) => {
+                        let created = c
+                            .manifest
+                            .as_ref()
+                            .map(|m| m.created_at.clone())
+                            .unwrap_or_else(|| "?".to_string());
+                        println!("最近快照: {} (保存于 {created})", c.id);
+                    }
+                    None => println!("当前工作区暂无快照。"),
+                }
+            }
+        }
+        CheckpointAction::Restore { id, yes } => {
+            if !yes {
+                bail!(
+                    "恢复会用快照覆盖工作区里的同名文件。确认请加 --yes：rayman checkpoint restore --yes"
+                );
+            }
+            let outcome = checkpoint::restore(root, dir, id.as_deref())?;
+            if json {
+                print(&json!({
+                    "id": outcome.id,
+                    "restored": outcome.restored,
+                    "failed": outcome.failed,
+                }));
+            } else {
+                println!(
+                    "已从快照 {} 恢复 {} 个文件{}。",
+                    outcome.id,
+                    outcome.restored,
+                    if outcome.failed > 0 {
+                        format!("，{} 个失败", outcome.failed)
+                    } else {
+                        String::new()
+                    }
+                );
+            }
+        }
     }
     Ok(())
 }
