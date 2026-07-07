@@ -1,20 +1,22 @@
 {
-  "_comment": "Copy this file to backends.json (gitignored) and edit. Each key is a --backend name. base_url is an OpenAI-compatible endpoint; the secret is read from the env var named by api_key_env (leave api_key_env off for a local endpoint that needs no key). Run: rayman-evals --backend deepseek",
+  "_comment": "Copy this file to backends.json (gitignored) and edit. Each key is a --backend name. base_url is an OpenAI-compatible endpoint; the secret is read from the env var named by api_key_env (leave api_key_env off for a local endpoint that needs no key). max_tokens defaults to 400000; MOST endpoints cap output far lower (DeepSeek ~8192) and will reject or clamp a large value — lower it per model if requests fail. Run: rayman-evals --backend deepseek",
   "backends": {
     "deepseek": {
       "base_url": "https://api.deepseek.com/v1",
       "model": "deepseek-chat",
       "api_key_env": "DEEPSEEK_API_KEY",
-      "max_tokens": 4096
+      "max_tokens": 400000
     },
     "openrouter": {
       "base_url": "https://openrouter.ai/api/v1",
       "model": "deepseek/deepseek-chat",
-      "api_key_env": "OPENROUTER_API_KEY"
+      "api_key_env": "OPENROUTER_API_KEY",
+      "max_tokens": 400000
     },
     "ollama": {
       "base_url": "http://localhost:11434/v1",
-      "model": "qwen2.5-coder"
+      "model": "qwen2.5-coder",
+      "max_tokens": 400000
     }
   }
 }

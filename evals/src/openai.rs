@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 
 use crate::agent::{Assistant, Model, ToolCall};
 
-const DEFAULT_MAX_TOKENS: u32 = 4096;
+const DEFAULT_MAX_TOKENS: u32 = 400000;
 const MAX_RETRIES: u32 = 3;
 
 /// 配置文件结构：命名后端 -> 端点/模型/密钥环境变量名。
@@ -32,7 +32,8 @@ pub struct BackendCfg {
     /// 存放密钥的环境变量名，例如 DEEPSEEK_API_KEY。留空表示本地端点无需密钥。
     #[serde(default)]
     pub api_key_env: Option<String>,
-    /// 单次响应上限，默认 4096。
+    /// 单次响应上限，默认 400000。注意：多数端点的实际输出上限远低于此
+    /// （如 DeepSeek 约 8192），端点若拒绝就在此调小。
     #[serde(default)]
     pub max_tokens: Option<u32>,
 }
