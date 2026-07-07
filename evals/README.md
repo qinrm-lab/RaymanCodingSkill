@@ -15,7 +15,7 @@ This is a standalone project — **not** part of the main `rayman` workspace (se
 2. For each task × condition × trial, the harness copies the fixture to a fresh workspace, runs a minimal tool-use agent loop (tools: `list_files`, `read_file`, `write_file`, `run`) against the chosen backend, then runs the hidden grade command.
 3. Results aggregate into per-task and overall pass rates and the with-skill-minus-control **delta**, written to `.runs/report.md` and `.runs/report.json`.
 
-Grading is objective: the three shipped tasks grade with `cargo test` / `cargo clippy -- -D warnings`.
+Grading is objective: every shipped task grades with `cargo test` or `cargo clippy -- -D warnings`. The tasks range from one-line fixes to `large-repo-nav`, where the failing top-level test is caused by a bug buried several modules deep — the case where navigation/context tooling should earn its keep.
 
 ## Run it
 
@@ -68,7 +68,7 @@ Endpoints and models change often, so they live in a **gitignored config file** 
    cargo run -- --backend deepseek --trials 3
    ```
 
-Config file path is `evals/backends.json` by default; override with `--backends <path>`.
+Config file path is `evals/backends.json` by default; override with `--backends <path>`. Each entry also accepts optional `wire` (`"chat"`, the default, for OpenAI chat/completions endpoints; `"responses"` for the OpenAI *Responses API*, which Codex-style relays stream over SSE), an inline `api_key` (takes priority over `api_key_env` — convenient for a private relay), and `max_tokens` (output cap; keep it low for small models). See `backends.example.json` for one entry per wire.
 
 ### Flags
 
