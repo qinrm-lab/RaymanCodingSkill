@@ -5,10 +5,10 @@ use clap::Parser;
 use serde_json::json;
 
 use cli::{
-    CheckpointAction, CheckpointCmd, Cli, Command, ContextAction, ContextCmd, Format, GoalAction,
-    GoalCmd, PendingAction, PendingCmd, TempAction, TempCmd,
+    AutosaveAction, AutosaveCmd, CheckpointAction, CheckpointCmd, Cli, Command, ContextAction,
+    ContextCmd, Format, GoalAction, GoalCmd, PendingAction, PendingCmd, TempAction, TempCmd,
 };
-use rayman::{assets, checkpoint, context, goal, temp, workspace_root};
+use rayman::{assets, autosave, checkpoint, context, goal, temp, workspace_root};
 
 fn main() {
     if let Err(error) = run() {
@@ -101,6 +101,34 @@ fn run() -> Result<()> {
         Command::Check => return run_check(&root, json),
 
         Command::Checkpoint(cmd) => return run_checkpoint(&root, json, cmd),
+
+        Command::Autosave(cmd) => return run_autosave(&root, json, cmd),
+    }
+    Ok(())
+}
+
+fn run_autosave(root: &std::path::Path, json: bool, cmd: AutosaveCmd) -> Result<()> {
+    let outcome = match cmd.action {
+        AutosaveAction::Start {
+            interval,
+            keep,
+            no_auto_stop,
+            dir,
+        } => autosave::start(root, interval, keep, !no_auto_stop, dir.as_deref())?,
+        AutosaveAction::Tick { workspace } => {
+            let ws = autosave::resolve_workspace(workspace.as_deref())?;
+            autosave::tick(&ws)?
+        }
+        AutosaveAction::Stop { status } => autosave::stop(root, &status)?,
+        AutosaveAction::Status => autosave::status(root),
+    };
+    if json {
+        print(&json!({
+            "message": outcome.message,
+            "state": outcome.state.as_ref().map(|s| serde_json::to_value(s).unwrap_or(serde_json::Value::Null)),
+        }));
+    } else {
+        println!("{}", outcome.message);
     }
     Ok(())
 }

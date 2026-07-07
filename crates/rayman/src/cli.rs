@@ -37,6 +37,47 @@ pub enum Command {
     Temp(TempCmd),
     /// 工作树快照：整树本地拷贝，便于断电/切换 AI 工具后恢复
     Checkpoint(CheckpointCmd),
+    /// 自动快照生命周期：开工注册 Windows 计划任务定时保存，完成/出错时存最后一次并停止
+    Autosave(AutosaveCmd),
+}
+
+#[derive(Args)]
+pub struct AutosaveCmd {
+    #[command(subcommand)]
+    pub action: AutosaveAction,
+}
+
+#[derive(Subcommand)]
+pub enum AutosaveAction {
+    /// 开工：存一次初始快照并注册计划任务（幂等，每次开工跑一遍即可）
+    Start {
+        /// 自动保存间隔（分钟，默认 30）
+        #[arg(long, default_value_t = 30)]
+        interval: u64,
+        /// 保留最近 N 个快照（默认 3）
+        #[arg(long, default_value_t = rayman::checkpoint::DEFAULT_KEEP)]
+        keep: usize,
+        /// 关闭“完成后自动停止”（默认开启：所有目标关闭且无待完成项时自动收尾）
+        #[arg(long)]
+        no_auto_stop: bool,
+        /// 快照根目录（默认用户级）
+        #[arg(long)]
+        dir: Option<PathBuf>,
+    },
+    /// 计划任务触发时跑：存一次快照，必要时自动收尾（一般不手动调用）
+    Tick {
+        /// 目标工作区（计划任务会传绝对路径；缺省则从当前目录向上找）
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    /// 全部完成或出错时调用：存最后一次快照并注销计划任务
+    Stop {
+        /// 收尾状态（success / error / ...；默认 success）
+        #[arg(long, default_value = "success")]
+        status: String,
+    },
+    /// 显示自动保存状态
+    Status,
 }
 
 #[derive(Args)]
