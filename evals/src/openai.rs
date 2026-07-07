@@ -105,7 +105,7 @@ impl OpenAiModel {
         })
     }
 
-    fn post(&self, body: &Value) -> Result<Value> {
+    fn post(&self, body: &Value) -> Result<String> {
         let mut attempt = 0;
         loop {
             attempt += 1;
@@ -120,7 +120,7 @@ impl OpenAiModel {
                 Ok(resp) => {
                     let status = resp.status();
                     if status.is_success() {
-                        return resp.json::<Value>().context("端点响应不是 JSON");
+                        return resp.text().context("无法读取响应体");
                     }
                     let retryable = status.as_u16() == 429 || status.as_u16() >= 500;
                     let text = resp.text().unwrap_or_default();
@@ -172,9 +172,13 @@ impl Model for OpenAiModel {
                     "tools": tools_to_chat(tools),
                     "tool_choice": "auto",
                 });
-                parse_chat(&self.post(&body)?)
+                let text = self.post(&body)?;
+                let value: Value = serde_json::from_str(&text)
+                    .with_context(|| format!("chat/completions 响应不是 JSON: {}", head(&text)))?;
+                parse_chat(&value)
             }
             Wire::Responses => {
+                // Codex 类中转的 /responses 只回流式 SSE，故 stream:true + 解析事件流。
                 let body = json!({
                     "model": self.model,
                     "max_output_tokens": self.max_tokens,
@@ -183,8 +187,9 @@ impl Model for OpenAiModel {
                     "tools": tools_to_responses(tools),
                     "tool_choice": "auto",
                     "store": false,
+                    "stream": true,
                 });
-                parse_responses(&self.post(&body)?)
+                read_responses(&self.post(&body)?)
             }
         }
     }
@@ -375,6 +380,50 @@ fn messages_to_responses(messages: &[Value]) -> Vec<Value> {
     input
 }
 
+/// 读取 /responses 的响应体：非流式则整体是 JSON；流式则从 SSE 里取最终 `response.completed`。
+fn read_responses(text: &str) -> Result<Assistant> {
+    // 非流式：整体就是一个 response 对象。
+    if let Ok(value) = serde_json::from_str::<Value>(text) {
+        if value.get("output").is_some() {
+            return parse_responses(&value);
+        }
+        if let Some(error) = value.get("error") {
+            bail!("responses 端点错误: {error}");
+        }
+    }
+    // 流式 SSE：逐行找带完整 response 快照的事件，取最后一个（response.completed / .incomplete）。
+    let mut last_response = None;
+    for line in text.lines() {
+        let Some(data) = line.trim_start().strip_prefix("data:") else {
+            continue;
+        };
+        let data = data.trim();
+        if data.is_empty() || data == "[DONE]" {
+            continue;
+        }
+        let Ok(event) = serde_json::from_str::<Value>(data) else {
+            continue;
+        };
+        if let Some(response) = event.get("response")
+            && response.get("output").is_some()
+        {
+            last_response = Some(response.clone());
+        }
+        if let Some(error) = event.get("error") {
+            bail!("responses 流内错误: {error}");
+        }
+    }
+    match last_response {
+        Some(response) => parse_responses(&response),
+        None => bail!("无法从 responses 响应中提取最终结果: {}", head(text)),
+    }
+}
+
+/// 报错时截取响应体开头，便于诊断。
+fn head(text: &str) -> String {
+    text.chars().take(400).collect()
+}
+
 fn parse_responses(response: &Value) -> Result<Assistant> {
     let mut blocks = Vec::new();
     let mut tool_calls = Vec::new();
@@ -524,5 +573,26 @@ mod tests {
         assert_eq!(assistant.tool_calls.len(), 1);
         assert_eq!(assistant.tool_calls[0].id, "call_1");
         assert_eq!(assistant.tool_calls[0].name, "run");
+    }
+
+    #[test]
+    fn read_responses_handles_sse_stream() {
+        let sse = "event: response.output_text.delta\n\
+                   data: {\"type\":\"response.output_text.delta\",\"delta\":\"h\"}\n\n\
+                   event: response.completed\n\
+                   data: {\"type\":\"response.completed\",\"response\":{\"output\":[\
+                   {\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"done\"}]},\
+                   {\"type\":\"function_call\",\"call_id\":\"c9\",\"name\":\"run\",\"arguments\":\"{}\"}]}}\n\n\
+                   data: [DONE]\n\n";
+        let assistant = read_responses(sse).unwrap();
+        assert_eq!(assistant.tool_calls.len(), 1);
+        assert_eq!(assistant.tool_calls[0].id, "c9");
+    }
+
+    #[test]
+    fn read_responses_handles_plain_json() {
+        let json_body = "{\"output\":[{\"type\":\"function_call\",\"call_id\":\"c1\",\"name\":\"run\",\"arguments\":\"{}\"}]}";
+        let assistant = read_responses(json_body).unwrap();
+        assert_eq!(assistant.tool_calls[0].id, "c1");
     }
 }
