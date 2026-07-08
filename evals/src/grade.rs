@@ -179,7 +179,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let marker = dir.path().join("rayman-bin");
         std::fs::create_dir_all(&marker).unwrap();
-        let cmd = if cfg!(windows) { "echo %PATH%" } else { "echo $PATH" };
+        let cmd = if cfg!(windows) {
+            "echo %PATH%"
+        } else {
+            "echo $PATH"
+        };
         let result = run_shell(dir.path(), cmd, Some(&marker), RUN_TIMEOUT);
         assert!(result.passed);
         assert!(
