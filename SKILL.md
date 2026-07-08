@@ -14,7 +14,7 @@ Use in a workspace that has a `.RaymanCodingSkill/` directory, or when the user 
 ## Task tiers — do the least that fits
 
 - **Trivial** (typo, one-liner, doc tweak): just edit and run the project's own focused test. No `rayman` commands required.
-- **Standard** (a feature or fix): `rayman context refresh` once up front, implement, run focused tests, then `rayman check` before you call it done.
+- **Standard** (a feature or fix): `rayman context refresh` once up front, implement, run focused tests, then `rayman check` before you call it done; if it reports a blocker, don't call the task done until it's resolved or the user has explicitly accepted the open item.
 - **Release / hand-off**: everything in Standard, plus resolve pending work and run the project's full build+test.
 
 `rayman check` is the single readiness gate: it reports context freshness, obsolete-asset/TODO findings, and open pending items, and exits non-zero when there is a hard blocker.
@@ -35,6 +35,7 @@ Use in a workspace that has a `.RaymanCodingSkill/` directory, or when the user 
 
 - A `must` requirement is satisfied only by a current file path plus a validation command that actually ran and passed. Model confidence is not evidence.
 - If something is unverified, blocked, or skipped, say so plainly and record it with `goal pending add`. Prefer "unknown" over a plausible but unchecked claim.
+- Don't limit yourself to the literal ask: if you notice a real, unrelated problem in files you're reading or touching (a bug, a security issue, clearly broken behavior), fix it if it's small and low-risk. If it's out of scope, risky, or you're unsure, don't silently skip it — record it with `goal pending add` and tell the user what you found, with a couple of concrete options and a recommended one. `rayman check` won't pass while that item is open.
 
 ## Degradation ladder — when `rayman` is missing
 
