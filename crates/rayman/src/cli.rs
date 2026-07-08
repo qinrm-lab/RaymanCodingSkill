@@ -145,6 +145,12 @@ pub enum MapAction {
     Symbol { name: String },
     /// 分析某个文件变更会影响的依赖方、测试和建议验证命令
     Impact { path: String },
+    /// 汇总项目可维护性质量信号；--check 会在 error 级问题上非零退出
+    Quality {
+        /// error 级质量问题存在时退出 1；warning 只报告不阻断
+        #[arg(long)]
+        check: bool,
+    },
 }
 
 #[derive(Args)]
@@ -304,6 +310,17 @@ mod tests {
             Command::Map(MapCmd {
                 action: MapAction::Impact { path },
             }) => assert_eq!(path, "src/lib.rs"),
+            _ => panic!("unexpected command"),
+        }
+    }
+
+    #[test]
+    fn parses_map_quality_check() {
+        let cli = Cli::try_parse_from(["rayman", "map", "quality", "--check"]).unwrap();
+        match cli.command {
+            Command::Map(MapCmd {
+                action: MapAction::Quality { check },
+            }) => assert!(check),
             _ => panic!("unexpected command"),
         }
     }

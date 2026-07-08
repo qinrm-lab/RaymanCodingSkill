@@ -123,6 +123,28 @@ pub struct ImpactReport {
     pub recommendation_basis: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct QualityReport {
+    pub ready: bool,
+    pub source_files: usize,
+    pub test_files: usize,
+    pub candidate_test_covered_source_files: usize,
+    pub public_api_files_without_test_evidence: usize,
+    pub error_count: usize,
+    pub warning_count: usize,
+    pub info_count: usize,
+    pub findings: Vec<QualityFinding>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct QualityFinding {
+    pub severity: String,
+    pub kind: String,
+    pub path: String,
+    pub detail: String,
+    pub recommendation: String,
+}
+
 pub fn build(root: &Path) -> Result<ProjectMap> {
     let map = build_readonly(root)?;
     write_json(&project_map_path(root), &map)?;
@@ -272,6 +294,98 @@ pub fn impact_report(map: &ProjectMap, path: &str) -> Result<ImpactReport> {
         recommendation_basis:
             "dependency facts plus heuristic test candidates; not proof of real coverage".into(),
     })
+}
+
+pub fn quality_report(map: &ProjectMap) -> QualityReport {
+    let candidate_covered_source_paths: BTreeSet<&str> = map
+        .tests
+        .iter()
+        .flat_map(|test| test.candidate_paths.iter().map(String::as_str))
+        .collect();
+    let public_api_without_test_paths: BTreeSet<&str> = map
+        .risks
+        .iter()
+        .filter(|risk| risk.kind == "public_api_without_test_evidence")
+        .map(|risk| risk.path.as_str())
+        .collect();
+
+    let mut findings: Vec<QualityFinding> = map
+        .risks
+        .iter()
+        .map(|risk| QualityFinding {
+            severity: risk.severity.clone(),
+            kind: risk.kind.clone(),
+            path: risk.path.clone(),
+            detail: risk.detail.clone(),
+            recommendation: recommendation_for_risk(&risk.kind).into(),
+        })
+        .collect();
+
+    if map.source_files >= 3 && map.test_files == 0 {
+        findings.push(QualityFinding {
+            severity: "error".into(),
+            kind: "multi_source_project_without_tests".into(),
+            path: ".".into(),
+            detail: format!(
+                "{} source files but no indexed test files; large-project edits have no local validation anchor",
+                map.source_files
+            ),
+            recommendation: "add at least one test target or record why this workspace has no executable tests".into(),
+        });
+    }
+
+    findings.sort_by(|a, b| {
+        severity_rank(&a.severity)
+            .cmp(&severity_rank(&b.severity))
+            .then_with(|| a.kind.cmp(&b.kind))
+            .then_with(|| a.path.cmp(&b.path))
+    });
+
+    let error_count = findings
+        .iter()
+        .filter(|finding| finding.severity == "error")
+        .count();
+    let warning_count = findings
+        .iter()
+        .filter(|finding| finding.severity == "warning")
+        .count();
+    let info_count = findings
+        .iter()
+        .filter(|finding| finding.severity == "info")
+        .count();
+
+    QualityReport {
+        ready: error_count == 0,
+        source_files: map.source_files,
+        test_files: map.test_files,
+        candidate_test_covered_source_files: candidate_covered_source_paths.len(),
+        public_api_files_without_test_evidence: public_api_without_test_paths.len(),
+        error_count,
+        warning_count,
+        info_count,
+        findings,
+    }
+}
+
+fn recommendation_for_risk(kind: &str) -> &'static str {
+    match kind {
+        "large_file" => "split the file or inspect it before broad edits",
+        "high_fan_in" => "treat changes as shared-contract changes and run broader tests",
+        "public_api_without_test_evidence" => {
+            "add/record a same-package test target before claiming coverage"
+        }
+        "no_symbols" => "confirm whether the file is generated, data-only, or missing indexed code",
+        _ => "review before large-project edits",
+    }
+}
+
+fn severity_rank(severity: &str) -> usize {
+    match severity {
+        "error" => 0,
+        "warning" => 1,
+        "info" => 2,
+        _ => 3,
+    }
 }
 
 fn project_map_path(root: &Path) -> PathBuf {
@@ -854,5 +968,46 @@ mod tests {
             "dependencies={:?}",
             map.dependencies
         );
+    }
+
+    #[test]
+    fn quality_report_blocks_multi_source_project_without_tests() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write(root.join("src/lib.rs").as_path(), "pub mod parser;\n");
+        write(root.join("src/parser.rs").as_path(), "pub fn parse() {}\n");
+        write(
+            root.join("src/evaluator.rs").as_path(),
+            "pub fn eval() {}\n",
+        );
+        context::refresh(root).unwrap();
+
+        let map = build_readonly(root).unwrap();
+        let quality = quality_report(&map);
+
+        assert!(!quality.ready);
+        assert_eq!(quality.error_count, 1);
+        assert!(quality.findings.iter().any(|finding| {
+            finding.kind == "multi_source_project_without_tests" && finding.severity == "error"
+        }));
+    }
+
+    #[test]
+    fn quality_report_keeps_uncovered_public_api_as_warning() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write(root.join("src/lib.rs").as_path(), "pub fn api() {}\n");
+        write(
+            root.join("tests/api_test.rs").as_path(),
+            "use sample::api;\n#[test]\nfn api_works() {}\n",
+        );
+        context::refresh(root).unwrap();
+
+        let map = build_readonly(root).unwrap();
+        let quality = quality_report(&map);
+
+        assert!(quality.ready);
+        assert_eq!(quality.error_count, 0);
+        assert!(quality.warning_count <= quality.findings.len());
     }
 }

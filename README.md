@@ -4,6 +4,7 @@ A lean, evidence-first coding-agent helper. One small Rust binary, `rayman`, tha
 
 - **Context index** — a fingerprint-cached map of the workspace (files, kinds, symbols). Refresh reuses unchanged files and only re-hashes what changed.
 - **Project map** — a derived architecture view (modules, symbols, local dependencies, entrypoints, heuristic test candidates, impact hints). It refuses stale context instead of guessing.
+- **Quality surface** — machine-readable maintainability findings from the project map; `map quality --check` fails only on error-level gaps and keeps warnings reviewable.
 - **Goal contract** — capture a task as `must`/`should` requirements; closing as success is refused until every `must` has recorded evidence. Pending-work items carry across sessions.
 - **Asset scan** — read-only report of obsolete-looking files and `TODO`/`FIXME`/`未完成` markers. It never deletes anything.
 - **Managed temp** — workspace-local scratch under `.RaymanCodingSkill/tmp/`, never system temp.
@@ -33,8 +34,9 @@ rayman map summary              # project structure summary from the current ind
 rayman map file <path>          # symbols/dependencies/tests/risks for one file
 rayman map symbol <name>        # find indexed symbols by name
 rayman map impact <path>        # dependent files, heuristic test candidates, suggested checks
+rayman map quality [--check]    # maintainability quality findings; --check blocks on errors
 rayman check                    # one aggregated readiness gate (context + assets + pending)
-rayman check --profile standard # plus project map and goal validation/impact evidence checks
+rayman check --profile standard # plus project map, quality errors, and goal validation evidence
 rayman assets                   # read-only obsolete-file + TODO/未完成 scan
 rayman temp status | scratch <label> | cleanup
 

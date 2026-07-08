@@ -168,6 +168,17 @@ fn run_map(root: &std::path::Path, json: bool, cmd: MapCmd) -> Result<()> {
                 print_impact_report(&report);
             }
         }
+        MapAction::Quality { check } => {
+            let report = map::quality_report(&project_map);
+            if json {
+                print(&serde_json::to_value(&report)?);
+            } else {
+                print_quality_report(&report);
+            }
+            if check && !report.ready {
+                std::process::exit(1);
+            }
+        }
     }
     Ok(())
 }
@@ -502,6 +513,7 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
     let mut standard_blockers = Vec::new();
     let mut standard_warnings = Vec::new();
     let mut map_summary = None;
+    let mut map_quality = None;
 
     if cmd.profile == CheckProfile::Standard {
         let (goals, goal_load_issues) = goal_store.list_with_issues()?;
@@ -515,6 +527,16 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
             match map::build_readonly(root) {
                 Ok(project_map) => {
                     map_summary = Some(map::summary(&project_map));
+                    let quality = map::quality_report(&project_map);
+                    for finding in &quality.findings {
+                        if finding.severity == "error" {
+                            standard_blockers.push(format!(
+                                "quality {}: {} — {}",
+                                finding.kind, finding.path, finding.detail
+                            ));
+                        }
+                    }
+                    map_quality = Some(quality);
                 }
                 Err(error) => {
                     standard_blockers.push(format!("项目地图不可用: {error}"));
@@ -614,6 +636,7 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
                 "blockers": standard_blockers,
                 "warnings": standard_warnings,
                 "project_map": map_summary,
+                "quality": map_quality,
             },
         }));
     } else {
@@ -642,6 +665,16 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
                 println!(
                     "  项目地图: modules={} symbols={} deps={} risks={}",
                     summary.modules, summary.symbols, summary.dependencies, summary.risks
+                );
+            }
+            if let Some(quality) = &map_quality {
+                println!(
+                    "  质量: ready={} errors={} warnings={} covered_sources={}/{}",
+                    quality.ready,
+                    quality.error_count,
+                    quality.warning_count,
+                    quality.candidate_test_covered_source_files,
+                    quality.source_files
                 );
             }
             println!("  standard blockers: {}", standard_blockers.len());
@@ -774,6 +807,31 @@ fn print_impact_report(report: &map::ImpactReport) {
         for risk in &report.risks {
             println!("    [{}] {} — {}", risk.severity, risk.kind, risk.detail);
         }
+    }
+}
+
+fn print_quality_report(report: &map::QualityReport) {
+    println!(
+        "项目质量: {}",
+        if report.ready { "READY" } else { "BLOCKED" }
+    );
+    println!(
+        "  source={} tests={} candidate_test_covered_sources={} public_api_without_test_evidence={}",
+        report.source_files,
+        report.test_files,
+        report.candidate_test_covered_source_files,
+        report.public_api_files_without_test_evidence
+    );
+    println!(
+        "  findings: errors={} warnings={} info={}",
+        report.error_count, report.warning_count, report.info_count
+    );
+    for finding in &report.findings {
+        println!(
+            "    [{}] {} {} — {}",
+            finding.severity, finding.kind, finding.path, finding.detail
+        );
+        println!("      建议: {}", finding.recommendation);
     }
 }
 

@@ -849,6 +849,81 @@ fn map_commands_report_project_structure_and_impact() {
 }
 
 #[test]
+fn map_quality_check_blocks_multi_source_project_without_tests() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub mod parser;\npub mod evaluator;\n");
+    write(root, "src/parser.rs", "pub fn parse() -> i32 { 1 }\n");
+    write(root, "src/evaluator.rs", "pub fn eval() -> i32 { 1 }\n");
+    run_json(root, &["context", "refresh"]);
+
+    let quality = run_json(root, &["map", "quality"]);
+    assert_eq!(quality["ready"], false);
+    assert_eq!(quality["error_count"], 1);
+    assert!(
+        quality["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|finding| {
+                finding["kind"] == "multi_source_project_without_tests"
+                    && finding["severity"] == "error"
+            }),
+        "quality={quality}"
+    );
+
+    let quality_check = run(root, &["map", "quality", "--check"]);
+    assert_eq!(quality_check.status, 1);
+    assert!(
+        quality_check
+            .stdout
+            .contains("multi_source_project_without_tests"),
+        "stdout={}",
+        quality_check.stdout
+    );
+
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(standard.status, 1);
+    assert!(
+        standard
+            .stdout
+            .contains("quality multi_source_project_without_tests"),
+        "stdout={}",
+        standard.stdout
+    );
+}
+
+#[test]
+fn map_quality_check_passes_with_a_test_anchor() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub mod parser;\npub mod evaluator;\n");
+    write(root, "src/parser.rs", "pub fn parse() -> i32 { 1 }\n");
+    write(
+        root,
+        "src/evaluator.rs",
+        "use crate::parser;\npub fn eval() -> i32 { parser::parse() }\n",
+    );
+    write(
+        root,
+        "tests/evaluator_test.rs",
+        "use sample::evaluator;\n#[test]\nfn evaluator_works() {}\n",
+    );
+    run_json(root, &["context", "refresh"]);
+
+    let quality = run_json(root, &["map", "quality"]);
+    assert_eq!(quality["ready"], true, "quality={quality}");
+    assert_eq!(quality["error_count"], 0);
+
+    let quality_check = run(root, &["map", "quality", "--check"]);
+    assert_eq!(
+        quality_check.status, 0,
+        "stdout={} stderr={}",
+        quality_check.stdout, quality_check.stderr
+    );
+}
+
+#[test]
 fn map_commands_fail_closed_on_missing_or_stale_context() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
