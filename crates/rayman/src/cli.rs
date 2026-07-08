@@ -143,10 +143,23 @@ pub enum MapAction {
     File { path: String },
     /// 按名称查找符号
     Symbol { name: String },
+    /// 查看 Cargo package / path-dependency 拓扑
+    Topology,
     /// 分析某个文件变更会影响的依赖方、测试和建议验证命令
     Impact { path: String },
+    /// 聚合多个变更路径，生成大型变更的文件分组、风险和验证计划
+    Plan {
+        /// 计划触碰的文件路径（可重复）
+        paths: Vec<String>,
+        /// 计划存在阻塞项时退出 1
+        #[arg(long)]
+        check: bool,
+    },
     /// 汇总项目可维护性质量信号；--check 会在 error 级问题上非零退出
     Quality {
+        /// 质量策略：standard 低误报；strict 会读取可选质量策略配置
+        #[arg(long, value_enum, default_value_t = QualityProfile::Standard)]
+        profile: QualityProfile,
         /// error 级质量问题存在时退出 1；warning 只报告不阻断
         #[arg(long)]
         check: bool,
@@ -155,7 +168,7 @@ pub enum MapAction {
 
 #[derive(Args)]
 pub struct CheckCmd {
-    /// 检查强度：quick 保持旧行为；standard 加入项目地图与目标证据影响面
+    /// 检查强度：quick 保持旧行为；standard 加入项目地图与目标证据影响面；release 读取 strict 质量策略
     #[arg(long, value_enum, default_value_t = CheckProfile::Quick)]
     pub profile: CheckProfile,
 }
@@ -164,6 +177,13 @@ pub struct CheckCmd {
 pub enum CheckProfile {
     Quick,
     Standard,
+    Release,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
+pub enum QualityProfile {
+    Standard,
+    Strict,
 }
 
 #[derive(Args)]
@@ -198,7 +218,7 @@ pub enum GoalAction {
         /// 本次证据涉及的变更文件；会记录 map impact 快照（可重复）
         #[arg(long = "changed")]
         changed: Vec<String>,
-        /// 已实际运行且通过的验证命令；standard profile 下完成需求必须有该结构化证据（可重复）
+        /// 已实际运行且通过的验证命令；standard profile 会检查它是否覆盖变更类型（可重复）
         #[arg(long = "validated")]
         validated: Vec<String>,
     },
@@ -304,6 +324,15 @@ mod tests {
     }
 
     #[test]
+    fn parses_release_check_profile() {
+        let cli = Cli::try_parse_from(["rayman", "check", "--profile", "release"]).unwrap();
+        match cli.command {
+            Command::Check(CheckCmd { profile }) => assert_eq!(profile, CheckProfile::Release),
+            _ => panic!("unexpected command"),
+        }
+    }
+
+    #[test]
     fn parses_map_impact() {
         let cli = Cli::try_parse_from(["rayman", "map", "impact", "src/lib.rs"]).unwrap();
         match cli.command {
@@ -315,12 +344,53 @@ mod tests {
     }
 
     #[test]
-    fn parses_map_quality_check() {
-        let cli = Cli::try_parse_from(["rayman", "map", "quality", "--check"]).unwrap();
+    fn parses_map_topology() {
+        let cli = Cli::try_parse_from(["rayman", "map", "topology"]).unwrap();
         match cli.command {
             Command::Map(MapCmd {
-                action: MapAction::Quality { check },
-            }) => assert!(check),
+                action: MapAction::Topology,
+            }) => {}
+            _ => panic!("unexpected command"),
+        }
+    }
+
+    #[test]
+    fn parses_map_plan_check() {
+        let cli = Cli::try_parse_from([
+            "rayman",
+            "map",
+            "plan",
+            "src/lib.rs",
+            "src/map.rs",
+            "--check",
+        ])
+        .unwrap();
+        match cli.command {
+            Command::Map(MapCmd {
+                action: MapAction::Plan { paths, check },
+            }) => {
+                assert_eq!(
+                    paths,
+                    vec!["src/lib.rs".to_string(), "src/map.rs".to_string()]
+                );
+                assert!(check);
+            }
+            _ => panic!("unexpected command"),
+        }
+    }
+
+    #[test]
+    fn parses_map_quality_check() {
+        let cli =
+            Cli::try_parse_from(["rayman", "map", "quality", "--profile", "strict", "--check"])
+                .unwrap();
+        match cli.command {
+            Command::Map(MapCmd {
+                action: MapAction::Quality { profile, check },
+            }) => {
+                assert_eq!(profile, QualityProfile::Strict);
+                assert!(check);
+            }
             _ => panic!("unexpected command"),
         }
     }

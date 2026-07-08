@@ -7,7 +7,7 @@ use serde_json::json;
 use cli::{
     AutosaveAction, AutosaveCmd, CheckCmd, CheckProfile, CheckpointAction, CheckpointCmd, Cli,
     Command, ContextAction, ContextCmd, Format, GoalAction, GoalCmd, MapAction, MapCmd,
-    PendingAction, PendingCmd, TempAction, TempCmd,
+    PendingAction, PendingCmd, QualityProfile, TempAction, TempCmd,
 };
 use rayman::{assets, autosave, checkpoint, context, goal, map, temp, workspace_root};
 
@@ -130,8 +130,12 @@ fn run_map(root: &std::path::Path, json: bool, cmd: MapCmd) -> Result<()> {
                 }));
             } else {
                 println!(
-                    "项目地图已刷新: modules={} symbols={} dependencies={} risks={}",
-                    summary.modules, summary.symbols, summary.dependencies, summary.risks
+                    "项目地图已刷新: modules={} symbols={} dependencies={} packages={} risks={}",
+                    summary.modules,
+                    summary.symbols,
+                    summary.dependencies,
+                    summary.packages,
+                    summary.risks
                 );
                 println!("  位置: .RaymanCodingSkill/context/project_map.json");
             }
@@ -160,6 +164,14 @@ fn run_map(root: &std::path::Path, json: bool, cmd: MapCmd) -> Result<()> {
                 print_symbol_report(&report);
             }
         }
+        MapAction::Topology => {
+            let report = map::topology_report(&project_map);
+            if json {
+                print(&serde_json::to_value(&report)?);
+            } else {
+                print_topology_report(&report);
+            }
+        }
         MapAction::Impact { path } => {
             let report = map::impact_report(&project_map, &path)?;
             if json {
@@ -168,8 +180,20 @@ fn run_map(root: &std::path::Path, json: bool, cmd: MapCmd) -> Result<()> {
                 print_impact_report(&report);
             }
         }
-        MapAction::Quality { check } => {
-            let report = map::quality_report(&project_map);
+        MapAction::Plan { paths, check } => {
+            let report = map::change_plan(&project_map, &paths)?;
+            if json {
+                print(&serde_json::to_value(&report)?);
+            } else {
+                print_change_plan(&report);
+            }
+            if check && !report.ready {
+                std::process::exit(1);
+            }
+        }
+        MapAction::Quality { profile, check } => {
+            let config = quality_config_for(root, profile)?;
+            let report = map::quality_report_with_config(&project_map, &config);
             if json {
                 print(&serde_json::to_value(&report)?);
             } else {
@@ -181,6 +205,16 @@ fn run_map(root: &std::path::Path, json: bool, cmd: MapCmd) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn quality_config_for(
+    root: &std::path::Path,
+    profile: QualityProfile,
+) -> Result<map::QualityConfig> {
+    match profile {
+        QualityProfile::Standard => Ok(map::QualityConfig::standard()),
+        QualityProfile::Strict => map::load_quality_config(root, "strict"),
+    }
 }
 
 fn run_autosave(root: &std::path::Path, json: bool, cmd: AutosaveCmd) -> Result<()> {
@@ -515,7 +549,7 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
     let mut map_summary = None;
     let mut map_quality = None;
 
-    if cmd.profile == CheckProfile::Standard {
+    if matches!(cmd.profile, CheckProfile::Standard | CheckProfile::Release) {
         let (goals, goal_load_issues) = goal_store.list_with_issues()?;
         for issue in goal_load_issues {
             standard_blockers.push(format!(
@@ -527,7 +561,12 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
             match map::build_readonly(root) {
                 Ok(project_map) => {
                     map_summary = Some(map::summary(&project_map));
-                    let quality = map::quality_report(&project_map);
+                    let quality = if cmd.profile == CheckProfile::Release {
+                        let config = map::load_quality_config(root, "strict")?;
+                        map::quality_report_with_config(&project_map, &config)
+                    } else {
+                        map::quality_report(&project_map)
+                    };
                     for finding in &quality.findings {
                         if finding.severity == "error" {
                             standard_blockers.push(format!(
@@ -606,6 +645,12 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
                     standard_blockers
                         .push(format!("goal {} 需求 {} {detail}", checked_goal.id, req.id));
                 }
+                if req.status == "done" && !req.impacts.is_empty() && !req.validations.is_empty() {
+                    for gap in validation_relevance_gaps(req) {
+                        standard_blockers
+                            .push(format!("goal {} 需求 {} {gap}", checked_goal.id, req.id));
+                    }
+                }
                 if req.status == "done"
                     && req.impacts.is_empty()
                     && !req.validations.is_empty()
@@ -660,16 +705,21 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
             asset_report.markers.len()
         );
         println!("  待完成项: {}", pending.len());
-        if cmd.profile == CheckProfile::Standard {
+        if matches!(cmd.profile, CheckProfile::Standard | CheckProfile::Release) {
             if let Some(summary) = &map_summary {
                 println!(
-                    "  项目地图: modules={} symbols={} deps={} risks={}",
-                    summary.modules, summary.symbols, summary.dependencies, summary.risks
+                    "  项目地图: modules={} symbols={} deps={} packages={} risks={}",
+                    summary.modules,
+                    summary.symbols,
+                    summary.dependencies,
+                    summary.packages,
+                    summary.risks
                 );
             }
             if let Some(quality) = &map_quality {
                 println!(
-                    "  质量: ready={} errors={} warnings={} covered_sources={}/{}",
+                    "  质量: profile={} ready={} errors={} warnings={} covered_sources={}/{}",
+                    quality.profile,
                     quality.ready,
                     quality.error_count,
                     quality.warning_count,
@@ -692,6 +742,79 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
         std::process::exit(1);
     }
     Ok(())
+}
+
+fn validation_relevance_gaps(req: &goal::Requirement) -> Vec<String> {
+    let mut gaps = Vec::new();
+    for impact in &req.impacts {
+        let Some(expectation) = validation_expectation_for_impact(impact) else {
+            continue;
+        };
+        if !req
+            .validations
+            .iter()
+            .any(|validation| validation_matches_expectation(&validation.command, expectation))
+        {
+            gaps.push(format!(
+                "validation 不覆盖 {}；需要 {}",
+                impact.changed_path,
+                validation_expectation_label(expectation)
+            ));
+        }
+    }
+    gaps
+}
+
+#[derive(Copy, Clone)]
+enum ValidationExpectation {
+    RustBuildOrTest,
+    CargoManifestValidation,
+}
+
+fn validation_expectation_for_impact(
+    impact: &goal::ImpactEvidence,
+) -> Option<ValidationExpectation> {
+    let path = impact.changed_path.to_ascii_lowercase();
+    if path.ends_with(".rs") {
+        return Some(ValidationExpectation::RustBuildOrTest);
+    }
+    if path.ends_with("cargo.toml") || path.ends_with("cargo.lock") {
+        return Some(ValidationExpectation::CargoManifestValidation);
+    }
+    None
+}
+
+fn validation_expectation_label(expectation: ValidationExpectation) -> &'static str {
+    match expectation {
+        ValidationExpectation::RustBuildOrTest => {
+            "Rust build/test validation such as `cargo test`, `cargo clippy`, `cargo check`, or `cargo build`"
+        }
+        ValidationExpectation::CargoManifestValidation => {
+            "Cargo manifest validation such as `cargo test`, `cargo clippy`, `cargo check`, `cargo build`, `cargo deny check`, or `cargo audit`"
+        }
+    }
+}
+
+fn validation_matches_expectation(command: &str, expectation: ValidationExpectation) -> bool {
+    let command = command.to_ascii_lowercase();
+    match expectation {
+        ValidationExpectation::RustBuildOrTest => is_rust_build_or_test_command(&command),
+        ValidationExpectation::CargoManifestValidation => {
+            is_rust_build_or_test_command(&command) || is_dependency_audit_command(&command)
+        }
+    }
+}
+
+fn is_rust_build_or_test_command(command: &str) -> bool {
+    command.contains("cargo test")
+        || command.contains("cargo nextest")
+        || command.contains("cargo clippy")
+        || command.contains("cargo check")
+        || command.contains("cargo build")
+}
+
+fn is_dependency_audit_command(command: &str) -> bool {
+    command.contains("cargo deny") || command.contains("cargo audit")
 }
 
 fn print_assets(report: &assets::AssetReport) {
@@ -718,13 +841,15 @@ fn print_assets(report: &assets::AssetReport) {
 
 fn print_map_summary(summary: &map::MapSummary) {
     println!(
-        "项目地图: files={} source={} tests={} modules={} symbols={} deps={} entrypoints={} risks={}",
+        "项目地图: files={} source={} tests={} modules={} symbols={} deps={} packages={} package_deps={} entrypoints={} risks={}",
         summary.files,
         summary.source_files,
         summary.test_files,
         summary.modules,
         summary.symbols,
         summary.dependencies,
+        summary.packages,
+        summary.package_dependencies,
         summary.entrypoints,
         summary.risks
     );
@@ -780,8 +905,39 @@ fn print_symbol_report(report: &map::SymbolReport) {
     }
 }
 
+fn print_topology_report(report: &map::TopologyReport) {
+    println!(
+        "项目拓扑: packages={} package_dependencies={}",
+        report.packages.len(),
+        report.package_dependencies.len()
+    );
+    for package in &report.packages {
+        println!(
+            "  package {} root={} manifest={} source={} tests={}",
+            package.name,
+            package.root_path,
+            package.manifest_path,
+            package.source_files,
+            package.test_files
+        );
+    }
+    for dependency in &report.package_dependencies {
+        println!(
+            "  {} -> {} ({}, {}, {})",
+            dependency.from_package,
+            dependency.to_package,
+            dependency.dependency_name,
+            dependency.kind,
+            dependency.evidence
+        );
+    }
+}
+
 fn print_impact_report(report: &map::ImpactReport) {
     println!("影响分析: {}", report.changed_path);
+    if let Some(package) = &report.package {
+        println!("  package: {package}");
+    }
     println!("  直接依赖: {}", report.direct_dependencies.len());
     for dependency in &report.direct_dependencies {
         println!("    -> {} ({})", dependency.to_path, dependency.evidence);
@@ -789,6 +945,20 @@ fn print_impact_report(report: &map::ImpactReport) {
     println!("  直接依赖方: {}", report.direct_dependents.len());
     for dependency in &report.direct_dependents {
         println!("    <- {} ({})", dependency.from_path, dependency.evidence);
+    }
+    println!("  package 依赖: {}", report.package_dependencies.len());
+    for dependency in &report.package_dependencies {
+        println!(
+            "    -> {} via {} ({})",
+            dependency.to_package, dependency.dependency_name, dependency.evidence
+        );
+    }
+    println!("  package 依赖方: {}", report.package_dependents.len());
+    for dependency in &report.package_dependents {
+        println!(
+            "    <- {} via {} ({})",
+            dependency.from_package, dependency.dependency_name, dependency.evidence
+        );
     }
     println!("  候选相关测试(启发式): {}", report.related_tests.len());
     for test in &report.related_tests {
@@ -810,9 +980,61 @@ fn print_impact_report(report: &map::ImpactReport) {
     }
 }
 
+fn print_change_plan(report: &map::ChangePlan) {
+    println!(
+        "变更计划: {}",
+        if report.ready { "READY" } else { "BLOCKED" }
+    );
+    println!(
+        "  changed_paths={} impacted_files={} related_tests={} priority={}",
+        report.changed_paths.len(),
+        report.impacted_files.len(),
+        report.related_tests.len(),
+        report.review_priority
+    );
+    if !report.blockers.is_empty() {
+        println!("  blockers:");
+        for blocker in &report.blockers {
+            println!("    BLOCKER: {blocker}");
+        }
+    }
+    if !report.warnings.is_empty() {
+        println!("  warnings:");
+        for warning in &report.warnings {
+            println!("    warning: {warning}");
+        }
+    }
+    println!("  文件分组:");
+    for file in &report.impacted_files {
+        println!("    [{}] {} — {}", file.role, file.path, file.reason);
+    }
+    println!("  候选相关测试(启发式): {}", report.related_tests.len());
+    for test in &report.related_tests {
+        println!(
+            "    {} ({}, basis={}, confidence={})",
+            test.path, test.kind, test.basis, test.confidence
+        );
+    }
+    println!("  建议验证:");
+    for check in &report.recommended_checks {
+        println!("    {check}");
+    }
+    if !report.risks.is_empty() {
+        println!("  风险:");
+        for risk in &report.risks {
+            println!(
+                "    [{}] {} {} — {}",
+                risk.severity, risk.kind, risk.path, risk.detail
+            );
+        }
+    }
+    println!("  建议依据: {}", report.recommendation_basis);
+}
+
 fn print_quality_report(report: &map::QualityReport) {
     println!(
-        "项目质量: {}",
+        "项目质量({}): {}",
+        report.profile,
         if report.ready { "READY" } else { "BLOCKED" }
     );
     println!(

@@ -513,6 +513,27 @@ fn standard_check_does_not_write_project_map_cache() {
 }
 
 #[test]
+fn release_check_does_not_write_project_map_cache() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+    let project_map = root.join(".RaymanCodingSkill/context/project_map.json");
+    std::fs::write(&project_map, "sentinel project map cache").unwrap();
+
+    let release = run(root, &["check", "--profile", "release"]);
+    assert_eq!(
+        release.status, 0,
+        "stdout={} stderr={}",
+        release.stdout, release.stderr
+    );
+    assert_eq!(
+        std::fs::read_to_string(&project_map).unwrap(),
+        "sentinel project map cache"
+    );
+}
+
+#[test]
 fn goal_evidence_changed_failure_does_not_write_project_map_cache() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
@@ -588,6 +609,47 @@ fn standard_check_does_not_change_state_tree() {
         standard.status, 0,
         "stdout={} stderr={}",
         standard.stdout, standard.stderr
+    );
+    assert_eq!(state_snapshot(root), before);
+}
+
+#[test]
+fn release_check_does_not_change_state_tree() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+    run_json(
+        root,
+        &["goal", "start", "docs update", "--must", "record evidence"],
+    );
+    let goals = run_json(root, &["goal", "list"]);
+    let id = goals[0]["id"].as_str().unwrap();
+    run(
+        root,
+        &[
+            "goal",
+            "evidence",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "src/lib.rs changed; cargo test --all passed",
+            "--changed",
+            "src/lib.rs",
+            "--validated",
+            "cargo test --all",
+        ],
+    );
+    let closed = run(root, &["goal", "close", id]);
+    assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
+    let before = state_snapshot(root);
+
+    let release = run(root, &["check", "--profile", "release"]);
+    assert_eq!(
+        release.status, 0,
+        "stdout={} stderr={}",
+        release.stdout, release.stderr
     );
     assert_eq!(state_snapshot(root), before);
 }
@@ -698,6 +760,159 @@ fn goal_evidence_changed_requires_validation_and_standard_accepts_it() {
             .unwrap()
             .contains("heuristic")
     );
+    let closed = run(root, &["goal", "close", id]);
+    assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
+
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(
+        standard.status, 0,
+        "stdout={} stderr={}",
+        standard.stdout, standard.stderr
+    );
+}
+
+#[test]
+fn standard_check_blocks_irrelevant_validation_for_source_changes() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+    let goal = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "wire relevant validation",
+            "--must",
+            "record evidence",
+        ],
+    );
+    let id = goal["id"].as_str().unwrap();
+
+    run_json(
+        root,
+        &[
+            "goal",
+            "evidence",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "src/lib.rs changed; docs reviewed",
+            "--changed",
+            "src/lib.rs",
+            "--validated",
+            "docs reviewed",
+        ],
+    );
+    let closed = run(root, &["goal", "close", id]);
+    assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
+
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(standard.status, 1);
+    assert!(
+        standard.stdout.contains("validation 不覆盖 src/lib.rs"),
+        "stdout={}",
+        standard.stdout
+    );
+}
+
+#[test]
+fn standard_check_accepts_rust_validation_for_cargo_manifest_changes() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(
+        root,
+        "Cargo.toml",
+        "[package]\nname = \"sample\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+    let goal = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "update manifest",
+            "--must",
+            "record evidence",
+        ],
+    );
+    let id = goal["id"].as_str().unwrap();
+
+    let recorded = run(
+        root,
+        &[
+            "goal",
+            "evidence",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "Cargo.toml changed; cargo test --all passed",
+            "--changed",
+            "Cargo.toml",
+            "--validated",
+            "cargo test --all",
+        ],
+    );
+    assert_eq!(recorded.status, 0, "stderr={}", recorded.stderr);
+    let closed = run(root, &["goal", "close", id]);
+    assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
+
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(
+        standard.status, 0,
+        "stdout={} stderr={}",
+        standard.stdout, standard.stderr
+    );
+}
+
+#[test]
+fn standard_check_accepts_rust_validation_for_cargo_lock_changes() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(
+        root,
+        "Cargo.toml",
+        "[package]\nname = \"sample\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(
+        root,
+        "Cargo.lock",
+        "# This file is automatically @generated by Cargo.\nversion = 4\n",
+    );
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+    let goal = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "update lockfile",
+            "--must",
+            "record evidence",
+        ],
+    );
+    let id = goal["id"].as_str().unwrap();
+
+    let recorded = run(
+        root,
+        &[
+            "goal",
+            "evidence",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "Cargo.lock changed; cargo check --all passed",
+            "--changed",
+            "Cargo.lock",
+            "--validated",
+            "cargo check --all",
+        ],
+    );
+    assert_eq!(recorded.status, 0, "stderr={}", recorded.stderr);
     let closed = run(root, &["goal", "close", id]);
     assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
 
@@ -849,6 +1064,354 @@ fn map_commands_report_project_structure_and_impact() {
 }
 
 #[test]
+fn map_topology_and_impact_include_cargo_path_dependents() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(
+        root,
+        "Cargo.toml",
+        "[workspace]\nmembers = [\"crates/core\", \"crates/app\"]\nresolver = \"2\"\n",
+    );
+    write(
+        root,
+        "crates/core/Cargo.toml",
+        "[package]\nname = \"core\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(
+        root,
+        "crates/core/src/lib.rs",
+        "pub fn core_api() -> i32 { 1 }\n",
+    );
+    write(
+        root,
+        "crates/app/Cargo.toml",
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\ncore = { path = \"../core\" }\n",
+    );
+    write(
+        root,
+        "crates/app/src/lib.rs",
+        "pub fn app_api() -> i32 { core::core_api() }\n",
+    );
+    write(
+        root,
+        "crates/app/tests/app_test.rs",
+        "use app::app_api;\n#[test]\nfn app_works() { assert_eq!(app_api(), 1); }\n",
+    );
+    run_json(root, &["context", "refresh"]);
+
+    let topology = run_json(root, &["map", "topology"]);
+    assert_eq!(topology["packages"].as_array().unwrap().len(), 2);
+    assert!(
+        topology["package_dependencies"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|dependency| {
+                dependency["from_package"] == "app" && dependency["to_package"] == "core"
+            }),
+        "topology={topology}"
+    );
+
+    let impact = run_json(root, &["map", "impact", "crates/core/src/lib.rs"]);
+    assert_eq!(impact["package"], "core");
+    assert!(
+        impact["package_dependents"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|dependency| dependency["from_package"] == "app"),
+        "impact={impact}"
+    );
+    assert!(
+        impact["recommended_checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|check| check == "cargo test -p core"),
+        "impact={impact}"
+    );
+    assert!(
+        impact["recommended_checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|check| check == "cargo test -p app"),
+        "impact={impact}"
+    );
+}
+
+#[test]
+fn map_topology_includes_workspace_inherited_path_dependents() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(
+        root,
+        "Cargo.toml",
+        "[workspace]\nmembers = [\"crates/core\", \"crates/app\"]\nresolver = \"2\"\n\n[workspace.dependencies]\ncore = { path = \"crates/core\" }\n",
+    );
+    write(
+        root,
+        "crates/core/Cargo.toml",
+        "[package]\nname = \"core\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(
+        root,
+        "crates/core/src/lib.rs",
+        "pub fn core_api() -> i32 { 1 }\n",
+    );
+    write(
+        root,
+        "crates/app/Cargo.toml",
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\ncore = { workspace = true }\n",
+    );
+    write(
+        root,
+        "crates/app/src/lib.rs",
+        "pub fn app_api() -> i32 { core::core_api() }\n",
+    );
+    run_json(root, &["context", "refresh"]);
+
+    let topology = run_json(root, &["map", "topology"]);
+    assert!(
+        topology["package_dependencies"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|dependency| {
+                dependency["from_package"] == "app"
+                    && dependency["from_root_path"] == "crates/app"
+                    && dependency["to_package"] == "core"
+                    && dependency["to_root_path"] == "crates/core"
+            }),
+        "topology={topology}"
+    );
+
+    let impact = run_json(root, &["map", "impact", "crates/core/src/lib.rs"]);
+    assert!(
+        impact["package_dependents"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|dependency| dependency["from_package"] == "app"),
+        "impact={impact}"
+    );
+    assert!(
+        impact["recommended_checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|check| check == "cargo test -p core"),
+        "impact={impact}"
+    );
+    assert!(
+        impact["recommended_checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|check| check == "cargo test -p app"),
+        "impact={impact}"
+    );
+}
+
+#[test]
+fn map_topology_includes_dotted_workspace_inherited_path_dependents() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(
+        root,
+        "Cargo.toml",
+        "[workspace]\nmembers = [\"crates/core\", \"crates/app\"]\nresolver = \"2\"\n\n[workspace.dependencies]\ncore.path = \"crates/core\"\n",
+    );
+    write(
+        root,
+        "crates/core/Cargo.toml",
+        "[package]\nname = \"core\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(
+        root,
+        "crates/core/src/lib.rs",
+        "pub fn core_api() -> i32 { 1 }\n",
+    );
+    write(
+        root,
+        "crates/app/Cargo.toml",
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[target.'cfg(windows)'.dependencies]\ncore.workspace = true\n",
+    );
+    write(
+        root,
+        "crates/app/src/lib.rs",
+        "pub fn app_api() -> i32 { core::core_api() }\n",
+    );
+    run_json(root, &["context", "refresh"]);
+
+    let topology = run_json(root, &["map", "topology"]);
+    assert!(
+        topology["package_dependencies"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|dependency| {
+                dependency["from_package"] == "app"
+                    && dependency["from_root_path"] == "crates/app"
+                    && dependency["to_package"] == "core"
+                    && dependency["to_root_path"] == "crates/core"
+            }),
+        "topology={topology}"
+    );
+}
+
+#[test]
+fn map_plan_check_blocks_broad_source_change_without_test_anchor() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub mod parser;\npub mod evaluator;\n");
+    write(root, "src/parser.rs", "pub fn parse() -> i32 { 1 }\n");
+    write(root, "src/evaluator.rs", "pub fn eval() -> i32 { 1 }\n");
+    run_json(root, &["context", "refresh"]);
+
+    let plan = run(
+        root,
+        &[
+            "map",
+            "plan",
+            "src/lib.rs",
+            "src/parser.rs",
+            "src/evaluator.rs",
+            "--check",
+        ],
+    );
+    assert_eq!(plan.status, 1);
+    assert!(
+        plan.stdout.contains("no same-package candidate test"),
+        "stdout={}",
+        plan.stdout
+    );
+}
+
+#[test]
+fn map_plan_check_blocks_package_broad_change_without_indexed_test_anchor() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(
+        root,
+        "Cargo.toml",
+        "[workspace]\nmembers = [\"crates/core\", \"crates/app\"]\nresolver = \"2\"\n",
+    );
+    write(
+        root,
+        "crates/core/Cargo.toml",
+        "[package]\nname = \"core\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(root, "crates/core/src/lib.rs", "pub mod a;\npub mod b;\n");
+    write(root, "crates/core/src/a.rs", "pub fn a() -> i32 { 1 }\n");
+    write(root, "crates/core/src/b.rs", "pub fn b() -> i32 { 2 }\n");
+    write(
+        root,
+        "crates/app/Cargo.toml",
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\ncore = { path = \"../core\" }\n",
+    );
+    write(
+        root,
+        "crates/app/src/lib.rs",
+        "pub fn app_api() -> i32 { core::a::a() + core::b::b() }\n",
+    );
+    run_json(root, &["context", "refresh"]);
+
+    let plan = run(
+        root,
+        &[
+            "map",
+            "plan",
+            "crates/core/src/lib.rs",
+            "crates/core/src/a.rs",
+            "crates/core/src/b.rs",
+            "--check",
+        ],
+    );
+    assert_eq!(plan.status, 1);
+    assert!(
+        plan.stdout
+            .contains("no same-package candidate test target")
+            && plan.stdout.contains("indexed package test anchor"),
+        "stdout={}",
+        plan.stdout
+    );
+    assert!(
+        plan.stdout.contains("cargo test -p core") && plan.stdout.contains("cargo test -p app"),
+        "stdout={}",
+        plan.stdout
+    );
+}
+
+#[test]
+fn map_plan_check_accepts_package_test_anchors_for_broad_source_change() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(
+        root,
+        "Cargo.toml",
+        "[workspace]\nmembers = [\"crates/core\", \"crates/app\"]\nresolver = \"2\"\n",
+    );
+    write(
+        root,
+        "crates/core/Cargo.toml",
+        "[package]\nname = \"core\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(root, "crates/core/src/lib.rs", "pub mod a;\npub mod b;\n");
+    write(root, "crates/core/src/a.rs", "pub fn a() -> i32 { 1 }\n");
+    write(root, "crates/core/src/b.rs", "pub fn b() -> i32 { 2 }\n");
+    write(
+        root,
+        "crates/app/Cargo.toml",
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\ncore = { path = \"../core\" }\n",
+    );
+    write(
+        root,
+        "crates/app/src/lib.rs",
+        "pub fn app_api() -> i32 { core::a::a() + core::b::b() }\n",
+    );
+    write(
+        root,
+        "crates/app/tests/app_test.rs",
+        "use app::app_api;\n#[test]\nfn app_works() { assert_eq!(app_api(), 3); }\n",
+    );
+    run_json(root, &["context", "refresh"]);
+
+    let plan = run_json(
+        root,
+        &[
+            "map",
+            "plan",
+            "crates/core/src/lib.rs",
+            "crates/core/src/a.rs",
+            "crates/core/src/b.rs",
+            "--check",
+        ],
+    );
+    assert_eq!(plan["ready"], true, "plan={plan}");
+    assert!(
+        plan["blockers"].as_array().unwrap().is_empty(),
+        "plan={plan}"
+    );
+    assert!(
+        plan["recommended_checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|check| check == "cargo test -p core"),
+        "plan={plan}"
+    );
+    assert!(
+        plan["recommended_checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|check| check == "cargo test -p app"),
+        "plan={plan}"
+    );
+}
+
+#[test]
 fn map_quality_check_blocks_multi_source_project_without_tests() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
@@ -890,6 +1453,134 @@ fn map_quality_check_blocks_multi_source_project_without_tests() {
             .contains("quality multi_source_project_without_tests"),
         "stdout={}",
         standard.stdout
+    );
+}
+
+#[test]
+fn strict_quality_config_can_block_configured_warning_kinds() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn api() {}\n");
+    write(
+        root,
+        ".RaymanCodingSkill/quality.json",
+        "{\n  \"block_warning_kinds\": [\"public_api_without_test_evidence\"]\n}\n",
+    );
+    run_json(root, &["context", "refresh"]);
+
+    let standard = run(root, &["map", "quality", "--check"]);
+    assert_eq!(
+        standard.status, 0,
+        "stdout={} stderr={}",
+        standard.stdout, standard.stderr
+    );
+
+    let strict = run(root, &["map", "quality", "--profile", "strict", "--check"]);
+    assert_eq!(strict.status, 1);
+    assert!(
+        strict
+            .stdout
+            .contains("configured as blocking by .RaymanCodingSkill/quality.json"),
+        "stdout={}",
+        strict.stdout
+    );
+}
+
+#[test]
+fn release_check_fails_closed_on_corrupt_quality_config() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn api() {}\n");
+    write(root, ".RaymanCodingSkill/quality.json", "{ not json");
+    run_json(root, &["context", "refresh"]);
+
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(
+        standard.status, 0,
+        "stdout={} stderr={}",
+        standard.stdout, standard.stderr
+    );
+
+    let release = run(root, &["check", "--profile", "release"]);
+    assert_eq!(release.status, 1);
+    assert!(
+        release.stderr.contains("quality.json"),
+        "stderr={}",
+        release.stderr
+    );
+}
+
+#[test]
+fn strict_quality_config_fails_closed_on_unknown_fields() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn api() {}\n");
+    write(
+        root,
+        ".RaymanCodingSkill/quality.json",
+        "{\n  \"block_warning_kind\": [\"public_api_without_test_evidence\"]\n}\n",
+    );
+    run_json(root, &["context", "refresh"]);
+
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(
+        standard.status, 0,
+        "stdout={} stderr={}",
+        standard.stdout, standard.stderr
+    );
+
+    let strict = run(root, &["map", "quality", "--profile", "strict", "--check"]);
+    assert_eq!(strict.status, 1);
+    assert!(
+        strict.stderr.contains("quality.json") && strict.stderr.contains("unknown field"),
+        "stderr={}",
+        strict.stderr
+    );
+
+    let release = run(root, &["check", "--profile", "release"]);
+    assert_eq!(release.status, 1);
+    assert!(
+        release.stderr.contains("quality.json") && release.stderr.contains("unknown field"),
+        "stderr={}",
+        release.stderr
+    );
+}
+
+#[test]
+fn strict_quality_config_fails_closed_on_unknown_warning_kinds() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn api() {}\n");
+    write(
+        root,
+        ".RaymanCodingSkill/quality.json",
+        "{\n  \"block_warning_kinds\": [\"public_api_without_test_evdence\"]\n}\n",
+    );
+    run_json(root, &["context", "refresh"]);
+
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(
+        standard.status, 0,
+        "stdout={} stderr={}",
+        standard.stdout, standard.stderr
+    );
+
+    let strict = run(root, &["map", "quality", "--profile", "strict", "--check"]);
+    assert_eq!(strict.status, 1);
+    assert!(
+        strict.stderr.contains("quality.json")
+            && strict.stderr.contains("unknown block_warning_kinds entry"),
+        "stderr={}",
+        strict.stderr
+    );
+
+    let release = run(root, &["check", "--profile", "release"]);
+    assert_eq!(release.status, 1);
+    assert!(
+        release.stderr.contains("quality.json")
+            && release.stderr.contains("unknown block_warning_kinds entry"),
+        "stderr={}",
+        release.stderr
     );
 }
 
@@ -958,11 +1649,26 @@ fn map_commands_fail_closed_on_missing_or_stale_context() {
 fn map_impact_does_not_infer_related_tests_across_package_roots() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
+    write(
+        root,
+        "Cargo.toml",
+        "[workspace]\nmembers = [\"crates/rayman\"]\nexclude = [\"evals\"]\nresolver = \"2\"\n",
+    );
+    write(
+        root,
+        "crates/rayman/Cargo.toml",
+        "[package]\nname = \"rayman\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
     write(root, "crates/rayman/src/lib.rs", "pub fn cli() {}\n");
     write(
         root,
         "crates/rayman/tests/cli.rs",
         "use rayman::cli;\n#[test]\nfn cli_works() { cli(); }\n",
+    );
+    write(
+        root,
+        "evals/tasks/add-feature/fixture/Cargo.toml",
+        "[package]\nname = \"task\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
     );
     write(
         root,
@@ -984,6 +1690,23 @@ fn map_impact_does_not_infer_related_tests_across_package_roots() {
         "impact={impact}"
     );
     assert!(
+        impact["recommended_checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|check| check
+                == "cargo test --manifest-path evals/tasks/add-feature/fixture/Cargo.toml"),
+        "impact={impact}"
+    );
+    assert!(
+        !impact["recommended_checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|check| check == "cargo test -p task"),
+        "impact={impact}"
+    );
+    assert!(
         !impact["recommended_checks"]
             .as_array()
             .unwrap()
@@ -992,6 +1715,90 @@ fn map_impact_does_not_infer_related_tests_across_package_roots() {
                 .as_str()
                 .unwrap()
                 .contains("crates/rayman/tests/cli.rs")),
+        "impact={impact}"
+    );
+}
+
+#[test]
+fn map_impact_uses_manifest_path_for_duplicate_workspace_package_names() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(
+        root,
+        "Cargo.toml",
+        "[workspace]\nmembers = [\"crates/one\", \"crates/two\"]\nresolver = \"2\"\n",
+    );
+    write(
+        root,
+        "crates/one/Cargo.toml",
+        "[package]\nname = \"shared\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(root, "crates/one/src/lib.rs", "pub fn one() {}\n");
+    write(
+        root,
+        "crates/two/Cargo.toml",
+        "[package]\nname = \"shared\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(root, "crates/two/src/lib.rs", "pub fn two() {}\n");
+    run_json(root, &["context", "refresh"]);
+
+    let impact = run_json(root, &["map", "impact", "crates/one/src/lib.rs"]);
+    assert!(
+        impact["recommended_checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|check| check == "cargo test --manifest-path crates/one/Cargo.toml"),
+        "impact={impact}"
+    );
+    assert!(
+        !impact["recommended_checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|check| check == "cargo test -p shared"),
+        "impact={impact}"
+    );
+}
+
+#[test]
+fn map_impact_uses_manifest_path_for_nested_package_under_workspace_member_glob() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(
+        root,
+        "Cargo.toml",
+        "[workspace]\nmembers = [\"crates/*\"]\nresolver = \"2\"\n",
+    );
+    write(
+        root,
+        "crates/app/Cargo.toml",
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(root, "crates/app/src/lib.rs", "pub fn app() {}\n");
+    write(
+        root,
+        "crates/app/fixture/Cargo.toml",
+        "[package]\nname = \"task\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(root, "crates/app/fixture/src/lib.rs", "pub fn task() {}\n");
+    run_json(root, &["context", "refresh"]);
+
+    let impact = run_json(root, &["map", "impact", "crates/app/fixture/src/lib.rs"]);
+    assert!(
+        impact["recommended_checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|check| check == "cargo test --manifest-path crates/app/fixture/Cargo.toml"),
+        "impact={impact}"
+    );
+    assert!(
+        !impact["recommended_checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|check| check == "cargo test -p task"),
         "impact={impact}"
     );
 }
