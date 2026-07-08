@@ -14,7 +14,7 @@ Use in a workspace that has a `.RaymanCodingSkill/` directory, or when the user 
 ## Task tiers — do the least that fits
 
 - **Trivial** (typo, one-liner, doc tweak): just edit and run the project's own focused test. No `rayman` commands required.
-- **Standard** (a feature or fix): `rayman context refresh` once up front, use `rayman map impact <path>` for non-trivial touched files, implement, run focused tests, then `rayman check` before you call it done; if it reports a blocker, don't call the task done until it's resolved or the user has explicitly accepted the open item.
+- **Standard** (a feature or fix): `rayman context refresh` once up front, use `rayman map impact <path>` for non-trivial touched files, implement, record goal evidence with `--changed <path>` and `--validated "<command that passed>"` when a goal is active, run focused tests, then `rayman check --profile standard` before you call it done; if it reports a blocker, don't call the task done until it's resolved or the user has explicitly accepted the open item.
 - **Release / hand-off**: everything in Standard, plus resolve pending work and run the project's full build+test.
 
 `rayman check` is the single readiness gate: it reports context freshness, obsolete-asset/TODO findings, and open pending items, and exits non-zero when there is a hard blocker.
@@ -25,8 +25,9 @@ Use in a workspace that has a `.RaymanCodingSkill/` directory, or when the user 
 - `rayman context status` — cheap freshness check; run `refresh` if it says `stale`/`missing`.
 - `rayman map summary|file <path>|symbol <name>|impact <path>` — build a project map from the current context index, then report modules, symbols, local dependencies, entrypoints, heuristic test candidates, risks, and suggested checks. It refuses stale/missing context.
 - `rayman goal start "<title>" --must "<req>" [--should "<req>"]` — capture the task as a contract.
-- `rayman goal evidence <id> --req <req_id> -m "<file + validation>"` then `goal close <id>` — success is refused until every `must` requirement has evidence.
+- `rayman goal evidence <id> --req <req_id> -m "<file + validation>" --validated "<command that passed>" [--changed <path>]` then `goal close <id>` — success is refused until every `must` requirement has evidence; standard profile requires closed `success`, non-empty evidence text, structured validation commands, and changed-file evidence records a `map impact` snapshot.
 - `rayman goal pending add|list|resolve` — carry unfinished work across sessions; never report done while pending items remain.
+- `rayman check --profile standard` — everything in `check`, plus project-map freshness, strict goal-state loading, closed-success evidence checks, and fail-closed active/partial/blocked goal handling.
 - `rayman assets` — read-only scan for obsolete-looking files and TODO/FIXME/未完成 markers. It never deletes anything; deciding what to remove is yours.
 - `rayman temp scratch <label> | status | cleanup` — put throwaway runtime files under `.RaymanCodingSkill/tmp/`, not system temp.
 - `rayman checkpoint save | list | status | restore` — snapshot the whole working tree (gitignore-aware) plus task state to a user-level store, keeping the newest few; for crash recovery and handing off between AI assistants. `restore` needs `--yes`.

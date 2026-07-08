@@ -5,9 +5,9 @@ use clap::Parser;
 use serde_json::json;
 
 use cli::{
-    AutosaveAction, AutosaveCmd, CheckpointAction, CheckpointCmd, Cli, Command, ContextAction,
-    ContextCmd, Format, GoalAction, GoalCmd, MapAction, MapCmd, PendingAction, PendingCmd,
-    TempAction, TempCmd,
+    AutosaveAction, AutosaveCmd, CheckCmd, CheckProfile, CheckpointAction, CheckpointCmd, Cli,
+    Command, ContextAction, ContextCmd, Format, GoalAction, GoalCmd, MapAction, MapCmd,
+    PendingAction, PendingCmd, TempAction, TempCmd,
 };
 use rayman::{assets, autosave, checkpoint, context, goal, map, temp, workspace_root};
 
@@ -107,7 +107,7 @@ fn run(cli: Cli) -> Result<()> {
             }
         },
 
-        Command::Check => return run_check(&root, json),
+        Command::Check(cmd) => return run_check(&root, json, cmd),
 
         Command::Map(cmd) => return run_map(&root, json, cmd),
 
@@ -368,14 +368,66 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                             .map(|evidence| format!("  证据: {evidence}"))
                             .unwrap_or_default()
                     );
+                    for validation in &req.validations {
+                        println!("    validated: {}", validation.command);
+                    }
+                    for impact in &req.impacts {
+                        println!(
+                            "    impact: {} deps={} dependents={} candidate_tests={} recommended_checks={}",
+                            impact.changed_path,
+                            impact.direct_dependencies.len(),
+                            impact.direct_dependents.len(),
+                            impact.candidate_tests.len(),
+                            impact.recommended_checks.len()
+                        );
+                    }
                 }
             } else {
                 println!("目标不存在: {id}");
             }
         }
-        GoalAction::Evidence { id, req, message } => {
-            let goal = store.record_evidence(&id, &req, &message)?;
-            println!("已记录 {req} 证据（目标 {}）", goal.id);
+        GoalAction::Evidence {
+            id,
+            req,
+            message,
+            changed,
+            validated,
+        } => {
+            if message.trim().is_empty() {
+                bail!("证据 `--message` 不能为空。");
+            }
+            if validated.iter().any(|command| command.trim().is_empty()) {
+                bail!("`--validated <command>` 不能为空。");
+            }
+            if !changed.is_empty() && validated.is_empty() {
+                bail!(
+                    "`--changed` 证据必须同时提供至少一个 `--validated <command>`，避免把影响面建议误当作已验证事实。"
+                );
+            }
+            let impacts = if changed.is_empty() {
+                Vec::new()
+            } else {
+                let project_map = map::build_readonly(root)?;
+                changed
+                    .iter()
+                    .map(|path| {
+                        let report = map::impact_report(&project_map, path)?;
+                        Ok(impact_evidence_from_report(&report))
+                    })
+                    .collect::<Result<Vec<_>>>()?
+            };
+            let impact_count = impacts.len();
+            let validation_count = validated.len();
+            let goal =
+                store.record_evidence_with_context(&id, &req, &message, validated, impacts)?;
+            if json {
+                print(&serde_json::to_value(&goal)?);
+            } else {
+                println!(
+                    "已记录 {req} 证据（目标 {}，impact={}，validated={}）",
+                    goal.id, impact_count, validation_count
+                );
+            }
         }
         GoalAction::Close { id, status } => {
             let goal = store.close(&id, &status)?;
@@ -414,28 +466,162 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
     Ok(())
 }
 
+fn impact_evidence_from_report(report: &map::ImpactReport) -> goal::ImpactEvidence {
+    goal::ImpactEvidence {
+        changed_path: report.changed_path.clone(),
+        direct_dependencies: report
+            .direct_dependencies
+            .iter()
+            .map(|dependency| dependency.to_path.clone())
+            .collect(),
+        direct_dependents: report
+            .direct_dependents
+            .iter()
+            .map(|dependency| dependency.from_path.clone())
+            .collect(),
+        candidate_tests: report
+            .related_tests
+            .iter()
+            .map(|test| test.path.clone())
+            .collect(),
+        recommended_checks: report.recommended_checks.clone(),
+        recommendation_basis: report.recommendation_basis.clone(),
+        recorded_at: rayman::fsutil::now_iso(),
+    }
+}
+
 /// 一次性只读就绪检查：聚合上下文新鲜度、资产扫描、待完成项。
 /// 有硬阻塞（上下文缺失/陈旧、存在待完成项）时以非零码退出，便于脚本/agent 门禁。
-fn run_check(root: &std::path::Path, json: bool) -> Result<()> {
+fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
     let freshness = context::freshness(root);
     let asset_report = assets::scan(root);
+    let goal_store = goal::GoalStore::new(root);
     let pending = goal::PendingStore::new(root).list();
 
     let context_blocked = freshness.status != "ready";
-    let blocked = context_blocked || !pending.is_empty();
+    let mut standard_blockers = Vec::new();
+    let mut standard_warnings = Vec::new();
+    let mut map_summary = None;
+
+    if cmd.profile == CheckProfile::Standard {
+        let (goals, goal_load_issues) = goal_store.list_with_issues()?;
+        for issue in goal_load_issues {
+            standard_blockers.push(format!(
+                "goal 文件不可读取: {} ({})",
+                issue.path, issue.error
+            ));
+        }
+        if !context_blocked {
+            match map::build_readonly(root) {
+                Ok(project_map) => {
+                    map_summary = Some(map::summary(&project_map));
+                }
+                Err(error) => {
+                    standard_blockers.push(format!("项目地图不可用: {error}"));
+                }
+            }
+        }
+        for checked_goal in &goals {
+            match checked_goal.status.as_str() {
+                "success" => {}
+                "active" => {
+                    standard_blockers.push(format!(
+                        "goal {} 仍为 active；记录证据后必须 goal close 才能作为 standard READY",
+                        checked_goal.id
+                    ));
+                }
+                "partial" | "blocked" => {
+                    standard_blockers.push(format!(
+                        "goal {} 状态为 {}，不能作为 standard READY",
+                        checked_goal.id, checked_goal.status
+                    ));
+                }
+                other => {
+                    standard_blockers.push(format!("goal {} 状态未知: {}", checked_goal.id, other));
+                }
+            }
+            for req in &checked_goal.requirements {
+                if checked_goal.status == "active" && req.kind == "must" && req.status != "done" {
+                    standard_blockers.push(format!(
+                        "active goal {} 的 must 需求 {} 仍未完成",
+                        checked_goal.id, req.id
+                    ));
+                }
+                if checked_goal.status == "success" && req.kind == "must" && req.status != "done" {
+                    standard_blockers.push(format!(
+                        "success goal {} 的 must 需求 {} 未处于 done 状态",
+                        checked_goal.id, req.id
+                    ));
+                }
+                if matches!(checked_goal.status.as_str(), "partial" | "blocked")
+                    && req.kind == "must"
+                    && req.status != "done"
+                {
+                    standard_blockers.push(format!(
+                        "goal {} 的 must 需求 {} 仍未完成",
+                        checked_goal.id, req.id
+                    ));
+                }
+                if req.status == "done"
+                    && req
+                        .evidence
+                        .as_deref()
+                        .map(str::trim)
+                        .unwrap_or_default()
+                        .is_empty()
+                {
+                    standard_blockers.push(format!(
+                        "goal {} 需求 {} 缺少 evidence 文本",
+                        checked_goal.id, req.id
+                    ));
+                }
+                if req.status == "done" && req.validations.is_empty() {
+                    let detail = if req.impacts.is_empty() {
+                        "缺少结构化 validated 命令；代码变更还应记录 changed impact 快照"
+                    } else {
+                        "有 impact 快照但缺少 validated 命令"
+                    };
+                    standard_blockers
+                        .push(format!("goal {} 需求 {} {detail}", checked_goal.id, req.id));
+                }
+                if req.status == "done"
+                    && req.impacts.is_empty()
+                    && !req.validations.is_empty()
+                    && !checked_goal.loaded_from_legacy
+                {
+                    standard_warnings.push(format!(
+                        "goal {} 需求 {} 没有 impact 快照；非代码变更可忽略",
+                        checked_goal.id, req.id
+                    ));
+                }
+            }
+        }
+    }
+
+    let blocked = context_blocked || !pending.is_empty() || !standard_blockers.is_empty();
 
     if json {
         print(&json!({
             "ready": !blocked,
+            "profile": format!("{:?}", cmd.profile).to_ascii_lowercase(),
             "context": serde_json::to_value(&freshness)?,
             "assets": {
                 "obsolete": asset_report.obsolete.len(),
                 "markers": asset_report.markers.len(),
             },
             "pending": pending.len(),
+            "standard": {
+                "blockers": standard_blockers,
+                "warnings": standard_warnings,
+                "project_map": map_summary,
+            },
         }));
     } else {
-        println!("就绪检查: {}", if blocked { "BLOCKED" } else { "READY" });
+        println!(
+            "就绪检查({:?}): {}",
+            cmd.profile,
+            if blocked { "BLOCKED" } else { "READY" }
+        );
         println!(
             "  上下文: {}{}",
             freshness.status,
@@ -451,6 +637,22 @@ fn run_check(root: &std::path::Path, json: bool) -> Result<()> {
             asset_report.markers.len()
         );
         println!("  待完成项: {}", pending.len());
+        if cmd.profile == CheckProfile::Standard {
+            if let Some(summary) = &map_summary {
+                println!(
+                    "  项目地图: modules={} symbols={} deps={} risks={}",
+                    summary.modules, summary.symbols, summary.dependencies, summary.risks
+                );
+            }
+            println!("  standard blockers: {}", standard_blockers.len());
+            for blocker in &standard_blockers {
+                println!("    BLOCKER: {blocker}");
+            }
+            println!("  standard warnings: {}", standard_warnings.len());
+            for warning in &standard_warnings {
+                println!("    warning: {warning}");
+            }
+        }
     }
 
     if blocked {

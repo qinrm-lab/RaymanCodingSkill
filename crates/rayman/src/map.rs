@@ -124,6 +124,12 @@ pub struct ImpactReport {
 }
 
 pub fn build(root: &Path) -> Result<ProjectMap> {
+    let map = build_readonly(root)?;
+    write_json(&project_map_path(root), &map)?;
+    Ok(map)
+}
+
+pub fn build_readonly(root: &Path) -> Result<ProjectMap> {
     let freshness = context::freshness(root);
     if freshness.status != "ready" {
         bail!(
@@ -134,9 +140,7 @@ pub fn build(root: &Path) -> Result<ProjectMap> {
     let Some(index) = context::load(root)? else {
         bail!("上下文索引缺失。先运行 `rayman context refresh`。");
     };
-    let map = build_from_index(root, &index)?;
-    write_json(&project_map_path(root), &map)?;
-    Ok(map)
+    build_from_index(root, &index)
 }
 
 pub fn summary(map: &ProjectMap) -> MapSummary {

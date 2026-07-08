@@ -3,7 +3,7 @@
 //! 只保留真正有用的那一条门禁：**关闭为 success 时，每个 `must` 需求都必须带证据**。
 //! 砍掉 counterexample_challenges / search_effort / claim_ledger 等仪式化元数据。
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
@@ -24,6 +24,27 @@ pub struct Requirement {
     pub status: String, // open | done
     #[serde(default)]
     pub evidence: Option<String>,
+    #[serde(default)]
+    pub validations: Vec<ValidationEvidence>,
+    #[serde(default)]
+    pub impacts: Vec<ImpactEvidence>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ValidationEvidence {
+    pub command: String,
+    pub recorded_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ImpactEvidence {
+    pub changed_path: String,
+    pub direct_dependencies: Vec<String>,
+    pub direct_dependents: Vec<String>,
+    pub candidate_tests: Vec<String>,
+    pub recommended_checks: Vec<String>,
+    pub recommendation_basis: String,
+    pub recorded_at: String,
 }
 
 fn must_kind() -> String {
@@ -41,6 +62,50 @@ pub struct Goal {
     pub created_at: String,
     pub updated_at: String,
     pub requirements: Vec<Requirement>,
+    #[serde(default, skip)]
+    pub loaded_from_legacy: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LegacyGoal {
+    id: String,
+    status: String,
+    #[serde(default)]
+    created_at: Option<String>,
+    #[serde(default)]
+    updated_at: Option<String>,
+    contract: LegacyContract,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LegacyContract {
+    goal: String,
+    #[serde(default)]
+    requirements: Vec<LegacyRequirement>,
+    #[serde(default)]
+    verification: Vec<String>,
+    #[serde(default)]
+    created_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LegacyRequirement {
+    id: String,
+    text: String,
+    #[serde(default = "must_kind")]
+    priority: String,
+    #[serde(default = "open_status")]
+    status: String,
+    #[serde(default)]
+    evidence: Option<String>,
+    #[serde(default)]
+    validation_commands: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct GoalLoadIssue {
+    pub path: String,
+    pub error: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -89,6 +154,8 @@ impl GoalStore {
                 kind: if *is_must { "must" } else { "should" }.into(),
                 status: "open".into(),
                 evidence: None,
+                validations: Vec::new(),
+                impacts: Vec::new(),
             })
             .collect();
         let goal = Goal {
@@ -98,44 +165,114 @@ impl GoalStore {
             created_at: now.clone(),
             updated_at: now,
             requirements,
+            loaded_from_legacy: false,
         };
         write_json(&self.goal_path(&id), &goal)?;
         Ok(goal)
     }
 
     pub fn get(&self, id: &str) -> Result<Option<Goal>> {
-        read_json(&self.goal_path(id))
+        Self::load_goal_file(&self.goal_path(id))
     }
 
     pub fn list(&self) -> Result<Vec<Goal>> {
+        let (goals, _) = self.list_with_issues()?;
+        Ok(goals)
+    }
+
+    pub fn list_with_issues(&self) -> Result<(Vec<Goal>, Vec<GoalLoadIssue>)> {
         let dir = self.root.join(GOALS_DIR);
         let mut goals = Vec::new();
-        let Ok(entries) = std::fs::read_dir(&dir) else {
-            return Ok(goals);
+        let mut issues = Vec::new();
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok((goals, issues));
+            }
+            Err(error) => {
+                issues.push(GoalLoadIssue {
+                    path: dir.display().to_string(),
+                    error: error.to_string(),
+                });
+                return Ok((goals, issues));
+            }
         };
-        for entry in entries.flatten() {
+        for entry_result in entries {
+            let entry = match entry_result {
+                Ok(entry) => entry,
+                Err(error) => {
+                    issues.push(GoalLoadIssue {
+                        path: dir.display().to_string(),
+                        error: error.to_string(),
+                    });
+                    continue;
+                }
+            };
             if entry.path().extension().and_then(|ext| ext.to_str()) == Some("json") {
-                // 单个损坏文件不拖垮列表。
-                if let Ok(Some(goal)) = read_json::<Goal>(&entry.path()) {
-                    goals.push(goal);
+                match Self::load_goal_file(&entry.path()) {
+                    Ok(Some(goal)) => goals.push(goal),
+                    Ok(None) => {}
+                    Err(error) => issues.push(GoalLoadIssue {
+                        path: entry.path().display().to_string(),
+                        error: error.to_string(),
+                    }),
                 }
             }
         }
         goals.sort_by(|a, b| a.created_at.cmp(&b.created_at));
-        Ok(goals)
+        Ok((goals, issues))
+    }
+
+    fn load_goal_file(path: &Path) -> Result<Option<Goal>> {
+        let Some(value) = read_json::<serde_json::Value>(path)? else {
+            return Ok(None);
+        };
+        match serde_json::from_value::<Goal>(value.clone()) {
+            Ok(mut goal) => {
+                goal.loaded_from_legacy = false;
+                Ok(Some(goal))
+            }
+            Err(current_error) => match serde_json::from_value::<LegacyGoal>(value) {
+                Ok(legacy) => Ok(Some(goal_from_legacy(legacy))),
+                Err(legacy_error) => bail!(
+                    "无法解析 goal 文件: current schema: {current_error}; legacy schema: {legacy_error}"
+                ),
+            },
+        }
     }
 
     /// 记录某个需求的证据并标记完成。
     pub fn record_evidence(&self, id: &str, req_id: &str, evidence: &str) -> Result<Goal> {
+        self.record_evidence_with_context(id, req_id, evidence, Vec::new(), Vec::new())
+    }
+
+    /// 记录某个需求的证据、验证命令和变更影响快照，并标记完成。
+    pub fn record_evidence_with_context(
+        &self,
+        id: &str,
+        req_id: &str,
+        evidence: &str,
+        validation_commands: Vec<String>,
+        impacts: Vec<ImpactEvidence>,
+    ) -> Result<Goal> {
         let Some(mut goal) = self.get(id)? else {
             bail!("目标不存在: {id}");
         };
         let Some(req) = goal.requirements.iter_mut().find(|req| req.id == req_id) else {
             bail!("需求不存在: {req_id}");
         };
+        let now = now_iso();
         req.evidence = Some(evidence.into());
+        req.validations = validation_commands
+            .into_iter()
+            .map(|command| ValidationEvidence {
+                command,
+                recorded_at: now.clone(),
+            })
+            .collect();
+        req.impacts = impacts;
         req.status = "done".into();
-        goal.updated_at = now_iso();
+        goal.updated_at = now;
         write_json(&self.goal_path(id), &goal)?;
         Ok(goal)
     }
@@ -165,6 +302,53 @@ impl GoalStore {
         goal.updated_at = now_iso();
         write_json(&self.goal_path(id), &goal)?;
         Ok(goal)
+    }
+}
+
+fn goal_from_legacy(legacy: LegacyGoal) -> Goal {
+    let created_at = legacy
+        .created_at
+        .or_else(|| legacy.contract.created_at.clone())
+        .unwrap_or_default();
+    let updated_at = legacy.updated_at.unwrap_or_else(|| created_at.clone());
+    let requirements = legacy
+        .contract
+        .requirements
+        .into_iter()
+        .map(|req| {
+            let validation_commands = if req.validation_commands.is_empty() {
+                legacy.contract.verification.clone()
+            } else {
+                req.validation_commands
+            };
+            Requirement {
+                id: req.id,
+                text: req.text,
+                kind: req.priority,
+                status: match req.status.as_str() {
+                    "satisfied" => "done".into(),
+                    other => other.into(),
+                },
+                evidence: req.evidence,
+                validations: validation_commands
+                    .into_iter()
+                    .map(|command| ValidationEvidence {
+                        command,
+                        recorded_at: updated_at.clone(),
+                    })
+                    .collect(),
+                impacts: Vec::new(),
+            }
+        })
+        .collect();
+    Goal {
+        id: legacy.id,
+        title: legacy.contract.goal,
+        status: legacy.status,
+        created_at,
+        updated_at,
+        requirements,
+        loaded_from_legacy: true,
     }
 }
 

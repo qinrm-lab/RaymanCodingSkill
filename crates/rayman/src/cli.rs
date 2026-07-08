@@ -30,7 +30,7 @@ pub enum Command {
     /// 最小目标契约与待完成项续接
     Goal(GoalCmd),
     /// 一次性只读就绪检查（上下文新鲜度 + 资产扫描 + 待完成）
-    Check,
+    Check(CheckCmd),
     /// 项目地图与变更影响分析（依赖当前 context 索引）
     Map(MapCmd),
     /// 只读的过时资产与未完成标记扫描
@@ -148,6 +148,19 @@ pub enum MapAction {
 }
 
 #[derive(Args)]
+pub struct CheckCmd {
+    /// 检查强度：quick 保持旧行为；standard 加入项目地图与目标证据影响面
+    #[arg(long, value_enum, default_value_t = CheckProfile::Quick)]
+    pub profile: CheckProfile,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
+pub enum CheckProfile {
+    Quick,
+    Standard,
+}
+
+#[derive(Args)]
 pub struct GoalCmd {
     #[command(subcommand)]
     pub action: GoalAction,
@@ -176,6 +189,12 @@ pub enum GoalAction {
         req: String,
         #[arg(long = "message", short = 'm')]
         message: String,
+        /// 本次证据涉及的变更文件；会记录 map impact 快照（可重复）
+        #[arg(long = "changed")]
+        changed: Vec<String>,
+        /// 已实际运行且通过的验证命令；standard profile 下完成需求必须有该结构化证据（可重复）
+        #[arg(long = "validated")]
+        validated: Vec<String>,
     },
     /// 关闭目标（success 要求所有 must 需求带证据）
     Close {
@@ -266,7 +285,16 @@ mod tests {
     #[test]
     fn parses_check() {
         let cli = Cli::try_parse_from(["rayman", "check"]).unwrap();
-        assert!(matches!(cli.command, Command::Check));
+        assert!(matches!(cli.command, Command::Check(_)));
+    }
+
+    #[test]
+    fn parses_standard_check_profile() {
+        let cli = Cli::try_parse_from(["rayman", "check", "--profile", "standard"]).unwrap();
+        match cli.command {
+            Command::Check(CheckCmd { profile }) => assert_eq!(profile, CheckProfile::Standard),
+            _ => panic!("unexpected command"),
+        }
     }
 
     #[test]

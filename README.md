@@ -34,13 +34,15 @@ rayman map file <path>          # symbols/dependencies/tests/risks for one file
 rayman map symbol <name>        # find indexed symbols by name
 rayman map impact <path>        # dependent files, heuristic test candidates, suggested checks
 rayman check                    # one aggregated readiness gate (context + assets + pending)
+rayman check --profile standard # plus project map and goal validation/impact evidence checks
 rayman assets                   # read-only obsolete-file + TODO/未完成 scan
 rayman temp status | scratch <label> | cleanup
 
 rayman goal start "<title>" --must "<req>" [--should "<req>"]
 rayman goal list | show <id>
-rayman goal evidence <id> --req <req_id> -m "<file + validation that passed>"
-rayman goal close <id> [--status success|partial|blocked]
+rayman goal evidence <id> --req <req_id> -m "<file + validation that passed>" --validated "<command that passed>"
+rayman goal evidence <id> --req <req_id> -m "<evidence>" --validated "<command that passed>" --changed <path>
+rayman goal close <id> [--status success|partial|blocked] # standard READY requires closed success
 rayman goal pending add "<title>" -m "<detail>" | list | resolve <id>
 ```
 

@@ -1,6 +1,7 @@
 //! 端到端集成测试：驱动真实的 `rayman` 二进制在临时工作区跑完整流程。
 //! 这些测试补足单元测试无法覆盖的东西——真实进程、真实退出码、真实文件系统状态。
 
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::Command;
 
@@ -46,6 +47,48 @@ fn write(dir: &Path, rel: &str, body: &str) {
     let path = dir.join(rel);
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(path, body).unwrap();
+}
+
+fn state_snapshot(root: &Path) -> BTreeMap<String, (u64, std::time::SystemTime, Vec<u8>)> {
+    fn visit(
+        base: &Path,
+        dir: &Path,
+        out: &mut BTreeMap<String, (u64, std::time::SystemTime, Vec<u8>)>,
+    ) {
+        let entries = match std::fs::read_dir(dir) {
+            Ok(entries) => entries,
+            Err(error) => panic!("无法读取状态目录 {}: {error}", dir.display()),
+        };
+        for entry in entries {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            let metadata = std::fs::metadata(&path).unwrap();
+            if metadata.is_dir() {
+                visit(base, &path, out);
+            } else if metadata.is_file() {
+                let rel = path
+                    .strip_prefix(base)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                out.insert(
+                    rel,
+                    (
+                        metadata.len(),
+                        metadata.modified().unwrap(),
+                        std::fs::read(&path).unwrap(),
+                    ),
+                );
+            }
+        }
+    }
+
+    let state_root = root.join(".RaymanCodingSkill");
+    let mut out = BTreeMap::new();
+    if state_root.exists() {
+        visit(&state_root, &state_root, &mut out);
+    }
+    out
 }
 
 #[test]
@@ -141,6 +184,529 @@ fn goal_success_close_is_refused_without_must_evidence() {
     let closed = run(root, &["goal", "close", &id]);
     assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
     assert_eq!(run_json(root, &["goal", "show", &id])["status"], "success");
+}
+
+#[test]
+fn standard_check_blocks_active_must_requirements_without_evidence() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+    run_json(
+        root,
+        &["goal", "start", "wire impact", "--must", "record evidence"],
+    );
+
+    assert_eq!(run(root, &["check"]).status, 0);
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(standard.status, 1);
+    assert!(
+        standard.stdout.contains("active goal") && standard.stdout.contains("must"),
+        "stdout={}",
+        standard.stdout
+    );
+}
+
+#[test]
+fn standard_check_blocks_active_goal_even_with_validated_evidence() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+    let goal = run_json(
+        root,
+        &["goal", "start", "wire impact", "--must", "record evidence"],
+    );
+    let id = goal["id"].as_str().unwrap();
+
+    let recorded = run(
+        root,
+        &[
+            "goal",
+            "evidence",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "src/lib.rs changed; cargo test --all passed",
+            "--changed",
+            "src/lib.rs",
+            "--validated",
+            "cargo test --all",
+        ],
+    );
+    assert_eq!(recorded.status, 0, "stderr={}", recorded.stderr);
+
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(standard.status, 1);
+    assert!(
+        standard.stdout.contains("仍为 active") && standard.stdout.contains("goal close"),
+        "stdout={}",
+        standard.stdout
+    );
+}
+
+#[test]
+fn standard_check_blocks_done_requirement_without_structured_validation() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+    let goal = run_json(
+        root,
+        &["goal", "start", "wire impact", "--must", "record evidence"],
+    );
+    let id = goal["id"].as_str().unwrap();
+
+    let recorded = run(
+        root,
+        &[
+            "goal",
+            "evidence",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "src/lib.rs changed; claimed validation",
+        ],
+    );
+    assert_eq!(recorded.status, 0, "stderr={}", recorded.stderr);
+    let closed = run(root, &["goal", "close", id]);
+    assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
+
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(standard.status, 1);
+    assert!(
+        standard.stdout.contains("缺少结构化 validated 命令")
+            && standard.stdout.contains("standard blockers: 1"),
+        "stdout={}",
+        standard.stdout
+    );
+}
+
+#[test]
+fn standard_check_blocks_done_requirement_without_evidence() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    write(
+        root,
+        ".RaymanCodingSkill/goals/goal_manual.json",
+        r#"{
+  "id": "goal_manual",
+  "title": "manual goal",
+  "status": "success",
+  "created_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-01T00:00:00Z",
+  "requirements": [
+    {
+      "id": "req_1",
+      "text": "manual requirement",
+      "kind": "must",
+      "status": "done",
+      "validations": [
+        {
+          "command": "cargo test --all",
+          "recorded_at": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "impacts": []
+    }
+  ]
+}"#,
+    );
+    run_json(root, &["context", "refresh"]);
+
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(standard.status, 1);
+    assert!(
+        standard.stdout.contains("goal_manual") && standard.stdout.contains("缺少 evidence 文本"),
+        "stdout={}",
+        standard.stdout
+    );
+}
+
+#[test]
+fn standard_check_blocks_partial_goal_without_structured_validation() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+    let goal = run_json(
+        root,
+        &["goal", "start", "wire impact", "--must", "record evidence"],
+    );
+    let id = goal["id"].as_str().unwrap();
+
+    let recorded = run(
+        root,
+        &[
+            "goal",
+            "evidence",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "src/lib.rs changed; claimed validation",
+        ],
+    );
+    assert_eq!(recorded.status, 0, "stderr={}", recorded.stderr);
+    let closed = run(root, &["goal", "close", id, "--status", "partial"]);
+    assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
+
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(standard.status, 1);
+    assert!(
+        standard.stdout.contains("状态为 partial")
+            && standard.stdout.contains("缺少结构化 validated 命令"),
+        "stdout={}",
+        standard.stdout
+    );
+}
+
+#[test]
+fn standard_check_blocks_unreadable_goal_file_instead_of_skipping_it() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    write(
+        root,
+        ".RaymanCodingSkill/goals/bad.json",
+        "{ definitely not json",
+    );
+    run_json(root, &["context", "refresh"]);
+
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(standard.status, 1);
+    assert!(
+        standard.stdout.contains("goal 文件不可读取"),
+        "stdout={}",
+        standard.stdout
+    );
+}
+
+#[test]
+fn standard_check_blocks_invalid_goals_store_path() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+    std::fs::write(root.join(".RaymanCodingSkill/goals"), "not a directory").unwrap();
+
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(standard.status, 1);
+    assert!(
+        standard.stdout.contains("goal 文件不可读取"),
+        "stdout={}",
+        standard.stdout
+    );
+}
+
+#[test]
+fn standard_check_reads_legacy_goal_schema_and_blocks_missing_validation() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    write(
+        root,
+        ".RaymanCodingSkill/goals/goal_legacy.json",
+        r#"{
+  "id": "goal_legacy",
+  "contract": {
+    "goal": "legacy goal",
+    "requirements": [
+      {
+        "id": "req_1",
+        "priority": "must",
+        "text": "legacy requirement",
+        "status": "satisfied",
+        "evidence": "claimed done",
+        "validation_commands": []
+      }
+    ],
+    "verification": [],
+    "created_at": "2026-01-01T00:00:00Z"
+  },
+  "status": "success",
+  "created_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-01T00:00:00Z"
+}"#,
+    );
+    run_json(root, &["context", "refresh"]);
+
+    let listed = run_json(root, &["goal", "list"]);
+    assert_eq!(listed[0]["id"], "goal_legacy");
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(standard.status, 1);
+    assert!(
+        standard.stdout.contains("goal_legacy")
+            && standard.stdout.contains("缺少结构化 validated 命令"),
+        "stdout={}",
+        standard.stdout
+    );
+}
+
+#[test]
+fn standard_check_accepts_legacy_goal_level_verification() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    write(
+        root,
+        ".RaymanCodingSkill/goals/goal_legacy.json",
+        r#"{
+  "id": "goal_legacy",
+  "contract": {
+    "goal": "legacy goal",
+    "requirements": [
+      {
+        "id": "req_1",
+        "priority": "must",
+        "text": "legacy requirement",
+        "status": "satisfied",
+        "evidence": "claimed done",
+        "validation_commands": []
+      }
+    ],
+    "verification": ["cargo test --all"],
+    "created_at": "2026-01-01T00:00:00Z"
+  },
+  "status": "success",
+  "created_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-01T00:00:00Z"
+}"#,
+    );
+    run_json(root, &["context", "refresh"]);
+
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(
+        standard.status, 0,
+        "stdout={} stderr={}",
+        standard.stdout, standard.stderr
+    );
+    assert!(
+        standard.stdout.contains("standard warnings: 0"),
+        "stdout={}",
+        standard.stdout
+    );
+}
+
+#[test]
+fn standard_check_does_not_write_project_map_cache() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+    let project_map = root.join(".RaymanCodingSkill/context/project_map.json");
+    std::fs::write(&project_map, "sentinel project map cache").unwrap();
+
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(
+        standard.status, 0,
+        "stdout={} stderr={}",
+        standard.stdout, standard.stderr
+    );
+    assert_eq!(
+        std::fs::read_to_string(&project_map).unwrap(),
+        "sentinel project map cache"
+    );
+}
+
+#[test]
+fn goal_evidence_changed_failure_does_not_write_project_map_cache() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+    let project_map = root.join(".RaymanCodingSkill/context/project_map.json");
+    assert!(!project_map.exists());
+    let goal = run_json(
+        root,
+        &["goal", "start", "wire impact", "--must", "record evidence"],
+    );
+    let id = goal["id"].as_str().unwrap();
+
+    let failed = run(
+        root,
+        &[
+            "goal",
+            "evidence",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "missing file changed",
+            "--changed",
+            "no/such.rs",
+            "--validated",
+            "cargo test --all",
+        ],
+    );
+    assert_eq!(failed.status, 1);
+    assert!(
+        failed.stderr.contains("项目地图中没有文件"),
+        "stderr={}",
+        failed.stderr
+    );
+    assert!(!project_map.exists());
+}
+
+#[test]
+fn standard_check_does_not_change_state_tree() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+    run_json(
+        root,
+        &["goal", "start", "docs update", "--must", "record evidence"],
+    );
+    let goals = run_json(root, &["goal", "list"]);
+    let id = goals[0]["id"].as_str().unwrap();
+    run(
+        root,
+        &[
+            "goal",
+            "evidence",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "src/lib.rs changed; cargo test --all passed",
+            "--changed",
+            "src/lib.rs",
+            "--validated",
+            "cargo test --all",
+        ],
+    );
+    let closed = run(root, &["goal", "close", id]);
+    assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
+    let before = state_snapshot(root);
+
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(
+        standard.status, 0,
+        "stdout={} stderr={}",
+        standard.stdout, standard.stderr
+    );
+    assert_eq!(state_snapshot(root), before);
+}
+
+#[test]
+fn standard_check_accepts_done_requirement_with_validation_and_no_impact_warning() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "README.md", "docs only\n");
+    run_json(root, &["context", "refresh"]);
+    let goal = run_json(
+        root,
+        &["goal", "start", "docs update", "--must", "record evidence"],
+    );
+    let id = goal["id"].as_str().unwrap();
+
+    let recorded = run(
+        root,
+        &[
+            "goal",
+            "evidence",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "README.md changed; docs reviewed",
+            "--validated",
+            "docs reviewed",
+        ],
+    );
+    assert_eq!(recorded.status, 0, "stderr={}", recorded.stderr);
+    let closed = run(root, &["goal", "close", id]);
+    assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
+
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(
+        standard.status, 0,
+        "stdout={} stderr={}",
+        standard.stdout, standard.stderr
+    );
+    assert!(
+        standard.stdout.contains("standard warnings: 1"),
+        "stdout={}",
+        standard.stdout
+    );
+}
+
+#[test]
+fn goal_evidence_changed_requires_validation_and_standard_accepts_it() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+    let goal = run_json(
+        root,
+        &["goal", "start", "wire impact", "--must", "record evidence"],
+    );
+    let id = goal["id"].as_str().unwrap();
+
+    let missing_validation = run(
+        root,
+        &[
+            "goal",
+            "evidence",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "src/lib.rs changed",
+            "--changed",
+            "src/lib.rs",
+        ],
+    );
+    assert_eq!(missing_validation.status, 1);
+    assert!(
+        missing_validation.stderr.contains("--validated"),
+        "stderr={}",
+        missing_validation.stderr
+    );
+
+    let recorded = run_json(
+        root,
+        &[
+            "goal",
+            "evidence",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "src/lib.rs changed; cargo test --all passed",
+            "--changed",
+            "src/lib.rs",
+            "--validated",
+            "cargo test --all",
+        ],
+    );
+    assert_eq!(
+        recorded["requirements"][0]["validations"][0]["command"],
+        "cargo test --all"
+    );
+    assert_eq!(
+        recorded["requirements"][0]["impacts"][0]["changed_path"],
+        "src/lib.rs"
+    );
+    assert!(
+        recorded["requirements"][0]["impacts"][0]["recommendation_basis"]
+            .as_str()
+            .unwrap()
+            .contains("heuristic")
+    );
+    let closed = run(root, &["goal", "close", id]);
+    assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
+
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(
+        standard.status, 0,
+        "stdout={} stderr={}",
+        standard.stdout, standard.stderr
+    );
 }
 
 #[test]
