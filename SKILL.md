@@ -14,7 +14,7 @@ Use in a workspace that has a `.RaymanCodingSkill/` directory, or when the user 
 ## Task tiers — do the least that fits
 
 - **Trivial** (typo, one-liner, doc tweak): just edit and run the project's own focused test. No `rayman` commands required.
-- **Standard** (a feature or fix): `rayman context refresh` once up front, implement, run focused tests, then `rayman check` before you call it done; if it reports a blocker, don't call the task done until it's resolved or the user has explicitly accepted the open item.
+- **Standard** (a feature or fix): `rayman context refresh` once up front, use `rayman map impact <path>` for non-trivial touched files, implement, run focused tests, then `rayman check` before you call it done; if it reports a blocker, don't call the task done until it's resolved or the user has explicitly accepted the open item.
 - **Release / hand-off**: everything in Standard, plus resolve pending work and run the project's full build+test.
 
 `rayman check` is the single readiness gate: it reports context freshness, obsolete-asset/TODO findings, and open pending items, and exits non-zero when there is a hard blocker.
@@ -23,6 +23,7 @@ Use in a workspace that has a `.RaymanCodingSkill/` directory, or when the user 
 
 - `rayman context refresh` — rebuild the index; unchanged files are reused, only changed files are re-hashed.
 - `rayman context status` — cheap freshness check; run `refresh` if it says `stale`/`missing`.
+- `rayman map summary|file <path>|symbol <name>|impact <path>` — build a project map from the current context index, then report modules, symbols, local dependencies, entrypoints, heuristic test candidates, risks, and suggested checks. It refuses stale/missing context.
 - `rayman goal start "<title>" --must "<req>" [--should "<req>"]` — capture the task as a contract.
 - `rayman goal evidence <id> --req <req_id> -m "<file + validation>"` then `goal close <id>` — success is refused until every `must` requirement has evidence.
 - `rayman goal pending add|list|resolve` — carry unfinished work across sessions; never report done while pending items remain.

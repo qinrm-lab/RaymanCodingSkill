@@ -206,6 +206,156 @@ fn assets_scan_reports_obsolete_and_markers_without_deleting() {
 }
 
 #[test]
+fn map_commands_report_project_structure_and_impact() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub mod parser;\npub mod evaluator;\n");
+    write(root, "src/parser.rs", "pub fn parse() -> i32 { 1 }\n");
+    write(
+        root,
+        "src/evaluator.rs",
+        "use crate::parser;\npub fn eval() -> i32 { parser::parse() }\n",
+    );
+    write(
+        root,
+        "tests/evaluator_test.rs",
+        "use sample::evaluator;\n#[test]\nfn eval_works() { assert_eq!(1, 1); }\n",
+    );
+
+    run_json(root, &["context", "refresh"]);
+
+    let summary = run_json(root, &["map", "summary"]);
+    assert_eq!(summary["source_files"], 3);
+    assert_eq!(summary["test_files"], 1);
+    assert!(
+        summary["dependencies"].as_u64().unwrap() >= 1,
+        "summary={summary}"
+    );
+
+    let file = run_json(root, &["map", "file", "src/evaluator.rs"]);
+    assert_eq!(file["path"], "src/evaluator.rs");
+    assert!(
+        file["outgoing_dependencies"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|dependency| dependency["to_path"] == "src/parser.rs")
+    );
+
+    let symbols = run_json(root, &["map", "symbol", "eval"]);
+    assert!(
+        symbols["matches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|symbol| symbol["path"] == "src/evaluator.rs")
+    );
+
+    let impact = run_json(root, &["map", "impact", "src/evaluator.rs"]);
+    assert!(
+        impact["related_tests"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|test| test["path"] == "tests/evaluator_test.rs")
+    );
+    assert_eq!(
+        impact["related_tests"][0]["basis"],
+        "same_package_test_text_reference_heuristic"
+    );
+    assert!(
+        impact["recommendation_basis"]
+            .as_str()
+            .unwrap()
+            .contains("heuristic")
+    );
+    assert!(
+        impact["recommended_checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|check| check == "cargo test --all")
+    );
+    assert!(
+        root.join(".RaymanCodingSkill/context/project_map.json")
+            .exists()
+    );
+}
+
+#[test]
+fn map_commands_fail_closed_on_missing_or_stale_context() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+
+    let missing = run(root, &["--format", "json", "map", "summary"]);
+    assert_eq!(missing.status, 1);
+    let missing_error: Value = serde_json::from_str(&missing.stderr)
+        .unwrap_or_else(|error| panic!("stderr is not JSON: {error}\n{}", missing.stderr));
+    assert!(
+        missing_error["error"]
+            .as_str()
+            .unwrap()
+            .contains("上下文索引")
+    );
+
+    run_json(root, &["context", "refresh"]);
+    write(root, "src/new.rs", "pub fn new_item() {}\n");
+    let stale = run(root, &["--format", "json", "map", "summary"]);
+    assert_eq!(stale.status, 1);
+    let stale_error: Value = serde_json::from_str(&stale.stderr)
+        .unwrap_or_else(|error| panic!("stderr is not JSON: {error}\n{}", stale.stderr));
+    assert!(
+        stale_error["error"]
+            .as_str()
+            .unwrap()
+            .contains("不是 ready")
+    );
+}
+
+#[test]
+fn map_impact_does_not_infer_related_tests_across_package_roots() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "crates/rayman/src/lib.rs", "pub fn cli() {}\n");
+    write(
+        root,
+        "crates/rayman/tests/cli.rs",
+        "use rayman::cli;\n#[test]\nfn cli_works() { cli(); }\n",
+    );
+    write(
+        root,
+        "evals/tasks/add-feature/fixture/src/lib.rs",
+        "pub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+    );
+    run_json(root, &["context", "refresh"]);
+
+    let impact = run_json(
+        root,
+        &[
+            "map",
+            "impact",
+            "evals/tasks/add-feature/fixture/src/lib.rs",
+        ],
+    );
+    assert!(
+        impact["related_tests"].as_array().unwrap().is_empty(),
+        "impact={impact}"
+    );
+    assert!(
+        !impact["recommended_checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|check| check
+                .as_str()
+                .unwrap()
+                .contains("crates/rayman/tests/cli.rs")),
+        "impact={impact}"
+    );
+}
+
+#[test]
 fn temp_scratch_status_and_cleanup() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();

@@ -68,6 +68,10 @@ fn index_path(root: &Path) -> std::path::PathBuf {
     root.join(INDEX_RELATIVE_PATH)
 }
 
+pub fn load(root: &Path) -> Result<Option<ContextIndex>> {
+    read_json::<ContextIndex>(&index_path(root))
+}
+
 fn mtime_ns(metadata: &std::fs::Metadata) -> u128 {
     metadata
         .modified()

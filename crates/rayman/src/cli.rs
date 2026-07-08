@@ -31,6 +31,8 @@ pub enum Command {
     Goal(GoalCmd),
     /// 一次性只读就绪检查（上下文新鲜度 + 资产扫描 + 待完成）
     Check,
+    /// 项目地图与变更影响分析（依赖当前 context 索引）
+    Map(MapCmd),
     /// 只读的过时资产与未完成标记扫描
     Assets,
     /// 托管临时目录
@@ -123,6 +125,26 @@ pub enum ContextAction {
     Status,
     /// 刷新索引（只重算变更文件）
     Refresh,
+}
+
+#[derive(Args)]
+pub struct MapCmd {
+    #[command(subcommand)]
+    pub action: MapAction,
+}
+
+#[derive(Subcommand)]
+pub enum MapAction {
+    /// 从当前 context 索引重建项目地图
+    Refresh,
+    /// 输出项目规模、模块、符号、依赖和风险摘要
+    Summary,
+    /// 查看单个文件的模块、符号、依赖、测试和风险
+    File { path: String },
+    /// 按名称查找符号
+    Symbol { name: String },
+    /// 分析某个文件变更会影响的依赖方、测试和建议验证命令
+    Impact { path: String },
 }
 
 #[derive(Args)]
@@ -245,5 +267,16 @@ mod tests {
     fn parses_check() {
         let cli = Cli::try_parse_from(["rayman", "check"]).unwrap();
         assert!(matches!(cli.command, Command::Check));
+    }
+
+    #[test]
+    fn parses_map_impact() {
+        let cli = Cli::try_parse_from(["rayman", "map", "impact", "src/lib.rs"]).unwrap();
+        match cli.command {
+            Command::Map(MapCmd {
+                action: MapAction::Impact { path },
+            }) => assert_eq!(path, "src/lib.rs"),
+            _ => panic!("unexpected command"),
+        }
     }
 }

@@ -7,6 +7,7 @@ pub mod checkpoint;
 pub mod context;
 pub mod fsutil;
 pub mod goal;
+pub mod map;
 pub mod temp;
 pub mod walk;
 

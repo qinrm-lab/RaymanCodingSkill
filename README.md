@@ -3,6 +3,7 @@
 A lean, evidence-first coding-agent helper. One small Rust binary, `rayman`, that gives an agent (or you) the load-bearing basics for working in a repository:
 
 - **Context index** — a fingerprint-cached map of the workspace (files, kinds, symbols). Refresh reuses unchanged files and only re-hashes what changed.
+- **Project map** — a derived architecture view (modules, symbols, local dependencies, entrypoints, heuristic test candidates, impact hints). It refuses stale context instead of guessing.
 - **Goal contract** — capture a task as `must`/`should` requirements; closing as success is refused until every `must` has recorded evidence. Pending-work items carry across sessions.
 - **Asset scan** — read-only report of obsolete-looking files and `TODO`/`FIXME`/`未完成` markers. It never deletes anything.
 - **Managed temp** — workspace-local scratch under `.RaymanCodingSkill/tmp/`, never system temp.
@@ -28,6 +29,10 @@ cargo run -p rayman -- context status
 ```
 rayman context refresh          # build/update the index (reuses unchanged files)
 rayman context status           # cheap freshness check (stat-only; no rebuild)
+rayman map summary              # project structure summary from the current index
+rayman map file <path>          # symbols/dependencies/tests/risks for one file
+rayman map symbol <name>        # find indexed symbols by name
+rayman map impact <path>        # dependent files, heuristic test candidates, suggested checks
 rayman check                    # one aggregated readiness gate (context + assets + pending)
 rayman assets                   # read-only obsolete-file + TODO/未完成 scan
 rayman temp status | scratch <label> | cleanup

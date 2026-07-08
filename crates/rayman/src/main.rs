@@ -6,19 +6,28 @@ use serde_json::json;
 
 use cli::{
     AutosaveAction, AutosaveCmd, CheckpointAction, CheckpointCmd, Cli, Command, ContextAction,
-    ContextCmd, Format, GoalAction, GoalCmd, PendingAction, PendingCmd, TempAction, TempCmd,
+    ContextCmd, Format, GoalAction, GoalCmd, MapAction, MapCmd, PendingAction, PendingCmd,
+    TempAction, TempCmd,
 };
-use rayman::{assets, autosave, checkpoint, context, goal, temp, workspace_root};
+use rayman::{assets, autosave, checkpoint, context, goal, map, temp, workspace_root};
 
 fn main() {
-    if let Err(error) = run() {
-        eprintln!("错误: {error:#}");
+    let cli = Cli::parse();
+    let json = matches!(cli.format, Format::Json);
+    if let Err(error) = run(cli) {
+        if json {
+            match serde_json::to_string_pretty(&json!({ "error": error.to_string() })) {
+                Ok(text) => eprintln!("{text}"),
+                Err(_) => eprintln!("{{\"error\":\"{}\"}}", error),
+            }
+        } else {
+            eprintln!("错误: {error:#}");
+        }
         std::process::exit(1);
     }
 }
 
-fn run() -> Result<()> {
-    let cli = Cli::parse();
+fn run(cli: Cli) -> Result<()> {
     let json = matches!(cli.format, Format::Json);
     let root = workspace_root()?;
 
@@ -100,9 +109,65 @@ fn run() -> Result<()> {
 
         Command::Check => return run_check(&root, json),
 
+        Command::Map(cmd) => return run_map(&root, json, cmd),
+
         Command::Checkpoint(cmd) => return run_checkpoint(&root, json, cmd),
 
         Command::Autosave(cmd) => return run_autosave(&root, json, cmd),
+    }
+    Ok(())
+}
+
+fn run_map(root: &std::path::Path, json: bool, cmd: MapCmd) -> Result<()> {
+    let project_map = map::build(root)?;
+    match cmd.action {
+        MapAction::Refresh => {
+            let summary = map::summary(&project_map);
+            if json {
+                print(&json!({
+                    "path": ".RaymanCodingSkill/context/project_map.json",
+                    "summary": summary,
+                }));
+            } else {
+                println!(
+                    "项目地图已刷新: modules={} symbols={} dependencies={} risks={}",
+                    summary.modules, summary.symbols, summary.dependencies, summary.risks
+                );
+                println!("  位置: .RaymanCodingSkill/context/project_map.json");
+            }
+        }
+        MapAction::Summary => {
+            let summary = map::summary(&project_map);
+            if json {
+                print(&serde_json::to_value(&summary)?);
+            } else {
+                print_map_summary(&summary);
+            }
+        }
+        MapAction::File { path } => {
+            let report = map::file_report(&project_map, &path)?;
+            if json {
+                print(&serde_json::to_value(&report)?);
+            } else {
+                print_file_report(&report);
+            }
+        }
+        MapAction::Symbol { name } => {
+            let report = map::symbol_report(&project_map, &name);
+            if json {
+                print(&serde_json::to_value(&report)?);
+            } else {
+                print_symbol_report(&report);
+            }
+        }
+        MapAction::Impact { path } => {
+            let report = map::impact_report(&project_map, &path)?;
+            if json {
+                print(&serde_json::to_value(&report)?);
+            } else {
+                print_impact_report(&report);
+            }
+        }
     }
     Ok(())
 }
@@ -412,6 +477,100 @@ fn print_assets(report: &assets::AssetReport) {
                 "  {}:{} [{}] {}",
                 finding.path, finding.line, finding.marker, finding.text
             );
+        }
+    }
+}
+
+fn print_map_summary(summary: &map::MapSummary) {
+    println!(
+        "项目地图: files={} source={} tests={} modules={} symbols={} deps={} entrypoints={} risks={}",
+        summary.files,
+        summary.source_files,
+        summary.test_files,
+        summary.modules,
+        summary.symbols,
+        summary.dependencies,
+        summary.entrypoints,
+        summary.risks
+    );
+    if summary.warnings > 0 {
+        println!("  风险提示: warnings={}", summary.warnings);
+    }
+}
+
+fn print_file_report(report: &map::FileReport) {
+    println!("文件: {}", report.path);
+    if let Some(module) = &report.module {
+        println!(
+            "  模块: {} kind={} lines={} symbols={} public={}",
+            module.name, module.kind, module.lines, module.symbols, module.public_symbols
+        );
+    }
+    println!("  符号: {}", report.symbols.len());
+    for symbol in report.symbols.iter().take(20) {
+        println!(
+            "    {} {}:{} [{}]",
+            symbol.name, symbol.path, symbol.line, symbol.visibility
+        );
+    }
+    println!(
+        "  依赖: outgoing={} incoming={}",
+        report.outgoing_dependencies.len(),
+        report.incoming_dependencies.len()
+    );
+    println!("  候选相关测试(启发式): {}", report.related_tests.len());
+    for test in &report.related_tests {
+        println!(
+            "    {} ({}, basis={}, confidence={})",
+            test.path, test.kind, test.basis, test.confidence
+        );
+    }
+    println!("  风险: {}", report.risks.len());
+    for risk in &report.risks {
+        println!("    [{}] {} — {}", risk.severity, risk.kind, risk.detail);
+    }
+}
+
+fn print_symbol_report(report: &map::SymbolReport) {
+    if report.matches.is_empty() {
+        println!("未找到符号: {}", report.query);
+        return;
+    }
+    println!("符号匹配: {} ({} 个)", report.query, report.matches.len());
+    for symbol in &report.matches {
+        println!(
+            "  {} {}:{} {} [{}]",
+            symbol.kind, symbol.path, symbol.line, symbol.name, symbol.visibility
+        );
+    }
+}
+
+fn print_impact_report(report: &map::ImpactReport) {
+    println!("影响分析: {}", report.changed_path);
+    println!("  直接依赖: {}", report.direct_dependencies.len());
+    for dependency in &report.direct_dependencies {
+        println!("    -> {} ({})", dependency.to_path, dependency.evidence);
+    }
+    println!("  直接依赖方: {}", report.direct_dependents.len());
+    for dependency in &report.direct_dependents {
+        println!("    <- {} ({})", dependency.from_path, dependency.evidence);
+    }
+    println!("  候选相关测试(启发式): {}", report.related_tests.len());
+    for test in &report.related_tests {
+        println!(
+            "    {} ({}, basis={}, confidence={})",
+            test.path, test.kind, test.basis, test.confidence
+        );
+    }
+    println!("  建议验证:");
+    for check in &report.recommended_checks {
+        println!("    {check}");
+    }
+    println!("  建议依据: {}", report.recommendation_basis);
+    if !report.risks.is_empty() {
+        println!("  风险:");
+        for risk in &report.risks {
+            println!("    [{}] {} — {}", risk.severity, risk.kind, risk.detail);
         }
     }
 }
