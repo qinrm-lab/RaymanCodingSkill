@@ -7,7 +7,7 @@ A lean, evidence-first coding-agent helper. One small Rust binary, `rayman`, tha
 - **Change plan** — aggregate multiple intended change paths into impacted files, package dependents, candidate tests, risks, and validation commands before broad edits.
 - **Quality surface** — machine-readable maintainability findings from the project map; `map quality --check` fails only on error-level gaps and keeps warnings reviewable unless a strict quality policy explicitly promotes them.
 - **Goal contract** — capture a task as `must`/`should` requirements; closing as success is refused until every `must` has recorded evidence. Pending-work items carry across sessions.
-- **Asset scan** — read-only report of obsolete-looking files and `TODO`/`FIXME`/`未完成` markers. It never deletes anything.
+- **Asset scan** — read-only report of obsolete-looking files and work-in-progress markers. It never deletes anything.
 - **Managed temp** — workspace-local scratch under `.RaymanCodingSkill/tmp/`, never system temp.
 
 All state is workspace-local under `.RaymanCodingSkill/` (gitignored). Current files and command output are the source of truth; there is no cross-project memory, no LLM calls, and no network surface.
@@ -41,7 +41,7 @@ rayman map quality [--check]    # maintainability quality findings; --check bloc
 rayman check                    # one aggregated readiness gate (context + assets + pending)
 rayman check --profile standard # plus project map, quality errors, validation relevance, and goal evidence
 rayman check --profile release  # standard plus strict quality policy from .RaymanCodingSkill/quality.json
-rayman assets                   # read-only obsolete-file + TODO/未完成 scan
+rayman assets                   # read-only obsolete-file + work-marker scan
 rayman temp status | scratch <label> | cleanup
 
 rayman goal start "<title>" --must "<req>" [--should "<req>"]
@@ -76,6 +76,7 @@ cargo fmt --all --check
 cargo clippy --all-targets -- -D warnings
 cargo test --all
 cargo deny check
+cargo deny --manifest-path evals\Cargo.toml check --config evals\deny.toml
 ```
 
 CI (`.github/workflows/ci.yml`) runs the same on Linux and Windows.

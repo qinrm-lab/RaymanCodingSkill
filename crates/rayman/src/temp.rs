@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-use crate::fsutil::display_path;
+use crate::ui_paths::display_path;
 
 const TEMP_ROOT: &str = ".RaymanCodingSkill/tmp";
 

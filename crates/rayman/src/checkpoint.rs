@@ -9,7 +9,7 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::fsutil::{self, display_path};
+use crate::state_store::{self, display_path};
 use crate::walk;
 
 /// 默认保留的快照数（滚动，多留几个以防某次保存中途损坏）。
@@ -148,7 +148,7 @@ pub fn save(root: &Path, override_dir: Option<&Path>, keep: usize) -> Result<Sav
     fs::create_dir_all(&ws_dir)
         .with_context(|| format!("无法创建 checkpoint 目录: {}", display_path(&ws_dir)))?;
 
-    let timestamp = fsutil::now_iso();
+    let timestamp = state_store::now_iso();
     let id = fs_safe_id(&timestamp);
     let staging = ws_dir.join(format!("{STAGING_PREFIX}{}-{id}", std::process::id()));
     let tree = staging.join(TREE_SUBDIR);
@@ -189,7 +189,7 @@ pub fn save(root: &Path, override_dir: Option<&Path>, keep: usize) -> Result<Sav
         total_bytes,
         tool_version: env!("CARGO_PKG_VERSION").to_string(),
     };
-    fsutil::write_json(&staging.join(MANIFEST_NAME), &manifest)?;
+    state_store::write_json(&staging.join(MANIFEST_NAME), &manifest)?;
 
     let final_dir = ws_dir.join(&id);
     if final_dir.exists() {
@@ -265,7 +265,7 @@ pub fn list(root: &Path, override_dir: Option<&Path>) -> Result<Vec<CheckpointIn
         if name.starts_with('.') {
             continue;
         }
-        let manifest = fsutil::read_json::<Manifest>(&path.join(MANIFEST_NAME))
+        let manifest = state_store::read_json::<Manifest>(&path.join(MANIFEST_NAME))
             .ok()
             .flatten();
         out.push(CheckpointInfo {

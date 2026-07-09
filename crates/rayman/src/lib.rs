@@ -11,6 +11,15 @@ pub mod map;
 pub mod temp;
 pub mod walk;
 
+mod file_io;
+mod hash;
+mod path_guard;
+mod pathfmt;
+mod project_store;
+mod state_store;
+mod timefmt;
+mod ui_paths;
+
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};

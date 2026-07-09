@@ -56,7 +56,7 @@ fn looks_obsolete(name: &str) -> Option<String> {
     None
 }
 
-/// 扫描工作区，返回过时资产候选与未完成标记（均为提示，不做任何删除）。
+/// 扫描工作区，返回过时资产候选与工作标记（均为提示，不做任何删除）。
 pub fn scan(root: &Path) -> AssetReport {
     let mut obsolete = Vec::new();
     let mut markers = Vec::new();
@@ -84,7 +84,13 @@ pub fn scan(root: &Path) -> AssetReport {
             continue;
         };
         for (index, line) in text.lines().enumerate() {
-            for marker in WORK_MARKERS.iter().filter(|marker| line.contains(**marker)) {
+            if is_marker_catalog_or_fixture_line(&rel, line) {
+                continue;
+            }
+            for marker in WORK_MARKERS
+                .iter()
+                .filter(|marker| line_has_work_marker(line, marker))
+            {
                 markers.push(MarkerFinding {
                     path: rel.clone(),
                     line: index + 1,
@@ -95,6 +101,33 @@ pub fn scan(root: &Path) -> AssetReport {
         }
     }
     AssetReport { obsolete, markers }
+}
+
+fn is_marker_catalog_or_fixture_line(path: &str, line: &str) -> bool {
+    let trimmed = line.trim_start();
+    let scanner_test_line = path == "crates/rayman/src/assets.rs" || path == "src/assets.rs";
+    let rust_test_fixture_line =
+        path.ends_with(".rs") && path.contains("/tests/") && trimmed.starts_with('"');
+    trimmed.contains("WORK_MARKERS")
+        || trimmed.contains("markers.contains(&")
+        || trimmed.contains("finding.marker ==")
+        || trimmed.contains("report.markers")
+        || ((scanner_test_line || rust_test_fixture_line) && trimmed.ends_with("\\n\","))
+        || (scanner_test_line && trimmed.starts_with('"'))
+}
+
+fn line_has_work_marker(line: &str, marker: &str) -> bool {
+    if marker_requires_delimiter(marker) {
+        return line.find(marker).is_some_and(|index| {
+            let tail = &line[index + marker.len()..];
+            tail.starts_with(':') || tail.starts_with('：') || tail.starts_with(char::is_whitespace)
+        });
+    }
+    line.contains(marker)
+}
+
+fn marker_requires_delimiter(marker: &str) -> bool {
+    matches!(marker, "未完成" | "待完成" | "待办")
 }
 
 #[cfg(test)]
@@ -141,5 +174,42 @@ mod tests {
                 .iter()
                 .any(|finding| finding.marker == "未完成")
         );
+    }
+
+    #[test]
+    fn scan_ignores_marker_catalogs_and_pending_vocabulary() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(
+            root.join("src/main.rs"),
+            "const WORK_MARKERS: &[&str] = &[\"TODO\", \"未完成\"];\n\
+             println!(\"待完成项: 0\");\n\
+             println!(\"未完成标记: 0\");\n\
+             // 未完成: wire this later\n",
+        )
+        .unwrap();
+
+        let report = scan(root);
+        assert_eq!(report.markers.len(), 1);
+        assert_eq!(report.markers[0].marker, "未完成");
+    }
+
+    #[test]
+    fn scan_ignores_rust_test_fixture_string_markers() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::create_dir_all(root.join("crates/rayman/tests")).unwrap();
+        fs::write(
+            root.join("crates/rayman/tests/cli.rs"),
+            "\"fn main() {} // TODO: 未完成 wire up\\n\",\n\
+             // TODO: real follow-up in test code\n",
+        )
+        .unwrap();
+
+        let report = scan(root);
+        assert_eq!(report.markers.len(), 1);
+        assert_eq!(report.markers[0].line, 2);
+        assert_eq!(report.markers[0].marker, "TODO");
     }
 }

@@ -9,7 +9,7 @@ use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::fsutil::{now_iso, read_json, write_json};
+use crate::state_store::{now_iso, read_json, write_json};
 
 const GOALS_DIR: &str = ".RaymanCodingSkill/goals";
 const PENDING_PATH: &str = ".RaymanCodingSkill/pending.json";

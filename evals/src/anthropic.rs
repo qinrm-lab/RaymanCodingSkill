@@ -131,3 +131,19 @@ impl Model for AnthropicModel {
         format!("anthropic({})", self.model)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn label_includes_selected_model() {
+        let model = AnthropicModel {
+            client: reqwest::blocking::Client::new(),
+            api_key: "test-key".into(),
+            model: "claude-test".into(),
+        };
+
+        assert_eq!(model.label(), "anthropic(claude-test)");
+    }
+}

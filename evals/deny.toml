@@ -4,7 +4,6 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
-db-path = ".RaymanCodingSkill/tmp/cargo-deny/advisory-db"
 ignore = []
 
 [licenses]
@@ -12,6 +11,10 @@ version = 2
 confidence-threshold = 0.8
 allow = [
     "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-3-Clause",
+    "CDLA-Permissive-2.0",
+    "ISC",
     "MIT",
     "Unicode-3.0",
 ]
@@ -24,7 +27,9 @@ wildcards = "deny"
 highlight = "all"
 allow = []
 deny = []
-skip = []
+skip = [
+    { crate = "windows-sys@0.52.0", reason = "transitive Windows binding retained by ring/rustls while eval CLI/dev tooling has moved to windows-sys 0.61; duplicate is platform glue, not an API dependency" },
+]
 skip-tree = []
 
 [sources]

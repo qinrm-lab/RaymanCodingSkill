@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
-use crate::fsutil::{self, display_path};
 use crate::goal::{GoalStore, PendingStore};
+use crate::state_store::{self, display_path};
 use crate::{checkpoint, workspace_root};
 
 const STATE_RELATIVE: &str = ".RaymanCodingSkill/autosave.json";
@@ -42,11 +42,11 @@ fn state_path(root: &Path) -> PathBuf {
 }
 
 fn load_state(root: &Path) -> Option<AutosaveState> {
-    fsutil::read_json(&state_path(root)).ok().flatten()
+    state_store::read_json(&state_path(root)).ok().flatten()
 }
 
 fn save_state(root: &Path, state: &AutosaveState) -> Result<()> {
-    fsutil::write_json(&state_path(root), state)
+    state_store::write_json(&state_path(root), state)
 }
 
 /// 计划任务名：每个工作区一个，稳定且唯一。
@@ -96,7 +96,7 @@ pub fn start(
         dir: dir.map(display_path),
         auto_stop,
         task_name: name.clone(),
-        started_at: fsutil::now_iso(),
+        started_at: state_store::now_iso(),
         last_tick_at: None,
         stopped_at: None,
         stop_status: None,
@@ -141,7 +141,7 @@ pub fn tick(root: &Path) -> Result<ActionOutcome> {
     }
 
     let saved = checkpoint::save(root, dir_override(&state.dir).as_deref(), state.keep)?;
-    state.last_tick_at = Some(fsutil::now_iso());
+    state.last_tick_at = Some(state_store::now_iso());
     save_state(root, &state)?;
 
     if state.auto_stop && work_is_complete(root) {
@@ -170,7 +170,7 @@ pub fn stop(root: &Path, status: &str) -> Result<ActionOutcome> {
         dir: None,
         auto_stop: true,
         task_name: task_name(root),
-        started_at: fsutil::now_iso(),
+        started_at: state_store::now_iso(),
         last_tick_at: None,
         stopped_at: None,
         stop_status: None,
@@ -189,7 +189,7 @@ pub fn stop(root: &Path, status: &str) -> Result<ActionOutcome> {
 fn finalize(root: &Path, state: &mut AutosaveState, status: &str) -> Result<()> {
     let _ = checkpoint::save(root, dir_override(&state.dir).as_deref(), state.keep)?;
     state.active = false;
-    state.stopped_at = Some(fsutil::now_iso());
+    state.stopped_at = Some(state_store::now_iso());
     state.stop_status = Some(status.to_string());
     save_state(root, state)?;
     let _ = unregister_task(&state.task_name);
@@ -491,7 +491,7 @@ mod tests {
             dir: Some(display_path(store.path())),
             auto_stop: true,
             task_name: task_name(root),
-            started_at: fsutil::now_iso(),
+            started_at: state_store::now_iso(),
             last_tick_at: None,
             stopped_at: None,
             stop_status: None,

@@ -85,3 +85,59 @@ fn copy_dir(src: &Path, dest: &Path) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn write(path: &Path, body: &str) {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(path, body).unwrap();
+    }
+
+    #[test]
+    fn load_tasks_filters_and_sorts() {
+        let dir = tempfile::tempdir().unwrap();
+        let tasks = dir.path();
+        for name in ["zeta", "alpha"] {
+            let task_dir = tasks.join(name);
+            write(&task_dir.join("prompt.md"), &format!("fix {name}\n"));
+            write(&task_dir.join("grade.txt"), "cargo test\n");
+            write(&task_dir.join("fixture/src/lib.rs"), "pub fn ok() {}\n");
+        }
+
+        let all = load_tasks(tasks, None).unwrap();
+        assert_eq!(
+            all.iter()
+                .map(|task| task.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["alpha", "zeta"]
+        );
+
+        let filtered = load_tasks(tasks, Some("zeta")).unwrap();
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].name, "zeta");
+        assert_eq!(filtered[0].prompt, "fix zeta");
+    }
+
+    #[test]
+    fn setup_workspace_copies_fixture_and_marks_rayman_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let fixture = dir.path().join("fixture");
+        write(&fixture.join("src/lib.rs"), "pub fn ok() {}\n");
+        let task = Task {
+            name: "sample".into(),
+            prompt: "fix it".into(),
+            fixture_dir: fixture,
+            grade_cmd: "cargo test".into(),
+        };
+        let dest = dir.path().join("workspace");
+
+        setup_workspace(&task, &dest).unwrap();
+
+        assert!(dest.join("src/lib.rs").exists());
+        assert!(dest.join(".RaymanCodingSkill").is_dir());
+    }
+}

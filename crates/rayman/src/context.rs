@@ -10,7 +10,7 @@ use std::time::UNIX_EPOCH;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::fsutil::{display_path, now_iso, read_json, sha256_file, write_json};
+use crate::project_store::{display_path, now_iso, read_json, sha256_file, write_json};
 use crate::walk::{relative_key, workspace_files};
 
 const INDEX_RELATIVE_PATH: &str = ".RaymanCodingSkill/context/index.json";
@@ -125,6 +125,14 @@ fn extract_symbols(text: &str) -> Vec<Symbol> {
             });
             continue;
         }
+        if let Some(name) = reexport_name(line) {
+            symbols.push(Symbol {
+                name,
+                kind: "reexport".into(),
+                line: index + 1,
+            });
+            continue;
+        }
         let mut rest = line;
         for prefix in ["pub ", "async ", "unsafe ", "default "] {
             if let Some(stripped) = rest.strip_prefix(prefix) {
@@ -158,6 +166,17 @@ fn extract_symbols(text: &str) -> Vec<Symbol> {
         }
     }
     symbols
+}
+
+fn reexport_name(line: &str) -> Option<String> {
+    let tail = line.strip_prefix("pub use ")?;
+    let tail = tail.trim_end_matches(';').trim();
+    let name = tail
+        .rsplit("::")
+        .next()
+        .unwrap_or(tail)
+        .trim_matches(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'));
+    (!name.is_empty()).then(|| name.to_string())
 }
 
 fn between(text: &str, start: &str, end: &str) -> Option<String> {
@@ -355,6 +374,28 @@ mod tests {
                 .symbols
                 .iter()
                 .any(|symbol| symbol.name == "main" && symbol.kind == "function")
+        );
+    }
+
+    #[test]
+    fn classify_extracts_reexport_symbols() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        touch(
+            &root.join("src/lib.rs"),
+            "pub use crate::exports::display_path;\n",
+        );
+
+        let (index, _) = refresh(root).unwrap();
+        let file = index
+            .files
+            .iter()
+            .find(|entry| entry.path == "src/lib.rs")
+            .unwrap();
+        assert!(
+            file.symbols
+                .iter()
+                .any(|symbol| { symbol.name == "display_path" && symbol.kind == "reexport" })
         );
     }
 

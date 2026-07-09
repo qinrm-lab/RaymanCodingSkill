@@ -1,6 +1,6 @@
 ---
 name: raymancodingskill
-description: Lean coding-workflow helper for a workspace that contains a .RaymanCodingSkill/ directory, or when the user explicitly invokes rayman. Provides workspace context indexing, a minimal goal contract with resumable pending work, a read-only obsolete-asset/TODO scan, and managed temp. Do not use for unrelated repos, host-app accounts, IDE assistant login, OAuth, or connectors.
+description: Lean coding-workflow helper for a workspace that contains a .RaymanCodingSkill/ directory, or when the user explicitly invokes rayman. Provides workspace context indexing, a minimal goal contract with resumable pending work, a read-only obsolete-asset/work-marker scan, and managed temp. Do not use for unrelated repos, host-app accounts, IDE assistant login, OAuth, or connectors.
 ---
 
 # RaymanCodingSkill (lean)
@@ -17,7 +17,7 @@ Use in a workspace that has a `.RaymanCodingSkill/` directory, or when the user 
 - **Standard** (a feature or fix): `rayman context refresh` once up front, use `rayman map impact <path>` for non-trivial touched files, use `rayman map plan <paths...> --check` before broad or multi-file changes, review `rayman map quality --check` when touching broad architecture or multiple modules, implement, record goal evidence with `--changed <path>` and `--validated "<command that actually ran and passed>"` when a goal is active, run focused tests, then `rayman check --profile standard` before you call it done; if it reports a blocker, don't call the task done until it's resolved or the user has explicitly accepted the open item.
 - **Release / hand-off**: everything in Standard, plus resolve pending work, run the project's full build+test, and use `rayman check --profile release` when a strict quality policy is present.
 
-`rayman check` is the single readiness gate: it reports context freshness, obsolete-asset/TODO findings, and open pending items, and exits non-zero when there is a hard blocker.
+`rayman check` is the single readiness gate: it reports context freshness, obsolete-asset/work-marker findings, and open pending items, and exits non-zero when there is a hard blocker.
 
 ## Core commands
 
@@ -29,7 +29,7 @@ Use in a workspace that has a `.RaymanCodingSkill/` directory, or when the user 
 - `rayman goal pending add|list|resolve` — carry unfinished work across sessions; never report done while pending items remain.
 - `rayman check --profile standard` — everything in `check`, plus project-map freshness, error-level quality findings, validation relevance for recorded `--changed` files, strict goal-state loading, closed-success evidence checks, and fail-closed active/partial/blocked goal handling.
 - `rayman check --profile release` — the standard profile plus optional strict quality policy from `.RaymanCodingSkill/quality.json`; malformed strict policy, unknown fields, and unknown blocking warning kinds are blockers.
-- `rayman assets` — read-only scan for obsolete-looking files and TODO/FIXME/未完成 markers. It never deletes anything; deciding what to remove is yours.
+- `rayman assets` — read-only scan for obsolete-looking files and work-in-progress markers. It never deletes anything; deciding what to remove is yours.
 - `rayman temp scratch <label> | status | cleanup` — put throwaway runtime files under `.RaymanCodingSkill/tmp/`, not system temp.
 - `rayman checkpoint save | list | status | restore` — snapshot the whole working tree (gitignore-aware) plus task state to a user-level store, keeping the newest few; for crash recovery and handing off between AI assistants. `restore` needs `--yes`.
 - `rayman autosave start | stop | status` — start-of-session, `start` saves a snapshot and registers a Windows scheduled task that auto-snapshots every N minutes (default 30); on completion or error call `stop` to save a final snapshot and unregister. With auto-stop on (default), it self-stops once all goals are closed and no pending work remains. See `tools/README.md`.
