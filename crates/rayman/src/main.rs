@@ -92,18 +92,26 @@ fn run(cli: Cli) -> Result<()> {
             }
             TempAction::Scratch { label } => {
                 let dir = temp::scratch_dir(&root, &label)?;
-                println!("{}", dir.display());
+                if json {
+                    print(&json!({ "path": dir.display().to_string() }));
+                } else {
+                    println!("{}", dir.display());
+                }
             }
             TempAction::Cleanup => {
                 let removed = temp::cleanup(&root)?;
-                println!(
-                    "{}",
-                    if removed {
-                        "已清理托管临时目录。"
-                    } else {
-                        "无托管临时目录可清理。"
-                    }
-                );
+                if json {
+                    print(&json!({ "removed": removed }));
+                } else {
+                    println!(
+                        "{}",
+                        if removed {
+                            "已清理托管临时目录。"
+                        } else {
+                            "无托管临时目录可清理。"
+                        }
+                    );
+                }
             }
         },
 
@@ -476,15 +484,23 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
         }
         GoalAction::Close { id, status } => {
             let goal = store.close(&id, &status)?;
-            println!("目标 {} 已关闭为 {}", goal.id, goal.status);
+            if json {
+                print(&serde_json::to_value(&goal)?);
+            } else {
+                println!("目标 {} 已关闭为 {}", goal.id, goal.status);
+            }
         }
         GoalAction::Pending(PendingCmd { action }) => match action {
             PendingAction::Add { title, message } => {
                 let item = pending.add(&title, &message)?;
-                println!("已记录待完成项 {}", item.id);
+                if json {
+                    print(&serde_json::to_value(&item)?);
+                } else {
+                    println!("已记录待完成项 {}", item.id);
+                }
             }
             PendingAction::List => {
-                let items = pending.list();
+                let items = pending.list()?;
                 if json {
                     print(&serde_json::to_value(&items)?);
                 } else if items.is_empty() {
@@ -497,14 +513,18 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
             }
             PendingAction::Resolve { id } => {
                 let removed = pending.resolve(&id)?;
-                println!(
-                    "{}",
-                    if removed {
-                        "已解决待完成项。"
-                    } else {
-                        "未找到该待完成项。"
-                    }
-                );
+                if json {
+                    print(&json!({ "resolved": removed, "id": id }));
+                } else {
+                    println!(
+                        "{}",
+                        if removed {
+                            "已解决待完成项。"
+                        } else {
+                            "未找到该待完成项。"
+                        }
+                    );
+                }
             }
         },
     }
@@ -541,7 +561,11 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
     let freshness = context::freshness(root);
     let asset_report = assets::scan(root);
     let goal_store = goal::GoalStore::new(root);
-    let pending = goal::PendingStore::new(root).list();
+    // 损坏的 pending.json 是阻塞项而非"零待办"：静默放行会让门禁失效。
+    let (pending, pending_error) = match goal::PendingStore::new(root).list() {
+        Ok(items) => (items, None),
+        Err(error) => (Vec::new(), Some(format!("{error:#}"))),
+    };
 
     let context_blocked = freshness.status != "ready";
     let mut standard_blockers = Vec::new();
@@ -665,7 +689,10 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
         }
     }
 
-    let blocked = context_blocked || !pending.is_empty() || !standard_blockers.is_empty();
+    let blocked = context_blocked
+        || !pending.is_empty()
+        || pending_error.is_some()
+        || !standard_blockers.is_empty();
 
     if json {
         print(&json!({
@@ -677,6 +704,7 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
                 "markers": asset_report.markers.len(),
             },
             "pending": pending.len(),
+            "pending_error": pending_error,
             "standard": {
                 "blockers": standard_blockers,
                 "warnings": standard_warnings,
@@ -705,6 +733,9 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
             asset_report.markers.len()
         );
         println!("  待完成项: {}", pending.len());
+        if let Some(error) = &pending_error {
+            println!("    BLOCKER: pending.json 不可读取: {error}");
+        }
         if matches!(cmd.profile, CheckProfile::Standard | CheckProfile::Release) {
             if let Some(summary) = &map_summary {
                 println!(

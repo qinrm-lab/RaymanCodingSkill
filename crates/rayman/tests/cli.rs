@@ -1264,6 +1264,11 @@ fn map_topology_includes_dotted_workspace_inherited_path_dependents() {
 fn map_plan_check_blocks_broad_source_change_without_test_anchor() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
+    write(
+        root,
+        "Cargo.toml",
+        "[package]\nname = \"sample\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    );
     write(root, "src/lib.rs", "pub mod parser;\npub mod evaluator;\n");
     write(root, "src/parser.rs", "pub fn parse() -> i32 { 1 }\n");
     write(root, "src/evaluator.rs", "pub fn eval() -> i32 { 1 }\n");
@@ -1283,6 +1288,30 @@ fn map_plan_check_blocks_broad_source_change_without_test_anchor() {
     assert_eq!(plan.status, 1);
     assert!(
         plan.stdout.contains("no same-package candidate test"),
+        "stdout={}",
+        plan.stdout
+    );
+}
+
+#[test]
+fn map_plan_check_passes_broad_non_rust_change_without_cargo_workspace() {
+    // Real-world basis: dogfooding rayman against a 792-file, 60k-line C# repo showed
+    // this heuristic hard-blocking a well-tested change because it only understands
+    // Cargo/Rust project shapes. Outside a detected Cargo workspace it must be advisory.
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/A.cs", "public class A {}\n");
+    write(root, "src/B.cs", "public class B {}\n");
+    write(root, "src/C.cs", "public class C {}\n");
+    run_json(root, &["context", "refresh"]);
+
+    let plan = run(
+        root,
+        &["map", "plan", "src/A.cs", "src/B.cs", "src/C.cs", "--check"],
+    );
+    assert_eq!(plan.status, 0, "stdout={}", plan.stdout);
+    assert!(
+        plan.stdout.contains("no Cargo workspace detected"),
         "stdout={}",
         plan.stdout
     );
@@ -1415,6 +1444,11 @@ fn map_plan_check_accepts_package_test_anchors_for_broad_source_change() {
 fn map_quality_check_blocks_multi_source_project_without_tests() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
+    write(
+        root,
+        "Cargo.toml",
+        "[package]\nname = \"sample\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    );
     write(root, "src/lib.rs", "pub mod parser;\npub mod evaluator;\n");
     write(root, "src/parser.rs", "pub fn parse() -> i32 { 1 }\n");
     write(root, "src/evaluator.rs", "pub fn eval() -> i32 { 1 }\n");

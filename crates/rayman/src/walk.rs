@@ -30,6 +30,10 @@ pub fn workspace_files(root: &Path) -> Vec<PathBuf> {
         .require_git(false) // 即使工作区还不是 git 仓库，也尊重 .gitignore
         .parents(false);
     builder.filter_entry(|entry| {
+        // 只剪枝目录：名为 build/dist 的普通源码文件不应从索引里无声消失。
+        if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            return true;
+        }
         let name = entry.file_name().to_string_lossy();
         !ALWAYS_IGNORE.contains(&name.as_ref())
     });

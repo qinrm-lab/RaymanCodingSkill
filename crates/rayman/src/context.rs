@@ -10,7 +10,9 @@ use std::time::UNIX_EPOCH;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::project_store::{display_path, now_iso, read_json, sha256_file, write_json};
+use crate::project_store::{
+    display_path, now_iso, read_json, sha256_bytes, sha256_file, write_json,
+};
 use crate::walk::{relative_key, workspace_files};
 
 const INDEX_RELATIVE_PATH: &str = ".RaymanCodingSkill/context/index.json";
@@ -91,10 +93,10 @@ fn load_cached(root: &Path) -> Option<ContextIndex> {
 fn classify(rel: &str, extension: &str) -> String {
     let in_test_dir = rel
         .split('/')
-        .any(|component| component == "test" || component == "tests");
+        .any(|component| component == "test" || component == "tests" || component == "__tests__");
     let file_name = rel.rsplit('/').next().unwrap_or(rel);
     let is_source = SOURCE_EXTENSIONS.contains(&extension);
-    let name_marks_test = is_source && TEST_MARKERS.iter().any(|marker| file_name.contains(marker));
+    let name_marks_test = is_source && file_name_marks_test(file_name);
     if in_test_dir || name_marks_test {
         "test".into()
     } else if ["md", "mdx", "rst", "txt"].contains(&extension) {
@@ -108,6 +110,19 @@ fn classify(rel: &str, extension: &str) -> String {
     } else {
         "asset".into()
     }
+}
+
+/// 文件名级测试判定：整词/词缀匹配 TEST_MARKERS，不用裸子串——
+/// latest.rs、inspect.rs、attest.rs 都含 "test"/"spec" 子串但不是测试。
+fn file_name_marks_test(file_name: &str) -> bool {
+    let lower = file_name.to_ascii_lowercase();
+    let stem = lower.split('.').next().unwrap_or(&lower);
+    TEST_MARKERS.iter().any(|marker| {
+        stem == *marker
+            || stem.starts_with(&format!("{marker}_"))
+            || stem.ends_with(&format!("_{marker}"))
+            || lower.contains(&format!(".{marker}."))
+    })
 }
 
 fn extract_symbols(text: &str) -> Vec<Symbol> {
@@ -134,7 +149,15 @@ fn extract_symbols(text: &str) -> Vec<Symbol> {
             continue;
         }
         let mut rest = line;
-        for prefix in ["pub ", "async ", "unsafe ", "default "] {
+        // 可见性前缀：pub、pub(crate)、pub(super)、pub(in path) 统一剥掉。
+        if let Some(after) = rest.strip_prefix("pub ") {
+            rest = after;
+        } else if let Some(after) = rest.strip_prefix("pub(")
+            && let Some(close) = after.find(')')
+        {
+            rest = after[close + 1..].trim_start();
+        }
+        for prefix in ["async ", "unsafe ", "default "] {
             if let Some(stripped) = rest.strip_prefix(prefix) {
                 rest = stripped;
             }
@@ -186,14 +209,25 @@ fn between(text: &str, start: &str, end: &str) -> Option<String> {
     Some(rest[..stop].to_string())
 }
 
-fn build_entry(root: &Path, path: &Path, size: u64, mtime: u128) -> Result<FileEntry> {
+/// 超过此大小的文件只做流式 hash，不进内存做文本解析。
+const MAX_TEXT_BYTES: u64 = 8 * 1024 * 1024;
+
+fn build_entry(root: &Path, path: &Path, size: u64, mtime: u128) -> FileEntry {
     let rel = relative_key(root, path);
     let extension = path
         .extension()
         .and_then(|ext| ext.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
-    let text = std::fs::read_to_string(path).unwrap_or_default();
+    // 一次读入并容错：被锁定/非 UTF-8 的文件不能让整个 refresh 失败（Windows 文件锁常见）；
+    // hash 与文本取自同一份字节，读不到就按空内容记录，锁释放后 hash 变化会触发重索引。
+    let (bytes, streamed_hash) = if size > MAX_TEXT_BYTES {
+        (Vec::new(), sha256_file(path).ok())
+    } else {
+        (std::fs::read(path).unwrap_or_default(), None)
+    };
+    let sha256 = streamed_hash.unwrap_or_else(|| sha256_bytes(&bytes));
+    let text = String::from_utf8_lossy(&bytes);
     let lines = text.lines().count();
     let kind = classify(&rel, &extension);
     let symbols = if kind == "source" || kind == "test" {
@@ -201,15 +235,15 @@ fn build_entry(root: &Path, path: &Path, size: u64, mtime: u128) -> Result<FileE
     } else {
         Vec::new()
     };
-    Ok(FileEntry {
+    FileEntry {
         path: rel,
         size,
         mtime_ns: mtime,
-        sha256: sha256_file(path)?,
+        sha256,
         kind,
         lines,
         symbols,
-    })
+    }
 }
 
 /// 刷新索引：复用未变文件的指纹与符号，只重算变更文件。
@@ -244,7 +278,7 @@ pub fn refresh(root: &Path) -> Result<(ContextIndex, RefreshReport)> {
             }
             _ => {
                 rehashed += 1;
-                files.push(build_entry(root, &path, size, mtime)?);
+                files.push(build_entry(root, &path, size, mtime));
             }
         }
     }
@@ -397,6 +431,61 @@ mod tests {
                 .iter()
                 .any(|symbol| { symbol.name == "display_path" && symbol.kind == "reexport" })
         );
+    }
+
+    #[test]
+    fn classify_does_not_treat_substring_names_as_tests() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // 含 test/spec 子串但不是测试的普通源文件。
+        touch(&root.join("src/latest.rs"), "pub fn latest() {}");
+        touch(&root.join("src/inspect.rs"), "pub fn inspect() {}");
+        touch(&root.join("src/attest.rs"), "pub fn attest() {}");
+        // 真正的测试命名习惯仍要识别。
+        touch(&root.join("src/parser_test.rs"), "#[test]\nfn t() {}");
+        touch(&root.join("src/test_utils.rs"), "pub fn helper() {}");
+        touch(&root.join("src/app.spec.ts"), "it('x', () => {});");
+
+        let (index, _) = refresh(root).unwrap();
+        let kind = |path: &str| {
+            index
+                .files
+                .iter()
+                .find(|entry| entry.path == path)
+                .unwrap()
+                .kind
+                .clone()
+        };
+        assert_eq!(kind("src/latest.rs"), "source");
+        assert_eq!(kind("src/inspect.rs"), "source");
+        assert_eq!(kind("src/attest.rs"), "source");
+        assert_eq!(kind("src/parser_test.rs"), "test");
+        assert_eq!(kind("src/test_utils.rs"), "test");
+        assert_eq!(kind("src/app.spec.ts"), "test");
+    }
+
+    #[test]
+    fn extract_symbols_handles_scoped_visibility() {
+        let symbols = extract_symbols(
+            "pub(crate) fn helper() {}\npub(super) struct Inner;\npub(in crate::x) enum E {}\n",
+        );
+        let names: Vec<_> = symbols.iter().map(|symbol| symbol.name.as_str()).collect();
+        assert!(names.contains(&"helper"));
+        assert!(names.contains(&"Inner"));
+        assert!(names.contains(&"E"));
+    }
+
+    #[test]
+    fn refresh_tolerates_non_utf8_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        touch(&root.join("src/a.rs"), "pub fn a() {}");
+        // GBK 编码字节：非法 UTF-8，不得让 refresh 整体失败。
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("src/gbk.rs"), [0xD6u8, 0xD0, 0xCE, 0xC4, b'\n']).unwrap();
+
+        let (index, _) = refresh(root).unwrap();
+        assert!(index.files.iter().any(|entry| entry.path == "src/gbk.rs"));
     }
 
     #[test]

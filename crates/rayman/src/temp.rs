@@ -15,10 +15,14 @@ pub fn temp_root(root: &Path) -> PathBuf {
 
 /// 在托管临时根下创建（若不存在）一个具名子目录并返回其路径。
 pub fn scratch_dir(root: &Path, label: &str) -> Result<PathBuf> {
-    let safe: String = label
+    let mut safe: String = label
         .chars()
         .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
         .collect();
+    // Windows 保留设备名（con/nul/aux/com1…）作目录名非法，会报一条与输入无关的 OS 错误。
+    if is_windows_reserved_name(&safe) {
+        safe.push('_');
+    }
     let dir = temp_root(root).join(if safe.is_empty() {
         "scratch".into()
     } else {
@@ -27,6 +31,14 @@ pub fn scratch_dir(root: &Path, label: &str) -> Result<PathBuf> {
     std::fs::create_dir_all(&dir)
         .with_context(|| format!("无法创建临时目录: {}", dir.display()))?;
     Ok(dir)
+}
+
+fn is_windows_reserved_name(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    matches!(lower.as_str(), "con" | "prn" | "aux" | "nul")
+        || (lower.len() == 4
+            && (lower.starts_with("com") || lower.starts_with("lpt"))
+            && lower.as_bytes()[3].is_ascii_digit())
 }
 
 #[derive(Debug, Clone)]
@@ -62,6 +74,14 @@ pub fn cleanup(root: &Path) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scratch_label_avoids_windows_reserved_names() {
+        let dir = tempfile::tempdir().unwrap();
+        let scratch = scratch_dir(dir.path(), "nul").unwrap();
+        assert_ne!(scratch.file_name().unwrap(), "nul");
+        assert!(scratch.is_dir());
+    }
 
     #[test]
     fn scratch_create_status_and_cleanup() {

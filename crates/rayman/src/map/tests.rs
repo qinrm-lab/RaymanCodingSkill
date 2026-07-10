@@ -51,6 +51,63 @@ fn map_builds_dependencies_and_impact_from_current_context() {
 }
 
 #[test]
+fn map_build_tolerates_non_utf8_source_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(root.join("src/lib.rs").as_path(), "pub fn ok() {}\n");
+    // GBK 编码字节：非法 UTF-8。此前会让整条 map/check 管线 bail。
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::write(root.join("src/gbk.rs"), [0xD6u8, 0xD0, 0xCE, 0xC4, b'\n']).unwrap();
+    context::refresh(root).unwrap();
+
+    let map = build(root).unwrap();
+    assert!(map.modules.iter().any(|module| module.path == "src/gbk.rs"));
+}
+
+#[test]
+fn use_of_workspace_crate_name_creates_local_dependency_edge() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        root.join("Cargo.toml").as_path(),
+        "[package]\nname = \"acme-widgets\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    );
+    write(root.join("src/lib.rs").as_path(), "pub mod parser;\n");
+    write(root.join("src/parser.rs").as_path(), "pub fn parse() {}\n");
+    write(
+        root.join("tests/parser_test.rs").as_path(),
+        "use acme_widgets::parser;\n#[test]\nfn t() { parser::parse(); }\n",
+    );
+    context::refresh(root).unwrap();
+
+    // crate 名来自实际发现的 package（acme-widgets → acme_widgets），不是硬编码的 rayman。
+    let map = build(root).unwrap();
+    assert!(map.dependencies.iter().any(|dependency| {
+        dependency.from_path == "tests/parser_test.rs" && dependency.to_path == "src/parser.rs"
+    }));
+}
+
+#[test]
+fn public_api_risk_skips_test_helper_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        root.join("tests/common/mod.rs").as_path(),
+        "pub fn setup() {}\n",
+    );
+    write(root.join("src/lib.rs").as_path(), "fn private_only() {}\n");
+    context::refresh(root).unwrap();
+
+    let map = build(root).unwrap();
+    assert!(
+        !map.risks.iter().any(|risk| {
+            risk.kind == "public_api_without_test_evidence" && risk.path.starts_with("tests/")
+        }),
+        "测试辅助文件不应触发 public_api_without_test_evidence"
+    );
+}
+
+#[test]
 fn evals_dependency_policy_changes_recommend_evals_deny_check() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
@@ -131,6 +188,10 @@ fn change_plan_blocks_broad_source_change_without_test_anchor() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     write(
+        root.join("Cargo.toml").as_path(),
+        "[package]\nname = \"sample\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    );
+    write(
         root.join("src/lib.rs").as_path(),
         "pub mod a;\npub mod b;\n",
     );
@@ -154,6 +215,38 @@ fn change_plan_blocks_broad_source_change_without_test_anchor() {
     assert!(plan.blockers.iter().any(|blocker| {
         blocker.contains("3 source files") && blocker.contains("no same-package candidate test")
     }));
+}
+
+#[test]
+fn change_plan_warns_instead_of_blocking_without_cargo_workspace() {
+    // Verified against a real 60k-line C# workspace: symbol extraction and test-anchor
+    // detection are Cargo/Rust-shaped and produce near-zero signal outside a Cargo project
+    // (0 symbols across 279 source files). Without a Cargo.toml anywhere in the index, the
+    // "no test anchor" finding must stay advisory, not a hard `plan --check` blocker.
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(root.join("src/a.cs").as_path(), "public class A {}\n");
+    write(root.join("src/b.cs").as_path(), "public class B {}\n");
+    write(root.join("src/c.cs").as_path(), "public class C {}\n");
+    context::refresh(root).unwrap();
+
+    let map = build_readonly(root).unwrap();
+    let plan = change_plan(
+        &map,
+        &[
+            "src/a.cs".to_string(),
+            "src/b.cs".to_string(),
+            "src/c.cs".to_string(),
+        ],
+    )
+    .unwrap();
+
+    assert!(plan.ready, "blockers={:?}", plan.blockers);
+    assert!(
+        plan.warnings
+            .iter()
+            .any(|warning| { warning.contains("no Cargo workspace detected") })
+    );
 }
 
 #[test]
@@ -189,6 +282,10 @@ fn map_resolves_use_dependencies_inside_nested_crate_src_roots() {
 fn quality_report_blocks_multi_source_project_without_tests() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
+    write(
+        root.join("Cargo.toml").as_path(),
+        "[package]\nname = \"sample\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    );
     write(root.join("src/lib.rs").as_path(), "pub mod parser;\n");
     write(root.join("src/parser.rs").as_path(), "pub fn parse() {}\n");
     write(
@@ -204,6 +301,27 @@ fn quality_report_blocks_multi_source_project_without_tests() {
     assert_eq!(quality.error_count, 1);
     assert!(quality.findings.iter().any(|finding| {
         finding.kind == "multi_source_project_without_tests" && finding.severity == "error"
+    }));
+}
+
+#[test]
+fn quality_report_downgrades_missing_tests_to_warning_without_cargo_workspace() {
+    // Same real-world basis as change_plan_warns_instead_of_blocking_without_cargo_workspace:
+    // outside a detected Cargo project the test-detection heuristic has no real signal.
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(root.join("src/a.cs").as_path(), "public class A {}\n");
+    write(root.join("src/b.cs").as_path(), "public class B {}\n");
+    write(root.join("src/c.cs").as_path(), "public class C {}\n");
+    context::refresh(root).unwrap();
+
+    let map = build_readonly(root).unwrap();
+    let quality = quality_report(&map);
+
+    assert!(quality.ready, "findings={:?}", quality.findings);
+    assert_eq!(quality.error_count, 0);
+    assert!(quality.findings.iter().any(|finding| {
+        finding.kind == "multi_source_project_without_tests" && finding.severity == "warning"
     }));
 }
 

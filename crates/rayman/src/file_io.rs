@@ -2,8 +2,10 @@
 
 use std::ffi::OsStr;
 use std::fs;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 
@@ -19,8 +21,11 @@ pub fn write_atomic(target: &Path, text: &str) -> Result<()> {
             .with_context(|| format!("无法创建目录: {}", parent.display()))?;
     }
     let temp = atomic_temp_path(target);
-    fs::write(&temp, text).with_context(|| format!("无法写入临时文件: {}", temp.display()))?;
-    if let Err(error) = fs::rename(&temp, target) {
+    if let Err(error) = write_synced(&temp, text) {
+        let _ = fs::remove_file(&temp);
+        return Err(error).with_context(|| format!("无法写入临时文件: {}", temp.display()));
+    }
+    if let Err(error) = rename_with_retry(&temp, target) {
         let _ = fs::remove_file(&temp);
         bail!(
             "无法原子替换文件 {} -> {}: {error}",
@@ -29,6 +34,34 @@ pub fn write_atomic(target: &Path, text: &str) -> Result<()> {
         );
     }
     Ok(())
+}
+
+/// 写入并 fsync：断电时 rename 元数据可能先于数据落盘，不 sync 目标会变成空文件。
+fn write_synced(path: &Path, text: &str) -> io::Result<()> {
+    let mut file = fs::File::create(path)?;
+    file.write_all(text.as_bytes())?;
+    file.sync_all()
+}
+
+/// 杀软/索引器可能短暂持有目标文件，Windows 上 rename 会瞬时报拒绝访问/共享冲突。
+fn rename_with_retry(from: &Path, to: &Path) -> io::Result<()> {
+    let mut delay = Duration::from_millis(10);
+    for _ in 0..5 {
+        match fs::rename(from, to) {
+            Ok(()) => return Ok(()),
+            Err(error) if is_transient_share_conflict(&error) => {
+                std::thread::sleep(delay);
+                delay *= 2;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    fs::rename(from, to)
+}
+
+fn is_transient_share_conflict(error: &io::Error) -> bool {
+    // 5 = ERROR_ACCESS_DENIED, 32 = ERROR_SHARING_VIOLATION
+    error.kind() == io::ErrorKind::PermissionDenied || error.raw_os_error() == Some(32)
 }
 
 fn atomic_temp_path(target: &Path) -> PathBuf {
@@ -49,10 +82,14 @@ pub fn write_json<T: serde::Serialize>(target: &Path, value: &T) -> Result<()> {
 }
 
 pub fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<Option<T>> {
-    if !path.exists() {
-        return Ok(None);
-    }
-    let text = read_text(path)?;
+    // 只有"不存在"才算无状态；权限/IO 错误必须报错，否则调用方会当首次运行并覆盖原数据。
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(error).with_context(|| format!("无法读取文件: {}", path.display()));
+        }
+    };
     let value = serde_json::from_str(&text)
         .with_context(|| format!("无法解析 JSON: {}", path.display()))?;
     Ok(Some(value))

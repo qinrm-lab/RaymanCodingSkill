@@ -142,11 +142,16 @@ fn collect_state_files(dir: &Path, out: &mut Vec<PathBuf>) {
 
 /// 保存当前工作树快照，然后按 `keep` 清理旧快照。
 pub fn save(root: &Path, override_dir: Option<&Path>, keep: usize) -> Result<SaveOutcome> {
+    // keep=0 会在 prune 时把刚保存的快照一起删光，安全网形同虚设。
+    let keep = keep.max(1);
     let root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
     let ckpt_root = checkpoints_root(override_dir)?;
     let ws_dir = ckpt_root.join(workspace_key(&root));
     fs::create_dir_all(&ws_dir)
         .with_context(|| format!("无法创建 checkpoint 目录: {}", display_path(&ws_dir)))?;
+    // 与 src 同为 canonicalize 形态才能比较：Windows 上 walk 产出 \\?\ verbatim 路径，
+    // 未 canonicalize 的 ckpt_root 前缀永远比不中，旧快照会被递归拷进新快照。
+    let ckpt_root = ckpt_root.canonicalize().unwrap_or(ckpt_root);
 
     let timestamp = state_store::now_iso();
     let id = fs_safe_id(&timestamp);
@@ -333,9 +338,23 @@ fn restore_tree(
             let Ok(rel) = path.strip_prefix(base) else {
                 continue;
             };
+            // 含 ..、绝对路径或盘符的组件一律拒绝，防止损坏/被改动的快照写出工作区。
+            if rel
+                .components()
+                .any(|c| !matches!(c, std::path::Component::Normal(_)))
+            {
+                *failed += 1;
+                continue;
+            }
             let dest = dest_root.join(rel);
             if let Some(parent) = dest.parent() {
                 let _ = fs::create_dir_all(parent);
+            }
+            // 不透过既有符号链接把内容写到工作区之外；恢复为普通文件。
+            if let Ok(meta) = dest.symlink_metadata()
+                && meta.file_type().is_symlink()
+            {
+                let _ = fs::remove_file(&dest);
             }
             match fs::copy(&path, &dest) {
                 Ok(_) => *restored += 1,
@@ -352,6 +371,40 @@ mod tests {
     fn write(path: &Path, text: &str) {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, text).unwrap();
+    }
+
+    #[test]
+    fn save_with_dir_inside_workspace_excludes_prior_snapshots() {
+        let ws = tempfile::tempdir().unwrap();
+        let root = ws.path();
+        write(&root.join("src/main.rs"), "fn main() {}");
+        let ckpt_dir = root.join(".ckpts");
+
+        let first = save(root, Some(&ckpt_dir), DEFAULT_KEEP).unwrap();
+        let second = save(root, Some(&ckpt_dir), DEFAULT_KEEP).unwrap();
+
+        // 快照目录在工作区内时，旧快照绝不能被递归拷进新快照（体积会几何级膨胀）。
+        let tree = second.path.join(TREE_SUBDIR);
+        assert!(
+            !tree.join(".ckpts").exists(),
+            "旧快照被拷进了新快照: {}",
+            tree.display()
+        );
+        assert_eq!(second.file_count, first.file_count);
+    }
+
+    #[test]
+    fn save_with_keep_zero_still_retains_latest_snapshot() {
+        let ws = tempfile::tempdir().unwrap();
+        let store = tempfile::tempdir().unwrap();
+        let root = ws.path();
+        write(&root.join("src/main.rs"), "fn main() {}");
+
+        let outcome = save(root, Some(store.path()), 0).unwrap();
+        assert!(
+            outcome.path.join(MANIFEST_NAME).exists(),
+            "keep=0 不得把刚保存的快照也删掉"
+        );
     }
 
     #[test]

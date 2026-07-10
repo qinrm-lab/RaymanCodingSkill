@@ -13,3 +13,9 @@ pub fn sha256_file(path: &Path) -> Result<String> {
         .with_context(|| format!("无法读取文件: {}", path.display()))?;
     Ok(format!("{:x}", hasher.finalize()))
 }
+
+pub fn sha256_bytes(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    format!("{:x}", hasher.finalize())
+}

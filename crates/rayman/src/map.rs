@@ -25,6 +25,8 @@ pub struct ProjectMap {
     pub test_files: usize,
     pub docs_files: usize,
     pub config_files: usize,
+    #[serde(default)]
+    pub script_files: usize,
     pub asset_files: usize,
     pub modules: Vec<ModuleEntry>,
     pub symbols: Vec<MapSymbol>,
@@ -275,6 +277,7 @@ pub fn summary(map: &ProjectMap) -> MapSummary {
             + map.test_files
             + map.docs_files
             + map.config_files
+            + map.script_files
             + map.asset_files,
         source_files: map.source_files,
         test_files: map.test_files,
@@ -551,12 +554,22 @@ pub fn change_plan(map: &ProjectMap, paths: &[String]) -> Result<ChangePlan> {
     }
 
     let has_validation_anchor = !tests_by_path.is_empty() || has_package_test_anchor;
+    // Test-anchor detection (symbol extraction, package topology) is Cargo/Rust-shaped;
+    // outside a Cargo workspace it has no real signal and should not hard-block.
+    let is_cargo_project = !map.packages.is_empty();
 
     let mut blockers = Vec::new();
     if source_changed_count >= 3 && !has_validation_anchor {
-        blockers.push(format!(
+        let message = format!(
             "{source_changed_count} source files are in scope but no same-package candidate test target or indexed package test anchor was inferred"
-        ));
+        );
+        if is_cargo_project {
+            blockers.push(message);
+        } else {
+            warnings.push(format!(
+                "{message}; no Cargo workspace detected, so this is advisory only — verify test coverage manually"
+            ));
+        }
     }
 
     let review_priority = if !blockers.is_empty()
@@ -656,15 +669,26 @@ pub fn quality_report_with_config(map: &ProjectMap, config: &QualityConfig) -> Q
         })
         .collect();
 
+    // Test-file classification and symbol extraction are Cargo/Rust-shaped heuristics;
+    // outside a Cargo workspace (no Cargo.toml anywhere in the index) they have no real
+    // signal, so this stays a warning instead of a hard error-level blocker.
+    let is_cargo_project = !map.packages.is_empty();
     if map.source_files >= config.multi_source_no_test_min_sources && map.test_files == 0 {
         findings.push(QualityFinding {
-            severity: "error".into(),
+            severity: if is_cargo_project { "error" } else { "warning" }.into(),
             kind: "multi_source_project_without_tests".into(),
             path: ".".into(),
-            detail: format!(
-                "{} source files but no indexed test files; large-project edits have no local validation anchor",
-                map.source_files
-            ),
+            detail: if is_cargo_project {
+                format!(
+                    "{} source files but no indexed test files; large-project edits have no local validation anchor",
+                    map.source_files
+                )
+            } else {
+                format!(
+                    "{} source files but no indexed test files; no Cargo workspace detected, so this heuristic is advisory only — verify test coverage manually",
+                    map.source_files
+                )
+            },
             recommendation: "add at least one test target or record why this workspace has no executable tests".into(),
         });
     }
@@ -807,9 +831,13 @@ fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
 
     for file in &index.files {
         if file.kind == "source" || file.kind == "test" {
-            let text = std::fs::read_to_string(root.join(&file.path))
-                .with_context(|| format!("无法读取源码文件用于项目地图: {}", file.path))?;
-            text_by_path.insert(file.path.clone(), text);
+            // 与 context 索引同一容错策略：非 UTF-8（GBK/UTF-16 常见）或被锁定的文件
+            // 按可读内容处理，不能让单个文件卡死整条 map/check 管线。
+            let bytes = std::fs::read(root.join(&file.path)).unwrap_or_default();
+            text_by_path.insert(
+                file.path.clone(),
+                String::from_utf8_lossy(&bytes).into_owned(),
+            );
         }
     }
 
@@ -873,9 +901,15 @@ fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
     let workspace = read_workspace_info(root)?;
     let packages = discover_packages(root, index, &workspace)?;
     let package_dependencies = infer_package_dependencies(root, &packages, &workspace)?;
-    let dependencies = infer_dependencies(&text_by_path, &path_set);
+    // 本地 crate 名来自实际发现的 package，而不是硬编码本工具自己的名字。
+    let local_crates: BTreeSet<String> = packages
+        .iter()
+        .map(|package| package.name.replace('-', "_"))
+        .collect();
+    let dependencies = infer_dependencies(&text_by_path, &path_set, &local_crates);
     let risks = infer_risks(index, &symbols, &dependencies, &tests);
-    let (source_files, test_files, docs_files, config_files, asset_files) = count_kinds(index);
+    let (source_files, test_files, docs_files, config_files, script_files, asset_files) =
+        count_kinds(index);
 
     Ok(ProjectMap {
         generated_at: now_iso(),
@@ -884,6 +918,7 @@ fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
         test_files,
         docs_files,
         config_files,
+        script_files,
         asset_files,
         modules,
         symbols,
@@ -903,33 +938,16 @@ fn normalize_query_path(path: &str) -> String {
         .replace('\\', "/")
 }
 
-fn count_kinds(index: &ContextIndex) -> (usize, usize, usize, usize, usize) {
-    let source = index
-        .files
-        .iter()
-        .filter(|file| file.kind == "source")
-        .count();
-    let test = index
-        .files
-        .iter()
-        .filter(|file| file.kind == "test")
-        .count();
-    let docs = index
-        .files
-        .iter()
-        .filter(|file| file.kind == "docs")
-        .count();
-    let config = index
-        .files
-        .iter()
-        .filter(|file| file.kind == "config")
-        .count();
-    let asset = index
-        .files
-        .iter()
-        .filter(|file| file.kind == "asset")
-        .count();
-    (source, test, docs, config, asset)
+fn count_kinds(index: &ContextIndex) -> (usize, usize, usize, usize, usize, usize) {
+    let count = |kind: &str| index.files.iter().filter(|file| file.kind == kind).count();
+    (
+        count("source"),
+        count("test"),
+        count("docs"),
+        count("config"),
+        count("script"),
+        count("asset"),
+    )
 }
 
 fn read_workspace_info(root: &Path) -> Result<WorkspaceInfo> {
@@ -1533,12 +1551,15 @@ fn test_source_root_for(path: &str) -> Option<String> {
 fn infer_dependencies(
     text_by_path: &BTreeMap<String, String>,
     path_set: &BTreeSet<String>,
+    local_crates: &BTreeSet<String>,
 ) -> Vec<Dependency> {
     let mut dependencies = Vec::new();
     let mut seen = BTreeSet::new();
     for (from_path, text) in text_by_path {
         for (line_index, line) in text.lines().enumerate() {
-            for (target_path, kind, evidence) in local_targets(from_path, line, path_set) {
+            for (target_path, kind, evidence) in
+                local_targets(from_path, line, path_set, local_crates)
+            {
                 if target_path == *from_path {
                     continue;
                 }
@@ -1561,6 +1582,7 @@ fn local_targets(
     from_path: &str,
     line: &str,
     path_set: &BTreeSet<String>,
+    local_crates: &BTreeSet<String>,
 ) -> Vec<(String, String, String)> {
     let trimmed = line.trim_start();
     if trimmed.starts_with("//") {
@@ -1575,7 +1597,7 @@ fn local_targets(
             }
         }
     }
-    for root in crate_roots(trimmed) {
+    for root in crate_roots(trimmed, local_crates) {
         if let Some(candidate) = root_to_path(from_path, &root, path_set) {
             targets.push((candidate, "use".into(), root));
         }
@@ -1620,12 +1642,15 @@ fn module_candidates(from_path: &str, module: &str) -> Vec<String> {
     ]
 }
 
-fn crate_roots(line: &str) -> Vec<String> {
+fn crate_roots(line: &str, local_crates: &BTreeSet<String>) -> Vec<String> {
     let mut roots = BTreeSet::new();
     collect_after_prefix(line, "crate::", &mut roots);
-    collect_after_prefix(line, "rayman::", &mut roots);
     collect_braced_use(line, "crate::{", &mut roots);
-    collect_braced_use(line, "rayman::{", &mut roots);
+    // 工作区内各 package 的 crate 名：集成测试/bin 里 `use <libname>::…` 也是本地依赖边。
+    for crate_name in local_crates {
+        collect_after_prefix(line, &format!("{crate_name}::"), &mut roots);
+        collect_braced_use(line, &format!("{crate_name}::{{"), &mut roots);
+    }
     roots.into_iter().collect()
 }
 
@@ -1772,7 +1797,10 @@ fn infer_risks(
                 detail: "many local files depend on this file".into(),
             });
         }
-        if public_by_path.get(file.path.as_str()).copied().unwrap_or(0) > 0
+        // 只对 source 文件生效：covered 集合按构造只含源文件，测试辅助文件
+        // （如 tests/common/mod.rs 的 pub fn）必然误报。
+        if file.kind == "source"
+            && public_by_path.get(file.path.as_str()).copied().unwrap_or(0) > 0
             && !covered.contains(file.path.as_str())
             && file.path != "src/main.rs"
         {

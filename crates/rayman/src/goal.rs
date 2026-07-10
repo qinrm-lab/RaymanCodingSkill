@@ -137,8 +137,16 @@ impl GoalStore {
         Self { root: root.into() }
     }
 
-    fn goal_path(&self, id: &str) -> PathBuf {
-        self.root.join(GOALS_DIR).join(format!("{id}.json"))
+    /// id 直接拼进文件名；拒绝分隔符等字符，防止 `--id ../../x` 越出 goals 目录读写。
+    fn goal_path(&self, id: &str) -> Result<PathBuf> {
+        if id.is_empty()
+            || !id
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        {
+            bail!("非法目标 id: {id}（只允许字母、数字、下划线和连字符）");
+        }
+        Ok(self.root.join(GOALS_DIR).join(format!("{id}.json")))
     }
 
     /// 新建目标。`requirements` 为 (text, is_must) 列表。
@@ -167,12 +175,12 @@ impl GoalStore {
             requirements,
             loaded_from_legacy: false,
         };
-        write_json(&self.goal_path(&id), &goal)?;
+        write_json(&self.goal_path(&id)?, &goal)?;
         Ok(goal)
     }
 
     pub fn get(&self, id: &str) -> Result<Option<Goal>> {
-        Self::load_goal_file(&self.goal_path(id))
+        Self::load_goal_file(&self.goal_path(id)?)
     }
 
     pub fn list(&self) -> Result<Vec<Goal>> {
@@ -263,22 +271,27 @@ impl GoalStore {
         };
         let now = now_iso();
         req.evidence = Some(evidence.into());
-        req.validations = validation_commands
-            .into_iter()
-            .map(|command| ValidationEvidence {
-                command,
-                recorded_at: now.clone(),
-            })
-            .collect();
-        req.impacts = impacts;
+        // 追加而非覆写：补记一条说明不应销毁先前的验证与影响面审计记录。
+        for command in validation_commands {
+            if !req.validations.iter().any(|v| v.command == command) {
+                req.validations.push(ValidationEvidence {
+                    command,
+                    recorded_at: now.clone(),
+                });
+            }
+        }
+        req.impacts.extend(impacts);
         req.status = "done".into();
         goal.updated_at = now;
-        write_json(&self.goal_path(id), &goal)?;
+        write_json(&self.goal_path(id)?, &goal)?;
         Ok(goal)
     }
 
     /// 关闭目标。status=success 时，每个 must 需求必须已带证据，否则拒绝。
     pub fn close(&self, id: &str, status: &str) -> Result<Goal> {
+        if !matches!(status, "success" | "partial" | "blocked") {
+            bail!("未知的关闭状态: {status}（可用: success | partial | blocked）");
+        }
         let Some(mut goal) = self.get(id)? else {
             bail!("目标不存在: {id}");
         };
@@ -300,7 +313,7 @@ impl GoalStore {
         }
         goal.status = status.into();
         goal.updated_at = now_iso();
-        write_json(&self.goal_path(id), &goal)?;
+        write_json(&self.goal_path(id)?, &goal)?;
         Ok(goal)
     }
 }
@@ -365,16 +378,18 @@ impl PendingStore {
         self.root.join(PENDING_PATH)
     }
 
-    fn load(&self) -> PendingList {
-        read_json(&self.path()).ok().flatten().unwrap_or_default()
+    /// 损坏的 pending.json 必须报错：静默当空列表会让 check 放行，
+    /// 且下一次 add/resolve 的写回会用空列表覆盖销毁原有数据。
+    fn load(&self) -> Result<PendingList> {
+        Ok(read_json(&self.path())?.unwrap_or_default())
     }
 
-    pub fn list(&self) -> Vec<PendingItem> {
-        self.load().items
+    pub fn list(&self) -> Result<Vec<PendingItem>> {
+        Ok(self.load()?.items)
     }
 
     pub fn add(&self, title: &str, detail: &str) -> Result<PendingItem> {
-        let mut list = self.load();
+        let mut list = self.load()?;
         let now = now_iso();
         let item = PendingItem {
             id: short_id("pending", &format!("{title}{now}{}", list.items.len())),
@@ -388,7 +403,7 @@ impl PendingStore {
     }
 
     pub fn resolve(&self, id: &str) -> Result<bool> {
-        let mut list = self.load();
+        let mut list = self.load()?;
         let before = list.items.len();
         list.items.retain(|item| item.id != id);
         let removed = list.items.len() != before;
@@ -435,8 +450,38 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = PendingStore::new(dir.path());
         let item = store.add("finish gate", "wire up CI").unwrap();
-        assert_eq!(store.list().len(), 1);
+        assert_eq!(store.list().unwrap().len(), 1);
         assert!(store.resolve(&item.id).unwrap());
-        assert!(store.list().is_empty());
+        assert!(store.list().unwrap().is_empty());
+    }
+
+    #[test]
+    fn corrupt_pending_store_errors_instead_of_wiping() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = PendingStore::new(dir.path());
+        store.add("keep me", "important").unwrap();
+        let path = dir.path().join(PENDING_PATH);
+        std::fs::write(&path, "{ not json").unwrap();
+
+        // 损坏文件必须报错，且 add/resolve 不得覆盖原文件。
+        assert!(store.list().is_err());
+        assert!(store.add("new", "item").is_err());
+        assert!(store.resolve("pending_x").is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "{ not json");
+    }
+
+    #[test]
+    fn close_rejects_unknown_status_and_traversal_ids() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = GoalStore::new(dir.path());
+        let goal = store.start("task", &[("req".into(), true)]).unwrap();
+
+        // 未知状态（含大小写/拼写错误）不得绕过证据门禁。
+        assert!(store.close(&goal.id, "done").is_err());
+        assert!(store.close(&goal.id, "Success").is_err());
+
+        // id 含路径分隔符/.. 时拒绝，防止越出 goals 目录。
+        assert!(store.get("../../x").is_err());
+        assert!(store.close("..\\evil", "partial").is_err());
     }
 }

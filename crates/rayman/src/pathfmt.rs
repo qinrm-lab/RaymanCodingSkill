@@ -19,7 +19,25 @@ mod tests {
 
     #[test]
     fn display_path_keeps_normal_paths() {
-        let rendered = display_path(Path::new("relative/path.txt"));
-        assert!(rendered.contains("relative"));
+        assert_eq!(
+            display_path(Path::new("relative/path.txt")),
+            Path::new("relative/path.txt").display().to_string()
+        );
+    }
+
+    #[test]
+    fn display_path_strips_verbatim_prefix() {
+        assert_eq!(
+            display_path(Path::new(r"\\?\E:\ws\file.txt")),
+            r"E:\ws\file.txt"
+        );
+    }
+
+    #[test]
+    fn display_path_rewrites_verbatim_unc_prefix() {
+        assert_eq!(
+            display_path(Path::new(r"\\?\UNC\server\share\file.txt")),
+            r"\\server\share\file.txt"
+        );
     }
 }

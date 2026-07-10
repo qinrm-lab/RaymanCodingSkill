@@ -56,15 +56,19 @@ pub fn task_name(root: &Path) -> String {
 
 /// 工作是否“全部完成”：有目标、且没有仍处于 active 的目标、且没有待完成项。
 /// 没有任何目标时返回 false（无从判断完成，交给显式 `stop`）。
+/// 任何状态文件读不出来都按“未完成”处理：损坏的 active 目标被当成不存在
+/// 会导致自动快照在工作进行中自停并注销。
 pub fn work_is_complete(root: &Path) -> bool {
-    let goals = GoalStore::new(root).list().unwrap_or_default();
-    if goals.is_empty() {
+    let Ok((goals, issues)) = GoalStore::new(root).list_with_issues() else {
+        return false;
+    };
+    if !issues.is_empty() || goals.is_empty() {
         return false;
     }
     if goals.iter().any(|goal| goal.status == "active") {
         return false;
     }
-    PendingStore::new(root).list().is_empty()
+    matches!(PendingStore::new(root).list(), Ok(items) if items.is_empty())
 }
 
 fn dir_override(state_dir: &Option<String>) -> Option<PathBuf> {
