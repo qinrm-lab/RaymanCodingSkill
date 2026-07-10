@@ -2,8 +2,9 @@
 target/
 Cargo.lock.bak
 
-# Local tool state
-.RaymanCodingSkill/
+# Local tool state（quality.json 是可共享的策略文件，允许入库）
+.RaymanCodingSkill/*
+!.RaymanCodingSkill/quality.json
 .claude/
 
 # Logs and temporary files

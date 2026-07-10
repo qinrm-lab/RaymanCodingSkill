@@ -58,10 +58,10 @@ rayman checkpoint restore <id> --yes    # 恢复指定快照
 
 ## 跑 eval（选后端）
 
-eval 是独立项目，用后端名直接跑（后端在 `evals/backends.json`）：
+eval 是独立项目。先从 `evals/backends.example.json` 复制出 `evals/backends.json` 并填好 key，再用后端名跑（示例配置里有 `deepseek` / `openrouter` / `ollama` / `relay-responses`）：
 
 ```powershell
 cd evals
-cargo run -- --backend yunyi --trials 3      # 或 --backend deepseek
-cargo run -- --backend yunyi --task fix-failing-test   # 便宜的单任务烟测
+cargo run -- --backend deepseek --trials 3
+cargo run -- --backend deepseek --task fix-failing-test   # 便宜的单任务烟测
 ```

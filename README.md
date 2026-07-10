@@ -3,9 +3,9 @@
 A lean, evidence-first coding-agent helper. One small Rust binary, `rayman`, that gives an agent (or you) the load-bearing basics for working in a repository:
 
 - **Context index** — a fingerprint-cached map of the workspace (files, kinds, symbols). Refresh reuses unchanged files and only re-hashes what changed.
-- **Project map** — a derived architecture view (modules, symbols, local dependencies, Cargo package topology, entrypoints, heuristic test candidates, impact hints). It refuses stale context instead of guessing.
-- **Change plan** — aggregate multiple intended change paths into impacted files, package dependents, candidate tests, risks, and validation commands before broad edits.
-- **Quality surface** — machine-readable maintainability findings from the project map; `map quality --check` fails only on error-level gaps and keeps warnings reviewable unless a strict quality policy explicitly promotes them.
+- **Project map** — a derived architecture view (modules, symbols, local dependencies, Cargo package topology, entrypoints, heuristic test candidates, impact hints). It refuses stale context instead of guessing. Symbol extraction and test-anchor detection are Cargo/Rust-shaped heuristics; on a workspace with no `Cargo.toml`, the map still builds (files, kinds, risks) but the "no test anchor" findings below are advisory, not blocking — see Quality surface.
+- **Change plan** — aggregate multiple intended change paths into impacted files, package dependents, candidate tests, risks, and validation commands before broad edits. The "no candidate test anchor" blocker only fires as a hard `plan --check` failure inside a detected Cargo workspace; elsewhere it's a warning.
+- **Quality surface** — machine-readable maintainability findings from the project map; `map quality --check` fails only on error-level gaps, and `multi_source_project_without_tests` is only ever error-level inside a detected Cargo workspace (outside one it's a non-blocking warning, since the underlying test-detection heuristics don't understand other languages). Warnings stay non-blocking unless you run `map quality --profile strict --check` (or `check --profile release`), which reads the strict policy from `.RaymanCodingSkill/quality.json`.
 - **Goal contract** — capture a task as `must`/`should` requirements; closing as success is refused until every `must` has recorded evidence. Pending-work items carry across sessions.
 - **Asset scan** — read-only report of obsolete-looking files and work-in-progress markers. It never deletes anything.
 - **Managed temp** — workspace-local scratch under `.RaymanCodingSkill/tmp/`, never system temp.
@@ -31,13 +31,15 @@ cargo run -p rayman -- context status
 ```
 rayman context refresh          # build/update the index (reuses unchanged files)
 rayman context status           # cheap freshness check (stat-only; no rebuild)
+rayman map refresh              # rebuild the project map from the current index
 rayman map summary              # project structure summary from the current index
 rayman map file <path>          # symbols/dependencies/tests/risks for one file
 rayman map symbol <name>        # find indexed symbols by name
 rayman map topology             # Cargo package/path-dependency topology
 rayman map impact <path>        # dependent files, heuristic test candidates, suggested checks
 rayman map plan <paths...> [--check] # multi-file change plan; --check blocks unscoped broad edits
-rayman map quality [--check]    # maintainability quality findings; --check blocks on errors
+rayman map quality [--profile standard|strict] [--check] # maintainability findings; --check blocks
+                                # on errors; only --profile strict reads .RaymanCodingSkill/quality.json
 rayman check                    # one aggregated readiness gate (context + assets + pending)
 rayman check --profile standard # plus project map, quality errors, validation relevance, and goal evidence
 rayman check --profile release  # standard plus strict quality policy from .RaymanCodingSkill/quality.json
@@ -48,8 +50,11 @@ rayman goal start "<title>" --must "<req>" [--should "<req>"]
 rayman goal list | show <id>
 rayman goal evidence <id> --req <req_id> -m "<file + validation that passed>" --validated "<command that passed>"
 rayman goal evidence <id> --req <req_id> -m "<evidence>" --validated "<command that passed>" --changed <path>
-rayman goal close <id> [--status success|partial|blocked] # standard READY requires closed success
+rayman goal close <id> [--status success|partial|blocked] # only these three; standard READY requires closed success
 rayman goal pending add "<title>" -m "<detail>" | list | resolve <id>
+
+rayman checkpoint save | list | status | restore [--yes]  # gitignore-aware working-tree snapshots
+rayman autosave start | stop | status                     # scheduled auto-snapshots (see tools/README.md)
 ```
 
 Every command accepts `--format json` for machine-readable output.
@@ -58,7 +63,7 @@ Every command accepts `--format json` for machine-readable output.
 
 Cargo topology includes direct path dependencies and workspace-inherited path dependencies from `[workspace.dependencies]` plus `{ workspace = true }`, including common dotted TOML forms. Impact recommendations use `cargo test -p <name>` only for unique workspace member packages; excluded fixtures, non-workspace nested packages, and duplicate package names use `cargo test --manifest-path <path>` instead. `map plan --check` treats package-level checks as broad-change anchors only when the package has an indexed test target.
 
-Optional strict quality policy lives at `.RaymanCodingSkill/quality.json`:
+Optional strict quality policy lives at `.RaymanCodingSkill/quality.json` (the one file under `.RaymanCodingSkill/` that is **not** gitignored, so the policy can be committed and shared):
 
 ```
 {
@@ -79,7 +84,7 @@ cargo deny check
 cargo deny --manifest-path evals\Cargo.toml check --config evals\deny.toml
 ```
 
-CI (`.github/workflows/ci.yml`) runs the same on Linux and Windows.
+CI (`.github/workflows/ci.yml`) runs fmt/clippy/tests for both the root workspace and `evals/` on Linux **and** Windows, and runs cargo-deny for both workspaces on Linux (deny checks are platform-independent).
 
 ## License
 
