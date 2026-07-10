@@ -1,6 +1,10 @@
 /target
 /.runs
-Cargo.lock
 
 # Your real backend config (endpoints/models); keep secrets in env vars.
 backends.json
+
+# Trial runs build fixtures in place; their lockfiles are run artifacts.
+# evals/Cargo.lock itself IS tracked (binary project, reproducible CI).
+tasks/*/fixture/Cargo.lock
+tasks/*/fixture/target/

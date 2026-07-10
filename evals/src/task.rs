@@ -33,7 +33,13 @@ pub fn load_tasks(tasks_root: &Path, filter: Option<&str>) -> Result<Vec<Task>> 
         {
             continue;
         }
-        let prompt = read(&dir.join("prompt.md"))?;
+        // 杂散目录（IDE 缓存、临时文件夹等）没有 prompt.md：跳过并提示，别让整轮评测挂掉。
+        let prompt_path = dir.join("prompt.md");
+        if !prompt_path.is_file() {
+            eprintln!("⚠ 跳过缺 prompt.md 的目录（非任务）: {}", dir.display());
+            continue;
+        }
+        let prompt = read(&prompt_path)?;
         let grade_cmd = read(&dir.join("grade.txt"))?.trim().to_string();
         let fixture_dir = dir.join("fixture");
         if !fixture_dir.is_dir() {
@@ -75,7 +81,17 @@ fn copy_dir(src: &Path, dest: &Path) -> Result<()> {
     std::fs::create_dir_all(dest).with_context(|| format!("无法创建目录: {}", dest.display()))?;
     for entry in std::fs::read_dir(src)?.flatten() {
         let from = entry.path();
-        let to = dest.join(entry.file_name());
+        let name = entry.file_name();
+        // 构建产物/元数据不属于任务起点，复制会拖慢评测并污染工作区。
+        if from.is_dir()
+            && matches!(
+                name.to_string_lossy().as_ref(),
+                "target" | ".git" | "node_modules" | ".RaymanCodingSkill"
+            )
+        {
+            continue;
+        }
+        let to = dest.join(name);
         if from.is_dir() {
             copy_dir(&from, &to)?;
         } else {
@@ -120,6 +136,40 @@ mod tests {
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].name, "zeta");
         assert_eq!(filtered[0].prompt, "fix zeta");
+    }
+
+    #[test]
+    fn load_tasks_skips_stray_dirs_without_prompt() {
+        let dir = tempfile::tempdir().unwrap();
+        let tasks = dir.path();
+        let task_dir = tasks.join("real");
+        write(&task_dir.join("prompt.md"), "fix it\n");
+        write(&task_dir.join("grade.txt"), "cargo test\n");
+        write(&task_dir.join("fixture/src/lib.rs"), "pub fn ok() {}\n");
+        // 杂散目录：没有 prompt.md，应被跳过而非报错。
+        write(&tasks.join("stray/junk.txt"), "not a task\n");
+
+        let all = load_tasks(tasks, None).unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].name, "real");
+    }
+
+    #[test]
+    fn copy_dir_skips_build_and_vcs_dirs() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("fixture");
+        write(&src.join("src/lib.rs"), "pub fn ok() {}\n");
+        for skipped in ["target", ".git", "node_modules", ".RaymanCodingSkill"] {
+            write(&src.join(skipped).join("junk"), "x");
+        }
+        let dest = dir.path().join("dest");
+
+        copy_dir(&src, &dest).unwrap();
+
+        assert!(dest.join("src/lib.rs").exists());
+        for skipped in ["target", ".git", "node_modules", ".RaymanCodingSkill"] {
+            assert!(!dest.join(skipped).exists(), "{skipped} 不应被复制");
+        }
     }
 
     #[test]

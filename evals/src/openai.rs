@@ -14,7 +14,7 @@ use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::agent::{Assistant, Model, ToolCall};
+use crate::agent::{Assistant, Model, ToolCall, Truncated};
 
 const DEFAULT_MAX_TOKENS: u32 = 400000;
 const MAX_RETRIES: u32 = 3;
@@ -278,7 +278,12 @@ fn messages_to_chat(system: &str, messages: &[Value]) -> Vec<Value> {
 }
 
 fn parse_chat(response: &Value) -> Result<Assistant> {
-    let message = &response["choices"][0]["message"];
+    let choice = &response["choices"][0];
+    // finish_reason=length：输出被 max_tokens 截断，工具调用可能不完整，不能当干净收尾。
+    if choice.get("finish_reason").and_then(Value::as_str) == Some("length") {
+        return Err(anyhow::Error::new(Truncated));
+    }
+    let message = &choice["message"];
     let mut blocks = Vec::new();
     if let Some(text) = message.get("content").and_then(Value::as_str)
         && !text.is_empty()
@@ -298,9 +303,14 @@ fn parse_chat(response: &Value) -> Result<Assistant> {
                 .and_then(|f| f.get("arguments"))
                 .and_then(Value::as_str)
                 .unwrap_or("{}");
-            let input: Value = serde_json::from_str(args).unwrap_or_else(|_| json!({}));
+            let (input, input_error) = parse_tool_args(args);
             blocks.push(json!({"type": "tool_use", "id": id, "name": name, "input": input}));
-            tool_calls.push(ToolCall { id, name, input });
+            tool_calls.push(ToolCall {
+                id,
+                name,
+                input,
+                input_error,
+            });
         }
     }
     Ok(Assistant {
@@ -380,19 +390,15 @@ fn messages_to_responses(messages: &[Value]) -> Vec<Value> {
     input
 }
 
-/// 读取 /responses 的响应体：非流式则整体是 JSON；流式则从 SSE 里取最终 `response.completed`。
+/// 读取 /responses 的响应体：非流式则整体是 JSON；流式则从 SSE 里取终态事件。
 fn read_responses(text: &str) -> Result<Assistant> {
     // 非流式：整体就是一个 response 对象。
     if let Ok(value) = serde_json::from_str::<Value>(text) {
-        if value.get("output").is_some() {
-            return parse_responses(&value);
-        }
-        if let Some(error) = value.get("error") {
-            bail!("responses 端点错误: {error}");
-        }
+        return parse_response_snapshot(&value, text);
     }
-    // 流式 SSE：逐行找带完整 response 快照的事件，取最后一个（response.completed / .incomplete）。
-    let mut last_response = None;
+    // 流式 SSE：只认 response.completed / response.failed 终态；
+    // 中间快照（created/in_progress）带着空 output，绝不能当成功结果。
+    let mut completed = None;
     for line in text.lines() {
         let Some(data) = line.trim_start().strip_prefix("data:") else {
             continue;
@@ -404,22 +410,58 @@ fn read_responses(text: &str) -> Result<Assistant> {
         let Ok(event) = serde_json::from_str::<Value>(data) else {
             continue;
         };
-        if let Some(response) = event.get("response")
-            && response.get("output").is_some()
-        {
-            last_response = Some(response.clone());
+        match event.get("type").and_then(Value::as_str) {
+            Some("response.completed") => {
+                if let Some(response) = event.get("response") {
+                    completed = Some(response.clone());
+                }
+            }
+            Some("response.failed") => {
+                let message = event
+                    .pointer("/response/error/message")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .unwrap_or_else(|| event.to_string());
+                bail!("responses 端点失败: {message}");
+            }
+            Some("response.incomplete") => return Err(anyhow::Error::new(Truncated)),
+            _ => {}
         }
         if let Some(error) = event.get("error") {
             bail!("responses 流内错误: {error}");
         }
     }
-    match last_response {
+    match completed {
         Some(response) => {
             let assistant = parse_responses(&response)?;
             debug_empty(&response, &assistant);
             Ok(assistant)
         }
-        None => bail!("无法从 responses 响应中提取最终结果: {}", head(text)),
+        None => bail!("responses 流没有 response.completed 终态: {}", head(text)),
+    }
+}
+
+/// 非流式 response 对象：完成态解析输出；failed/incomplete 显式报错，不把空 output 当成功。
+fn parse_response_snapshot(value: &Value, raw: &str) -> Result<Assistant> {
+    match value.get("status").and_then(Value::as_str) {
+        Some("failed") => {
+            let message = value
+                .pointer("/error/message")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .unwrap_or_else(|| head(raw));
+            bail!("responses 端点失败: {message}");
+        }
+        Some("incomplete") => Err(anyhow::Error::new(Truncated)),
+        _ => {
+            if let Some(error) = value.get("error").filter(|e| !e.is_null()) {
+                bail!("responses 端点错误: {error}");
+            }
+            if value.get("output").is_some() {
+                return parse_responses(value);
+            }
+            bail!("无法从 responses 响应中提取结果: {}", head(raw));
+        }
     }
 }
 
@@ -502,10 +544,15 @@ fn parse_responses(response: &Value) -> Result<Assistant> {
                         .get("arguments")
                         .and_then(Value::as_str)
                         .unwrap_or("{}");
-                    let input: Value = serde_json::from_str(args).unwrap_or_else(|_| json!({}));
+                    let (input, input_error) = parse_tool_args(args);
                     blocks
                         .push(json!({"type": "tool_use", "id": id, "name": name, "input": input}));
-                    tool_calls.push(ToolCall { id, name, input });
+                    tool_calls.push(ToolCall {
+                        id,
+                        name,
+                        input,
+                        input_error,
+                    });
                 }
                 _ => {} // reasoning 等忽略
             }
@@ -518,6 +565,17 @@ fn parse_responses(response: &Value) -> Result<Assistant> {
 }
 
 // ---- 共享助手 ----
+
+/// 解析工具 arguments JSON；失败时不静默替换 `{}`，把原因带给执行层作为错误 tool_result 回给模型。
+fn parse_tool_args(args: &str) -> (Value, Option<String>) {
+    match serde_json::from_str(args) {
+        Ok(input) => (input, None),
+        Err(error) => (
+            json!({}),
+            Some(format!("{error}；原始片段: {}", head(args))),
+        ),
+    }
+}
 
 /// 从 Anthropic assistant content 块拆出文本 + (call_id, name, arguments_json_string) 列表。
 fn split_assistant(content: Option<&Value>) -> (String, Vec<(String, String, String)>) {
@@ -639,5 +697,49 @@ mod tests {
         let json_body = "{\"output\":[{\"type\":\"function_call\",\"call_id\":\"c1\",\"name\":\"run\",\"arguments\":\"{}\"}]}";
         let assistant = read_responses(json_body).unwrap();
         assert_eq!(assistant.tool_calls[0].id, "c1");
+    }
+
+    #[test]
+    fn read_responses_reports_failed_terminal_event() {
+        let sse = "data: {\"type\":\"response.failed\",\"response\":{\"status\":\"failed\",\"error\":{\"message\":\"boom\"}}}\n\n";
+        let error = read_responses(sse).unwrap_err();
+        assert!(error.to_string().contains("boom"), "{error}");
+    }
+
+    #[test]
+    fn read_responses_rejects_intermediate_snapshot_without_completed() {
+        // in_progress 快照带空 output，不能被当成功结果。
+        let sse = "data: {\"type\":\"response.in_progress\",\"response\":{\"output\":[]}}\n\n\
+                   data: [DONE]\n\n";
+        assert!(read_responses(sse).is_err());
+    }
+
+    #[test]
+    fn read_responses_maps_incomplete_to_truncated() {
+        let sse = "data: {\"type\":\"response.incomplete\",\"response\":{\"output\":[]}}\n\n";
+        let error = read_responses(sse).unwrap_err();
+        assert!(error.is::<Truncated>());
+    }
+
+    #[test]
+    fn parse_chat_maps_length_finish_reason_to_truncated() {
+        let response = json!({
+            "choices": [{"finish_reason": "length", "message": {"content": "partial"}}]
+        });
+        let error = parse_chat(&response).unwrap_err();
+        assert!(error.is::<Truncated>());
+    }
+
+    #[test]
+    fn invalid_tool_arguments_surface_as_input_error() {
+        let response = json!({
+            "choices": [{"message": {"tool_calls": [
+                {"id": "c1", "function": {"name": "run", "arguments": "{\"command\": \"trunc"}}
+            ]}}]
+        });
+        let assistant = parse_chat(&response).unwrap();
+        assert_eq!(assistant.tool_calls.len(), 1);
+        assert!(assistant.tool_calls[0].input_error.is_some());
+        assert_eq!(assistant.tool_calls[0].input, json!({}));
     }
 }

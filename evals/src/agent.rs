@@ -9,7 +9,7 @@ use anyhow::Result;
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use crate::grade::{RUN_TIMEOUT, run_shell};
+use crate::grade::{EnvPolicy, RUN_TIMEOUT, run_shell};
 
 pub const MAX_STEPS: usize = 24;
 
@@ -56,9 +56,25 @@ pub struct ToolCall {
     pub id: String,
     pub name: String,
     pub input: Value,
+    /// arguments 解析失败时的原因（多为截断）；执行层直接把它作为错误 tool_result 回给模型。
+    pub input_error: Option<String>,
 }
 
+/// 后端响应被输出上限截断（stop_reason=max_tokens / finish_reason=length）：
+/// 不完整的 tool_use 已被丢弃，不能当干净收尾。上层据此把该次尝试记为 error 而非 fail。
+#[derive(Debug)]
+pub struct Truncated;
+
+impl std::fmt::Display for Truncated {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("truncated: 响应被输出上限截断，工具调用可能不完整")
+    }
+}
+
+impl std::error::Error for Truncated {}
+
 /// 后端返回的一条 assistant 回复。
+#[derive(Debug)]
 pub struct Assistant {
     /// 原始 content 数组，直接作为 assistant 消息追加进对话。
     pub content: Value,
@@ -77,9 +93,8 @@ pub struct AgentConfig {
     pub skill_text: Option<String>,
     pub task_prompt: String,
     pub max_steps: usize,
-    /// with_skill 组：`rayman` 所在目录，注入 `run` 工具的 PATH，让“rayman 可用”名副其实。
-    /// control 组为 None。
-    pub rayman_bin: Option<PathBuf>,
+    /// `run` 工具的子进程环境策略：with_skill 组注入 rayman 到 PATH，control 组反向剔除。
+    pub env: EnvPolicy,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -164,17 +179,10 @@ pub fn run_agent(model: &dyn Model, workspace: &Path, cfg: &AgentConfig) -> Atte
         let mut results = Vec::new();
         for call in &assistant.tool_calls {
             tool_calls += 1;
-            if call.name == "run"
-                && call
-                    .input
-                    .get("command")
-                    .and_then(Value::as_str)
-                    .map(|command| command.contains("rayman"))
-                    .unwrap_or(false)
-            {
+            if call.name == "run" && is_rayman_command(str_arg(&call.input, "command")) {
                 rayman_invocations += 1;
             }
-            let (content, is_error) = exec_tool(workspace, call, cfg.rayman_bin.as_deref());
+            let (content, is_error) = exec_tool(workspace, call, &cfg.env);
             results.push(json!({
                 "type": "tool_result",
                 "tool_use_id": call.id,
@@ -242,8 +250,29 @@ fn respond_nonempty(
     Ok(assistant)
 }
 
+/// 命令首个 token 的 basename（去扩展名）等于 `rayman` 才算一次调用；
+/// 只是出现在参数/文本里（如 `echo rayman`、`cargo test rayman_x`）不计。
+fn is_rayman_command(command: &str) -> bool {
+    let Some(first) = command.split_whitespace().next() else {
+        return false;
+    };
+    let first = first.trim_matches(|c| c == '"' || c == '\'');
+    // 手动切分两种分隔符：Unix 下 Path 不认 `\`，不能只靠 Path::file_name。
+    let base = first.rsplit(['/', '\\']).next().unwrap_or(first);
+    Path::new(base)
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .is_some_and(|stem| stem.eq_ignore_ascii_case("rayman"))
+}
+
 /// 执行单个工具，返回 (内容, 是否错误)。读/写限制在工作区内。
-fn exec_tool(workspace: &Path, call: &ToolCall, rayman_bin: Option<&Path>) -> (String, bool) {
+fn exec_tool(workspace: &Path, call: &ToolCall, env: &EnvPolicy) -> (String, bool) {
+    if let Some(reason) = &call.input_error {
+        return (
+            format!("工具参数无效（arguments 不是合法 JSON，疑似被截断）: {reason}"),
+            true,
+        );
+    }
     match call.name.as_str() {
         "list_files" => (list_files(workspace), false),
         "read_file" => match safe_path(workspace, str_arg(&call.input, "path")) {
@@ -266,12 +295,7 @@ fn exec_tool(workspace: &Path, call: &ToolCall, rayman_bin: Option<&Path>) -> (S
             Err(error) => (error, true),
         },
         "run" => {
-            let result = run_shell(
-                workspace,
-                str_arg(&call.input, "command"),
-                rayman_bin,
-                RUN_TIMEOUT,
-            );
+            let result = run_shell(workspace, str_arg(&call.input, "command"), env, RUN_TIMEOUT);
             let content = format!(
                 "exit={}\n--- stdout ---\n{}\n--- stderr ---\n{}",
                 result.exit, result.stdout, result.stderr
@@ -373,7 +397,12 @@ impl Model for MockModel {
                     let id = format!("mock_{index}");
                     content
                         .push(json!({"type": "tool_use", "id": id, "name": name, "input": input}));
-                    tool_calls.push(ToolCall { id, name, input });
+                    tool_calls.push(ToolCall {
+                        id,
+                        name,
+                        input,
+                        input_error: None,
+                    });
                 }
                 Ok(Assistant {
                     content: Value::Array(content),
@@ -414,7 +443,7 @@ mod tests {
             skill_text: None,
             task_prompt: "do it".into(),
             max_steps: MAX_STEPS,
-            rayman_bin: None,
+            env: EnvPolicy::default(),
         };
         let log = run_agent(&model, workspace, &cfg);
         assert!(log.finished);
@@ -439,16 +468,28 @@ mod tests {
             skill_text: Some("SKILL-BODY".into()),
             task_prompt: "t".into(),
             max_steps: 1,
-            rayman_bin: None,
+            env: EnvPolicy::default(),
         };
         let control = AgentConfig {
             system_base: "BASE".into(),
             skill_text: None,
             task_prompt: "t".into(),
             max_steps: 1,
-            rayman_bin: None,
+            env: EnvPolicy::default(),
         };
         assert!(system_prompt(&with).contains("SKILL-BODY"));
         assert!(!system_prompt(&control).contains("SKILL-BODY"));
+    }
+
+    #[test]
+    fn rayman_invocation_counts_only_leading_rayman_token() {
+        assert!(is_rayman_command("rayman scan --json"));
+        assert!(is_rayman_command("./rayman scan"));
+        assert!(is_rayman_command(r"C:\bin\rayman.exe map"));
+        assert!(is_rayman_command("\"rayman\" goal"));
+        assert!(!is_rayman_command("echo rayman"));
+        assert!(!is_rayman_command("cargo test rayman_case"));
+        assert!(!is_rayman_command("raymanx scan"));
+        assert!(!is_rayman_command(""));
     }
 }

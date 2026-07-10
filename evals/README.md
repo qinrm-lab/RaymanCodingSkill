@@ -2,10 +2,10 @@
 
 Measures whether the RaymanCodingSkill actually improves a coding agent's **output**, not just its process compliance. It runs a real LLM agent on the same coding tasks under two conditions and compares objective pass rates:
 
-- **with_skill** — the agent's system prompt includes the repo's `SKILL.md` and it is told `rayman` is on PATH.
-- **control** — neither.
+- **with_skill** — the agent's system prompt includes the repo's `SKILL.md`, and the `rayman` binary's directory is prepended to the `run` tool's PATH.
+- **control** — neither; additionally, any PATH directory containing a `rayman` binary is stripped from the `run` tool's environment, so the control arm cannot call it by accident.
 
-The **only** difference between the two arms is the skill text + tool availability, so any pass-rate delta is attributable to the skill.
+The **only** difference between the two arms is the skill text + `rayman` availability, so any pass-rate delta is attributable to the skill. The harness therefore refuses to start if no `rayman` binary is found (build one first: `cargo build --release` at the repo root; the repo's `target/release` is preferred over an installed copy, and the chosen path is printed at startup).
 
 This is a standalone project — **not** part of the main `rayman` workspace (see `exclude = ["evals"]` in the root `Cargo.toml`), so its LLM/HTTP dependencies never touch the shipped tool.
 
@@ -13,7 +13,7 @@ This is a standalone project — **not** part of the main `rayman` workspace (se
 
 1. Each task under `tasks/<name>/` has a `fixture/` (a starting repo), a `prompt.md` (the instruction given to the agent), and a `grade.txt` (a hidden command run in the finished workspace — exit 0 = success). The agent never sees `grade.txt`.
 2. For each task × condition × trial, the harness copies the fixture to a fresh workspace, runs a minimal tool-use agent loop (tools: `list_files`, `read_file`, `write_file`, `run`) against the chosen backend, then runs the hidden grade command.
-3. Results aggregate into per-task and overall pass rates and the with-skill-minus-control **delta**, written to `.runs/report.md` and `.runs/report.json`.
+3. Each trial ends as **pass**, **fail**, or **error** (infrastructure problems: workspace setup failure, backend outage, or a response truncated by the output limit). Pass rates use `pass / (pass + fail)` — errors are reported separately, next to the with-skill-minus-control **delta**, so backend flakiness never counts as a model failure. Results (including per-trial details) are written to `.runs/report.md` and `.runs/report.json`. A trial error never aborts the run; the report is always written.
 
 Grading is objective: every shipped task grades with `cargo test` or `cargo clippy -- -D warnings`. The tasks range from one-line fixes to `large-repo-nav`, where the failing top-level test is caused by a bug buried several modules deep — the case where navigation/context tooling should earn its keep.
 
@@ -88,5 +88,5 @@ Keep fixtures small and dependency-free so grading is fast and offline.
 
 ## Caveats
 
-- The `run` tool executes model-generated shell commands inside the per-trial workspace copy. That's inherent to any coding agent; run evals on a machine where that's acceptable.
+- The `run` tool executes model-generated shell commands inside the per-trial workspace copy. Child processes get a scrubbed environment rebuilt from an allowlist (PATH, toolchain, and OS essentials), so parent-process secrets such as `ANTHROPIC_API_KEY` are not visible to those commands — but executing model-generated commands is still inherent to any coding agent; run evals on a machine where that's acceptable.
 - The harness re-hashes nothing and caches nothing between trials — each trial is an independent fresh workspace.

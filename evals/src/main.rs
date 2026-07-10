@@ -8,13 +8,14 @@ mod openai;
 mod report;
 mod task;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::Parser;
 
 use agent::{AgentConfig, MockModel, Model, run_agent};
-use report::{CONTROL, EvalReport, TrialResult, WITH_SKILL};
+use grade::EnvPolicy;
+use report::{CONTROL, EvalReport, Outcome, TrialResult, WITH_SKILL};
 
 const SYSTEM_BASE: &str = "You are an autonomous coding agent working inside a repository. \
 Complete the user's task by reading and editing files and running commands with the provided tools. \
@@ -60,28 +61,23 @@ fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
-fn rayman_exe() -> &'static str {
-    if cfg!(windows) {
-        "rayman.exe"
-    } else {
-        "rayman"
-    }
-}
-
 /// 找到 `rayman` 所在目录，供 with_skill 组注入 `run` 工具的 PATH。
-/// 顺序：安装位置 → 仓库 release → 仓库 debug。找不到返回 None（with_skill 退化为纯文本）。
+/// 顺序：仓库 release → 安装位置 → 仓库 debug。优先本仓库最新构建，避免悄悄评测过期的安装版。
 fn find_rayman_bin() -> Option<PathBuf> {
     let mut candidates = Vec::new();
+    let repo = manifest_dir().parent().map(Path::to_path_buf);
+    if let Some(repo) = &repo {
+        candidates.push(repo.join("target").join("release"));
+    }
     if let Some(local) = std::env::var_os("LOCALAPPDATA") {
         candidates.push(PathBuf::from(local).join("Rayman").join("bin"));
     }
-    if let Some(repo) = manifest_dir().parent() {
-        candidates.push(repo.join("target").join("release"));
+    if let Some(repo) = &repo {
         candidates.push(repo.join("target").join("debug"));
     }
     candidates
         .into_iter()
-        .find(|dir| dir.join(rayman_exe()).exists())
+        .find(|dir| dir.join(grade::rayman_exe()).exists())
 }
 
 /// 按 `--backend` 名字构建模型后端。mock/anthropic 内建，其余名字从配置文件查表（OpenAI 兼容）。
@@ -123,6 +119,74 @@ fn main() {
     }
 }
 
+/// 一次评测运行的共享上下文，供每个 trial 复用。
+struct RunContext<'a> {
+    model: &'a dyn Model,
+    skill_text: &'a str,
+    rayman_bin: &'a Path,
+    runs_dir: &'a Path,
+    max_steps: usize,
+}
+
+/// 跑单个 trial。基础设施错误（工作区准备失败、后端故障、响应截断）收敛为 Error 结果，
+/// 不打断整轮评测，让已完成的结果总能落进报告。
+fn run_trial(ctx: &RunContext, task: &task::Task, condition: &str, trial: usize) -> TrialResult {
+    let mut result = TrialResult {
+        task: task.name.clone(),
+        condition: condition.into(),
+        trial,
+        outcome: Outcome::Error,
+        grade_exit: -1,
+        steps: 0,
+        tool_calls: 0,
+        rayman_invocations: 0,
+        finished: false,
+        error: None,
+    };
+    let workspace = ctx
+        .runs_dir
+        .join(format!("{}__{}__t{}", task.name, condition, trial));
+    if let Err(error) = task::setup_workspace(task, &workspace) {
+        result.error = Some(format!("{error:#}"));
+        return result;
+    }
+    let cfg = AgentConfig {
+        system_base: SYSTEM_BASE.into(),
+        skill_text: (condition == WITH_SKILL).then(|| ctx.skill_text.to_string()),
+        task_prompt: task.prompt.clone(),
+        max_steps: ctx.max_steps,
+        // with_skill 组把 rayman 注入 run 工具 PATH；control 组反向从 PATH 剔除，确保调不到。
+        env: if condition == WITH_SKILL {
+            EnvPolicy::with_rayman(ctx.rayman_bin.to_path_buf())
+        } else {
+            EnvPolicy::without_rayman()
+        },
+    };
+    let log = run_agent(ctx.model, &workspace, &cfg);
+    let graded = grade::run_shell(
+        &workspace,
+        &task.grade_cmd,
+        &EnvPolicy::default(),
+        grade::GRADE_TIMEOUT,
+    );
+    // 评分通过就算 pass；未通过时若 agent 曾报基础设施错误（后端故障/截断），
+    // 记 error 而非 fail，避免把环境问题算成模型失败。
+    result.outcome = if graded.passed {
+        Outcome::Pass
+    } else if log.error.is_some() {
+        Outcome::Error
+    } else {
+        Outcome::Fail
+    };
+    result.grade_exit = graded.exit;
+    result.steps = log.steps;
+    result.tool_calls = log.tool_calls;
+    result.rayman_invocations = log.rayman_invocations;
+    result.finished = log.finished;
+    result.error = log.error;
+    result
+}
+
 fn run() -> Result<()> {
     let cli = Cli::parse();
     // 先构建后端（借用完整的 cli），再消费 cli 里的 Option 字段。
@@ -142,14 +206,14 @@ fn run() -> Result<()> {
         anyhow::bail!("没有匹配的任务");
     }
 
-    let rayman_bin = find_rayman_bin();
-    match &rayman_bin {
-        Some(dir) => eprintln!("with_skill 组 rayman 可用: {}", dir.display()),
-        None => eprintln!(
-            "⚠ 未找到 rayman 可执行文件；with_skill 组只能用 SKILL.md 文本，无法真正调用 CLI。\
-             \n  装好后再跑更公平：cargo build --release（或安装到 %LOCALAPPDATA%\\Rayman\\bin）。"
-        ),
-    }
+    // with_skill 组的 system prompt 宣称 rayman 在 PATH 上，找不到二进制就不能开跑，
+    // 否则会系统性压低处理组。
+    let rayman_bin = find_rayman_bin().ok_or_else(|| {
+        anyhow::anyhow!(
+            "未找到 rayman 可执行文件，with_skill 组无法成立。先在仓库根运行: cargo build --release"
+        )
+    })?;
+    eprintln!("rayman 二进制目录: {}", rayman_bin.display());
 
     eprintln!(
         "后端={} 任务={} 每格重复={}",
@@ -158,43 +222,24 @@ fn run() -> Result<()> {
         cli.trials
     );
 
+    let ctx = RunContext {
+        model: model.as_ref(),
+        skill_text: &skill_text,
+        rayman_bin: &rayman_bin,
+        runs_dir: &runs_dir,
+        max_steps: cli.max_steps,
+    };
+
     let mut results = Vec::new();
     for task in &tasks {
-        for (condition, skill) in [(WITH_SKILL, Some(skill_text.clone())), (CONTROL, None)] {
+        for condition in [WITH_SKILL, CONTROL] {
             for trial in 0..cli.trials {
                 eprintln!("  [{}] {} trial {}", condition, task.name, trial);
-                let workspace = runs_dir.join(format!("{}__{}__t{}", task.name, condition, trial));
-                task::setup_workspace(task, &workspace)?;
-                let cfg = AgentConfig {
-                    system_base: SYSTEM_BASE.into(),
-                    skill_text: skill.clone(),
-                    task_prompt: task.prompt.clone(),
-                    max_steps: cli.max_steps,
-                    // 只有 with_skill 组把 rayman 注入 run 工具的 PATH。
-                    rayman_bin: if condition == WITH_SKILL {
-                        rayman_bin.clone()
-                    } else {
-                        None
-                    },
-                };
-                let log = run_agent(model.as_ref(), &workspace, &cfg);
-                let graded =
-                    grade::run_shell(&workspace, &task.grade_cmd, None, grade::GRADE_TIMEOUT);
-                if let Some(error) = &log.error {
-                    eprintln!("    agent 错误: {error}");
+                let result = run_trial(&ctx, task, condition, trial);
+                if let Some(error) = &result.error {
+                    eprintln!("    trial 错误: {error}");
                 }
-                results.push(TrialResult {
-                    task: task.name.clone(),
-                    condition: condition.into(),
-                    trial,
-                    passed: graded.passed,
-                    grade_exit: graded.exit,
-                    steps: log.steps,
-                    tool_calls: log.tool_calls,
-                    rayman_invocations: log.rayman_invocations,
-                    finished: log.finished,
-                    error: log.error,
-                });
+                results.push(result);
             }
         }
     }

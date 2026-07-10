@@ -9,7 +9,7 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 
-use crate::agent::{Assistant, Model, ToolCall};
+use crate::agent::{Assistant, Model, ToolCall, Truncated};
 
 /// 默认模型：除非用户显式指定，始终用最新最强的 Opus。
 pub const DEFAULT_MODEL: &str = "claude-opus-4-8";
@@ -94,6 +94,11 @@ impl Model for AnthropicModel {
         });
         let response = self.post(&body)?;
 
+        // max_tokens 截断时不完整的 tool_use 块会被丢弃，只剩文本看似“干净收尾”——必须显式报截断。
+        if response.get("stop_reason").and_then(Value::as_str) == Some("max_tokens") {
+            return Err(anyhow::Error::new(Truncated));
+        }
+
         // refusal 时 content 可能为空——先取出再判断，不要假设有内容。
         let content = response
             .get("content")
@@ -116,6 +121,7 @@ impl Model for AnthropicModel {
                             .unwrap_or_default()
                             .to_string(),
                         input: block.get("input").cloned().unwrap_or_else(|| json!({})),
+                        input_error: None,
                     });
                 }
             }
