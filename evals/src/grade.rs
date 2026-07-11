@@ -437,6 +437,15 @@ fn is_rayman_command_name(name: &OsStr) -> bool {
 fn control_command_mentions_rayman(command: &str) -> bool {
     #[cfg(windows)]
     {
+        // `cmd` expands variables and caret escapes before tokenization.  A command
+        // such as `set x=rayman & %x%` or `^r^a^y^m^a^n` can therefore hide a wrapper
+        // from the lexical token check below.  Reject these metacharacters in the
+        // control arm: this is intentionally conservative (false negatives are
+        // preferable to silently restoring the treated capability), and is not a
+        // claim that the host shell is sandboxed.
+        if command.contains('%') || command.contains('^') {
+            return true;
+        }
         command
             .split(|ch: char| {
                 ch.is_whitespace() || matches!(ch, '&' | '|' | ';' | '<' | '>' | '(' | ')' | '=')
@@ -667,6 +676,23 @@ mod tests {
             !dir.path().join("rayman.cmd").exists(),
             "command must be rejected before cmd can create the wrapper"
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn control_rejects_variable_and_caret_hidden_rayman_commands() {
+        for command in ["set x=rayman & %x%", "^r^a^y^m^a^n"] {
+            let dir = tempfile::tempdir().unwrap();
+            let policy = EnvPolicy::without_rayman();
+            let result = run_shell(dir.path(), command, &policy, RUN_TIMEOUT);
+            assert_eq!(result.outcome, GradeOutcome::InfrastructureError);
+            assert!(policy.control_workspace_violation());
+            assert!(
+                result.stderr.contains("rayman 命令/包装器"),
+                "{}",
+                result.stderr
+            );
+        }
     }
 
     #[test]

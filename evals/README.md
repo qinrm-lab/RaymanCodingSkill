@@ -3,7 +3,7 @@
 `rayman-evals` measures objective task outcomes for the RaymanCodingSkill under two conditions:
 
 - `with_skill`: the agent receives `SKILL.md` and can find the selected `rayman` binary on `PATH`.
-- `control`: neither; PATH entries exposing a `rayman` command (including Windows `.cmd`/`.bat` wrappers) are removed from the tool child process.
+- `control`: neither; PATH entries exposing a `rayman` command (including Windows `.cmd`/`.bat` wrappers) are removed from the tool child process. On Windows, commands containing `%` variable expansion or `^` escapes are rejected conservatively because `cmd` can hide a wrapper behind those transformations; this is an integrity guard, not an OS sandbox.
 
 Each task has a fixture, prompt, and grade command. Every task × condition × trial gets a fresh copy of the fixture, then the grade command decides pass/fail. `grade.txt` is hidden from the model prompt and file tools; it is **not** confidential from an unrestricted host shell.
 

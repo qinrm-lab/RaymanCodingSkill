@@ -255,6 +255,7 @@ pub fn save(root: &Path, override_dir: Option<&Path>, keep: usize) -> Result<Sav
     let ckpt_root = checkpoints_root(override_dir)?;
     fs::create_dir_all(&ckpt_root)
         .with_context(|| format!("无法创建 checkpoint 目录: {}", display_path(&ckpt_root)))?;
+    ensure_real_directory_chain(&ckpt_root)?;
     ensure_real_directory(&ckpt_root)?;
     let ckpt_root = ckpt_root
         .canonicalize()
@@ -415,6 +416,10 @@ fn copy_and_measure(source_root: &Path, relative: &Path, tree: &Path) -> Result<
     let source_before = integrity_for_file(source_root, relative)?;
     let destination = prepare_destination_file(tree, relative)?;
     let source = source_root.join(relative);
+    // Re-check both sides immediately before the copy.  The checks cannot remove a
+    // same-user TOCTOU race, but they fail closed on ordinary symlink/reparse swaps.
+    ensure_safe_file_under(source_root, relative)?;
+    prepare_destination_file(tree, relative)?;
     fs::copy(&source, &destination).with_context(|| {
         format!(
             "无法复制 checkpoint 文件: {} -> {}",
@@ -423,6 +428,8 @@ fn copy_and_measure(source_root: &Path, relative: &Path, tree: &Path) -> Result<
         )
     })?;
 
+    ensure_safe_file_under(source_root, relative)?;
+    ensure_safe_file_under(tree, relative)?;
     let destination_after = integrity_for_file(tree, relative)?;
     let source_after = integrity_for_file(source_root, relative)?;
     if source_before != source_after {
@@ -668,6 +675,11 @@ pub fn restore(
         }
         let destination = root.join(&relative);
         prepare_destination_file(root, &relative)?;
+        // Re-check source and destination immediately around the write.  This is
+        // deliberately fail-closed for symlink/reparse substitutions; a hostile
+        // same-user process can still race these path-based checks (documented).
+        ensure_safe_file_under(&tree, &relative)?;
+        prepare_destination_file(root, &relative)?;
         fs::copy(tree.join(&relative), &destination).with_context(|| {
             format!(
                 "无法恢复 checkpoint 文件: {} -> {}",
@@ -675,6 +687,8 @@ pub fn restore(
                 display_path(&destination)
             )
         })?;
+        ensure_safe_file_under(&tree, &relative)?;
+        prepare_destination_file(root, &relative)?;
         let written = integrity_for_file(root, &relative)?;
         if written.size != expected.size || written.sha256 != expected.sha256 {
             bail!("恢复后目标文件完整性不匹配: {}", expected.path);
@@ -837,6 +851,32 @@ fn ensure_real_directory(path: &Path) -> Result<()> {
     }
     if !metadata.file_type().is_dir() {
         bail!("路径不是目录: {}", display_path(path));
+    }
+    Ok(())
+}
+
+/// Reject symlink/reparse components in a checkpoint root's existing ancestor
+/// chain.  The final directory check alone would still allow a symlinked parent
+/// to redirect checkpoint writes outside the requested root.
+fn ensure_real_directory_chain(path: &Path) -> Result<()> {
+    let mut current = Some(path);
+    while let Some(candidate) = current {
+        match fs::symlink_metadata(candidate) {
+            Ok(metadata) if is_link_or_reparse(&metadata) => {
+                bail!(
+                    "拒绝链接/reparse checkpoint 路径组件: {}",
+                    display_path(candidate)
+                );
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(error).with_context(|| {
+                    format!("无法读取 checkpoint 路径组件: {}", display_path(candidate))
+                });
+            }
+        }
+        current = candidate.parent();
     }
     Ok(())
 }
@@ -1074,5 +1114,18 @@ mod tests {
         )
         .unwrap();
         assert!(save(second.path(), Some(store.path()), DEFAULT_KEEP).is_err());
+
+        // The checkpoint root itself must not be reached through a symlinked
+        // parent, even when the final directory resolves to a real directory.
+        let redirected_parent = store.path().join("redirected");
+        symlink(outside.path(), &redirected_parent).unwrap();
+        assert!(
+            save(
+                root,
+                Some(&redirected_parent.join("checkpoints")),
+                DEFAULT_KEEP
+            )
+            .is_err()
+        );
     }
 }

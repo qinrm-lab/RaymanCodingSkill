@@ -101,10 +101,11 @@ fn mtime_ns(metadata: &std::fs::Metadata) -> u128 {
         .unwrap_or(0)
 }
 
-/// 载入缓存索引；缺失或**损坏**都返回 `None`（降级为重建，不让命令报错）。
+/// 载入缓存索引；只有缺失返回 `None`，损坏或 I/O 错误必须向上传播。
 fn load_cached(root: &Path) -> Result<Option<ContextIndex>> {
-    // read_json 对损坏文件返回 Err；unwrap_or_default 把缺失(None)与损坏(Err)统一降级为 None。
-    Ok(read_json::<ContextIndex>(&index_path(root, false)?).unwrap_or_default())
+    // 只有文件确实不存在才视为首次运行。损坏、权限或其它 I/O 错误
+    // 必须继续向上传递，避免 refresh 静默覆盖取证状态。
+    read_json::<ContextIndex>(&index_path(root, false)?)
 }
 
 /// 按工作区相对路径对文件分类；只吃相对路径，避免祖先目录含 "test" 造成整清单误判。
@@ -231,6 +232,7 @@ fn between(text: &str, start: &str, end: &str) -> Option<String> {
 const MAX_TEXT_BYTES: u64 = 8 * 1024 * 1024;
 
 fn build_entry(root: &Path, path: &Path, size: u64, mtime: u128) -> Result<FileEntry> {
+    ensure_source_file(root, path)?;
     let rel = relative_key(root, path);
     let extension = path
         .extension()
@@ -249,6 +251,7 @@ fn build_entry(root: &Path, path: &Path, size: u64, mtime: u128) -> Result<FileE
     };
     let after = std::fs::metadata(path)
         .with_context(|| format!("上下文索引无法复查文件元数据: {}", display_path(path)))?;
+    ensure_source_file(root, path)?;
     if after.len() != size || mtime_ns(&after) != mtime {
         bail!("上下文索引读取期间文件发生变化: {}", display_path(path));
     }
@@ -271,6 +274,45 @@ fn build_entry(root: &Path, path: &Path, size: u64, mtime: u128) -> Result<FileE
         symbols,
         read_error: None,
     })
+}
+
+/// 在读取/哈希前后确认候选文件仍是工作区内的普通文件。遍历器不跟随
+/// 链接，但路径可能在遍历完成后被替换；拒绝链接/reparse，避免把工作区外
+/// 内容纳入上下文索引。
+fn ensure_source_file(root: &Path, path: &Path) -> Result<()> {
+    let metadata = std::fs::symlink_metadata(path)
+        .with_context(|| format!("上下文索引无法读取文件元数据: {}", display_path(path)))?;
+    if is_link_or_reparse(&metadata) || !metadata.file_type().is_file() {
+        bail!("上下文索引拒绝非普通文件: {}", display_path(path));
+    }
+    let workspace = root
+        .canonicalize()
+        .with_context(|| format!("无法规范化工作区根: {}", display_path(root)))?;
+    let canonical = path
+        .canonicalize()
+        .with_context(|| format!("无法规范化上下文文件: {}", display_path(path)))?;
+    if !canonical.starts_with(&workspace) {
+        bail!(
+            "上下文索引文件逃逸工作区: {} -> {}",
+            display_path(path),
+            display_path(&canonical)
+        );
+    }
+    Ok(())
+}
+
+fn is_link_or_reparse(metadata: &std::fs::Metadata) -> bool {
+    if metadata.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+    }
+    #[cfg(not(windows))]
+    false
 }
 
 /// 刷新索引：复用未变文件的指纹与符号，只重算变更文件。
@@ -646,15 +688,19 @@ mod tests {
     }
 
     #[test]
-    fn corrupt_cache_degrades_to_missing_not_error() {
+    fn corrupt_cache_is_preserved_as_an_error() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         touch(&root.join("src/a.rs"), "fn a() {}");
         refresh(root).unwrap();
         fs::write(root.join(INDEX_RELATIVE_PATH), "{ corrupt").unwrap();
-        // 不 panic、不 Err：降级为 missing，随后可重建。
-        assert_eq!(freshness(root).status, "missing");
-        assert!(refresh(root).is_ok());
+        // 损坏状态不能被静默降级并覆盖；只读状态报告为 incomplete，刷新返回错误。
+        assert_eq!(freshness(root).status, "incomplete");
+        assert!(refresh(root).is_err());
+        assert_eq!(
+            fs::read_to_string(root.join(INDEX_RELATIVE_PATH)).unwrap(),
+            "{ corrupt"
+        );
     }
 
     #[test]
@@ -672,5 +718,28 @@ mod tests {
         fs::create_dir_all(&target).unwrap();
         let metadata = fs::metadata(&target).unwrap();
         assert!(build_entry(root, &target, metadata.len(), mtime_ns(&metadata)).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn build_entry_refuses_a_symlink_to_a_file_outside_workspace() {
+        use std::os::unix::fs::symlink;
+
+        let workspace = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let outside_file = outside.path().join("secret.rs");
+        fs::write(&outside_file, "fn secret() {}").unwrap();
+        let target = workspace.path().join("secret.rs");
+        symlink(&outside_file, &target).unwrap();
+        let metadata = fs::metadata(&target).unwrap();
+        assert!(
+            build_entry(
+                workspace.path(),
+                &target,
+                metadata.len(),
+                mtime_ns(&metadata)
+            )
+            .is_err()
+        );
     }
 }

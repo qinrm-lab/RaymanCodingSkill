@@ -153,10 +153,14 @@ function Build-SourceFreshArtifact {
     try {
         $env:CARGO_TARGET_DIR = $targetDir
         # Cargo config enables /Brepro for ordinary Windows MSVC builds. Force the
-        # same linker contract here even when a caller supplied RUSTFLAGS that would
-        # override config, otherwise the isolated PE gets a fresh timestamp/PDB ID
-        # and a byte comparison becomes a false failure.
+        # same linker contract here. Do not silently discard caller-provided RUSTFLAGS
+        # (notably -D warnings): converting arbitrary shell-quoted RUSTFLAGS into
+        # Cargo's unit-separator encoding is ambiguous, so fail closed when it is set.
+        # CARGO_ENCODED_RUSTFLAGS is already lossless and can safely receive /Brepro.
         if (Test-WindowsMsvcHost) {
+            if (-not [string]::IsNullOrWhiteSpace($oldRustFlags)) {
+                throw 'Source-fresh verification refuses non-empty RUSTFLAGS on Windows; use CARGO_ENCODED_RUSTFLAGS so existing warning policy is preserved.'
+            }
             $brepro = @('-C', 'link-arg=/Brepro') -join [char]0x1f
             $env:CARGO_ENCODED_RUSTFLAGS = if ([string]::IsNullOrWhiteSpace($oldEncodedRustFlags)) {
                 $brepro
