@@ -29,6 +29,35 @@ fn run(dir: &Path, args: &[&str]) -> Output {
     }
 }
 
+/// Run with a deterministic PATH prefix.  Doctor uses this to prove the same
+/// command-resolution path an interactive caller would observe.
+fn run_with_path(
+    dir: &Path,
+    args: &[&str],
+    path_prefix: &[&Path],
+    pathext: Option<&str>,
+) -> Output {
+    let mut entries = path_prefix
+        .iter()
+        .map(|path| path.to_path_buf())
+        .collect::<Vec<_>>();
+    if let Some(parent_path) = std::env::var_os("PATH") {
+        entries.extend(std::env::split_paths(&parent_path));
+    }
+    let path = std::env::join_paths(entries).expect("PATH entries must be representable");
+    let mut command = Command::new(BIN);
+    command.args(args).current_dir(dir).env("PATH", path);
+    if let Some(pathext) = pathext {
+        command.env("PATHEXT", pathext);
+    }
+    let output = command.output().expect("无法启动 rayman 二进制");
+    Output {
+        status: output.status.code().unwrap_or(-1),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    }
+}
+
 /// 运行并解析 JSON 输出（用 --format json）。
 fn run_json(dir: &Path, args: &[&str]) -> Value {
     let mut full = vec!["--format", "json"];
@@ -41,6 +70,27 @@ fn run_json(dir: &Path, args: &[&str]) -> Value {
     );
     serde_json::from_str(&output.stdout)
         .unwrap_or_else(|error| panic!("输出不是 JSON: {error}\n{}", output.stdout))
+}
+
+/// Current-schema goals need a receipt produced by the CLI itself. `echo` is
+/// deliberately harmless and cross-shell; command authenticity is proven by
+/// the actual process exit/output/fingerprint, not by a typed attestation.
+fn validate_goal(root: &Path, id: &str, req: &str, message: &str, changed: &[&str]) -> Value {
+    let mut args = vec![
+        "goal",
+        "validate",
+        id,
+        "--req",
+        req,
+        "-m",
+        message,
+        "--command",
+        "echo receipt",
+    ];
+    for path in changed {
+        args.extend(["--changed", *path]);
+    }
+    run_json(root, &args)
 }
 
 fn write(dir: &Path, rel: &str, body: &str) {
@@ -197,7 +247,15 @@ fn standard_check_blocks_active_must_requirements_without_evidence() {
         &["goal", "start", "wire impact", "--must", "record evidence"],
     );
 
-    assert_eq!(run(root, &["check"]).status, 0);
+    // Bare `check` is the readiness gate, so its default profile must be the
+    // same fail-closed standard behavior as `--profile standard`.
+    let default_profile = run(root, &["check"]);
+    assert_eq!(default_profile.status, 1);
+    assert!(
+        default_profile.stdout.contains("active goal") && default_profile.stdout.contains("must"),
+        "stdout={}",
+        default_profile.stdout
+    );
     let standard = run(root, &["check", "--profile", "standard"]);
     assert_eq!(standard.status, 1);
     assert!(
@@ -247,7 +305,7 @@ fn standard_check_blocks_active_goal_even_with_validated_evidence() {
 }
 
 #[test]
-fn standard_check_blocks_done_requirement_without_structured_validation() {
+fn standard_check_blocks_done_requirement_without_validation_receipt() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
@@ -277,8 +335,8 @@ fn standard_check_blocks_done_requirement_without_structured_validation() {
     let standard = run(root, &["check", "--profile", "standard"]);
     assert_eq!(standard.status, 1);
     assert!(
-        standard.stdout.contains("缺少结构化 validated 命令")
-            && standard.stdout.contains("standard blockers: 1"),
+        standard.stdout.contains("缺少验证 receipt")
+            && standard.stdout.contains("standard blockers: 2"),
         "stdout={}",
         standard.stdout
     );
@@ -293,6 +351,7 @@ fn standard_check_blocks_done_requirement_without_evidence() {
         root,
         ".RaymanCodingSkill/goals/goal_manual.json",
         r#"{
+  "schema_version": 2,
   "id": "goal_manual",
   "title": "manual goal",
   "status": "success",
@@ -357,8 +416,7 @@ fn standard_check_blocks_partial_goal_without_structured_validation() {
     let standard = run(root, &["check", "--profile", "standard"]);
     assert_eq!(standard.status, 1);
     assert!(
-        standard.stdout.contains("状态为 partial")
-            && standard.stdout.contains("缺少结构化 validated 命令"),
+        standard.stdout.contains("状态为 partial") && standard.stdout.contains("缺少验证 receipt"),
         "stdout={}",
         standard.stdout
     );
@@ -437,10 +495,10 @@ fn standard_check_reads_legacy_goal_schema_and_blocks_missing_validation() {
     let listed = run_json(root, &["goal", "list"]);
     assert_eq!(listed[0]["id"], "goal_legacy");
     let standard = run(root, &["check", "--profile", "standard"]);
-    assert_eq!(standard.status, 1);
+    assert_eq!(standard.status, 0);
     assert!(
-        standard.stdout.contains("goal_legacy")
-            && standard.stdout.contains("缺少结构化 validated 命令"),
+        standard.stdout.contains("legacy goal goal_legacy")
+            && standard.stdout.contains("不能用于当前交付声明"),
         "stdout={}",
         standard.stdout
     );
@@ -485,7 +543,7 @@ fn standard_check_accepts_legacy_goal_level_verification() {
         standard.stdout, standard.stderr
     );
     assert!(
-        standard.stdout.contains("standard warnings: 0"),
+        standard.stdout.contains("legacy goal goal_legacy"),
         "stdout={}",
         standard.stdout
     );
@@ -534,7 +592,92 @@ fn release_check_does_not_write_project_map_cache() {
 }
 
 #[test]
-fn goal_evidence_changed_failure_does_not_write_project_map_cache() {
+fn release_check_reports_workspace_scope_not_installed_release_contract() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+
+    let report = run_json(root, &["check", "--profile", "release"]);
+
+    assert_eq!(report["ready"], true);
+    assert_eq!(report["readiness_scope"], "workspace_strict_quality");
+    assert_eq!(report["release_contract"]["checked"], false);
+    assert_eq!(report["release_contract"]["status"], "not_checked");
+    assert!(
+        report["release_contract"]["required_verifier"]
+            .as_str()
+            .is_some_and(|command| command.contains("RequireSourceFresh")),
+        "{report}"
+    );
+}
+
+#[test]
+fn doctor_verifies_installed_identity_in_an_ordinary_managed_workspace() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "SKILL.md", "ordinary workspace canonical skill\n");
+    let skill_hash = rayman::hash::sha256_file(&root.join("SKILL.md")).unwrap();
+    write(
+        root,
+        ".RaymanCodingSkill/workspace_skill.yaml",
+        &format!("skill_sha256: {skill_hash}\n"),
+    );
+    let binary = std::fs::canonicalize(BIN).unwrap();
+    let binary_dir = binary.parent().unwrap();
+
+    let output = run_with_path(
+        root,
+        &["--format", "json", "doctor", "--check"],
+        &[binary_dir],
+        None,
+    );
+
+    assert_eq!(
+        output.status, 0,
+        "stdout={} stderr={}",
+        output.stdout, output.stderr
+    );
+    let report: Value = serde_json::from_str(&output.stdout).unwrap();
+    assert_eq!(report["release_identity"]["ready"], true);
+    assert_eq!(report["repo_release"]["checked"], false);
+    assert_eq!(report["repo_release"]["status"], "not_checked_by_doctor");
+}
+
+#[cfg(windows)]
+#[test]
+fn doctor_rejects_an_earlier_windows_path_wrapper() {
+    let workspace = tempfile::tempdir().unwrap();
+    let root = workspace.path();
+    write(root, "SKILL.md", "ordinary workspace canonical skill\n");
+    let skill_hash = rayman::hash::sha256_file(&root.join("SKILL.md")).unwrap();
+    write(
+        root,
+        ".RaymanCodingSkill/workspace_skill.yaml",
+        &format!("skill_sha256: {skill_hash}\n"),
+    );
+    let wrapper_dir = tempfile::tempdir().unwrap();
+    write(wrapper_dir.path(), "rayman.cmd", "@echo wrong wrapper\r\n");
+    let binary = std::fs::canonicalize(BIN).unwrap();
+    let binary_dir = binary.parent().unwrap();
+
+    let output = run_with_path(
+        root,
+        &["--format", "json", "doctor", "--check"],
+        &[wrapper_dir.path(), binary_dir],
+        Some(".COM;.EXE;.BAT;.CMD"),
+    );
+
+    assert_ne!(output.status, 0, "stdout={}", output.stdout);
+    assert!(
+        output.stderr.contains("已安装身份契约不一致"),
+        "stderr={}",
+        output.stderr
+    );
+}
+
+#[test]
+fn goal_evidence_changed_unknown_path_records_impact_without_writing_project_map_cache() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
@@ -547,7 +690,7 @@ fn goal_evidence_changed_failure_does_not_write_project_map_cache() {
     );
     let id = goal["id"].as_str().unwrap();
 
-    let failed = run(
+    let recorded = run_json(
         root,
         &[
             "goal",
@@ -563,11 +706,13 @@ fn goal_evidence_changed_failure_does_not_write_project_map_cache() {
             "cargo test --all",
         ],
     );
-    assert_eq!(failed.status, 1);
     assert!(
-        failed.stderr.contains("项目地图中没有文件"),
-        "stderr={}",
-        failed.stderr
+        recorded["requirements"][0]["impacts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|impact| impact["changed_path"] == "no/such.rs"),
+        "recorded={recorded}"
     );
     assert!(!project_map.exists());
 }
@@ -600,6 +745,7 @@ fn standard_check_does_not_change_state_tree() {
             "cargo test --all",
         ],
     );
+    validate_goal(root, id, "req_1", "executed validation receipt", &[]);
     let closed = run(root, &["goal", "close", id]);
     assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
     let before = state_snapshot(root);
@@ -641,6 +787,7 @@ fn release_check_does_not_change_state_tree() {
             "cargo test --all",
         ],
     );
+    validate_goal(root, id, "req_1", "executed validation receipt", &[]);
     let closed = run(root, &["goal", "close", id]);
     assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
     let before = state_snapshot(root);
@@ -681,6 +828,7 @@ fn standard_check_accepts_done_requirement_with_validation_and_no_impact_warning
         ],
     );
     assert_eq!(recorded.status, 0, "stderr={}", recorded.stderr);
+    validate_goal(root, id, "req_1", "executed validation receipt", &[]);
     let closed = run(root, &["goal", "close", id]);
     assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
 
@@ -760,6 +908,7 @@ fn goal_evidence_changed_requires_validation_and_standard_accepts_it() {
             .unwrap()
             .contains("heuristic")
     );
+    validate_goal(root, id, "req_1", "executed validation receipt", &[]);
     let closed = run(root, &["goal", "close", id]);
     assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
 
@@ -857,6 +1006,7 @@ fn standard_check_accepts_rust_validation_for_cargo_manifest_changes() {
         ],
     );
     assert_eq!(recorded.status, 0, "stderr={}", recorded.stderr);
+    validate_goal(root, id, "req_1", "executed validation receipt", &[]);
     let closed = run(root, &["goal", "close", id]);
     assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
 
@@ -913,6 +1063,7 @@ fn standard_check_accepts_rust_validation_for_cargo_lock_changes() {
         ],
     );
     assert_eq!(recorded.status, 0, "stderr={}", recorded.stderr);
+    validate_goal(root, id, "req_1", "executed validation receipt", &[]);
     let closed = run(root, &["goal", "close", id]);
     assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
 
@@ -1057,10 +1208,14 @@ fn map_commands_report_project_structure_and_impact() {
             .iter()
             .any(|check| check == "cargo test --all")
     );
+    let project_map = root.join(".RaymanCodingSkill/context/project_map.json");
     assert!(
-        root.join(".RaymanCodingSkill/context/project_map.json")
-            .exists()
+        !project_map.exists(),
+        "read-only map queries must not create a cache"
     );
+    let refreshed = run(root, &["map", "refresh"]);
+    assert_eq!(refreshed.status, 0, "stderr={}", refreshed.stderr);
+    assert!(project_map.exists());
 }
 
 #[test]
@@ -1615,6 +1770,280 @@ fn strict_quality_config_fails_closed_on_unknown_warning_kinds() {
             && release.stderr.contains("unknown block_warning_kinds entry"),
         "stderr={}",
         release.stderr
+    );
+}
+
+#[test]
+fn standard_check_rejects_a_forged_v2_success_goal_without_must_requirements() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    write(
+        root,
+        ".RaymanCodingSkill/goals/goal_forged.json",
+        r#"{
+  "schema_version": 2,
+  "id": "goal_forged",
+  "title": "forged success",
+  "status": "success",
+  "created_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-01T00:00:00Z",
+  "requirements": []
+}"#,
+    );
+    run_json(root, &["context", "refresh"]);
+
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(standard.status, 1);
+    assert!(
+        standard.stdout.contains("goal_forged") && standard.stdout.contains("至少需要一个 must"),
+        "stdout={}",
+        standard.stdout
+    );
+}
+
+#[test]
+fn standard_check_rejects_an_unknown_nonzero_goal_schema() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    write(
+        root,
+        ".RaymanCodingSkill/goals/goal_future.json",
+        r#"{
+  "schema_version": 3,
+  "id": "goal_future",
+  "title": "unknown schema",
+  "status": "success",
+  "created_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-01T00:00:00Z",
+  "requirements": [
+    {
+      "id": "req_1",
+      "text": "must",
+      "kind": "must",
+      "status": "done",
+      "evidence": "claimed",
+      "validations": [],
+      "impacts": []
+    }
+  ]
+}"#,
+    );
+    run_json(root, &["context", "refresh"]);
+
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(standard.status, 1);
+    assert!(
+        standard.stdout.contains("goal_future")
+            && standard.stdout.contains("不支持的 goal schema_version=3"),
+        "stdout={}",
+        standard.stdout
+    );
+}
+
+#[test]
+fn legacy_goal_mutation_remains_legacy_history_after_writeback() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    write(
+        root,
+        ".RaymanCodingSkill/goals/goal_legacy_active.json",
+        r#"{
+  "id": "goal_legacy_active",
+  "contract": {
+    "goal": "legacy active goal",
+    "requirements": [
+      {
+        "id": "req_1",
+        "priority": "must",
+        "text": "record legacy evidence",
+        "status": "open",
+        "validation_commands": []
+      }
+    ],
+    "created_at": "2026-01-01T00:00:00Z"
+  },
+  "status": "active",
+  "created_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-01T00:00:00Z"
+}"#,
+    );
+    run_json(root, &["context", "refresh"]);
+
+    let recorded = run(
+        root,
+        &[
+            "goal",
+            "evidence",
+            "goal_legacy_active",
+            "--req",
+            "req_1",
+            "-m",
+            "historical evidence",
+        ],
+    );
+    assert_eq!(recorded.status, 0, "stderr={}", recorded.stderr);
+    assert_eq!(
+        run(root, &["goal", "close", "goal_legacy_active"]).status,
+        0
+    );
+
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(standard.status, 0, "stdout={}", standard.stdout);
+    assert!(standard.stdout.contains("legacy goal goal_legacy_active"));
+    assert!(!standard.stdout.contains("合约无效"));
+}
+
+#[test]
+fn goal_validate_failure_never_records_a_receipt() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+    let goal = run_json(
+        root,
+        &["goal", "start", "prove failure", "--must", "validate"],
+    );
+    let id = goal["id"].as_str().unwrap();
+
+    let failed = run(
+        root,
+        &[
+            "goal",
+            "validate",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "expected failure",
+            "--command",
+            "exit 7",
+        ],
+    );
+    assert_eq!(
+        failed.status, 1,
+        "stdout={} stderr={}",
+        failed.stdout, failed.stderr
+    );
+    assert!(
+        failed.stderr.contains("不会写入 receipt"),
+        "stderr={}",
+        failed.stderr
+    );
+    let shown = run_json(root, &["goal", "show", id]);
+    assert_eq!(shown["requirements"][0]["status"], "open");
+    assert!(shown["requirements"][0]["evidence"].is_null());
+    assert!(
+        shown["requirements"][0]["validations"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn typed_validated_claim_cannot_replace_an_executed_receipt() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+    let goal = run_json(
+        root,
+        &["goal", "start", "prove receipt", "--must", "validate"],
+    );
+    let id = goal["id"].as_str().unwrap();
+    let claimed = run(
+        root,
+        &[
+            "goal",
+            "evidence",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "typed claim only",
+            "--validated",
+            "cargo test --all",
+        ],
+    );
+    assert_eq!(claimed.status, 0, "stderr={}", claimed.stderr);
+    assert_eq!(run(root, &["goal", "close", id]).status, 0);
+
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(standard.status, 1);
+    assert!(
+        standard
+            .stdout
+            .contains("没有绑定当前工作区的成功 validation receipt"),
+        "stdout={}",
+        standard.stdout
+    );
+}
+
+#[test]
+fn source_change_after_receipt_invalidates_standard_readiness() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+    let goal = run_json(
+        root,
+        &["goal", "start", "bind receipt", "--must", "validate"],
+    );
+    let id = goal["id"].as_str().unwrap();
+    validate_goal(root, id, "req_1", "executed receipt", &[]);
+    assert_eq!(run(root, &["goal", "close", id]).status, 0);
+    assert_eq!(run(root, &["check", "--profile", "standard"]).status, 0);
+
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 43 }\n");
+    run_json(root, &["context", "refresh"]);
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(standard.status, 1);
+    assert!(
+        standard
+            .stdout
+            .contains("没有绑定当前工作区的成功 validation receipt"),
+        "stdout={}",
+        standard.stdout
+    );
+}
+
+#[test]
+fn checkpoint_verify_state_audit_and_recursive_temp_status_are_exposed_by_cli() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let checkpoint_dir = tempfile::tempdir().unwrap();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+
+    let checkpoint_dir = checkpoint_dir.path().to_str().unwrap();
+    let saved = run_json(
+        root,
+        &["checkpoint", "--dir", checkpoint_dir, "save", "--keep", "1"],
+    );
+    let id = saved["id"].as_str().unwrap();
+    let verified = run_json(root, &["checkpoint", "--dir", checkpoint_dir, "verify", id]);
+    assert_eq!(verified["status"], "complete");
+    assert!(verified["file_count"].as_u64().unwrap() >= 1);
+
+    write(root, ".RaymanCodingSkill/tmp/run/nested/a.bin", "abc");
+    write(root, ".RaymanCodingSkill/tmp/run/b.bin", "d");
+    let temp_status = run_json(root, &["temp", "status"]);
+    assert_eq!(temp_status["entry_count"], 1);
+    assert_eq!(temp_status["file_count"], 2);
+    assert_eq!(temp_status["directory_count"], 2);
+    assert_eq!(temp_status["total_bytes"], 4);
+    assert_eq!(temp_status["traversal_error_count"], 0);
+
+    let clean_audit = run_json(root, &["state", "audit", "--check"]);
+    assert_eq!(clean_audit["clean"], true);
+    write(root, ".RaymanCodingSkill/research/retired.json", "{}");
+    let blocked_audit = run(root, &["state", "audit", "--check"]);
+    assert_eq!(blocked_audit.status, 1);
+    assert!(
+        root.join(".RaymanCodingSkill/research/retired.json")
+            .exists()
     );
 }
 

@@ -1,13 +1,15 @@
 [workspace]
 members = ["crates/rayman"]
 # evals/ is a separate dev/research project (agent A/B outcome eval). It is
-# intentionally excluded so it never enters the shipped tool's dep tree or CI.
+# intentionally excluded from the shipped tool's dependency tree and the main
+# Cargo workspace; it has its own explicit CI job and dependency policy check.
 exclude = ["evals"]
 resolver = "2"
 
 [workspace.package]
-version = "2.0.0"
+version = "2.1.0"
 edition = "2024"
+rust-version = "1.88"
 license = "MIT"
 authors = ["Rayman"]
 

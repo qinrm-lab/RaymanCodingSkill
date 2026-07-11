@@ -1,92 +1,113 @@
 # rayman-evals — agent A/B outcome eval
 
-Measures whether the RaymanCodingSkill actually improves a coding agent's **output**, not just its process compliance. It runs a real LLM agent on the same coding tasks under two conditions and compares objective pass rates:
+`rayman-evals` measures objective task outcomes for the RaymanCodingSkill under two conditions:
 
-- **with_skill** — the agent's system prompt includes the repo's `SKILL.md`, and the `rayman` binary's directory is prepended to the `run` tool's PATH.
-- **control** — neither; additionally, any PATH directory containing a `rayman` binary is stripped from the `run` tool's environment, so the control arm cannot call it by accident.
+- `with_skill`: the agent receives `SKILL.md` and can find the selected `rayman` binary on `PATH`.
+- `control`: neither; PATH entries exposing a `rayman` command (including Windows `.cmd`/`.bat` wrappers) are removed from the tool child process.
 
-The **only** difference between the two arms is the skill text + `rayman` availability, so any pass-rate delta is attributable to the skill. The harness therefore refuses to start if no `rayman` binary is found (build one first: `cargo build --release` at the repo root; the repo's `target/release` is preferred over an installed copy, and the chosen path is printed at startup).
+Each task has a fixture, prompt, and grade command. Every task × condition × trial gets a fresh copy of the fixture, then the grade command decides pass/fail. `grade.txt` is hidden from the model prompt and file tools; it is **not** confidential from an unrestricted host shell.
 
-This is a standalone project — **not** part of the main `rayman` workspace (see `exclude = ["evals"]` in the root `Cargo.toml`), so its LLM/HTTP dependencies never touch the shipped tool.
+## Safety boundary
 
-## How it works
+The `run` tool executes a model-generated shell command directly as the current host user. It is **not a sandbox**: environment scrubbing, working-directory checks, timeouts, and symlink checks do not prevent a command from accessing the host filesystem or network through other means.
 
-1. Each task under `tasks/<name>/` has a `fixture/` (a starting repo), a `prompt.md` (the instruction given to the agent), and a `grade.txt` (a hidden command run in the finished workspace — exit 0 = success). The agent never sees `grade.txt`.
-2. For each task × condition × trial, the harness copies the fixture to a fresh workspace, runs a minimal tool-use agent loop (tools: `list_files`, `read_file`, `write_file`, `run`) against the chosen backend, then runs the hidden grade command.
-3. Each trial ends as **pass**, **fail**, or **error** (infrastructure problems: workspace setup failure, backend outage, or a response truncated by the output limit). Pass rates use `pass / (pass + fail)` — errors are reported separately, next to the with-skill-minus-control **delta**, so backend flakiness never counts as a model failure. Results (including per-trial details) are written to `.runs/report.md` and `.runs/report.json`. A trial error never aborts the run; the report is always written.
+Therefore only the offline mock backend runs without an acknowledgement. Every real backend is rejected before config, credentials, or network use unless the operator explicitly passes:
 
-Grading is objective: every shipped task grades with `cargo test` or `cargo clippy -- -D warnings`. The tasks range from one-line fixes to `large-repo-nav`, where the failing top-level test is caused by a bug buried several modules deep — the case where navigation/context tooling should earn its keep.
-
-## Run it
-
-Mock backend (free — proves the orchestration and grading end-to-end; the no-op agent scores 0% in both arms):
-
-```
-cargo run -- --backend mock
+```text
+--unsafe-host-exec
 ```
 
-Anthropic backend (needs `ANTHROPIC_API_KEY`; **spends API credits**):
+Use real models only in a disposable VM, Windows Sandbox, container with appropriate host isolation, or another environment you deliberately accept as unsafe. This binary cannot attest that such isolation actually separates the agent from evaluator inputs, so every `unsandboxed_host_execution` report is deliberately marked **NON-COMPARATIVE**: it is useful for debugging, never for comparing arms or claiming an effect. The acknowledgement allows unsafe execution; it does not make the experiment valid.
 
+File tools (`list_files`, `read_file`, `write_file`) reject visible symlink traversal and fixture copying rejects symlinks. This is a portable best-effort boundary, not a substitute for OS isolation; portable Rust has no race-free cross-platform `openat(O_NOFOLLOW)` equivalent.
+
+Before a real-backend trial starts, the selected `rayman` binary must pass its own `doctor --check` with `PATH` pinned to that binary, and the selected `--skill` content must equal the workspace `SKILL.md`. Mock runs intentionally skip this release-metadata check so offline CI does not depend on ignored workspace state.
+
+## Run
+
+Mock backend (offline, free; proves orchestration, provenance, and grading):
+
+```powershell
+cargo run --manifest-path evals/Cargo.toml -- --backend mock --trials 2
 ```
-export ANTHROPIC_API_KEY=sk-ant-...      # PowerShell: $env:ANTHROPIC_API_KEY="sk-ant-..."
-cargo run -- --backend anthropic --trials 3
+
+Real Anthropic backend (spends credits and directly executes model shell commands on the host):
+
+```powershell
+$env:ANTHROPIC_API_KEY="..."
+cargo run --manifest-path evals/Cargo.toml -- --backend anthropic --trials 2 --unsafe-host-exec
 ```
 
-### OpenAI-compatible backend (DeepSeek / local Ollama / any OpenAI-compatible endpoint)
+Use `--seed <u64>` to reproduce task/condition ordering. A generated seed is always recorded if omitted.
 
-Endpoints and models change often, so they live in a **gitignored config file** — edit the file, not the code. The secret stays in an env var.
+## OpenAI-compatible backends
 
-1. Copy the example to your real config (gitignored):
+Copy the example to a local, gitignored configuration:
 
-   ```
-   cp evals/backends.example.json evals/backends.json
-   ```
+```powershell
+Copy-Item evals/backends.example.json evals/backends.json
+```
 
-2. Edit `evals/backends.json` — each top-level key is a `--backend` name; set its `base_url`, `model`, and `api_key_env` (the name of the env var that holds the key; omit it for a keyless local endpoint):
+The schema is strict: unknown top-level and backend fields are rejected. `base_url` must use HTTPS, except `http://localhost`, `127.0.0.1`, or `::1` for a local server. URLs with user-info, query, or fragments are rejected.
 
-   ```json
-   {
-     "backends": {
-       "deepseek": {
-         "base_url": "https://api.deepseek.com/v1",
-         "model": "deepseek-chat",
-         "api_key_env": "DEEPSEEK_API_KEY"
-       }
-     }
-   }
-   ```
+By default a backend can obtain a key only from an approved, dedicated API-key variable such as `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, or `OPENROUTER_API_KEY`. Arbitrary environment-variable names are rejected so a config cannot point a remote endpoint at a generic host secret. Keep keys out of JSON:
 
-3. Set the secret in the env var you named:
+```json
+{
+  "backends": {
+    "deepseek": {
+      "base_url": "https://api.deepseek.com/v1",
+      "model": "deepseek-chat",
+      "api_key_env": "DEEPSEEK_API_KEY",
+      "max_tokens": 8192
+    }
+  }
+}
+```
 
-   ```
-   $env:DEEPSEEK_API_KEY="sk-..."      # bash: export DEEPSEEK_API_KEY=sk-...
-   ```
+Then run:
 
-4. Run it:
+```powershell
+$env:DEEPSEEK_API_KEY="..."
+cargo run --manifest-path evals/Cargo.toml -- --backend deepseek --trials 2 --unsafe-host-exec
+```
 
-   ```
-   cargo run -- --backend deepseek --trials 3
-   ```
+`api_key` inline JSON values are blocked by default. They require the additional explicit acknowledgement `--unsafe-inline-api-key` as well as `--unsafe-host-exec`; prefer `api_key_env` instead. Keyless loopback endpoints are supported.
 
-Config file path is `evals/backends.json` by default; override with `--backends <path>`. Each entry also accepts optional `wire` (`"chat"`, the default, for OpenAI chat/completions endpoints; `"responses"` for the OpenAI *Responses API*, which Codex-style relays stream over SSE), an inline `api_key` (takes priority over `api_key_env` — convenient for a private relay), and `max_tokens` (output cap; keep it low for small models). See `backends.example.json` for one entry per wire.
+Supported `wire` values are `openai`/`chat` (the default, `/chat/completions`) and `responses` (`/responses`).
 
-### Flags
+## Immutable artifacts and provenance
 
-`--backend <name>` (`mock` | `anthropic` | any name from `backends.json`), `--task <name>` (one task only, e.g. a cheap smoke), `--model <id>` (override the backend's default model), `--trials N`, `--max-steps N`, `--backends <path>`, `--runs-dir <dir>`.
+Each invocation creates a unique directory:
 
-A cheap real smoke: `cargo run -- --backend deepseek --task fix-failing-test` (2 agent runs).
+```text
+evals/.runs/run-<timestamp>-p<pid>-<counter>/
+  report.md
+  report.json
+  workspaces/<task>__<condition>__t<trial>/
+```
+
+Existing trial directories and run artifacts are never deleted or reused. `evals/.runs/latest.json` is a mutable JSON pointer plus summary, and `latest.md` is the matching human summary. They point to immutable reports rather than using a cross-platform symlink.
+
+`report.json` records the run id, evaluator version, Git HEAD when available, backend, execution mode, OS/architecture, seed/order strategy, release-contract status, SHA-256 values for the selected skill and `rayman` binary, and prompt/grade/fixture/task hashes for every task. The evaluator rechecks those inputs before and after every trial. Any missing/read-error/mismatch stops later trials, records the drift, and marks the entire run non-comparative rather than presenting stale provenance as current.
+
+## Reading results
+
+The report shows both:
+
+- **ITT rate**: `pass / planned`, where infrastructure errors remain in the denominator.
+- **Evaluable rate**: `pass / (pass + fail)`, with errors reported separately.
+
+It also reports both observed deltas. A run with fewer than two attempts per cell, missing observations, insufficient evaluable attempts, unequal error counts, or input drift is marked **INCONCLUSIVE** or **NON-COMPARATIVE** and explicitly forbids a causal claim. Even a balanced mock run is only eligible for descriptive comparison, not proof of causality; a real unsandboxed-host run is always non-comparative.
+
+Condition order is counterbalanced deterministically: each task alternates which arm runs first; the seed chooses the task's initial arm. This and the order of each trial are stored in the report.
 
 ## Adding a task
 
 Create `tasks/<name>/` with:
 
-- `fixture/` — the starting repo state.
-- `prompt.md` — what the agent is asked to do (do not reveal the grader).
-- `grade.txt` — one shell command; exit 0 means the task was completed correctly.
+- `fixture/`: a small, self-contained starting repository with no symlinks.
+- `prompt.md`: instruction shown to the agent.
+- `grade.txt`: shell command where exit 0 means success. It is not sent through the prompt/file tools, but must not be treated as secret unless an OS-level sandbox separates the agent from `tasks/`.
 
-Keep fixtures small and dependency-free so grading is fast and offline.
-
-## Caveats
-
-- The `run` tool executes model-generated shell commands inside the per-trial workspace copy. Child processes get a scrubbed environment rebuilt from an allowlist (PATH, toolchain, and OS essentials), so parent-process secrets such as `ANTHROPIC_API_KEY` are not visible to those commands — but executing model-generated commands is still inherent to any coding agent; run evals on a machine where that's acceptable.
-- The harness re-hashes nothing and caches nothing between trials — each trial is an independent fresh workspace.
+Keep fixture builds offline and grades deterministic. A normal agent prompt does not include `grade.txt`; an unrestricted host-shell agent can still reach it, which is why real-host reports are fail-closed non-comparative.

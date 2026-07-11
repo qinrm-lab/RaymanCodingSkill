@@ -1,13 +1,17 @@
 mod cli;
 
-use anyhow::{Result, bail};
+use std::path::{Path, PathBuf};
+use std::process::Command as ProcessCommand;
+
+use anyhow::{Context, Result, bail};
 use clap::Parser;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 
 use cli::{
     AutosaveAction, AutosaveCmd, CheckCmd, CheckProfile, CheckpointAction, CheckpointCmd, Cli,
-    Command, ContextAction, ContextCmd, Format, GoalAction, GoalCmd, MapAction, MapCmd,
-    PendingAction, PendingCmd, QualityProfile, TempAction, TempCmd,
+    Command, ContextAction, ContextCmd, DoctorCmd, Format, GoalAction, GoalCmd, MapAction, MapCmd,
+    PendingAction, PendingCmd, QualityProfile, StateAction, StateCmd, TempAction, TempCmd,
 };
 use rayman::{assets, autosave, checkpoint, context, goal, map, temp, workspace_root};
 
@@ -66,7 +70,7 @@ fn run(cli: Cli) -> Result<()> {
         Command::Goal(GoalCmd { action }) => run_goal(&root, json, action)?,
 
         Command::Assets => {
-            let report = assets::scan(&root);
+            let report = assets::scan(&root)?;
             if json {
                 print(&serde_json::to_value(&report)?);
             } else {
@@ -81,13 +85,27 @@ fn run(cli: Cli) -> Result<()> {
                     print(&json!({
                         "root": status.root,
                         "exists": status.exists,
-                        "entry_count": status.entry_count
+                        "entry_count": status.entry_count,
+                        "file_count": status.file_count,
+                        "directory_count": status.directory_count,
+                        "total_bytes": status.total_bytes,
+                        "traversal_error_count": status.traversal_error_count,
+                        "traversal_errors": status.traversal_errors,
                     }));
                 } else {
                     println!(
-                        "托管临时目录: {} (exists={}, entries={})",
-                        status.root, status.exists, status.entry_count
+                        "托管临时目录: {} (exists={}, entries={}, files={}, dirs={}, {:.1} MB, traversal_errors={})",
+                        status.root,
+                        status.exists,
+                        status.entry_count,
+                        status.file_count,
+                        status.directory_count,
+                        status.total_bytes as f64 / 1_048_576.0,
+                        status.traversal_error_count,
                     );
+                    for error in status.traversal_errors {
+                        println!("  error: {error}");
+                    }
                 }
             }
             TempAction::Scratch { label } => {
@@ -115,6 +133,10 @@ fn run(cli: Cli) -> Result<()> {
             }
         },
 
+        Command::State(StateCmd { action }) => match action {
+            StateAction::Audit { check } => run_state_audit(&root, json, check)?,
+        },
+
         Command::Check(cmd) => return run_check(&root, json, cmd),
 
         Command::Map(cmd) => return run_map(&root, json, cmd),
@@ -122,12 +144,277 @@ fn run(cli: Cli) -> Result<()> {
         Command::Checkpoint(cmd) => return run_checkpoint(&root, json, cmd),
 
         Command::Autosave(cmd) => return run_autosave(&root, json, cmd),
+
+        Command::Doctor(cmd) => return run_doctor(&root, json, cmd),
     }
     Ok(())
 }
 
+fn run_state_audit(root: &Path, json: bool, check: bool) -> Result<()> {
+    const V2_ALLOWED: &[&str] = &[
+        "goals",
+        "pending.json",
+        "context",
+        "autosave.json",
+        "tmp",
+        "workspace_skill.yaml",
+        "quality.json",
+    ];
+    let state = root.join(".RaymanCodingSkill");
+    let mut retired = Vec::new();
+    let mut errors = Vec::new();
+    match rayman::state_paths::managed_state_root(root, false) {
+        Ok(None) => {}
+        Ok(Some(verified_state)) => match std::fs::read_dir(&verified_state) {
+            Ok(entries) => {
+                for entry in entries {
+                    match entry {
+                        Ok(entry) => {
+                            let name = entry.file_name().to_string_lossy().to_string();
+                            if !V2_ALLOWED.contains(&name.as_str()) {
+                                retired.push(name);
+                            } else if let Err(error) = audit_allowed_state_entry(root, &name) {
+                                errors
+                                    .push(format!("允许的状态项 `{name}` 不安全或无效: {error:#}"));
+                            }
+                        }
+                        Err(error) => errors.push(error.to_string()),
+                    }
+                }
+            }
+            Err(error) => errors.push(error.to_string()),
+        },
+        Err(error) => errors.push(format!("无法安全读取受管状态: {error:#}")),
+    }
+    retired.sort();
+    let temp_status = temp::audit(root);
+    let clean = retired.is_empty() && errors.is_empty() && temp_status.traversal_error_count == 0;
+    if json {
+        print(&json!({
+            "state_root": state,
+            "allowed_v2_entries": V2_ALLOWED,
+            "retired_entries": retired,
+            "errors": errors,
+            "temp": {
+                "root": temp_status.root,
+                "files": temp_status.file_count,
+                "directories": temp_status.directory_count,
+                "bytes": temp_status.total_bytes,
+                "traversal_errors": temp_status.traversal_errors,
+            },
+            "clean": clean,
+            "destructive_action": "none; inspect and migrate or remove retired state only after explicit user approval",
+        }));
+    } else {
+        println!("受管状态审计: clean={clean}");
+        println!(
+            "  temp: files={} dirs={} {:.1} MB",
+            temp_status.file_count,
+            temp_status.directory_count,
+            temp_status.total_bytes as f64 / 1_048_576.0
+        );
+        if !retired.is_empty() {
+            println!("  retired entries: {}", retired.join(", "));
+        }
+        for error in errors.iter().chain(temp_status.traversal_errors.iter()) {
+            println!("  error: {error}");
+        }
+        println!("  no files were deleted");
+    }
+    if check && !clean {
+        bail!("受管状态包含退役条目或遍历错误；先审阅 `rayman state audit` 输出")
+    }
+    Ok(())
+}
+
+/// An allowlisted name is not automatically safe: `read_dir` exposes a lexical
+/// entry, and a link/reparse point or wrong type would otherwise make audit
+/// report `clean=true` while another command follows or later fails on it.
+/// Reuse the same state-path authority as the readers and writers.
+fn audit_allowed_state_entry(root: &Path, name: &str) -> Result<()> {
+    match name {
+        "goals" => {
+            let Some(_) = rayman::state_paths::managed_state_dir(root, Path::new("goals"), false)?
+            else {
+                bail!("目录在枚举后消失");
+            };
+            let (_, issues) = goal::GoalStore::new(root).list_with_issues()?;
+            if !issues.is_empty() {
+                let details = issues
+                    .iter()
+                    .map(|issue| format!("{}: {}", issue.path, issue.error))
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                bail!("目标目录含不可安全读取的记录: {details}");
+            }
+            Ok(())
+        }
+        "context" | "tmp" => {
+            let Some(_) = rayman::state_paths::managed_state_dir(root, Path::new(name), false)?
+            else {
+                bail!("目录在枚举后消失");
+            };
+            Ok(())
+        }
+        "pending.json" | "autosave.json" | "workspace_skill.yaml" | "quality.json" => {
+            let path = rayman::state_paths::managed_state_file(root, Path::new(name), false)?;
+            match std::fs::symlink_metadata(&path) {
+                Ok(_) => Ok(()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    bail!("文件在枚举后消失: {}", path.display())
+                }
+                Err(error) => Err(error)
+                    .with_context(|| format!("无法读取允许的状态文件: {}", path.display())),
+            }
+        }
+        _ => bail!("未知的允许状态项"),
+    }
+}
+
+const CLI_CONTRACT: &str = "rayman-cli-contract-v5";
+const SOURCE_FRESH_VERIFIER: &str = "scripts/verify-release-contract.ps1 -RequireSourceFresh";
+
+fn run_doctor(root: &Path, json: bool, cmd: DoctorCmd) -> Result<()> {
+    let running = std::env::current_exe().context("无法定位当前 rayman 二进制")?;
+    let running_hash = rayman::hash::sha256_file(&running)?;
+    let path_candidate = find_path_rayman();
+    let path_hash = path_candidate
+        .as_deref()
+        .map(rayman::hash::sha256_file)
+        .transpose()?;
+    let path_matches_running = path_hash.as_deref() == Some(running_hash.as_str());
+
+    let skill_path = root.join("SKILL.md");
+    let skill_hash = rayman::hash::sha256_file(&skill_path).ok();
+    let metadata_hash = workspace_skill_hash(root)?;
+    let metadata_matches = match (&skill_hash, &metadata_hash) {
+        (Some(actual), Some(expected)) => actual.eq_ignore_ascii_case(expected),
+        _ => false,
+    };
+    // This proves an installed identity tuple only. It cannot prove that a release artifact was
+    // rebuilt from the checkout's current sources: that requires an isolated locked rebuild and
+    // byte comparison, which the repository verifier performs on explicit handoff/CI paths.
+    // A managed workspace can be an ordinary user project, not this source checkout.
+    // Looking for `<workspace>/target/release/rayman` therefore made `doctor --check`
+    // falsely unusable after a correct installation.  Source-to-artifact byte identity
+    // belongs exclusively to the explicit repository verifier below.
+    let identity_ready = path_matches_running && metadata_matches;
+    let report = json!({
+        "contract": CLI_CONTRACT,
+        "version": env!("CARGO_PKG_VERSION"),
+        "running": {
+            "path": running,
+            "sha256": running_hash,
+        },
+        "path_rayman": path_candidate.as_ref().map(|path| json!({
+            "path": path,
+            "sha256": path_hash,
+            "matches_running": path_matches_running,
+        })),
+        "repo_release": {
+            "checked": false,
+            "status": "not_checked_by_doctor",
+            "required_verifier": SOURCE_FRESH_VERIFIER,
+        },
+        "workspace_skill": {
+            "path": skill_path,
+            "sha256": skill_hash,
+            "recorded_sha256": metadata_hash,
+            "matches_recorded": metadata_matches,
+        },
+        "release_identity": {
+            "ready": identity_ready,
+            "scope": "running_binary_path_command_and_workspace_skill_identity",
+        },
+        "source_fresh": {
+            "verified": false,
+            "status": "not_checked_by_doctor",
+            "required_verifier": SOURCE_FRESH_VERIFIER,
+        },
+    });
+    if json {
+        print(&report);
+    } else {
+        println!(
+            "已安装身份契约: {CLI_CONTRACT} v{}",
+            env!("CARGO_PKG_VERSION")
+        );
+        println!("  当前二进制: {}", running.display());
+        println!("  PATH 命令一致: {path_matches_running}");
+        println!("  仓库源码产物: 未由 doctor 检查；交接/CI 由 `{SOURCE_FRESH_VERIFIER}` 验证");
+        println!("  workspace SKILL 一致: {metadata_matches}");
+        println!("  已安装身份 READY: {identity_ready}");
+        println!("  源码新鲜度: 未由 doctor 证明；交接/CI 必须运行 `{SOURCE_FRESH_VERIFIER}`");
+    }
+    if cmd.check && !identity_ready {
+        bail!(
+            "已安装身份契约不一致：请使用仓库 release 二进制同步安装，并更新 .RaymanCodingSkill/workspace_skill.yaml 的 skill_sha256"
+        );
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn find_path_rayman() -> Option<PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    // `cmd`/Windows command discovery uses PATHEXT, not just `.exe`.  Selecting the
+    // first matching command in each PATH directory makes an earlier `.cmd`/`.bat`
+    // wrapper visible to doctor instead of falsely accepting a later rayman.exe.
+    // Fall back to the normal Windows order if PATHEXT is absent or empty.
+    let extensions = std::env::var_os("PATHEXT")
+        .map(|raw| {
+            raw.to_string_lossy()
+                .split(';')
+                .map(str::trim)
+                .filter(|extension| !extension.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .filter(|extensions| !extensions.is_empty())
+        .unwrap_or_else(|| vec![".COM".into(), ".EXE".into(), ".BAT".into(), ".CMD".into()]);
+    std::env::split_paths(&path).find_map(|dir| {
+        extensions
+            .iter()
+            .map(|extension| dir.join(format!("rayman{extension}")))
+            .find(|candidate| candidate.is_file())
+    })
+}
+
+#[cfg(not(windows))]
+fn find_path_rayman() -> Option<PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    std::env::split_paths(&path)
+        .map(|dir| dir.join("rayman"))
+        .find(|candidate| candidate.is_file())
+}
+
+fn workspace_skill_hash(root: &Path) -> Result<Option<String>> {
+    let path =
+        rayman::state_paths::managed_state_file(root, Path::new("workspace_skill.yaml"), false)?;
+    let content = match std::fs::read_to_string(&path) {
+        Ok(content) => content,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(error)
+                .with_context(|| format!("无法读取工作区 skill 状态: {}", path.display()));
+        }
+    };
+    Ok(content.lines().find_map(|line| {
+        line.strip_prefix("skill_sha256:")
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    }))
+}
+
 fn run_map(root: &std::path::Path, json: bool, cmd: MapCmd) -> Result<()> {
-    let project_map = map::build(root)?;
+    // Queries must remain read-only. Only the explicit `map refresh` action persists
+    // a derived cache; every other map command builds an ephemeral current view.
+    let project_map = if matches!(&cmd.action, MapAction::Refresh) {
+        map::build(root)?
+    } else {
+        map::build_readonly(root)?
+    };
     match cmd.action {
         MapAction::Refresh => {
             let summary = map::summary(&project_map);
@@ -238,7 +525,7 @@ fn run_autosave(root: &std::path::Path, json: bool, cmd: AutosaveCmd) -> Result<
             autosave::tick(&ws)?
         }
         AutosaveAction::Stop { status } => autosave::stop(root, &status)?,
-        AutosaveAction::Status => autosave::status(root),
+        AutosaveAction::Status => autosave::status(root)?,
     };
     if json {
         print(&json!({
@@ -290,6 +577,7 @@ fn run_checkpoint(root: &std::path::Path, json: bool, cmd: CheckpointCmd) -> Res
                     .map(|c| {
                         json!({
                             "id": c.id,
+                            "status": c.status,
                             "created_at": c.manifest.as_ref().map(|m| m.created_at.clone()),
                             "file_count": c.manifest.as_ref().map(|m| m.file_count),
                             "total_bytes": c.manifest.as_ref().map(|m| m.total_bytes),
@@ -304,12 +592,13 @@ fn run_checkpoint(root: &std::path::Path, json: bool, cmd: CheckpointCmd) -> Res
                 for c in &checkpoints {
                     match &c.manifest {
                         Some(m) => println!(
-                            "  {}  {} 个文件  {:.1} MB",
+                            "  {}  {:?}  {} 个文件  {:.1} MB",
                             c.id,
+                            c.status,
                             m.file_count,
                             m.total_bytes as f64 / 1_048_576.0
                         ),
-                        None => println!("  {}  (缺 manifest)", c.id),
+                        None => println!("  {}  {:?}  (缺或损坏 manifest)", c.id, c.status),
                     }
                 }
             }
@@ -321,6 +610,7 @@ fn run_checkpoint(root: &std::path::Path, json: bool, cmd: CheckpointCmd) -> Res
                     "has_checkpoint": latest.is_some(),
                     "latest": latest.as_ref().map(|c| json!({
                         "id": c.id,
+                        "status": c.status,
                         "created_at": c.manifest.as_ref().map(|m| m.created_at.clone()),
                         "file_count": c.manifest.as_ref().map(|m| m.file_count),
                     })),
@@ -333,7 +623,7 @@ fn run_checkpoint(root: &std::path::Path, json: bool, cmd: CheckpointCmd) -> Res
                             .as_ref()
                             .map(|m| m.created_at.clone())
                             .unwrap_or_else(|| "?".to_string());
-                        println!("最近快照: {} (保存于 {created})", c.id);
+                        println!("最近完整快照: {} ({:?}, 保存于 {created})", c.id, c.status);
                     }
                     None => println!("当前工作区暂无快照。"),
                 }
@@ -362,6 +652,34 @@ fn run_checkpoint(root: &std::path::Path, json: bool, cmd: CheckpointCmd) -> Res
                     } else {
                         String::new()
                     }
+                );
+            }
+        }
+        CheckpointAction::Verify { id } => {
+            let checkpoints = checkpoint::list(root, dir)?;
+            let target = match id.as_deref() {
+                None | Some("latest") => checkpoint::latest(root, dir)?,
+                Some(id) => checkpoints
+                    .into_iter()
+                    .find(|checkpoint| checkpoint.id == id),
+            }
+            .ok_or_else(|| anyhow::anyhow!("找不到可验证的 checkpoint"))?;
+            let manifest = checkpoint::verify_snapshot(&target.path)?;
+            if json {
+                print(&json!({
+                    "id": target.id,
+                    "status": "complete",
+                    "file_count": manifest.file_count,
+                    "total_bytes": manifest.total_bytes,
+                    "schema": manifest.schema,
+                    "version": manifest.version,
+                }));
+            } else {
+                println!(
+                    "checkpoint {} 已验证：{} 个文件，{:.1} MB",
+                    target.id,
+                    manifest.file_count,
+                    manifest.total_bytes as f64 / 1_048_576.0
                 );
             }
         }
@@ -482,6 +800,44 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 );
             }
         }
+        GoalAction::Validate {
+            id,
+            req,
+            message,
+            changed,
+            command,
+        } => {
+            if message.trim().is_empty() || command.trim().is_empty() {
+                bail!("`--message` 与 `--command` 都不能为空");
+            }
+            let impacts = impact_evidence_for_changed_paths(root, &changed)?;
+            let before = workspace_fingerprint(root)?;
+            let output = run_validation_command(root, &command)?;
+            let after = workspace_fingerprint(root)?;
+            if !output.status.success() {
+                bail!(
+                    "验证命令失败（exit={}）；不会写入 receipt。stdout_sha256={} stderr_sha256={}",
+                    output.status.code().unwrap_or(-1),
+                    sha256_hex(&output.stdout),
+                    sha256_hex(&output.stderr)
+                );
+            }
+            let receipt = goal::ValidationReceipt {
+                exit_code: output.status.code().unwrap_or(0),
+                cwd: root.display().to_string(),
+                workspace_fingerprint_before: before,
+                workspace_fingerprint_after: after,
+                stdout_sha256: sha256_hex(&output.stdout),
+                stderr_sha256: sha256_hex(&output.stderr),
+            };
+            let goal =
+                store.record_validation_receipt(&id, &req, &message, command, receipt, impacts)?;
+            if json {
+                print(&serde_json::to_value(&goal)?);
+            } else {
+                println!("已执行并记录 {} 的可验证 receipt（目标 {}）", req, goal.id);
+            }
+        }
         GoalAction::Close { id, status } => {
             let goal = store.close(&id, &status)?;
             if json {
@@ -531,6 +887,61 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
     Ok(())
 }
 
+fn impact_evidence_for_changed_paths(
+    root: &Path,
+    changed: &[String],
+) -> Result<Vec<goal::ImpactEvidence>> {
+    if changed.is_empty() {
+        return Ok(Vec::new());
+    }
+    let project_map = map::build_readonly(root)?;
+    changed
+        .iter()
+        .map(|path| {
+            let report = map::impact_report(&project_map, path)?;
+            Ok(impact_evidence_from_report(&report))
+        })
+        .collect()
+}
+
+fn run_validation_command(root: &Path, command: &str) -> Result<std::process::Output> {
+    let mut process = if cfg!(windows) {
+        let mut process = ProcessCommand::new("cmd");
+        process.args(["/C", command]);
+        process
+    } else {
+        let mut process = ProcessCommand::new("sh");
+        process.args(["-c", command]);
+        process
+    };
+    process
+        .current_dir(root)
+        .output()
+        .with_context(|| format!("无法执行验证命令: {command}"))
+}
+
+fn workspace_fingerprint(root: &Path) -> Result<String> {
+    let mut hasher = Sha256::new();
+    for path in rayman::walk::workspace_files_checked(root)? {
+        let relative = path
+            .strip_prefix(root)
+            .unwrap_or(&path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        hasher.update(relative.as_bytes());
+        hasher.update([0]);
+        hasher.update(rayman::hash::sha256_file(&path)?.as_bytes());
+        hasher.update([0]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    format!("{:x}", hasher.finalize())
+}
+
 fn impact_evidence_from_report(report: &map::ImpactReport) -> goal::ImpactEvidence {
     goal::ImpactEvidence {
         changed_path: report.changed_path.clone(),
@@ -558,8 +969,9 @@ fn impact_evidence_from_report(report: &map::ImpactReport) -> goal::ImpactEviden
 /// 一次性只读就绪检查：聚合上下文新鲜度、资产扫描、待完成项。
 /// 有硬阻塞（上下文缺失/陈旧、存在待完成项）时以非零码退出，便于脚本/agent 门禁。
 fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
-    let freshness = context::freshness(root);
-    let asset_report = assets::scan(root);
+    // `check` is a readiness claim, not a cheap UI probe: use content hashes.
+    let freshness = context::strong_freshness(root);
+    let asset_report = assets::scan(root)?;
     let goal_store = goal::GoalStore::new(root);
     // 损坏的 pending.json 是阻塞项而非"零待办"：静默放行会让门禁失效。
     let (pending, pending_error) = match goal::PendingStore::new(root).list() {
@@ -585,6 +997,12 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
             match map::build_readonly(root) {
                 Ok(project_map) => {
                     map_summary = Some(map::summary(&project_map));
+                    if !map::topology_is_authoritative(root, &project_map) {
+                        standard_blockers.push(format!(
+                            "Cargo workspace 拓扑未获 cargo metadata 权威确认: {}",
+                            project_map.topology_provenance
+                        ));
+                    }
                     let quality = if cmd.profile == CheckProfile::Release {
                         let config = map::load_quality_config(root, "strict")?;
                         map::quality_report_with_config(&project_map, &config)
@@ -606,48 +1024,67 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
                 }
             }
         }
+        let current_fingerprint = match workspace_fingerprint(root) {
+            Ok(fingerprint) => Some(fingerprint),
+            Err(error) => {
+                standard_blockers.push(format!("无法计算工作区内容指纹: {error}"));
+                None
+            }
+        };
         for checked_goal in &goals {
-            match checked_goal.status.as_str() {
-                "success" => {}
-                "active" => {
+            if checked_goal.loaded_from_legacy {
+                if checked_goal.status != goal::GoalStatus::Success {
                     standard_blockers.push(format!(
-                        "goal {} 仍为 active；记录证据后必须 goal close 才能作为 standard READY",
+                        "legacy goal {} 状态为 {}；请迁移或显式关闭",
+                        checked_goal.id, checked_goal.status
+                    ));
+                } else {
+                    standard_warnings.push(format!(
+                        "legacy goal {} 没有可验证 receipt，作为历史记录忽略；不能用于当前交付声明",
                         checked_goal.id
                     ));
                 }
-                "partial" | "blocked" => {
+                continue;
+            }
+            if let Some(error) = checked_goal.current_schema_error() {
+                standard_blockers.push(format!("goal {} 合约无效: {error}", checked_goal.id));
+                continue;
+            }
+            let requires_receipt = checked_goal.is_current_schema();
+            match checked_goal.status {
+                goal::GoalStatus::Success => {}
+                goal::GoalStatus::Active => standard_blockers.push(format!(
+                    "goal {} 仍为 active；用 goal validate 记录实际验证后必须 goal close",
+                    checked_goal.id
+                )),
+                goal::GoalStatus::Partial | goal::GoalStatus::Blocked => {
                     standard_blockers.push(format!(
                         "goal {} 状态为 {}，不能作为 standard READY",
                         checked_goal.id, checked_goal.status
-                    ));
-                }
-                other => {
-                    standard_blockers.push(format!("goal {} 状态未知: {}", checked_goal.id, other));
+                    ))
                 }
             }
             for req in &checked_goal.requirements {
-                if checked_goal.status == "active" && req.kind == "must" && req.status != "done" {
+                let is_must = req.kind == goal::RequirementKind::Must;
+                if checked_goal.status == goal::GoalStatus::Active
+                    && is_must
+                    && req.status != goal::RequirementStatus::Done
+                {
                     standard_blockers.push(format!(
                         "active goal {} 的 must 需求 {} 仍未完成",
                         checked_goal.id, req.id
                     ));
                 }
-                if checked_goal.status == "success" && req.kind == "must" && req.status != "done" {
+                if checked_goal.status == goal::GoalStatus::Success
+                    && is_must
+                    && req.status != goal::RequirementStatus::Done
+                {
                     standard_blockers.push(format!(
                         "success goal {} 的 must 需求 {} 未处于 done 状态",
                         checked_goal.id, req.id
                     ));
                 }
-                if matches!(checked_goal.status.as_str(), "partial" | "blocked")
-                    && req.kind == "must"
-                    && req.status != "done"
-                {
-                    standard_blockers.push(format!(
-                        "goal {} 的 must 需求 {} 仍未完成",
-                        checked_goal.id, req.id
-                    ));
-                }
-                if req.status == "done"
+                if req.status == goal::RequirementStatus::Done
                     && req
                         .evidence
                         .as_deref()
@@ -660,25 +1097,36 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
                         checked_goal.id, req.id
                     ));
                 }
-                if req.status == "done" && req.validations.is_empty() {
-                    let detail = if req.impacts.is_empty() {
-                        "缺少结构化 validated 命令；代码变更还应记录 changed impact 快照"
-                    } else {
-                        "有 impact 快照但缺少 validated 命令"
-                    };
-                    standard_blockers
-                        .push(format!("goal {} 需求 {} {detail}", checked_goal.id, req.id));
+                if req.status == goal::RequirementStatus::Done && req.validations.is_empty() {
+                    standard_blockers.push(format!(
+                        "goal {} 需求 {} 缺少验证 receipt",
+                        checked_goal.id, req.id
+                    ));
                 }
-                if req.status == "done" && !req.impacts.is_empty() && !req.validations.is_empty() {
+                if !req.impacts.is_empty() && !req.validations.is_empty() {
                     for gap in validation_relevance_gaps(req) {
                         standard_blockers
                             .push(format!("goal {} 需求 {} {gap}", checked_goal.id, req.id));
                     }
                 }
-                if req.status == "done"
+                if requires_receipt && checked_goal.status == goal::GoalStatus::Success && is_must {
+                    let has_current_receipt = req.validations.iter().any(|validation| {
+                        validation.receipt.as_ref().is_some_and(|receipt| {
+                            receipt.exit_code == 0
+                                && current_fingerprint.as_deref()
+                                    == Some(receipt.workspace_fingerprint_after.as_str())
+                        })
+                    });
+                    if !has_current_receipt {
+                        standard_blockers.push(format!(
+                            "success goal {} 的 must 需求 {} 没有绑定当前工作区的成功 validation receipt",
+                            checked_goal.id, req.id
+                        ));
+                    }
+                }
+                if req.status == goal::RequirementStatus::Done
                     && req.impacts.is_empty()
                     && !req.validations.is_empty()
-                    && !checked_goal.loaded_from_legacy
                 {
                     standard_warnings.push(format!(
                         "goal {} 需求 {} 没有 impact 快照；非代码变更可忽略",
@@ -694,10 +1142,27 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
         || pending_error.is_some()
         || !standard_blockers.is_empty();
 
+    let readiness_scope = check_readiness_scope(cmd.profile);
+    let release_contract = if cmd.profile == CheckProfile::Release {
+        json!({
+            "checked": false,
+            "status": "not_checked",
+            "detail": "release profile proves workspace strict-quality only; it is not installed release identity or source freshness",
+            "required_verifier": SOURCE_FRESH_VERIFIER,
+        })
+    } else {
+        json!({
+            "checked": false,
+            "status": "not_applicable",
+        })
+    };
+
     if json {
         print(&json!({
             "ready": !blocked,
             "profile": format!("{:?}", cmd.profile).to_ascii_lowercase(),
+            "readiness_scope": readiness_scope,
+            "release_contract": release_contract,
             "context": serde_json::to_value(&freshness)?,
             "assets": {
                 "obsolete": asset_report.obsolete.len(),
@@ -714,8 +1179,7 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
         }));
     } else {
         println!(
-            "就绪检查({:?}): {}",
-            cmd.profile,
+            "工作区就绪检查({readiness_scope}): {}",
             if blocked { "BLOCKED" } else { "READY" }
         );
         println!(
@@ -767,12 +1231,24 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
                 println!("    warning: {warning}");
             }
         }
+        if cmd.profile == CheckProfile::Release {
+            println!("  发布交接状态: 未检查（本结果仅是工作区 strict-quality）");
+            println!("  交接/CI 必须运行 `{SOURCE_FRESH_VERIFIER}`");
+        }
     }
 
     if blocked {
         std::process::exit(1);
     }
     Ok(())
+}
+
+fn check_readiness_scope(profile: CheckProfile) -> &'static str {
+    match profile {
+        CheckProfile::Quick => "workspace_base_snapshot",
+        CheckProfile::Standard => "workspace_standard",
+        CheckProfile::Release => "workspace_strict_quality",
+    }
 }
 
 fn validation_relevance_gaps(req: &goal::Requirement) -> Vec<String> {
@@ -1092,5 +1568,56 @@ fn print(value: &serde_json::Value) {
     match serde_json::to_string_pretty(value) {
         Ok(text) => println!("{text}"),
         Err(error) => eprintln!("错误: 无法序列化输出: {error}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn workspace_fingerprint_refuses_an_incomplete_workspace_walk() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(workspace_fingerprint(&dir.path().join("missing-workspace")).is_err());
+    }
+
+    #[test]
+    fn state_audit_check_refuses_an_unreadable_or_invalid_state_root() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(".RaymanCodingSkill"), "not a directory").unwrap();
+        assert!(run_state_audit(dir.path(), false, true).is_err());
+    }
+
+    #[test]
+    fn state_audit_check_refuses_a_wrong_type_for_an_allowed_state_file() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".RaymanCodingSkill/pending.json")).unwrap();
+
+        assert!(run_state_audit(dir.path(), false, true).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn state_audit_check_refuses_a_linked_allowed_state_entry() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".RaymanCodingSkill")).unwrap();
+        std::fs::create_dir_all(outside.path().join("goals")).unwrap();
+        symlink(
+            outside.path().join("goals"),
+            dir.path().join(".RaymanCodingSkill/goals"),
+        )
+        .unwrap();
+
+        assert!(run_state_audit(dir.path(), false, true).is_err());
+    }
+
+    #[test]
+    fn workspace_skill_hash_refuses_an_invalid_state_root() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(".RaymanCodingSkill"), "not a directory").unwrap();
+        assert!(workspace_skill_hash(dir.path()).is_err());
     }
 }

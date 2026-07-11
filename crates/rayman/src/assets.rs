@@ -3,9 +3,10 @@
 
 use std::path::Path;
 
+use anyhow::{Context, Result};
 use serde::Serialize;
 
-use crate::walk::{relative_key, workspace_files};
+use crate::walk::{relative_key, workspace_files_checked};
 
 const OBSOLETE_SUFFIXES: &[&str] = &[".bak", ".old", ".orig", ".deprecated", "~"];
 const OBSOLETE_STEM_MARKERS: &[&str] =
@@ -57,11 +58,14 @@ fn looks_obsolete(name: &str) -> Option<String> {
 }
 
 /// 扫描工作区，返回过时资产候选与工作标记（均为提示，不做任何删除）。
-pub fn scan(root: &Path) -> AssetReport {
+///
+/// 资产结果会进入 readiness 输出，因此遍历或可读取文件的读取失败必须传给调用方；
+/// 不能把不完整扫描误报为干净。大文件仍按既有上限跳过正文扫描。
+pub fn scan(root: &Path) -> Result<AssetReport> {
     let mut obsolete = Vec::new();
     let mut markers = Vec::new();
 
-    for path in workspace_files(root) {
+    for path in workspace_files_checked(root)? {
         let rel = relative_key(root, &path);
         let name = path
             .file_name()
@@ -75,14 +79,16 @@ pub fn scan(root: &Path) -> AssetReport {
         }
 
         let too_big = std::fs::metadata(&path)
-            .map(|metadata| metadata.len() > MAX_SCAN_BYTES)
-            .unwrap_or(true);
+            .with_context(|| format!("资产扫描无法读取文件元数据: {}", path.display()))?
+            .len()
+            > MAX_SCAN_BYTES;
         if too_big {
             continue;
         }
-        let Ok(text) = std::fs::read_to_string(&path) else {
-            continue;
-        };
+        // 非 UTF-8 不是读取失败；用无损错误替换继续扫描，避免 GBK 等文件让扫描失效。
+        let bytes = std::fs::read(&path)
+            .with_context(|| format!("资产扫描无法读取文件: {}", path.display()))?;
+        let text = String::from_utf8_lossy(&bytes);
         for (index, line) in text.lines().enumerate() {
             if is_marker_catalog_or_fixture_line(&rel, line) {
                 continue;
@@ -100,7 +106,7 @@ pub fn scan(root: &Path) -> AssetReport {
             }
         }
     }
-    AssetReport { obsolete, markers }
+    Ok(AssetReport { obsolete, markers })
 }
 
 fn is_marker_catalog_or_fixture_line(path: &str, line: &str) -> bool {
@@ -148,7 +154,7 @@ mod tests {
         fs::write(root.join("src/old_helper.rs.bak"), "dead").unwrap();
         fs::write(root.join("src/config_deprecated.rs"), "old").unwrap();
 
-        let report = scan(root);
+        let report = scan(root).unwrap();
         assert!(!report.is_clean());
         assert!(
             report
@@ -190,7 +196,7 @@ mod tests {
         )
         .unwrap();
 
-        let report = scan(root);
+        let report = scan(root).unwrap();
         assert_eq!(report.markers.len(), 1);
         assert_eq!(report.markers[0].marker, "未完成");
     }
@@ -207,9 +213,15 @@ mod tests {
         )
         .unwrap();
 
-        let report = scan(root);
+        let report = scan(root).unwrap();
         assert_eq!(report.markers.len(), 1);
         assert_eq!(report.markers[0].line, 2);
         assert_eq!(report.markers[0].marker, "TODO");
+    }
+
+    #[test]
+    fn scan_refuses_an_incomplete_workspace_walk() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(scan(&dir.path().join("missing-workspace")).is_err());
     }
 }

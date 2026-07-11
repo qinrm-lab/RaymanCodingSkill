@@ -1,5 +1,5 @@
 {
-  "_comment": "Copy to backends.json (gitignored) and edit. Each key is a --backend name. base_url is an OpenAI-compatible endpoint. wire is 'openai' (default, /chat/completions) or 'responses' (OpenAI Responses API /responses, e.g. Codex relays). Secret: set api_key_env to the name of an env var holding the key, OR put the key inline as api_key (backends.json is gitignored). Omit both for a keyless local endpoint. max_tokens defaults to 400000; most endpoints cap output far lower (DeepSeek ~8192) and will reject/clamp a large value. Run: rayman-evals --backend deepseek",
+  "_comment": "Copy to backends.json (gitignored). Schema is strict: only base_url, model, wire, api_key_env, api_key, and max_tokens are accepted per backend. Remote endpoints must be HTTPS; plain HTTP is allowed only for localhost/loopback. Prefer one of the approved dedicated *_API_KEY environment variables. Inline api_key is rejected unless the operator also passes --unsafe-inline-api-key (and every real backend needs --unsafe-host-exec).",
   "backends": {
     "deepseek": {
       "base_url": "https://api.deepseek.com/v1",
@@ -11,12 +11,12 @@
       "base_url": "https://openrouter.ai/api/v1",
       "model": "deepseek/deepseek-chat",
       "api_key_env": "OPENROUTER_API_KEY",
-      "max_tokens": 400000
+      "max_tokens": 32000
     },
     "ollama": {
       "base_url": "http://localhost:11434/v1",
       "model": "qwen2.5-coder",
-      "max_tokens": 400000
+      "max_tokens": 32000
     },
     "relay-responses": {
       "base_url": "https://your-relay.example/codex",

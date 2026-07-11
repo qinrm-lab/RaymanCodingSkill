@@ -7,10 +7,12 @@
 //! Anthropic 形状对话历史转成对应线协议，再把响应转回 Anthropic 形状，让 run_agent 无感知复用。
 
 use std::collections::BTreeMap;
+use std::net::IpAddr;
 use std::path::Path;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
+use reqwest::Url;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -20,11 +22,16 @@ const DEFAULT_MAX_TOKENS: u32 = 400000;
 const MAX_RETRIES: u32 = 3;
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct BackendsConfig {
+    /// 允许示例配置保留说明文字，同时拒绝其他未知顶层字段。
+    #[serde(default, rename = "_comment")]
+    _comment: Option<String>,
     pub backends: BTreeMap<String, BackendCfg>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct BackendCfg {
     /// OpenAI 兼容基址，例如 https://api.deepseek.com/v1 或 https://yunyi.cfd/codex
     pub base_url: String,
@@ -33,7 +40,7 @@ pub struct BackendCfg {
     /// 线协议：`openai`（默认，/chat/completions）或 `responses`（/responses）。
     #[serde(default)]
     pub wire: Option<String>,
-    /// 内联密钥（仅本地 gitignore 配置用）。优先级高于 api_key_env。
+    /// 内联密钥默认拒绝；只有显式 `--unsafe-inline-api-key` 才可使用。
     #[serde(default)]
     pub api_key: Option<String>,
     /// 存放密钥的环境变量名，例如 DEEPSEEK_API_KEY。本地无密钥端点可省略。
@@ -77,19 +84,31 @@ pub struct OpenAiModel {
 impl OpenAiModel {
     /// 从配置项构建；密钥优先取内联 api_key，否则取 api_key_env 指定的环境变量。
     /// `model_override` 非空时覆盖配置模型。
-    pub fn new(name: &str, cfg: &BackendCfg, model_override: Option<&str>) -> Result<Self> {
+    pub fn new(
+        name: &str,
+        cfg: &BackendCfg,
+        model_override: Option<&str>,
+        allow_inline_api_key: bool,
+    ) -> Result<Self> {
         let wire = match cfg.wire.as_deref().unwrap_or("openai") {
             "openai" | "chat" | "chat_completions" => Wire::Chat,
             "responses" => Wire::Responses,
             other => bail!("后端 {name} 的 wire 不支持: {other}（用 openai 或 responses）"),
         };
-        let api_key = resolve_key(name, cfg)?;
+        let api_key = resolve_key(name, cfg, allow_inline_api_key)?;
         let client = reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(300))
             .build()
             .context("无法创建 HTTP 客户端")?;
-        let model = model_override.unwrap_or(&cfg.model).to_string();
-        let base = cfg.base_url.trim_end_matches('/');
+        let model = model_override.unwrap_or(&cfg.model).trim();
+        if model.is_empty() {
+            bail!("后端 {name} 的 model 不能为空");
+        }
+        let base = validate_base_url(name, &cfg.base_url)?;
+        let max_tokens = cfg.max_tokens.unwrap_or(DEFAULT_MAX_TOKENS);
+        if max_tokens == 0 {
+            bail!("后端 {name} 的 max_tokens 必须大于 0");
+        }
         let url = match wire {
             Wire::Chat => format!("{base}/chat/completions"),
             Wire::Responses => format!("{base}/responses"),
@@ -98,9 +117,9 @@ impl OpenAiModel {
             label: format!("{name}({model})"),
             client,
             url,
-            model,
+            model: model.to_string(),
             api_key,
-            max_tokens: cfg.max_tokens.unwrap_or(DEFAULT_MAX_TOKENS),
+            max_tokens,
             wire,
         })
     }
@@ -142,14 +161,24 @@ impl OpenAiModel {
     }
 }
 
-fn resolve_key(name: &str, cfg: &BackendCfg) -> Result<Option<String>> {
-    if let Some(inline) = &cfg.api_key
-        && !inline.trim().is_empty()
-    {
+fn resolve_key(name: &str, cfg: &BackendCfg, allow_inline_api_key: bool) -> Result<Option<String>> {
+    if cfg.api_key.is_some() && cfg.api_key_env.is_some() {
+        bail!("后端 {name} 不能同时设置 api_key 与 api_key_env");
+    }
+    if let Some(inline) = &cfg.api_key {
+        if inline.trim().is_empty() {
+            bail!("后端 {name} 的 api_key 不能为空");
+        }
+        if !allow_inline_api_key {
+            bail!(
+                "后端 {name} 使用了内联 api_key；默认拒绝。改用批准的 api_key_env，或显式传 --unsafe-inline-api-key"
+            );
+        }
         return Ok(Some(inline.clone()));
     }
     match &cfg.api_key_env {
         Some(env_name) if !env_name.trim().is_empty() => {
+            validate_key_env(name, env_name)?;
             let key = std::env::var(env_name)
                 .with_context(|| format!("后端 {name} 需要环境变量 {env_name}，但未设置"))?;
             if key.trim().is_empty() {
@@ -157,8 +186,62 @@ fn resolve_key(name: &str, cfg: &BackendCfg) -> Result<Option<String>> {
             }
             Ok(Some(key))
         }
+        Some(_) => bail!("后端 {name} 的 api_key_env 不能为空"),
         _ => Ok(None),
     }
+}
+
+/// 只允许明示为 API key 的少量变量名，避免把任意宿主机密钥按配置转发给远程端点。
+fn validate_key_env(backend: &str, env_name: &str) -> Result<()> {
+    const APPROVED: &[&str] = &[
+        "ANTHROPIC_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "GEMINI_API_KEY",
+        "MISTRAL_API_KEY",
+        "OPENAI_API_KEY",
+        "OPENROUTER_API_KEY",
+        "RELAY_API_KEY",
+        "TOGETHER_API_KEY",
+    ];
+    if APPROVED.contains(&env_name) {
+        Ok(())
+    } else {
+        bail!(
+            "后端 {backend} 的 api_key_env `{env_name}` 不在批准列表；只允许专用 *_API_KEY 名称: {}",
+            APPROVED.join(", ")
+        );
+    }
+}
+
+/// 远程后端只能走 HTTPS；HTTP 只允许 loopback，供本地 Ollama 等开发服务使用。
+fn validate_base_url(name: &str, raw: &str) -> Result<String> {
+    let url = Url::parse(raw.trim())
+        .with_context(|| format!("后端 {name} 的 base_url 不是有效绝对 URL"))?;
+    if !url.username().is_empty() || url.password().is_some() {
+        bail!("后端 {name} 的 base_url 不得包含用户名或密码");
+    }
+    if url.query().is_some() || url.fragment().is_some() {
+        bail!("后端 {name} 的 base_url 不得包含 query 或 fragment");
+    }
+    let host = url
+        .host_str()
+        .ok_or_else(|| anyhow::anyhow!("后端 {name} 的 base_url 缺少 host"))?;
+    match url.scheme() {
+        "https" => {}
+        "http" if is_loopback_host(host) => {}
+        "http" => {
+            bail!("后端 {name} 的 HTTP base_url 仅允许 localhost/loopback；远程端点必须使用 HTTPS")
+        }
+        scheme => bail!("后端 {name} 的 base_url 仅支持 https（或 loopback http），收到 {scheme}"),
+    }
+    Ok(url.as_str().trim_end_matches('/').to_string())
+}
+
+fn is_loopback_host(host: &str) -> bool {
+    host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<IpAddr>()
+            .is_ok_and(|address| address.is_loopback())
 }
 
 impl Model for OpenAiModel {
@@ -741,5 +824,66 @@ mod tests {
         assert_eq!(assistant.tool_calls.len(), 1);
         assert!(assistant.tool_calls[0].input_error.is_some());
         assert_eq!(assistant.tool_calls[0].input, json!({}));
+    }
+
+    #[test]
+    fn backend_schema_rejects_unknown_fields() {
+        let unknown_top = r#"{"backends": {}, "surprise": true}"#;
+        assert!(serde_json::from_str::<BackendsConfig>(unknown_top).is_err());
+
+        let unknown_backend = r#"{
+            "backends": {
+                "example": {
+                    "base_url": "https://api.example.test/v1",
+                    "model": "model",
+                    "not_allowed": true
+                }
+            }
+        }"#;
+        assert!(serde_json::from_str::<BackendsConfig>(unknown_backend).is_err());
+    }
+
+    #[test]
+    fn base_url_requires_https_except_loopback_http() {
+        assert!(validate_base_url("x", "https://api.example.test/v1").is_ok());
+        assert!(validate_base_url("x", "http://localhost:11434/v1").is_ok());
+        assert!(validate_base_url("x", "http://127.0.0.1:11434/v1").is_ok());
+        assert!(validate_base_url("x", "http://api.example.test/v1").is_err());
+        assert!(validate_base_url("x", "ftp://localhost/files").is_err());
+        assert!(validate_base_url("x", "https://user:pass@example.test/v1").is_err());
+    }
+
+    #[test]
+    fn key_resolution_requires_approved_env_or_explicit_inline_ack() {
+        let inline = BackendCfg {
+            base_url: "https://api.example.test/v1".into(),
+            model: "model".into(),
+            wire: None,
+            api_key: Some("secret".into()),
+            api_key_env: None,
+            max_tokens: None,
+        };
+        let error = resolve_key("x", &inline, false).unwrap_err().to_string();
+        assert!(error.contains("--unsafe-inline-api-key"), "{error}");
+        assert!(!error.contains("--unsafe-inline-key"), "{error}");
+        assert_eq!(
+            resolve_key("x", &inline, true).unwrap(),
+            Some("secret".into())
+        );
+
+        let arbitrary_env = BackendCfg {
+            api_key: None,
+            api_key_env: Some("AWS_SECRET_ACCESS_KEY".into()),
+            ..inline
+        };
+        assert!(resolve_key("x", &arbitrary_env, false).is_err());
+        assert!(validate_key_env("x", "OPENAI_API_KEY").is_ok());
+
+        let ambiguous = BackendCfg {
+            api_key: Some("inline".into()),
+            api_key_env: Some("OPENAI_API_KEY".into()),
+            ..arbitrary_env
+        };
+        assert!(resolve_key("x", &ambiguous, true).is_err());
     }
 }

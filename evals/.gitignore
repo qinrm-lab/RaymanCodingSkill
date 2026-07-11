@@ -1,5 +1,8 @@
 /target
 /.runs
+# Named run roots are used by CI/local smoke isolation too; every run contains
+# copied trial workspaces and immutable reports, never source artifacts.
+/.runs-*
 
 # Your real backend config (endpoints/models); keep secrets in env vars.
 backends.json

@@ -3,7 +3,10 @@
 //! 循环与工具是共享的；后端（mock / anthropic）只负责“给定对话，产出下一条 assistant 消息”。
 //! 这样 A/B 两组之间**唯一的自变量**就是 system 提示里有没有技能文本 + `rayman` 是否可用。
 
-use std::path::{Path, PathBuf};
+use std::fs;
+use std::io::Write;
+use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::Result;
 use serde::Serialize;
@@ -12,6 +15,7 @@ use serde_json::{Value, json};
 use crate::grade::{EnvPolicy, RUN_TIMEOUT, run_shell};
 
 pub const MAX_STEPS: usize = 24;
+static WRITE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// 工具定义（Anthropic tools schema）。mock 后端忽略它。
 pub fn tool_defs() -> Value {
@@ -41,7 +45,7 @@ pub fn tool_defs() -> Value {
         },
         {
             "name": "run",
-            "description": "Run a shell command in the workspace root and see its stdout/stderr/exit code.",
+            "description": "Run a shell command directly on the host in the workspace root and see stdout/stderr/exit code. This is NOT a sandbox: the command can access host resources allowed to this user.",
             "input_schema": {
                 "type": "object",
                 "properties": {"command": {"type": "string"}},
@@ -265,7 +269,8 @@ fn is_rayman_command(command: &str) -> bool {
         .is_some_and(|stem| stem.eq_ignore_ascii_case("rayman"))
 }
 
-/// 执行单个工具，返回 (内容, 是否错误)。读/写限制在工作区内。
+/// 执行单个工具，返回 (内容, 是否错误)。文件工具拒绝任何已存在的 symlink 组件。
+/// `run` 仍是宿主 shell 执行，不能也不会在这里伪装成 sandbox。
 fn exec_tool(workspace: &Path, call: &ToolCall, env: &EnvPolicy) -> (String, bool) {
     if let Some(reason) = &call.input_error {
         return (
@@ -274,25 +279,24 @@ fn exec_tool(workspace: &Path, call: &ToolCall, env: &EnvPolicy) -> (String, boo
         );
     }
     match call.name.as_str() {
-        "list_files" => (list_files(workspace), false),
-        "read_file" => match safe_path(workspace, str_arg(&call.input, "path")) {
-            Ok(path) => match std::fs::read_to_string(&path) {
+        "list_files" => match list_files(workspace) {
+            Ok(files) => (files, false),
+            Err(error) => (format!("list_files 失败: {error}"), true),
+        },
+        "read_file" => match safe_path(workspace, str_arg(&call.input, "path"), PathAccess::Read) {
+            Ok(path) => match fs::read_to_string(&path) {
                 Ok(text) => (text, false),
                 Err(error) => (format!("read_file 失败: {error}"), true),
             },
             Err(error) => (error, true),
         },
-        "write_file" => match safe_path(workspace, str_arg(&call.input, "path")) {
-            Ok(path) => {
-                if let Some(parent) = path.parent() {
-                    let _ = std::fs::create_dir_all(parent);
-                }
-                match std::fs::write(&path, str_arg(&call.input, "content")) {
-                    Ok(()) => ("ok".to_string(), false),
-                    Err(error) => (format!("write_file 失败: {error}"), true),
-                }
-            }
-            Err(error) => (error, true),
+        "write_file" => match write_file(
+            workspace,
+            str_arg(&call.input, "path"),
+            str_arg(&call.input, "content"),
+        ) {
+            Ok(()) => ("ok".to_string(), false),
+            Err(error) => (format!("write_file 失败: {error}"), true),
         },
         "run" => {
             let result = run_shell(workspace, str_arg(&call.input, "command"), env, RUN_TIMEOUT);
@@ -300,7 +304,7 @@ fn exec_tool(workspace: &Path, call: &ToolCall, env: &EnvPolicy) -> (String, boo
                 "exit={}\n--- stdout ---\n{}\n--- stderr ---\n{}",
                 result.exit, result.stdout, result.stderr
             );
-            (content, !result.passed)
+            (content, !result.outcome.passed())
         }
         other => (format!("未知工具: {other}"), true),
     }
@@ -310,63 +314,238 @@ fn str_arg<'a>(input: &'a Value, key: &str) -> &'a str {
     input.get(key).and_then(Value::as_str).unwrap_or("")
 }
 
-/// 把相对路径限制在工作区内，拒绝 `..` 逃逸。
-fn safe_path(workspace: &Path, rel: &str) -> Result<PathBuf, String> {
-    if rel.is_empty() {
+#[derive(Clone, Copy)]
+enum PathAccess {
+    Read,
+    Write,
+}
+
+/// 把相对路径限制在工作区内，并拒绝任何已存在的 symlink/reparse-point 可见组件。
+/// Rust 标准库没有跨平台的 `openat(..., O_NOFOLLOW)` 等价物，因此这里是可移植的
+/// best-effort 防护：每次检查/创建后都复查元数据，且写入通过同目录临时文件 + rename。
+fn safe_path(workspace: &Path, rel: &str, access: PathAccess) -> Result<PathBuf, String> {
+    ensure_real_workspace(workspace)?;
+    if rel.trim().is_empty() {
         return Err("path 为空".into());
     }
-    let candidate = workspace.join(rel);
-    let normalized = normalize(&candidate);
-    let base = normalize(workspace);
-    if !normalized.starts_with(&base) {
-        return Err(format!("拒绝越权路径: {rel}"));
+    let requested = Path::new(rel);
+    if requested.is_absolute() {
+        return Err(format!("拒绝绝对路径: {rel}"));
     }
-    Ok(normalized)
-}
 
-/// 词法归一化（不触碰文件系统），消解 `.`/`..`。
-fn normalize(path: &Path) -> PathBuf {
-    let mut out = PathBuf::new();
-    for component in path.components() {
+    let components: Vec<_> = requested.components().collect();
+    if components.is_empty() {
+        return Err("path 为空".into());
+    }
+    let mut candidate = workspace.to_path_buf();
+    for (index, component) in components.iter().enumerate() {
         match component {
-            std::path::Component::ParentDir => {
-                out.pop();
+            Component::CurDir => continue,
+            Component::Normal(name) => candidate.push(name),
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                return Err(format!("拒绝越权路径: {rel}"));
             }
-            std::path::Component::CurDir => {}
-            other => out.push(other.as_os_str()),
+        }
+        match fs::symlink_metadata(&candidate) {
+            Ok(metadata) => {
+                reject_symlink(&candidate, &metadata)?;
+                if index + 1 < components.len() && !metadata.is_dir() {
+                    return Err(format!("路径中间组件不是目录: {}", candidate.display()));
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                if matches!(access, PathAccess::Read) && index + 1 < components.len() {
+                    return Err(format!("读取路径的父目录不存在: {}", candidate.display()));
+                }
+            }
+            Err(error) => return Err(format!("无法检查路径 {}: {error}", candidate.display())),
         }
     }
-    out
+    Ok(candidate)
 }
 
-fn list_files(workspace: &Path) -> String {
+fn ensure_real_workspace(workspace: &Path) -> Result<(), String> {
+    let metadata = fs::symlink_metadata(workspace)
+        .map_err(|error| format!("无法检查工作区 {}: {error}", workspace.display()))?;
+    reject_symlink(workspace, &metadata)?;
+    if !metadata.is_dir() {
+        return Err(format!("工作区不是目录: {}", workspace.display()));
+    }
+    // 祖先检查可以防住常见的父级 symlink/junction；标准库无法彻底消除 TOCTOU，故不声称 sandbox。
+    for ancestor in workspace.ancestors() {
+        if let Ok(metadata) = fs::symlink_metadata(ancestor) {
+            reject_symlink(ancestor, &metadata)?;
+        }
+    }
+    Ok(())
+}
+
+fn reject_symlink(path: &Path, metadata: &fs::Metadata) -> Result<(), String> {
+    if is_link_or_reparse(metadata) {
+        Err(format!("拒绝 symlink/reparse 路径组件: {}", path.display()))
+    } else {
+        Ok(())
+    }
+}
+
+/// Windows junction/symlink 都是 reparse point；`FileType::is_symlink` 不覆盖所有 junction。
+/// 非 Windows 仅用标准库的 symlink 标识，保持这一层文件工具逻辑可移植。
+fn is_link_or_reparse(metadata: &fs::Metadata) -> bool {
+    if metadata.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
+}
+
+fn write_file(workspace: &Path, rel: &str, content: &str) -> Result<(), String> {
+    let path = safe_path(workspace, rel, PathAccess::Write)?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| format!("写入路径没有父目录: {}", path.display()))?;
+    ensure_safe_parent_dirs(workspace, parent)?;
+    if let Ok(metadata) = fs::symlink_metadata(&path) {
+        reject_symlink(&path, &metadata)?;
+        if !metadata.is_file() {
+            return Err(format!("拒绝覆盖非普通文件: {}", path.display()));
+        }
+    }
+
+    let temp = parent.join(format!(
+        ".rayman-eval-write-{}-{}",
+        std::process::id(),
+        WRITE_COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
+    let result = (|| -> Result<(), String> {
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp)
+            .map_err(|error| format!("无法创建临时写入文件: {error}"))?;
+        file.write_all(content.as_bytes())
+            .map_err(|error| format!("无法写入临时文件: {error}"))?;
+        file.sync_all()
+            .map_err(|error| format!("无法同步临时文件: {error}"))?;
+        drop(file);
+
+        // rename 替换的是路径节点而非 symlink 的目标；Windows 若不允许覆盖，再只删除已验证的普通文件。
+        match fs::rename(&temp, &path) {
+            Ok(()) => Ok(()),
+            Err(first_error) => {
+                let metadata = fs::symlink_metadata(&path)
+                    .map_err(|error| format!("无法在替换前复查目标 {}: {error}", path.display()))?;
+                reject_symlink(&path, &metadata)?;
+                if !metadata.is_file() {
+                    return Err(format!("拒绝替换非普通文件: {}", path.display()));
+                }
+                fs::remove_file(&path)
+                    .map_err(|error| format!("无法替换目标 {}: {error}", path.display()))?;
+                fs::rename(&temp, &path).map_err(|error| {
+                    format!(
+                        "无法完成安全替换 {}（初始错误: {first_error}）: {error}",
+                        path.display()
+                    )
+                })
+            }
+        }
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temp);
+    }
+    result
+}
+
+fn ensure_safe_parent_dirs(workspace: &Path, parent: &Path) -> Result<(), String> {
+    let relative = parent
+        .strip_prefix(workspace)
+        .map_err(|_| format!("写入父目录逃出工作区: {}", parent.to_string_lossy()))?;
+    let mut current = workspace.to_path_buf();
+    for component in relative.components() {
+        let Component::Normal(name) = component else {
+            return Err(format!("写入父目录包含非法组件: {}", parent.display()));
+        };
+        current.push(name);
+        match fs::symlink_metadata(&current) {
+            Ok(metadata) => {
+                reject_symlink(&current, &metadata)?;
+                if !metadata.is_dir() {
+                    return Err(format!("写入父组件不是目录: {}", current.display()));
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                match fs::create_dir(&current) {
+                    Ok(()) => {}
+                    Err(create_error)
+                        if create_error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                    Err(create_error) => {
+                        return Err(format!(
+                            "无法创建父目录 {}: {create_error}",
+                            current.display()
+                        ));
+                    }
+                }
+                let metadata = fs::symlink_metadata(&current).map_err(|metadata_error| {
+                    format!("无法复查新父目录 {}: {metadata_error}", current.display())
+                })?;
+                reject_symlink(&current, &metadata)?;
+                if !metadata.is_dir() {
+                    return Err(format!("新父组件不是目录: {}", current.display()));
+                }
+            }
+            Err(error) => return Err(format!("无法检查父目录 {}: {error}", current.display())),
+        }
+    }
+    Ok(())
+}
+
+fn list_files(workspace: &Path) -> Result<String, String> {
+    ensure_real_workspace(workspace)?;
     let mut files = Vec::new();
-    collect(workspace, workspace, &mut files);
+    collect(workspace, workspace, &mut files)?;
     files.sort();
-    if files.is_empty() {
+    Ok(if files.is_empty() {
         "(empty workspace)".into()
     } else {
         files.join("\n")
-    }
+    })
 }
 
-fn collect(root: &Path, dir: &Path, out: &mut Vec<String>) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
-    for entry in entries.flatten() {
+fn collect(root: &Path, dir: &Path, out: &mut Vec<String>) -> Result<(), String> {
+    let entries =
+        fs::read_dir(dir).map_err(|error| format!("无法读取目录 {}: {error}", dir.display()))?;
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("无法枚举目录 {}: {error}", dir.display()))?;
         let path = entry.path();
         let name = entry.file_name();
         let name = name.to_string_lossy();
         if matches!(name.as_ref(), "target" | ".git" | ".RaymanCodingSkill") {
             continue;
         }
-        if path.is_dir() {
-            collect(root, &path, out);
-        } else if let Ok(rel) = path.strip_prefix(root) {
+        let metadata = fs::symlink_metadata(&path)
+            .map_err(|error| format!("无法检查目录项 {}: {error}", path.display()))?;
+        // list_files 从不跟随 link；静默跳过而不把宿主外部路径暴露给模型。
+        if is_link_or_reparse(&metadata) {
+            continue;
+        }
+        if metadata.is_dir() {
+            collect(root, &path, out)?;
+        } else if metadata.is_file() {
+            let rel = path
+                .strip_prefix(root)
+                .map_err(|_| format!("文件逃出工作区: {}", path.display()))?;
             out.push(rel.to_string_lossy().replace('\\', "/"));
         }
     }
+    Ok(())
 }
 
 // ---- Mock 后端：按脚本回放工具调用，用来在不花钱的情况下验证整套编排与评分。----
@@ -457,8 +636,50 @@ mod tests {
     #[test]
     fn safe_path_rejects_escape() {
         let dir = tempfile::tempdir().unwrap();
-        assert!(safe_path(dir.path(), "../evil.txt").is_err());
-        assert!(safe_path(dir.path(), "sub/ok.txt").is_ok());
+        assert!(safe_path(dir.path(), "../evil.txt", PathAccess::Read).is_err());
+        assert!(safe_path(dir.path(), "sub/ok.txt", PathAccess::Write).is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn file_tools_do_not_follow_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = dir.path().join("workspace");
+        fs::create_dir(&workspace).unwrap();
+        let outside = dir.path().join("outside");
+        fs::create_dir(&outside).unwrap();
+        fs::write(outside.join("secret.txt"), "secret").unwrap();
+        symlink(&outside, workspace.join("escape")).unwrap();
+
+        assert!(safe_path(&workspace, "escape/secret.txt", PathAccess::Read).is_err());
+        assert!(!list_files(&workspace).unwrap().contains("secret.txt"));
+
+        let call = ToolCall {
+            id: "write".into(),
+            name: "write_file".into(),
+            input: json!({"path": "escape/new.txt", "content": "nope"}),
+            input_error: None,
+        };
+        let (_, is_error) = exec_tool(&workspace, &call, &EnvPolicy::default());
+        assert!(is_error);
+        assert!(!outside.join("new.txt").exists());
+    }
+
+    #[test]
+    fn write_file_creates_nested_regular_path() {
+        let dir = tempfile::tempdir().unwrap();
+        write_file(dir.path(), "nested/file.txt", "safe").unwrap();
+        assert_eq!(
+            fs::read_to_string(dir.path().join("nested/file.txt")).unwrap(),
+            "safe"
+        );
+        write_file(dir.path(), "nested/file.txt", "replaced").unwrap();
+        assert_eq!(
+            fs::read_to_string(dir.path().join("nested/file.txt")).unwrap(),
+            "replaced"
+        );
     }
 
     #[test]

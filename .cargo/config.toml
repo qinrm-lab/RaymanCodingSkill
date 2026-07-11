@@ -1,0 +1,5 @@
+# Release-contract verification compares Windows artifacts byte-for-byte.  MSVC
+# link timestamps and CodeView identifiers are otherwise nondeterministic across
+# isolated target directories, so make every normal MSVC build reproducible too.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/Brepro"]

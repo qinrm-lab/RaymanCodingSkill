@@ -7,6 +7,20 @@ fn write(path: &Path, body: &str) {
 }
 
 #[test]
+fn cargo_workspace_requires_metadata_provenance_for_authoritative_topology() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    fs::write(root.join("Cargo.toml"), "[workspace]\nmembers = []\n").unwrap();
+
+    assert!(topology_provenance_is_authoritative(root, "cargo_metadata"));
+    assert!(!topology_provenance_is_authoritative(
+        root,
+        "heuristic_fallback: cargo metadata unavailable"
+    ));
+    assert!(!topology_provenance_is_authoritative(root, ""));
+}
+
+#[test]
 fn map_builds_dependencies_and_impact_from_current_context() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
@@ -130,7 +144,7 @@ fn evals_dependency_policy_changes_recommend_evals_deny_check() {
     let impact = impact_report(&map, "evals/Cargo.toml").unwrap();
 
     assert!(impact.recommended_checks.iter().any(|check| {
-        check == "cargo deny --manifest-path evals\\Cargo.toml check --config evals\\deny.toml"
+        check == "cargo deny --manifest-path evals/Cargo.toml check --config evals/deny.toml"
     }));
 }
 

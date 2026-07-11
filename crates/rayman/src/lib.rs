@@ -7,19 +7,20 @@ pub mod checkpoint;
 pub mod context;
 pub mod fsutil;
 pub mod goal;
+pub mod hash;
 pub mod map;
+pub mod state_paths;
 pub mod temp;
 pub mod walk;
 
 mod file_io;
-mod hash;
 mod pathfmt;
 mod project_store;
 mod state_store;
 mod timefmt;
 mod ui_paths;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
@@ -30,12 +31,31 @@ pub fn workspace_root() -> Result<PathBuf> {
     let cwd = std::env::current_dir().context("无法读取当前目录")?;
     let mut dir = cwd.as_path();
     loop {
-        if dir.join(".RaymanCodingSkill").is_dir() || dir.join(".git").exists() {
+        if is_workspace_marker(dir)? {
             return Ok(dir.to_path_buf());
         }
         match dir.parent() {
             Some(parent) => dir = parent,
             None => return Ok(cwd),
         }
+    }
+}
+
+fn is_workspace_marker(dir: &Path) -> Result<bool> {
+    // A linked state root must not become the authority boundary that selects
+    // a workspace.  `managed_state_root` verifies both symlinks and Windows
+    // reparse points before reporting a marker.
+    Ok(state_paths::managed_state_root(dir, false)?.is_some() || dir.join(".git").exists())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn workspace_marker_rejects_an_invalid_state_root() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(".RaymanCodingSkill"), "not a directory").unwrap();
+        assert!(is_workspace_marker(dir.path()).is_err());
     }
 }

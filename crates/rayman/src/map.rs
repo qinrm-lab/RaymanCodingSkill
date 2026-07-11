@@ -1,14 +1,17 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::context::{self, ContextIndex, FileEntry};
 use crate::project_store::{now_iso, read_json, write_json};
+use crate::state_paths;
 
-const PROJECT_MAP_RELATIVE_PATH: &str = ".RaymanCodingSkill/context/project_map.json";
 const QUALITY_CONFIG_RELATIVE_PATH: &str = ".RaymanCodingSkill/quality.json";
+const PROJECT_MAP_STATE_RELATIVE: &str = "context/project_map.json";
+const QUALITY_CONFIG_STATE_RELATIVE: &str = "quality.json";
 const LARGE_SOURCE_WARNING_LINES: usize = 2_000;
 const LARGE_TEST_WARNING_LINES: usize = 3_000;
 const BLOCKABLE_WARNING_KINDS: &[&str] = &[
@@ -21,6 +24,8 @@ const BLOCKABLE_WARNING_KINDS: &[&str] = &[
 pub struct ProjectMap {
     pub generated_at: String,
     pub workspace: String,
+    #[serde(default)]
+    pub topology_provenance: String,
     pub source_files: usize,
     pub test_files: usize,
     pub docs_files: usize,
@@ -150,6 +155,7 @@ pub struct SymbolReport {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct TopologyReport {
+    pub provenance: String,
     pub packages: Vec<PackageEntry>,
     pub package_dependencies: Vec<PackageDependency>,
 }
@@ -231,14 +237,42 @@ struct WorkspaceInfo {
     has_workspace_section: bool,
 }
 
+#[derive(Debug, Deserialize)]
+struct CargoMetadataDocument {
+    packages: Vec<CargoMetadataPackage>,
+    workspace_members: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CargoMetadataPackage {
+    id: String,
+    name: String,
+    manifest_path: String,
+    #[serde(default)]
+    dependencies: Vec<CargoMetadataDependency>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CargoMetadataDependency {
+    name: String,
+    #[serde(default)]
+    rename: Option<String>,
+    #[serde(default)]
+    path: Option<String>,
+    #[serde(default)]
+    kind: Option<String>,
+}
+
 pub fn build(root: &Path) -> Result<ProjectMap> {
     let map = build_readonly(root)?;
-    write_json(&project_map_path(root), &map)?;
+    write_json(&project_map_path(root, true)?, &map)?;
     Ok(map)
 }
 
 pub fn build_readonly(root: &Path) -> Result<ProjectMap> {
-    let freshness = context::freshness(root);
+    // Map conclusions are used by standard/release planning, so a stat-only ready
+    // result is insufficient: verify content hashes before deriving topology/risk.
+    let freshness = context::strong_freshness(root);
     if freshness.status != "ready" {
         bail!(
             "上下文索引不是 ready（当前: {}）。先运行 `rayman context refresh`。",
@@ -256,11 +290,9 @@ pub fn load_quality_config(root: &Path, profile: &str) -> Result<QualityConfig> 
         "strict" => QualityConfig::strict(),
         _ => QualityConfig::standard(),
     };
-    let path = root.join(QUALITY_CONFIG_RELATIVE_PATH);
-    if path.exists() {
-        let Some(file_config) = read_json::<QualityConfig>(&path)? else {
-            return Ok(config);
-        };
+    let path =
+        state_paths::managed_state_file(root, Path::new(QUALITY_CONFIG_STATE_RELATIVE), false)?;
+    if let Some(file_config) = read_json::<QualityConfig>(&path)? {
         validate_quality_config(&file_config)?;
         config.multi_source_no_test_min_sources =
             file_config.multi_source_no_test_min_sources.max(1);
@@ -353,16 +385,25 @@ pub fn symbol_report(map: &ProjectMap, name: &str) -> SymbolReport {
 
 pub fn topology_report(map: &ProjectMap) -> TopologyReport {
     TopologyReport {
+        provenance: map.topology_provenance.clone(),
         packages: map.packages.clone(),
         package_dependencies: map.package_dependencies.clone(),
     }
 }
 
+/// A Cargo workspace is authoritative only when its package topology came from
+/// Cargo metadata.  Heuristic fallback remains useful for interactive map
+/// output, but standard/release readiness must not rely on it.
+pub fn topology_is_authoritative(root: &Path, map: &ProjectMap) -> bool {
+    topology_provenance_is_authoritative(root, &map.topology_provenance)
+}
+
+fn topology_provenance_is_authoritative(root: &Path, provenance: &str) -> bool {
+    !root.join("Cargo.toml").is_file() || provenance == "cargo_metadata"
+}
+
 pub fn impact_report(map: &ProjectMap, path: &str) -> Result<ImpactReport> {
     let path = normalize_query_path(path);
-    if !map.modules.iter().any(|module| module.path == path) {
-        bail!("项目地图中没有文件: {path}");
-    }
     let package_entry = package_for_path(map, &path);
     let package = package_entry.map(|package| package.name.clone());
     let direct_dependencies: Vec<Dependency> = map
@@ -423,7 +464,7 @@ pub fn impact_report(map: &ProjectMap, path: &str) -> Result<ImpactReport> {
     }
     if is_evals_dependency_policy_path(&path) {
         recommended_checks.push(
-            "cargo deny --manifest-path evals\\Cargo.toml check --config evals\\deny.toml".into(),
+            "cargo deny --manifest-path evals/Cargo.toml check --config evals/deny.toml".into(),
         );
     }
     if path.ends_with(".rs") {
@@ -479,11 +520,14 @@ pub fn change_plan(map: &ProjectMap, paths: &[String]) -> Result<ChangePlan> {
     let mut has_package_test_anchor = false;
 
     for path in &changed_paths {
-        let Some(module) = module_by_path.get(path.as_str()) else {
-            bail!("项目地图中没有文件: {path}");
-        };
-        if module.kind == "source" {
+        let module = module_by_path.get(path.as_str());
+        if module.is_some_and(|module| module.kind == "source") || is_source_path(path) {
             source_changed_count += 1;
+        }
+        if module.is_none() {
+            warnings.push(format!(
+                "{path} is not in the current index; treating it as an add/delete candidate and using nearest package checks"
+            ));
         }
 
         let report = impact_report(map, path)?;
@@ -598,6 +642,33 @@ pub fn change_plan(map: &ProjectMap, paths: &[String]) -> Result<ChangePlan> {
             "multi-file impact aggregation from project-map dependencies, heuristic test candidates, and local risk signals; not proof of real coverage"
                 .into(),
     })
+}
+
+fn is_source_path(path: &str) -> bool {
+    matches!(
+        Path::new(path)
+            .extension()
+            .and_then(|extension| extension.to_str()),
+        Some(
+            "rs" | "js"
+                | "jsx"
+                | "ts"
+                | "tsx"
+                | "py"
+                | "go"
+                | "java"
+                | "cs"
+                | "cpp"
+                | "c"
+                | "h"
+                | "hpp"
+                | "rb"
+                | "php"
+                | "swift"
+                | "kt"
+                | "scala"
+        )
+    )
 }
 
 impl QualityConfig {
@@ -804,10 +875,9 @@ fn impact_has_package_test_anchor(map: &ProjectMap, report: &ImpactReport) -> bo
 
 fn package_has_test_anchor(map: &ProjectMap, package: &PackageEntry) -> bool {
     package.test_files > 0
-        || map
-            .tests
-            .iter()
-            .any(|test| path_is_under_package(&test.path, &package.root_path))
+        || map.tests.iter().any(|test| {
+            test.test_count > 0 && path_is_under_package(&test.path, &package.root_path)
+        })
 }
 
 fn is_evals_dependency_policy_path(path: &str) -> bool {
@@ -817,8 +887,142 @@ fn is_evals_dependency_policy_path(path: &str) -> bool {
     )
 }
 
-fn project_map_path(root: &Path) -> PathBuf {
-    root.join(PROJECT_MAP_RELATIVE_PATH)
+fn project_map_path(root: &Path, create_parents: bool) -> Result<PathBuf> {
+    state_paths::managed_state_file(root, Path::new(PROJECT_MAP_STATE_RELATIVE), create_parents)
+}
+
+/// Cargo 本身是 manifest 的权威解释器。能运行时绝不从逐行字符串启发式推断
+/// workspace/package/path-dependency；只在非 Cargo 或 metadata 不可用时降级并标记来源。
+fn cargo_metadata_topology(
+    root: &Path,
+    index: &ContextIndex,
+) -> Result<(Vec<PackageEntry>, Vec<PackageDependency>)> {
+    let output = Command::new("cargo")
+        .args(["metadata", "--no-deps", "--format-version", "1"])
+        .current_dir(root)
+        .output()
+        .context("无法执行 cargo metadata")?;
+    if !output.status.success() {
+        bail!(
+            "cargo metadata 失败: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    let document: CargoMetadataDocument =
+        serde_json::from_slice(&output.stdout).context("无法解析 cargo metadata JSON")?;
+    let workspace_members: BTreeSet<&str> = document
+        .workspace_members
+        .iter()
+        .map(String::as_str)
+        .collect();
+    let mut packages = document
+        .packages
+        .iter()
+        .map(|package| {
+            let manifest = Path::new(&package.manifest_path);
+            let relative_manifest = manifest
+                .strip_prefix(root)
+                .unwrap_or(manifest)
+                .to_string_lossy()
+                .replace('\\', "/");
+            PackageEntry {
+                name: package.name.clone(),
+                root_path: manifest_root_path(&relative_manifest),
+                manifest_path: relative_manifest,
+                workspace_member: workspace_members.contains(package.id.as_str()),
+                source_files: 0,
+                test_files: 0,
+            }
+        })
+        .collect::<Vec<_>>();
+    // Metadata owns workspace membership/dependencies. Add indexed nested manifests that
+    // Cargo deliberately excludes (fixtures, excluded tools) so their impact still gets a
+    // manifest-path test command rather than incorrectly borrowing an ancestor package.
+    let heuristic_workspace = read_workspace_info(root)?;
+    for candidate in discover_packages(root, index, &heuristic_workspace)? {
+        if !packages
+            .iter()
+            .any(|package| package.manifest_path == candidate.manifest_path)
+        {
+            packages.push(candidate);
+        }
+    }
+    packages.sort_by(|left, right| left.root_path.cmp(&right.root_path));
+    for package in &mut packages {
+        package.source_files = 0;
+        package.test_files = 0;
+    }
+    for file in &index.files {
+        if !matches!(file.kind.as_str(), "source" | "test") {
+            continue;
+        }
+        if let Some(position) = package_index_for_path(&packages, &file.path) {
+            if file.kind == "source" {
+                packages[position].source_files += 1;
+            } else {
+                packages[position].test_files += 1;
+            }
+        }
+    }
+
+    let by_manifest: BTreeMap<String, &PackageEntry> = packages
+        .iter()
+        .map(|package| (package.manifest_path.clone(), package))
+        .collect();
+    let mut dependencies = Vec::new();
+    for package in &document.packages {
+        let manifest = Path::new(&package.manifest_path);
+        let relative_manifest = manifest
+            .strip_prefix(root)
+            .unwrap_or(manifest)
+            .to_string_lossy()
+            .replace('\\', "/");
+        let Some(from) = by_manifest.get(&relative_manifest) else {
+            continue;
+        };
+        for dependency in &package.dependencies {
+            let Some(path) = dependency.path.as_deref() else {
+                continue;
+            };
+            let dependency_root = Path::new(path)
+                .strip_prefix(root)
+                .unwrap_or_else(|_| Path::new(path))
+                .to_string_lossy()
+                .replace('\\', "/");
+            let Some(to) = packages.iter().find(|candidate| {
+                candidate.root_path == dependency_root
+                    || candidate.manifest_path
+                        == format!("{}/Cargo.toml", dependency_root.trim_end_matches('/'))
+            }) else {
+                continue;
+            };
+            dependencies.push(PackageDependency {
+                from_package: from.name.clone(),
+                from_root_path: from.root_path.clone(),
+                to_package: to.name.clone(),
+                to_root_path: to.root_path.clone(),
+                dependency_name: dependency
+                    .rename
+                    .clone()
+                    .unwrap_or_else(|| dependency.name.clone()),
+                kind: dependency.kind.clone().unwrap_or_else(|| "normal".into()),
+                manifest_path: from.manifest_path.clone(),
+                evidence: "cargo metadata --no-deps".into(),
+            });
+        }
+    }
+    dependencies.sort_by(|left, right| {
+        left.from_root_path
+            .cmp(&right.from_root_path)
+            .then_with(|| left.to_root_path.cmp(&right.to_root_path))
+            .then_with(|| left.dependency_name.cmp(&right.dependency_name))
+    });
+    dependencies.dedup_by(|left, right| {
+        left.from_root_path == right.from_root_path
+            && left.to_root_path == right.to_root_path
+            && left.dependency_name == right.dependency_name
+    });
+    Ok((packages, dependencies))
 }
 
 fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
@@ -831,9 +1035,8 @@ fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
 
     for file in &index.files {
         if file.kind == "source" || file.kind == "test" {
-            // 与 context 索引同一容错策略：非 UTF-8（GBK/UTF-16 常见）或被锁定的文件
-            // 按可读内容处理，不能让单个文件卡死整条 map/check 管线。
-            let bytes = std::fs::read(root.join(&file.path)).unwrap_or_default();
+            let bytes = std::fs::read(root.join(&file.path))
+                .with_context(|| format!("项目地图读取失败: {}", file.path))?;
             text_by_path.insert(
                 file.path.clone(),
                 String::from_utf8_lossy(&bytes).into_owned(),
@@ -881,7 +1084,8 @@ fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
             });
         }
 
-        if file.kind == "test" || text.contains("#[cfg(test)]") || text.contains("#[test]") {
+        let test_count = count_tests(text);
+        if test_count > 0 {
             let inference = infer_candidate_paths(file, text, index);
             tests.push(TestTarget {
                 path: file.path.clone(),
@@ -890,7 +1094,7 @@ fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
                 } else {
                     "inline".into()
                 },
-                test_count: count_tests(text),
+                test_count,
                 candidate_paths: inference.paths,
                 basis: inference.basis,
                 confidence: inference.confidence,
@@ -898,9 +1102,29 @@ fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
         }
     }
 
-    let workspace = read_workspace_info(root)?;
-    let packages = discover_packages(root, index, &workspace)?;
-    let package_dependencies = infer_package_dependencies(root, &packages, &workspace)?;
+    let (packages, package_dependencies, topology_provenance) = if root.join("Cargo.toml").is_file()
+    {
+        match cargo_metadata_topology(root, index) {
+            Ok((packages, dependencies)) => (packages, dependencies, "cargo_metadata".to_string()),
+            Err(error) => {
+                // Do not dress the fallback up as Cargo authority. It remains useful for
+                // damaged/nonstandard workspaces, but callers can see the weaker provenance.
+                let workspace = read_workspace_info(root)?;
+                let packages = discover_packages(root, index, &workspace)?;
+                let dependencies = infer_package_dependencies(root, &packages, &workspace)?;
+                (
+                    packages,
+                    dependencies,
+                    format!("heuristic_fallback: {error:#}"),
+                )
+            }
+        }
+    } else {
+        let workspace = read_workspace_info(root)?;
+        let packages = discover_packages(root, index, &workspace)?;
+        let dependencies = infer_package_dependencies(root, &packages, &workspace)?;
+        (packages, dependencies, "no_cargo_manifest".to_string())
+    };
     // 本地 crate 名来自实际发现的 package，而不是硬编码本工具自己的名字。
     let local_crates: BTreeSet<String> = packages
         .iter()
@@ -914,6 +1138,7 @@ fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
     Ok(ProjectMap {
         generated_at: now_iso(),
         workspace: index.workspace.clone(),
+        topology_provenance,
         source_files,
         test_files,
         docs_files,

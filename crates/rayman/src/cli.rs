@@ -25,11 +25,11 @@ pub enum Format {
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// 工作区上下文索引（指纹缓存，未变文件跳过重建）
+    /// 工作区上下文索引（内容 hash 证明；map/check 会拒绝未验证内容）
     Context(ContextCmd),
     /// 最小目标契约与待完成项续接
     Goal(GoalCmd),
-    /// 一次性只读就绪检查（上下文新鲜度 + 资产扫描 + 待完成）
+    /// 一次性工作区就绪检查（默认 standard；release 仅代表 strict-quality，不代表已安装发布）
     Check(CheckCmd),
     /// 项目地图与变更影响分析（依赖当前 context 索引）
     Map(MapCmd),
@@ -37,10 +37,21 @@ pub enum Command {
     Assets,
     /// 托管临时目录
     Temp(TempCmd),
+    /// 只读审计受管状态、退役状态与临时空间，不自动删除任何文件
+    State(StateCmd),
     /// 工作树快照：整树本地拷贝，便于断电/切换 AI 工具后恢复
     Checkpoint(CheckpointCmd),
     /// 自动快照生命周期：开工注册 Windows 计划任务定时保存，完成/出错时存最后一次并停止
     Autosave(AutosaveCmd),
+    /// 检查已安装二进制、PATH 与工作区 skill 的身份契约；不证明源码新鲜度
+    Doctor(DoctorCmd),
+}
+
+#[derive(Args)]
+pub struct DoctorCmd {
+    /// 已安装身份不一致时以非零退出；源码新鲜度须用 verify-release-contract.ps1 -RequireSourceFresh
+    #[arg(long)]
+    pub check: bool,
 }
 
 #[derive(Args)]
@@ -109,6 +120,11 @@ pub enum CheckpointAction {
         #[arg(long)]
         yes: bool,
     },
+    /// 验证指定或最近完整快照的 manifest、路径和逐文件 hash，不写入工作区
+    Verify {
+        /// 快照 id 或 "latest"（默认最近完整快照）
+        id: Option<String>,
+    },
     /// 显示最近一次快照的状态
     Status,
 }
@@ -168,8 +184,8 @@ pub enum MapAction {
 
 #[derive(Args)]
 pub struct CheckCmd {
-    /// 检查强度：quick 保持旧行为；standard 加入项目地图与目标证据影响面；release 读取 strict 质量策略
-    #[arg(long, value_enum, default_value_t = CheckProfile::Quick)]
+    /// 检查强度：默认 standard；quick 仅基础快照；release 为工作区 strict-quality，不是安装发布验证
+    #[arg(long, value_enum, default_value_t = CheckProfile::Standard)]
     pub profile: CheckProfile,
 }
 
@@ -222,6 +238,20 @@ pub enum GoalAction {
         #[arg(long = "validated")]
         validated: Vec<String>,
     },
+    /// 实际执行一条验证命令并把 exit code、输出摘要和工作区指纹写成 receipt
+    Validate {
+        id: String,
+        #[arg(long)]
+        req: String,
+        #[arg(long = "message", short = 'm')]
+        message: String,
+        /// 本次验证覆盖的变更文件；会记录 map impact 快照（可重复）
+        #[arg(long = "changed")]
+        changed: Vec<String>,
+        /// 由当前 shell 执行；非零退出不会写入 receipt
+        #[arg(long)]
+        command: String,
+    },
     /// 关闭目标（success 要求所有 must 需求带证据）
     Close {
         id: String,
@@ -255,6 +285,22 @@ pub enum PendingAction {
 pub struct TempCmd {
     #[command(subcommand)]
     pub action: TempAction,
+}
+
+#[derive(Args)]
+pub struct StateCmd {
+    #[command(subcommand)]
+    pub action: StateAction,
+}
+
+#[derive(Subcommand)]
+pub enum StateAction {
+    /// 报告 v2 允许状态、退役目录和递归 temp 指标
+    Audit {
+        /// 发现退役状态或遍历错误时以非零退出
+        #[arg(long)]
+        check: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -311,7 +357,10 @@ mod tests {
     #[test]
     fn parses_check() {
         let cli = Cli::try_parse_from(["rayman", "check"]).unwrap();
-        assert!(matches!(cli.command, Command::Check(_)));
+        match cli.command {
+            Command::Check(CheckCmd { profile }) => assert_eq!(profile, CheckProfile::Standard),
+            _ => panic!("unexpected command"),
+        }
     }
 
     #[test]
@@ -393,5 +442,37 @@ mod tests {
             }
             _ => panic!("unexpected command"),
         }
+    }
+
+    #[test]
+    fn parses_doctor_check() {
+        let cli = Cli::try_parse_from(["rayman", "doctor", "--check"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Doctor(DoctorCmd { check: true })
+        ));
+    }
+
+    #[test]
+    fn parses_goal_validate() {
+        let cli = Cli::try_parse_from([
+            "rayman",
+            "goal",
+            "validate",
+            "goal_x",
+            "--req",
+            "req_1",
+            "-m",
+            "tests passed",
+            "--command",
+            "cargo test --all",
+        ])
+        .unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Goal(GoalCmd {
+                action: GoalAction::Validate { .. }
+            })
+        ));
     }
 }

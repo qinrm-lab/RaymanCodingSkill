@@ -1,21 +1,25 @@
 //! 工作区上下文索引：单次遍历 + 每文件指纹缓存。
 //!
-//! 与旧实现的关键区别：`refresh` 用 stat-only 遍历，(size, mtime) 未变的文件直接复用缓存里的
-//! sha/符号，**只重算变更文件**——修复“每次调用从头重建整份索引、缓存只用于事后报告 stale”的性能问题。
+//! `refresh` 对每个文件重算内容摘要，并在遍历或读取失败时拒绝写出索引；缓存仅用于
+//! 报告复用统计，不能作为跳过内容证明的依据。
 
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::UNIX_EPOCH;
 
-use anyhow::Result;
+use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::project_store::{
     display_path, now_iso, read_json, sha256_bytes, sha256_file, write_json,
 };
-use crate::walk::{relative_key, workspace_files};
+use crate::state_paths;
+use crate::walk::{relative_key, workspace_files_checked};
 
+#[cfg(test)]
 const INDEX_RELATIVE_PATH: &str = ".RaymanCodingSkill/context/index.json";
+const INDEX_STATE_RELATIVE: &str = "context/index.json";
+pub const CONTEXT_SCHEMA_VERSION: u32 = 2;
 const SOURCE_EXTENSIONS: &[&str] = &[
     "rs", "js", "jsx", "ts", "tsx", "py", "go", "java", "cs", "cpp", "c", "h", "hpp", "rb", "php",
     "swift", "kt", "scala",
@@ -32,6 +36,9 @@ pub struct FileEntry {
     pub lines: usize,
     #[serde(default)]
     pub symbols: Vec<Symbol>,
+    /// 读取/哈希失败不能伪装成空文件；当前索引因此为 incomplete。
+    #[serde(default)]
+    pub read_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -43,8 +50,12 @@ pub struct Symbol {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContextIndex {
+    #[serde(default)]
+    pub schema_version: u32,
     pub generated_at: String,
     pub workspace: String,
+    #[serde(default)]
+    pub workspace_identity: String,
     pub files: Vec<FileEntry>,
 }
 
@@ -55,23 +66,30 @@ pub struct RefreshReport {
     pub reused: usize,
     pub rehashed: usize,
     pub removed: usize,
+    pub errors: Vec<String>,
 }
 
 /// 相对当前工作区状态的新鲜度，stat-only 计算，不做整树哈希。
 #[derive(Debug, Clone, Serialize)]
 pub struct FreshnessReport {
-    pub status: String, // ready | stale | missing
+    pub status: String, // ready | stale | missing | incomplete
     pub changed: Vec<String>,
     pub removed: Vec<String>,
     pub added: Vec<String>,
+    pub errors: Vec<String>,
 }
 
-fn index_path(root: &Path) -> std::path::PathBuf {
-    root.join(INDEX_RELATIVE_PATH)
+fn index_path(root: &Path, create_parents: bool) -> Result<std::path::PathBuf> {
+    state_paths::managed_state_file(root, Path::new(INDEX_STATE_RELATIVE), create_parents)
+}
+
+fn workspace_identity(root: &Path) -> String {
+    let canonical = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    sha256_bytes(canonical.to_string_lossy().as_bytes())
 }
 
 pub fn load(root: &Path) -> Result<Option<ContextIndex>> {
-    read_json::<ContextIndex>(&index_path(root))
+    read_json::<ContextIndex>(&index_path(root, false)?)
 }
 
 fn mtime_ns(metadata: &std::fs::Metadata) -> u128 {
@@ -84,9 +102,9 @@ fn mtime_ns(metadata: &std::fs::Metadata) -> u128 {
 }
 
 /// 载入缓存索引；缺失或**损坏**都返回 `None`（降级为重建，不让命令报错）。
-fn load_cached(root: &Path) -> Option<ContextIndex> {
+fn load_cached(root: &Path) -> Result<Option<ContextIndex>> {
     // read_json 对损坏文件返回 Err；unwrap_or_default 把缺失(None)与损坏(Err)统一降级为 None。
-    read_json::<ContextIndex>(&index_path(root)).unwrap_or_default()
+    Ok(read_json::<ContextIndex>(&index_path(root, false)?).unwrap_or_default())
 }
 
 /// 按工作区相对路径对文件分类；只吃相对路径，避免祖先目录含 "test" 造成整清单误判。
@@ -97,7 +115,7 @@ fn classify(rel: &str, extension: &str) -> String {
     let file_name = rel.rsplit('/').next().unwrap_or(rel);
     let is_source = SOURCE_EXTENSIONS.contains(&extension);
     let name_marks_test = is_source && file_name_marks_test(file_name);
-    if in_test_dir || name_marks_test {
+    if is_source && (in_test_dir || name_marks_test) {
         "test".into()
     } else if ["md", "mdx", "rst", "txt"].contains(&extension) {
         "docs".into()
@@ -212,20 +230,28 @@ fn between(text: &str, start: &str, end: &str) -> Option<String> {
 /// 超过此大小的文件只做流式 hash，不进内存做文本解析。
 const MAX_TEXT_BYTES: u64 = 8 * 1024 * 1024;
 
-fn build_entry(root: &Path, path: &Path, size: u64, mtime: u128) -> FileEntry {
+fn build_entry(root: &Path, path: &Path, size: u64, mtime: u128) -> Result<FileEntry> {
     let rel = relative_key(root, path);
     let extension = path
         .extension()
         .and_then(|ext| ext.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
-    // 一次读入并容错：被锁定/非 UTF-8 的文件不能让整个 refresh 失败（Windows 文件锁常见）；
-    // hash 与文本取自同一份字节，读不到就按空内容记录，锁释放后 hash 变化会触发重索引。
+    // 读取或哈希失败不能归约为空内容：refresh 必须拒绝写出可能被误判为完整的索引。
     let (bytes, streamed_hash) = if size > MAX_TEXT_BYTES {
-        (Vec::new(), sha256_file(path).ok())
+        let hash = sha256_file(path)
+            .with_context(|| format!("上下文索引无法哈希文件: {}", display_path(path)))?;
+        (Vec::new(), Some(hash))
     } else {
-        (std::fs::read(path).unwrap_or_default(), None)
+        let bytes = std::fs::read(path)
+            .with_context(|| format!("上下文索引无法读取文件: {}", display_path(path)))?;
+        (bytes, None)
     };
+    let after = std::fs::metadata(path)
+        .with_context(|| format!("上下文索引无法复查文件元数据: {}", display_path(path)))?;
+    if after.len() != size || mtime_ns(&after) != mtime {
+        bail!("上下文索引读取期间文件发生变化: {}", display_path(path));
+    }
     let sha256 = streamed_hash.unwrap_or_else(|| sha256_bytes(&bytes));
     let text = String::from_utf8_lossy(&bytes);
     let lines = text.lines().count();
@@ -235,7 +261,7 @@ fn build_entry(root: &Path, path: &Path, size: u64, mtime: u128) -> FileEntry {
     } else {
         Vec::new()
     };
-    FileEntry {
+    Ok(FileEntry {
         path: rel,
         size,
         mtime_ns: mtime,
@@ -243,12 +269,17 @@ fn build_entry(root: &Path, path: &Path, size: u64, mtime: u128) -> FileEntry {
         kind,
         lines,
         symbols,
-    }
+        read_error: None,
+    })
 }
 
 /// 刷新索引：复用未变文件的指纹与符号，只重算变更文件。
 pub fn refresh(root: &Path) -> Result<(ContextIndex, RefreshReport)> {
-    let cached = load_cached(root)
+    let identity = workspace_identity(root);
+    let cached = load_cached(root)?
+        .filter(|index| {
+            index.schema_version == CONTEXT_SCHEMA_VERSION && index.workspace_identity == identity
+        })
         .map(|index| {
             index
                 .files
@@ -263,24 +294,24 @@ pub fn refresh(root: &Path) -> Result<(ContextIndex, RefreshReport)> {
     let mut rehashed = 0usize;
     let mut present = std::collections::BTreeSet::new();
 
-    for path in workspace_files(root) {
-        let Ok(metadata) = std::fs::metadata(&path) else {
-            continue;
-        };
+    for path in workspace_files_checked(root)? {
+        let metadata = std::fs::metadata(&path)
+            .with_context(|| format!("上下文索引无法读取文件元数据: {}", display_path(&path)))?;
         let size = metadata.len();
         let mtime = mtime_ns(&metadata);
         let rel = relative_key(root, &path);
         present.insert(rel.clone());
-        match cached.get(&rel) {
-            Some(entry) if entry.size == size && entry.mtime_ns == mtime && mtime != 0 => {
-                reused += 1;
-                files.push(entry.clone());
-            }
-            _ => {
-                rehashed += 1;
-                files.push(build_entry(root, &path, size, mtime));
-            }
+        // 标准 refresh 为内容证明：即使攻击者保持 size/mtime 不变也必须重算 hash。
+        // cached entry 仅用于统计同内容复用，不作为跳过读取的依据。
+        let entry = build_entry(root, &path, size, mtime)?;
+        if cached.get(&rel).is_some_and(|old| {
+            old.sha256 == entry.sha256 && old.read_error.is_none() && entry.read_error.is_none()
+        }) {
+            reused += 1;
+        } else {
+            rehashed += 1;
         }
+        files.push(entry);
     }
 
     let removed = cached.keys().filter(|key| !present.contains(*key)).count();
@@ -289,26 +320,53 @@ pub fn refresh(root: &Path) -> Result<(ContextIndex, RefreshReport)> {
         reused,
         rehashed,
         removed,
+        errors: Vec::new(),
     };
     let index = ContextIndex {
+        schema_version: CONTEXT_SCHEMA_VERSION,
         generated_at: now_iso(),
         workspace: display_path(root),
+        workspace_identity: identity,
         files,
     };
-    write_json(&index_path(root), &index)?;
+    write_json(&index_path(root, true)?, &index)?;
     Ok((index, report))
 }
 
 /// 只做 stat-only 新鲜度检查，不重建、不整树哈希。缓存损坏或缺失时报 `missing`。
 pub fn freshness(root: &Path) -> FreshnessReport {
-    let Some(cached) = load_cached(root) else {
+    let cached = match load_cached(root) {
+        Ok(Some(cached)) => cached,
+        Ok(None) => {
+            return FreshnessReport {
+                status: "missing".into(),
+                changed: Vec::new(),
+                removed: Vec::new(),
+                added: Vec::new(),
+                errors: Vec::new(),
+            };
+        }
+        Err(error) => {
+            return FreshnessReport {
+                status: "incomplete".into(),
+                changed: Vec::new(),
+                removed: Vec::new(),
+                added: Vec::new(),
+                errors: vec![format!("无法安全读取 context 状态: {error:#}")],
+            };
+        }
+    };
+    if cached.schema_version != CONTEXT_SCHEMA_VERSION
+        || cached.workspace_identity != workspace_identity(root)
+    {
         return FreshnessReport {
             status: "missing".into(),
             changed: Vec::new(),
             removed: Vec::new(),
             added: Vec::new(),
+            errors: vec!["context schema/workspace identity 不匹配".into()],
         };
-    };
+    }
     let cached_map: BTreeMap<_, _> = cached
         .files
         .into_iter()
@@ -318,15 +376,35 @@ pub fn freshness(root: &Path) -> FreshnessReport {
     let mut changed = Vec::new();
     let mut added = Vec::new();
     let mut present = std::collections::BTreeSet::new();
-    for path in workspace_files(root) {
-        let Ok(metadata) = std::fs::metadata(&path) else {
-            continue;
+    let mut errors = Vec::new();
+    let paths = match workspace_files_checked(root) {
+        Ok(paths) => paths,
+        Err(error) => {
+            return FreshnessReport {
+                status: "incomplete".into(),
+                changed: Vec::new(),
+                removed: Vec::new(),
+                added: Vec::new(),
+                errors: vec![format!("工作区遍历失败: {error:#}")],
+            };
+        }
+    };
+    for path in paths {
+        let metadata = match std::fs::metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                errors.push(format!("{}: {error}", display_path(&path)));
+                continue;
+            }
         };
         let rel = relative_key(root, &path);
         present.insert(rel.clone());
         match cached_map.get(&rel) {
             Some(entry) => {
-                if entry.size != metadata.len() || entry.mtime_ns != mtime_ns(&metadata) {
+                if entry.read_error.is_some()
+                    || entry.size != metadata.len()
+                    || entry.mtime_ns != mtime_ns(&metadata)
+                {
                     changed.push(rel);
                 }
             }
@@ -339,17 +417,59 @@ pub fn freshness(root: &Path) -> FreshnessReport {
         .cloned()
         .collect();
 
-    let status = if changed.is_empty() && added.is_empty() && removed.is_empty() {
-        "ready"
-    } else {
-        "stale"
-    };
+    let status =
+        if !errors.is_empty() || cached_map.values().any(|entry| entry.read_error.is_some()) {
+            "incomplete"
+        } else if changed.is_empty() && added.is_empty() && removed.is_empty() {
+            "ready"
+        } else {
+            "stale"
+        };
     FreshnessReport {
         status: status.into(),
         changed,
         removed,
         added,
+        errors,
     }
+}
+
+/// 强新鲜度：用于 map、standard/release 检查。它复核每个内容摘要，避免 size+mtime
+/// 恰好相同或被保留时的 false-ready。
+pub fn strong_freshness(root: &Path) -> FreshnessReport {
+    let mut report = freshness(root);
+    let index = match load_cached(root) {
+        Ok(Some(index)) => index,
+        Ok(None) => return report,
+        Err(error) => {
+            report
+                .errors
+                .push(format!("无法安全读取 context 状态: {error:#}"));
+            report.status = "incomplete".into();
+            return report;
+        }
+    };
+    if report.status == "missing" {
+        return report;
+    }
+    for entry in &index.files {
+        let path = root.join(&entry.path);
+        match sha256_file(&path) {
+            Ok(hash) if hash == entry.sha256 && entry.read_error.is_none() => {}
+            Ok(_) => report.changed.push(entry.path.clone()),
+            Err(error) => report.errors.push(format!("{}: {error}", entry.path)),
+        }
+    }
+    report.changed.sort();
+    report.changed.dedup();
+    report.status = if !report.errors.is_empty() {
+        "incomplete".into()
+    } else if report.changed.is_empty() && report.added.is_empty() && report.removed.is_empty() {
+        "ready".into()
+    } else {
+        "stale".into()
+    };
+    report
 }
 
 #[cfg(test)]
@@ -465,6 +585,12 @@ mod tests {
     }
 
     #[test]
+    fn docs_inside_tests_directory_do_not_create_a_test_anchor() {
+        assert_eq!(classify("tests/README.md", "md"), "docs");
+        assert_eq!(classify("tests/case.rs", "rs"), "test");
+    }
+
+    #[test]
     fn extract_symbols_handles_scoped_visibility() {
         let symbols = extract_symbols(
             "pub(crate) fn helper() {}\npub(super) struct Inner;\npub(in crate::x) enum E {}\n",
@@ -503,6 +629,23 @@ mod tests {
     }
 
     #[test]
+    fn strong_freshness_detects_same_stat_content_replacement() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let path = root.join("src/a.rs");
+        touch(&path, "fn alpha() {}\n");
+        refresh(root).unwrap();
+        let original = fs::metadata(&path).unwrap().modified().unwrap();
+        // Same byte length, then restore mtime: stat-only UI cannot prove identity.
+        fs::write(&path, "fn bravo() {}\n").unwrap();
+        let file = fs::File::options().write(true).open(&path).unwrap();
+        file.set_times(fs::FileTimes::new().set_modified(original))
+            .unwrap();
+        assert_eq!(freshness(root).status, "ready");
+        assert_eq!(strong_freshness(root).status, "stale");
+    }
+
+    #[test]
     fn corrupt_cache_degrades_to_missing_not_error() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
@@ -512,5 +655,22 @@ mod tests {
         // 不 panic、不 Err：降级为 missing，随后可重建。
         assert_eq!(freshness(root).status, "missing");
         assert!(refresh(root).is_ok());
+    }
+
+    #[test]
+    fn refresh_refuses_incomplete_workspace_walk() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("missing-workspace");
+        assert!(refresh(&missing).is_err());
+    }
+
+    #[test]
+    fn build_entry_refuses_a_non_file_read_target() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let target = root.join("not-a-file");
+        fs::create_dir_all(&target).unwrap();
+        let metadata = fs::metadata(&target).unwrap();
+        assert!(build_entry(root, &target, metadata.len(), mtime_ns(&metadata)).is_err());
     }
 }

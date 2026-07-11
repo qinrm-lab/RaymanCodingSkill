@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
     branches: [main]
 
@@ -41,7 +42,77 @@ jobs:
         run: cargo clippy --locked --all-targets --all-features -- -D warnings
 
       - name: Test
-        run: cargo test --locked --all
+        run: cargo test --locked --workspace --all-targets
+
+  msrv:
+    name: MSRV (Rust 1.88.0)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MSRV toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.88.0
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release artifact with MSRV
+        run: cargo build --locked --release
+
+      - name: Test with MSRV
+        run: cargo test --locked --workspace --all-targets
+
+  release-contract:
+    name: release artifact + CLI contract (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release artifact
+        run: cargo build --locked --release
+
+      - name: Verify artifact, PATH, skill binding, and CLI contract
+        shell: pwsh
+        run: |
+          $artifactDirectory = Join-Path $PWD "target/release"
+          $artifactName = if ($IsWindows) { "rayman.exe" } else { "rayman" }
+          $artifact = Join-Path $artifactDirectory $artifactName
+          $env:PATH = "$artifactDirectory$([IO.Path]::PathSeparator)$env:PATH"
+
+          # doctor intentionally fails when this workspace-level binding is absent or stale.
+          # CI provisions the same binding an installation must have; it does not install anything.
+          New-Item -ItemType Directory -Force ".RaymanCodingSkill" | Out-Null
+          $skillHash = (Get-FileHash "SKILL.md" -Algorithm SHA256).Hash.ToLowerInvariant()
+          @(
+            "skill: raymancodingskill"
+            "enabled: true"
+            "skill_file: SKILL.md"
+            "skill_sha256: $skillHash"
+          ) | Set-Content -Path ".RaymanCodingSkill/workspace_skill.yaml" -Encoding utf8
+
+          $contractArgs = @{
+            CliPath = $artifact
+            ReferenceCliPath = $artifact
+            SkillPath = (Join-Path $PWD "SKILL.md")
+            RequirePath = $true
+            RequireSourceFresh = $true
+          }
+          if ($env:GITHUB_REF_TYPE -eq "tag") {
+            $contractArgs.VerifyGitTag = $true
+          }
+          & "./scripts/verify-release-contract.ps1" @contractArgs
 
   deny:
     name: cargo-deny
@@ -81,4 +152,52 @@ jobs:
           workspaces: evals
       - run: cargo fmt --all --check
       - run: cargo clippy --locked --all-targets --all-features -- -D warnings
-      - run: cargo test --locked
+      - run: cargo test --locked --all-targets
+
+      # The evaluator is intentionally exercised only with its offline mock. This
+      # catches CLI wiring, task copying, report creation, and the mutable latest
+      # pointer without a model key or any model-network request.
+      - name: Build Rayman artifact for offline mock evaluator smoke
+        run: cargo build --manifest-path ../Cargo.toml --locked --release -p rayman
+
+      - name: Reject real backend before config, credentials, or network use
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $false
+          $output = & cargo run --locked -- --backend anthropic --task fix-failing-test --trials 1 2>&1
+          $exitCode = $LASTEXITCODE
+          $text = ($output | Out-String)
+          if ($exitCode -eq 0 -or $text -notmatch '--unsafe-host-exec') {
+            throw "A real backend must fail closed without --unsafe-host-exec. Exit=$exitCode`n$text"
+          }
+
+      - name: Offline mock evaluator CLI smoke and report provenance
+        shell: pwsh
+        run: |
+          # `/.runs-*` is ignored by evals/.gitignore, so a local replay never
+          # leaves trial workspaces/reports as untracked source changes.
+          $runs = Join-Path $PWD '.runs-ci'
+          & cargo run --locked -- --backend mock --task fix-failing-test --trials 2 --seed 20260711 --runs-dir $runs
+          if ($LASTEXITCODE -ne 0) {
+            throw "Offline mock evaluator smoke failed with exit code $LASTEXITCODE"
+          }
+          $latestPath = Join-Path $runs 'latest.json'
+          $latest = Get-Content -Raw -LiteralPath $latestPath | ConvertFrom-Json -ErrorAction Stop
+          if ([string]::IsNullOrWhiteSpace($latest.run_id) -or
+              -not $latest.report_json.StartsWith("$($latest.run_id)/")) {
+            throw "latest.json is not a pointer to this immutable run: $latestPath"
+          }
+          $reportPath = Join-Path $runs $latest.report_json
+          if (-not (Test-Path -LiteralPath $reportPath -PathType Leaf)) {
+            throw "Latest report artifact is missing: $reportPath"
+          }
+          & git check-ignore -q -- '.runs-ci/latest.json'
+          if ($LASTEXITCODE -ne 0) {
+            throw "Evaluator run output must remain ignored: $latestPath"
+          }
+          $report = Get-Content -Raw -LiteralPath $reportPath | ConvertFrom-Json -ErrorAction Stop
+          if ($report.provenance.execution_mode -ne 'mock' -or
+              [uint64]$report.provenance.seed -ne [uint64]20260711 -or
+              @($report.trials).Count -ne 4) {
+            throw "Unexpected offline mock provenance or trial count in $reportPath"
+          }

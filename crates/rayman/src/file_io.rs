@@ -16,15 +16,20 @@ pub fn read_text(path: &Path) -> Result<String> {
 }
 
 pub fn write_atomic(target: &Path, text: &str) -> Result<()> {
-    if let Some(parent) = target.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("无法创建目录: {}", parent.display()))?;
-    }
-    let temp = atomic_temp_path(target);
-    if let Err(error) = write_synced(&temp, text) {
-        let _ = fs::remove_file(&temp);
-        return Err(error).with_context(|| format!("无法写入临时文件: {}", temp.display()));
-    }
+    let parent = target
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("原子写入目标没有父目录: {}", target.display()))?;
+    // The callers that own state creation must establish their parent through
+    // `state_paths` first.  Re-creating it here would follow a parent that was
+    // swapped to a symlink/reparse point after that validation.
+    crate::state_paths::ensure_real_directory(parent)
+        .with_context(|| format!("原子写入父目录不安全或不存在: {}", parent.display()))?;
+    let temp = create_synced_temp(target, text)?;
+    // Detect a parent swap that happened while the temporary file was being
+    // written before attempting to publish it.  Handle-relative no-follow I/O
+    // would be needed to eliminate the remaining kernel-level TOCTOU window.
+    crate::state_paths::ensure_real_directory(parent)
+        .with_context(|| format!("原子发布前父目录不安全: {}", parent.display()))?;
     if let Err(error) = rename_with_retry(&temp, target) {
         let _ = fs::remove_file(&temp);
         bail!(
@@ -36,9 +41,39 @@ pub fn write_atomic(target: &Path, text: &str) -> Result<()> {
     Ok(())
 }
 
+/// Create the temporary sibling exclusively.  A predictable old temporary name
+/// must never be opened with truncation: an untrusted pre-existing file (or
+/// symlink) is not ours to overwrite.  Retrying also makes a stale temp from a
+/// previous crashed process a harmless availability issue rather than a write
+/// target.
+fn create_synced_temp(target: &Path, text: &str) -> Result<PathBuf> {
+    const MAX_TEMP_NAME_ATTEMPTS: usize = 32;
+    for _ in 0..MAX_TEMP_NAME_ATTEMPTS {
+        let temp = atomic_temp_path(target);
+        match write_synced(&temp, text) {
+            Ok(()) => return Ok(temp),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                let _ = fs::remove_file(&temp);
+                return Err(error).with_context(|| format!("无法写入临时文件: {}", temp.display()));
+            }
+        }
+    }
+    bail!(
+        "无法为原子写入创建独占临时文件（连续 {MAX_TEMP_NAME_ATTEMPTS} 个名称已存在）: {}",
+        target.display()
+    )
+}
+
 /// 写入并 fsync：断电时 rename 元数据可能先于数据落盘，不 sync 目标会变成空文件。
 fn write_synced(path: &Path, text: &str) -> io::Result<()> {
-    let mut file = fs::File::create(path)?;
+    // `create_new` maps to O_EXCL / CREATE_NEW.  It refuses a pre-existing
+    // symlink instead of following it, which keeps temporary-file creation from
+    // escaping the verified parent directory.
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)?;
     file.write_all(text.as_bytes())?;
     file.sync_all()
 }
@@ -121,5 +156,40 @@ mod tests {
         assert!(read_json::<serde_json::Value>(&path).unwrap().is_none());
         write_atomic(&path, "{ not json").unwrap();
         assert!(read_json::<serde_json::Value>(&path).is_err());
+    }
+
+    #[test]
+    fn write_atomic_does_not_create_an_unverified_parent() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("missing").join("state.json");
+        assert!(write_atomic(&target, "state").is_err());
+        assert!(!target.parent().unwrap().exists());
+    }
+
+    #[test]
+    fn temporary_write_refuses_to_truncate_an_existing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let temp = dir.path().join("existing.tmp");
+        fs::write(&temp, "preserve").unwrap();
+
+        let error = write_synced(&temp, "new contents").unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(fs::read_to_string(&temp).unwrap(), "preserve");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn temporary_write_refuses_to_follow_a_preexisting_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let outside_file = outside.path().join("outside.txt");
+        fs::write(&outside_file, "preserve").unwrap();
+        let temp = dir.path().join("existing.tmp");
+        symlink(&outside_file, &temp).unwrap();
+
+        assert!(write_synced(&temp, "new contents").is_err());
+        assert_eq!(fs::read_to_string(&outside_file).unwrap(), "preserve");
     }
 }

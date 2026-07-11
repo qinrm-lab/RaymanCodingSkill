@@ -1,6 +1,6 @@
 # 自动快照（checkpoint / autosave）
 
-在 **codex / claude / copilot 之间切换**、以及**断电/意外后恢复**时保护工作状态。全部由 `rayman` 二进制完成（无需 PowerShell 脚本），自动保存用 Windows 计划任务实现。
+在 **codex / claude / copilot 之间切换**、以及**断电/意外后恢复**时保护工作状态。手动 checkpoint 由 `rayman` 二进制完成（无需 PowerShell 脚本）；自动保存的计划任务仅在 Windows 上由 Windows 计划任务实现。非 Windows 平台请使用系统定时器周期调用 `rayman checkpoint save`。
 
 ## 生命周期（推荐用法）
 
@@ -12,8 +12,8 @@ rayman autosave stop --status error   # 出错收尾：同样存最后一次并�
 ```
 
 - **`start` 幂等**：每次开工跑一遍即可，会覆盖旧任务、重新存一次初始快照。适合“每次启动就自动注册”。
-- **完成即自停**：默认开启 auto-stop——当**所有目标都已关闭且没有待完成项**（`rayman goal` / `rayman check` 的口径）时，下一次定时触发会存最后一次快照并**自动注销**计划任务，不用你记得手动停。用 `--no-auto-stop` 可关闭。
-- **出错收尾**：程序化流程里出错时调用 `rayman autosave stop --status error`，同样存最后一次状态再停。
+- **完成即自停**：默认开启 auto-stop——仅当至少有一个目标、**所有目标状态均为 `success`**、且没有待完成项时，下一次定时触发会存最后一次快照并**自动注销**计划任务。`active`、`partial`、`blocked`、目标/待办状态读取失败或根本没有目标，都会保持运行。用 `--no-auto-stop` 可关闭。
+- **出错收尾**：程序化流程里出错时调用 `rayman autosave stop --status error`，尝试存最后一次快照后再停；若最终保存失败，会返回错误并保持 active 状态/计划任务，绝不伪造“已保存并停止”。
 - `rayman autosave status` 看当前状态（是否运行中、间隔、上次触发、任务是否注册）。
 
 ### 参数
@@ -36,12 +36,14 @@ rayman autosave start --no-auto-stop              # 不自动停，需手动 sto
 
 ## 快照是什么
 
-一次快照 = **当前工作树**（尊重 `.gitignore`，跳过 `target/`、`node_modules/` 等）+ **`.RaymanCodingSkill/` 任务状态**（目标/待办/上下文索引，不含易变的 `tmp/`）。
+一次快照 = **当前工作树**（尊重 `.gitignore`，跳过 `target/`、`node_modules/` 等）+ **v2 白名单任务状态**：goals、`pending.json`、context index/project map 和 `autosave.json`。它不会把整份 `.RaymanCodingSkill/` 当作备份源，因此不带入 `tmp/`、退役状态、评测运行物或其它未列入白名单的数据。
 
-- 存到**用户级**目录，不进仓库：Windows 为 `%LOCALAPPDATA%\Rayman\checkpoints\<工作区名>-<哈希>\<时间戳>\`。
-- 每次保存**滚动清理**旧的，默认保留最近 3 个（`--keep N`）。
-- 保存是“先写暂存目录再原子改名”，存到一半断电不污染最新快照。
-- **恢复是叠加式**：覆盖同名文件，不删除工作区里多出来的文件。
+- 存到**用户级**目录，不进仓库：Windows 为 `%LOCALAPPDATA%\Rayman\checkpoints\<工作区名>-<哈希>\<时间戳>\`；其它平台优先为 `$XDG_DATA_HOME/Rayman/checkpoints/`，否则为 `$HOME/.local/share/Rayman/checkpoints/`。若这些变量不可用而有 `$USERPROFILE`，则退回 `$USERPROFILE/Rayman/checkpoints/`。`--dir` 会覆盖以上位置。
+- 每次成功保存只**滚动清理完整快照**，默认保留最近 3 个（`--keep N`）；`partial`/`corrupt` 是故障取证，不会被自动轮换删除。
+- 保存是“先写暂存目录再原子改名”。复制、遍历或完整性校验失败会留下 `partial` 取证快照并以非零失败，绝不替换或污染最近的完整快照。
+- `checkpoint list` 会标记每个快照为 `complete`、`partial` 或 `corrupt`；`checkpoint status` 只选择最近一次已验证的 `complete` 快照。
+- `checkpoint verify [id|latest]` 只读复核 v2 manifest、路径、文件数、大小和 SHA-256；`latest` 是最近完整快照。
+- **恢复是叠加式**：只允许经过验证的完整快照，先检查全部源/目标路径再覆盖同名文件，不删除工作区里多出来的文件。
 
 > 快照默认**不含被 `.gitignore` 忽略的文件**（`.RaymanCodingSkill/` 任务状态是特意加回来的例外）。重要代码请照常 `git commit`；快照是“切工具 / 断电”的第二道保险，不是版本控制替代。
 
@@ -51,10 +53,22 @@ rayman autosave start --no-auto-stop              # 不自动停，需手动 sto
 rayman checkpoint save            # 存当前工作区，保留最近 3 个
 rayman checkpoint save --keep 5
 rayman checkpoint list            # 列出快照
-rayman checkpoint status          # 最近一次
-rayman checkpoint restore --yes         # 恢复最近快照（覆盖同名文件）
-rayman checkpoint restore <id> --yes    # 恢复指定快照
+rayman checkpoint status          # 最近一次已验证的完整快照
+rayman checkpoint verify          # 只读验证最近完整快照
+rayman checkpoint verify <id>     # 只读验证指定快照
+rayman checkpoint restore --yes         # 恢复最近完整快照（覆盖同名文件）
+rayman checkpoint restore <id> --yes    # 恢复指定的完整快照
 ```
+
+## 状态审计与托管临时目录
+
+```powershell
+rayman state audit          # 只读列出 v2 允许状态、退役条目和递归 temp 指标
+rayman state audit --check  # 退役状态、审计错误或遍历错误时非零；不会删除任何文件
+rayman temp status          # 递归 files/dirs/bytes 与 traversal errors
+```
+
+`state audit` 只提供清理/迁移决策所需的证据。即使 `--check` 失败，它也不会删除、迁移或覆盖状态；先审阅输出并取得明确批准。`temp cleanup` 仍是唯一会删除状态的 temp 命令，且只删除 `.RaymanCodingSkill/tmp/`。
 
 ## 跑 eval（选后端）
 
@@ -62,6 +76,8 @@ eval 是独立项目。先从 `evals/backends.example.json` 复制出 `evals/bac
 
 ```powershell
 cd evals
-cargo run -- --backend deepseek --trials 3
-cargo run -- --backend deepseek --task fix-failing-test   # 便宜的单任务烟测
+cargo run -- --backend deepseek --trials 3 --unsafe-host-exec
+cargo run -- --backend deepseek --task fix-failing-test --unsafe-host-exec   # 便宜的单任务烟测
 ```
+
+`--unsafe-host-exec` 是刻意的显式确认：真实后端生成的 shell 命令会直接在当前宿主机执行。仅在你接受风险的隔离环境中使用；这种运行永远不可比较（non-comparative），不能用于比较两组或作因果结论。CI 运行 `evals` 的 fmt、clippy、unit tests、依赖策略检查和离线 mock CLI smoke；smoke 会确认未传该参数的真实后端被拒绝，并验证 mock run 的不可变报告指针、seed、执行模式和 trial 数。它不配置真实后端密钥、不发出模型请求，也不把 mock 结果当作模型效果结论。真实 backend 运行前请先阅读 `evals/README.md` 并遵守本机隔离与凭据要求。

@@ -11,11 +11,11 @@ use std::path::{Path, PathBuf};
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
-use crate::goal::{GoalStore, PendingStore};
+use crate::goal::{GoalStatus, GoalStore, PendingStore};
+use crate::state_paths;
 use crate::state_store::{self, display_path};
 use crate::{checkpoint, workspace_root};
 
-const STATE_RELATIVE: &str = ".RaymanCodingSkill/autosave.json";
 const DEFAULT_INTERVAL_MIN: u64 = 30;
 
 /// 自动保存的持久状态（单一事实来源；tick/stop/status 都读它）。
@@ -37,16 +37,18 @@ pub struct AutosaveState {
     pub stop_status: Option<String>,
 }
 
-fn state_path(root: &Path) -> PathBuf {
-    root.join(STATE_RELATIVE)
+fn state_path(root: &Path, create_parents: bool) -> Result<PathBuf> {
+    state_paths::managed_state_file(root, Path::new("autosave.json"), create_parents)
 }
 
-fn load_state(root: &Path) -> Option<AutosaveState> {
-    state_store::read_json(&state_path(root)).ok().flatten()
+/// 状态损坏不能被当成“未启用”：那会使 start/stop 覆写唯一的故障证据，或让 tick
+/// 错误注销仍可能需要恢复的计划任务。
+fn load_state(root: &Path) -> Result<Option<AutosaveState>> {
+    state_store::read_json(&state_path(root, false)?)
 }
 
 fn save_state(root: &Path, state: &AutosaveState) -> Result<()> {
-    state_store::write_json(&state_path(root), state)
+    state_store::write_json(&state_path(root, true)?, state)
 }
 
 /// 计划任务名：每个工作区一个，稳定且唯一。
@@ -54,7 +56,7 @@ pub fn task_name(root: &Path) -> String {
     format!("RaymanCheckpoint-{}", checkpoint::workspace_key(root))
 }
 
-/// 工作是否“全部完成”：有目标、且没有仍处于 active 的目标、且没有待完成项。
+/// 工作是否“全部完成”：有目标、每一个目标都明确为 success、且没有待完成项。
 /// 没有任何目标时返回 false（无从判断完成，交给显式 `stop`）。
 /// 任何状态文件读不出来都按“未完成”处理：损坏的 active 目标被当成不存在
 /// 会导致自动快照在工作进行中自停并注销。
@@ -65,7 +67,19 @@ pub fn work_is_complete(root: &Path) -> bool {
     if !issues.is_empty() || goals.is_empty() {
         return false;
     }
-    if goals.iter().any(|goal| goal.status == "active") {
+    // A goal that deserializes but violates the current contract (for example,
+    // a future schema version) must not make autosave stop.  Legacy successful
+    // history deliberately remains compatible: `current_schema_error` returns
+    // None for records explicitly recognized as legacy.
+    if goals
+        .iter()
+        .any(|goal| goal.current_schema_error().is_some())
+    {
+        return false;
+    }
+    // `partial`、`blocked` 及未知状态都是未完成。只检查“没有 active”会让这些
+    // 仍需人工处理的目标触发 auto-stop。
+    if goals.iter().any(|goal| goal.status != GoalStatus::Success) {
         return false;
     }
     matches!(PendingStore::new(root).list(), Ok(items) if items.is_empty())
@@ -90,6 +104,8 @@ pub fn start(
     dir: Option<&Path>,
 ) -> Result<ActionOutcome> {
     let interval_min = interval_min.max(1);
+    // 不覆盖损坏的 autosave.json；使用者需要先保全并修复它。
+    let _ = load_state(root)?;
     let saved = checkpoint::save(root, dir, keep)?;
 
     let name = task_name(root);
@@ -127,7 +143,7 @@ pub fn start(
 
 /// 计划任务每次触发：存一次快照；未激活则自注销；开启 auto-stop 且完成则存最后一次并自停。
 pub fn tick(root: &Path) -> Result<ActionOutcome> {
-    let Some(mut state) = load_state(root) else {
+    let Some(mut state) = load_state(root)? else {
         // 没有状态：不该有任务在跑，尽力注销后退出。
         let name = task_name(root);
         let _ = unregister_task(&name);
@@ -144,20 +160,17 @@ pub fn tick(root: &Path) -> Result<ActionOutcome> {
         });
     }
 
-    let saved = checkpoint::save(root, dir_override(&state.dir).as_deref(), state.keep)?;
-    state.last_tick_at = Some(state_store::now_iso());
-    save_state(root, &state)?;
-
     if state.auto_stop && work_is_complete(root) {
         finalize(root, &mut state, "success (auto)")?;
         return Ok(ActionOutcome {
-            message: format!(
-                "已存快照 {} 并检测到工作完成：存为最后一次，已停止自动保存。",
-                saved.id
-            ),
+            message: "检测到全部目标均为 success：已存最后一次快照并停止自动保存。".into(),
             state: Some(state),
         });
     }
+
+    let saved = checkpoint::save(root, dir_override(&state.dir).as_deref(), state.keep)?;
+    state.last_tick_at = Some(state_store::now_iso());
+    save_state(root, &state)?;
 
     Ok(ActionOutcome {
         message: format!("已存快照 {}（{} 个文件）。", saved.id, saved.file_count),
@@ -167,18 +180,21 @@ pub fn tick(root: &Path) -> Result<ActionOutcome> {
 
 /// 显式停止（“全部完成”传 success，“出错”传 error 等）：存最后一次快照 + 注销任务。
 pub fn stop(root: &Path, status: &str) -> Result<ActionOutcome> {
-    let mut state = load_state(root).unwrap_or_else(|| AutosaveState {
-        active: false,
-        interval_min: DEFAULT_INTERVAL_MIN,
-        keep: checkpoint::DEFAULT_KEEP,
-        dir: None,
-        auto_stop: true,
-        task_name: task_name(root),
-        started_at: state_store::now_iso(),
-        last_tick_at: None,
-        stopped_at: None,
-        stop_status: None,
-    });
+    let mut state = match load_state(root)? {
+        Some(state) => state,
+        None => AutosaveState {
+            active: false,
+            interval_min: DEFAULT_INTERVAL_MIN,
+            keep: checkpoint::DEFAULT_KEEP,
+            dir: None,
+            auto_stop: true,
+            task_name: task_name(root),
+            started_at: state_store::now_iso(),
+            last_tick_at: None,
+            stopped_at: None,
+            stop_status: None,
+        },
+    };
     finalize(root, &mut state, status)?;
     Ok(ActionOutcome {
         message: format!(
@@ -191,7 +207,9 @@ pub fn stop(root: &Path, status: &str) -> Result<ActionOutcome> {
 
 /// 存最后一次快照，标记停止，注销任务。
 fn finalize(root: &Path, state: &mut AutosaveState, status: &str) -> Result<()> {
-    let _ = checkpoint::save(root, dir_override(&state.dir).as_deref(), state.keep)?;
+    // 保存失败（含 partial checkpoint）时保持 active 状态和计划任务，交给调用者处理；
+    // 不能伪造“已最终保存并停止”的结果。
+    checkpoint::save(root, dir_override(&state.dir).as_deref(), state.keep)?;
     state.active = false;
     state.stopped_at = Some(state_store::now_iso());
     state.stop_status = Some(status.to_string());
@@ -201,19 +219,20 @@ fn finalize(root: &Path, state: &mut AutosaveState, status: &str) -> Result<()> 
 }
 
 /// 当前自动保存状态摘要。
-pub fn status(root: &Path) -> ActionOutcome {
+pub fn status(root: &Path) -> Result<ActionOutcome> {
     match load_state(root) {
-        None => ActionOutcome {
+        Err(error) => bail!("自动保存状态损坏或不可读取；未修改状态，也未注销计划任务：{error}"),
+        Ok(None) => Ok(ActionOutcome {
             message: "未启用自动保存。运行 `rayman autosave start` 开启。".into(),
             state: None,
-        },
-        Some(state) => {
+        }),
+        Ok(Some(state)) => {
             let registered = task_registered(&state.task_name);
             let last = state
                 .last_tick_at
                 .clone()
                 .unwrap_or_else(|| "（尚无）".into());
-            ActionOutcome {
+            Ok(ActionOutcome {
                 message: format!(
                     "自动保存：{}（每 {} 分钟，keep={}，auto_stop={}）\n  计划任务 '{}'：{}\n  最近一次触发：{}",
                     if state.active {
@@ -229,7 +248,7 @@ pub fn status(root: &Path) -> ActionOutcome {
                     last
                 ),
                 state: Some(state),
-            }
+            })
         }
     }
 }
@@ -438,7 +457,21 @@ mod tests {
         assert!(!work_is_complete(root));
 
         goals
-            .record_evidence(&g.id, "req_1", "src/x + test passed")
+            .record_validation_receipt(
+                &g.id,
+                "req_1",
+                "src/x + test passed",
+                "cargo test".into(),
+                crate::goal::ValidationReceipt {
+                    exit_code: 0,
+                    cwd: root.display().to_string(),
+                    workspace_fingerprint_before: "before".into(),
+                    workspace_fingerprint_after: "after".into(),
+                    stdout_sha256: "a".repeat(64),
+                    stderr_sha256: "b".repeat(64),
+                },
+                Vec::new(),
+            )
             .unwrap();
         goals.close(&g.id, "success").unwrap();
         // 全部关闭、无 pending → 完成。
@@ -501,7 +534,7 @@ mod tests {
             stop_status: None,
         };
         save_state(root, &state).unwrap();
-        assert!(load_state(root).unwrap().active);
+        assert!(load_state(root).unwrap().unwrap().active);
 
         // stop 会存最后一次快照并标记 inactive（unregister 在非注册状态下是 no-op）。
         let outcome = stop(root, "success").unwrap();
@@ -511,5 +544,102 @@ mod tests {
         // 最后一次快照确实落盘。
         let snaps = checkpoint::list(root, Some(store.path())).unwrap();
         assert!(!snaps.is_empty());
+    }
+
+    #[test]
+    fn work_is_complete_rejects_partial_blocked_and_unknown_statuses() {
+        for status in ["partial", "blocked"] {
+            let dir = tempfile::tempdir().unwrap();
+            let root = dir.path();
+            let goals = GoalStore::new(root);
+            let goal = goals.start("t", &[("do".into(), true)]).unwrap();
+            goals
+                .record_evidence(&goal.id, "req_1", "src/x + test passed")
+                .unwrap();
+            goals.close(&goal.id, status).unwrap();
+            assert!(!work_is_complete(root), "{status} must not auto-stop");
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let goals = GoalStore::new(root);
+        let goal = goals.start("t", &[("do".into(), true)]).unwrap();
+        let path = root
+            .join(".RaymanCodingSkill/goals")
+            .join(format!("{}.json", goal.id));
+        let mut raw: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        raw["status"] = serde_json::Value::String("mystery".into());
+        fs::write(&path, serde_json::to_string(&raw).unwrap()).unwrap();
+        assert!(!work_is_complete(root), "unknown status must not auto-stop");
+    }
+
+    #[test]
+    fn work_is_complete_rejects_a_semantically_invalid_success_goal() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let goals = GoalStore::new(root);
+        let goal = goals.start("t", &[("do".into(), true)]).unwrap();
+        let path = root
+            .join(".RaymanCodingSkill/goals")
+            .join(format!("{}.json", goal.id));
+        let mut raw: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        raw["schema_version"] = serde_json::json!(crate::goal::GOAL_SCHEMA_VERSION + 1);
+        raw["status"] = serde_json::Value::String("success".into());
+        fs::write(&path, serde_json::to_string(&raw).unwrap()).unwrap();
+
+        assert!(
+            !work_is_complete(root),
+            "an invalid current-schema goal must not auto-stop"
+        );
+    }
+
+    #[test]
+    fn work_is_complete_keeps_legacy_success_history_compatible() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let goals_dir = root.join(".RaymanCodingSkill/goals");
+        fs::create_dir_all(&goals_dir).unwrap();
+        let legacy = serde_json::json!({
+            "id": "legacy_success",
+            "status": "success",
+            "contract": {
+                "goal": "historical completion",
+                "requirements": [{
+                    "id": "req_1",
+                    "text": "completed historically",
+                    "priority": "must",
+                    "status": "satisfied",
+                    "evidence": "historical evidence"
+                }]
+            }
+        });
+        fs::write(
+            goals_dir.join("legacy_success.json"),
+            serde_json::to_string(&legacy).unwrap(),
+        )
+        .unwrap();
+
+        assert!(
+            work_is_complete(root),
+            "recognized legacy success history remains auto-stop compatible"
+        );
+    }
+
+    #[test]
+    fn corrupt_autosave_state_is_never_overwritten_by_lifecycle_actions() {
+        let ws = tempfile::tempdir().unwrap();
+        let store = tempfile::tempdir().unwrap();
+        let root = ws.path();
+        touch(&root.join("src/main.rs"), "fn main() {}");
+        let path = state_path(root, true).unwrap();
+        touch(&path, "{ not json");
+
+        assert!(start(root, 30, 1, true, Some(store.path())).is_err());
+        assert!(tick(root).is_err());
+        assert!(stop(root, "error").is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "{ not json");
+        assert!(status(root).is_err());
     }
 }
