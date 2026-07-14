@@ -684,7 +684,13 @@ impl QualityConfig {
         Self {
             profile: "strict".into(),
             multi_source_no_test_min_sources: default_multi_source_no_test_min_sources(),
-            block_warning_kinds: Vec::new(),
+            // Genuinely stricter than `standard` by default, not just a label:
+            // block the two objective (non-heuristic) warning kinds. Leaves
+            // `public_api_without_test_evidence` warning-only by default since
+            // its test-coverage inference is a substring-match heuristic prone
+            // to false positives; a workspace can still opt it in via
+            // `.RaymanCodingSkill/quality.json`.
+            block_warning_kinds: vec!["large_file".into(), "high_fan_in".into()],
         }
     }
 }
@@ -1995,9 +2001,6 @@ fn infer_risks(
         if file.kind != "source" && file.kind != "test" {
             continue;
         }
-        if is_quality_fixture_path(&file.path) {
-            continue;
-        }
         if file.lines >= large_file_warning_lines(file.kind.as_str()) {
             risks.push(MapRisk {
                 severity: "warning".into(),
@@ -2040,10 +2043,6 @@ fn infer_risks(
         }
     }
     risks
-}
-
-fn is_quality_fixture_path(path: &str) -> bool {
-    path.starts_with("evals/tasks/") && path.contains("/fixture/src/")
 }
 
 fn large_file_warning_lines(kind: &str) -> usize {

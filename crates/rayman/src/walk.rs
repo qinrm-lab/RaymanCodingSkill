@@ -79,15 +79,30 @@ pub fn workspace_walk(root: &Path) -> WorkspaceWalk {
     let mut report = WorkspaceWalk::default();
     for result in builder.build() {
         match result {
-            Ok(entry) => {
-                if entry
-                    .file_type()
-                    .map(|file_type| file_type.is_file())
-                    .unwrap_or(false)
-                {
+            Ok(entry) => match entry.file_type() {
+                Some(file_type) if file_type.is_dir() => {}
+                Some(file_type) if file_type.is_file() => {
                     report.files.push(entry.into_path());
                 }
-            }
+                // `follow_links(false)` means a symlink (or other special
+                // entry) is neither a dir nor a file here. Silently skipping
+                // it would make `into_files()` claim a complete traversal
+                // while quietly missing content — exactly the false
+                // completeness this type exists to prevent.
+                Some(file_type) => {
+                    let kind = if file_type.is_symlink() {
+                        "符号链接"
+                    } else {
+                        "非常规文件"
+                    };
+                    report.errors.push(WalkIssue {
+                        error: format!("{kind}不会被跟随，遍历不完整: {}", entry.path().display()),
+                    });
+                }
+                None => report.errors.push(WalkIssue {
+                    error: format!("无法确定文件类型: {}", entry.path().display()),
+                }),
+            },
             Err(error) => report.errors.push(WalkIssue {
                 error: error.to_string(),
             }),
@@ -157,5 +172,29 @@ mod tests {
         let report = workspace_walk(&missing);
         assert!(!report.errors.is_empty(), "missing root must be reported");
         assert!(workspace_files_checked(&missing).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn walk_reports_a_symlinked_file_as_an_issue_instead_of_silently_dropping_it() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::write(root.join("real.txt"), "content").unwrap();
+        symlink(root.join("real.txt"), root.join("linked.txt")).unwrap();
+
+        let report = workspace_walk(root);
+        assert!(
+            report
+                .errors
+                .iter()
+                .any(|issue| issue.error.contains("linked.txt")),
+            "expected a WalkIssue for the symlink, got {:?}",
+            report.errors
+        );
+        // The checked variant must fail closed rather than report a complete
+        // traversal that silently omitted the symlinked file.
+        assert!(workspace_files_checked(root).is_err());
     }
 }

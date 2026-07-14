@@ -359,26 +359,53 @@ fn quality_report_keeps_uncovered_public_api_as_warning() {
 }
 
 #[test]
-fn quality_report_ignores_eval_fixture_source_risks() {
+fn quality_report_does_not_exempt_eval_fixture_shaped_paths() {
+    // A hardcoded "evals/tasks/*/fixture/src/*" exemption used to suppress all
+    // risk detection for any file matching that shape, in any workspace — not
+    // just this repo's own eval harness. That let risky/untested code hide
+    // from `rayman check` by simply living at a path with this shape. The
+    // generic risk engine must not special-case any project's own directory
+    // layout; a workspace-specific exemption belongs in that workspace's own
+    // `.RaymanCodingSkill/quality.json`, not in map.rs.
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     write(
         root.join("evals/tasks/sample/fixture/src/lib.rs").as_path(),
-        "pub fn intentionally_broken_fixture_api() {}\n",
+        "pub fn intentionally_untested_fixture_api() {}\n",
     );
     context::refresh(root).unwrap();
 
     let map = build_readonly(root).unwrap();
     let quality = quality_report(&map);
 
-    assert!(quality.ready);
-    assert_eq!(quality.warning_count, 0);
-    assert!(
-        quality
-            .findings
-            .iter()
-            .all(|finding| !finding.path.contains("/fixture/"))
-    );
+    assert!(quality.findings.iter().any(|finding| {
+        finding.path == "evals/tasks/sample/fixture/src/lib.rs"
+            && finding.kind == "public_api_without_test_evidence"
+    }));
+}
+
+#[test]
+fn strict_profile_blocks_large_file_by_default_while_standard_does_not() {
+    // `strict`/`release` used to be functionally identical to `standard`
+    // (both had empty `block_warning_kinds`), so the release gate provided no
+    // extra rigor unless a workspace hand-wrote `.RaymanCodingSkill/quality.json`.
+    // `strict()` must now block on its own by default.
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let big_body = "// pad\n".repeat(2_001);
+    write(root.join("src/lib.rs").as_path(), &big_body);
+    context::refresh(root).unwrap();
+
+    let map = build_readonly(root).unwrap();
+
+    let standard = quality_report_with_config(&map, &QualityConfig::standard());
+    assert!(standard.ready, "standard findings={:?}", standard.findings);
+
+    let strict = quality_report_with_config(&map, &QualityConfig::strict());
+    assert!(!strict.ready);
+    assert!(strict.findings.iter().any(|finding| {
+        finding.kind == "large_file" && finding.path == "src/lib.rs" && finding.severity == "error"
+    }));
 }
 
 #[test]

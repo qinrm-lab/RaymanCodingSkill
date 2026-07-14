@@ -600,6 +600,9 @@ impl GoalStore {
             bail!("目标不存在: {id}");
         };
         if status == GoalStatus::Success {
+            if let Some(error) = goal.current_schema_error() {
+                bail!("拒绝关闭为 success：目标合约无效: {error}");
+            }
             let must: Vec<_> = goal
                 .requirements
                 .iter()
@@ -948,6 +951,28 @@ mod tests {
         // id 含路径分隔符/.. 时拒绝，防止越出 goals 目录。
         assert!(store.get("../../x").is_err());
         assert!(store.close("..\\evil", "partial").is_err());
+    }
+
+    #[test]
+    fn close_success_rejects_a_hand_tampered_goal_with_duplicate_requirement_ids() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = GoalStore::new(dir.path());
+        let goal = store.start("task", &[("req".into(), true)]).unwrap();
+        store
+            .record_evidence(&goal.id, "req_1", "did the work")
+            .unwrap();
+
+        // Simulate a hand-edited state file: clone req_1's evidence onto a
+        // second requirement sharing the same id. The naive "every must has
+        // evidence" scan alone can't detect this kind of tampering; only the
+        // schema re-validation catches the duplicate id.
+        let path = dir.path().join(GOALS_DIR).join(format!("{}.json", goal.id));
+        let mut tampered = GoalStore::load_goal_file(&path).unwrap().unwrap();
+        let cloned = tampered.requirements[0].clone();
+        tampered.requirements.push(cloned);
+        write_json(&path, &tampered).unwrap();
+
+        assert!(store.close(&goal.id, "success").is_err());
     }
 
     #[cfg(unix)]
