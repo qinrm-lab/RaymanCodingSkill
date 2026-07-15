@@ -10,17 +10,17 @@ The reported `rayman --version` value is necessary but insufficient. A valid rel
 4. The public command surface `context`, `goal` (including receipt-producing `goal validate`), `check`, `map`, `assets`, `temp`, read-only `state audit --check`, `checkpoint` (including integrity-verifying `checkpoint verify`), `autosave`, and `doctor`; the runtime report label is `rayman-cli-contract-v5`.
 5. For a tagged release, the exact Git tag `v<package-version>` on the release commit.
 
-The Rust manifest and the command parser are the implementation sources of truth. There are deliberately two different claims:
+The Rust manifest and the command parser are the implementation sources of truth. There are deliberately three different claims:
 
 - `rayman check --profile release` is a **workspace strict-quality** result. It does not prove an installed executable, PATH identity, or source freshness.
 - `rayman doctor --check` proves the installed binary/PATH/workspace-SKILL **identity tuple**. It explicitly does not prove that the artifact was rebuilt from the current source.
-- `scripts/verify-release-contract.ps1 -RequireSourceFresh` is the handoff/CI claim. It records a clean Git `HEAD`, rebuilds `rayman` from the locked current source in an isolated temporary target directory, then requires the same clean `HEAD` again and byte identity with the supplied artifact. On Windows MSVC, the repository Cargo config uses `/Brepro` so PE timestamps and CodeView identifiers remain reproducible across those isolated target directories.
+- `scripts/verify-release-contract.ps1 -RequireSourceFresh` is the artifact-identity primitive used by handoff/CI. `-SkillPath` is mandatory. It rejects native-command shadows and known ambient compiler/linker/profile overrides, pins every Cargo/Git/rustc application it uses by path and hash, records clean `HEAD` and active `rustc -vV`, rebuilds in an isolated target, then terminally re-resolves/re-hashes every tool and supplied/deployed/PATH identity. User/parent Cargo config is intentionally not isolated. This proves current-source byte identity under the active rustc and active Cargo configuration context; it does not attest toolchain/config provenance or a hermetic repository-default build.
 
 A matching version string, filename, copied binary, or workspace strict-quality result without the source-fresh check is not release evidence.
 
 ## Build and smoke-test a release artifact
 
-Run this from the repository root in PowerShell 7+ (the script works on Windows, Linux, and macOS). It does not install an artifact. `-RequireSourceFresh` performs an additional isolated temporary build and removes that verified temporary target afterward.
+Run this from the repository root in PowerShell 7+ (the script works on Windows, Linux, and macOS). It does not install an artifact. Clear ambient compiler/linker/profile/target override variables first; `-RequireSourceFresh` deliberately fails rather than inheriting them.
 
 ```powershell
 cargo build --locked --release
@@ -41,14 +41,28 @@ $skillHash = (Get-FileHash ./SKILL.md -Algorithm SHA256).Hash.ToLowerInvariant()
   -RequireSourceFresh
 ```
 
-`-RequirePath` proves that `Get-Command rayman` resolves to byte-identical executable content. `-RequireSourceFresh` requires a clean Git worktree, records `HEAD`, rebuilds from the locked current source in an isolated target, then rechecks both clean status and the same `HEAD` before accepting its hash. It compares that fresh artifact's SHA-256 with `-CliPath` and `-ReferenceCliPath`. The repository applies `/Brepro` to Windows MSVC builds; the verifier appends the same flag through lossless `CARGO_ENCODED_RUSTFLAGS`, and fails closed if ambient `RUSTFLAGS` is non-empty rather than silently discarding warning policy (callers should encode existing flags in `CARGO_ENCODED_RUSTFLAGS`). An artifact built without the reproducible-link contract fails closed rather than producing a spurious release claim. The script also checks the version, lockfile, MSRV declaration, every listed top-level command, `goal validate`, `checkpoint verify`, `state audit --check`, the installed-identity output of `doctor --check`, and the supplied skill hash. `doctor` works from an ordinary managed workspace: it verifies the running binary, the first PATH command selected by the platform, and that workspace's recorded `SKILL.md`; it intentionally does not infer a source artifact from `<workspace>/target/release`. CI creates a temporary workspace hash binding before it runs this same smoke test; a normal installation must record the real workspace binding instead. The verifier checks `state audit --check` as a command surface (via its help), not as an instruction to mutate or clean a caller's workspace; its detailed operational contract is in `README.md`, `SKILL.md`, and `tools/README.md`.
+`-RequirePath` inspects PowerShell's effective command and rejects an Alias/Function/Cmdlet shadow. `-RequireSourceFresh` checks clean `HEAD`, active compiler consistency, isolated locked rebuild bytes, and final CLI/reference/skill/PATH hashes. Cargo, Git, and rustc must resolve directly to applications whenever the verifier uses them; their paths and bytes are fixed for the run, but their supply-chain origin is not attested. The verifier rejects listed environment overrides (`RUSTFLAGS`, encoded flags, wrappers, target/profile and native compiler/linker env), but it neither isolates nor proves the origin of `CARGO_HOME/config.toml`, parent-directory Cargo config, rustup, Cargo, or linker binaries. Both compared builds inherit that active configuration context. CI creates an ignored workspace skill binding; a normal installation records the real one. None of these checks claims hermetic/toolchain provenance or model quality.
+
+## Install or upgrade
+
+The supported source-checkout procedure is transactional and deliberately refuses an old PowerShell shadow. The historical `.Rayman\rayman.ps1` profile function has a drive-root loop and must be removed with the exact-match migration tool; custom functions remain fail-closed:
+
+```powershell
+./scripts/repair-rayman-powershell-profile.ps1 -Check
+./scripts/repair-rayman-powershell-profile.ps1 -Yes # only for the exact legacy shim
+./scripts/install-rayman.ps1 -Yes -AddToUserPath
+```
+
+The installer builds and verifies before writing, pins the verified hashes across every copy, stages beside each destination, and updates only the managed CLI and canonical skill. The complete staging lifecycle—including copy, hash, source recheck, original-to-backup move, and final replace—is one rollback domain. On Windows, `-AddToUserPath` prepends the managed directory inside the user PATH as part of that same transaction and verifies the projected future environment in real Windows order (`Machine PATH + proposed User PATH`); it refuses an older machine/user `rayman` that would win. If `-AddToUserPath` is omitted, the current PATH must already resolve the destination first. The switch fails on non-Windows instead of pretending to persist a shell-specific PATH. A failure attempts every file and user-PATH rollback and reports retained evidence if any restore fails. Verification is the commit point: later backup-cleanup failure retains the backup and cannot trigger destructive rollback of the committed install. `cargo install` is package smoke only because it does not deploy `SKILL.md`.
 
 ## Verify an existing installation before using it
 
-Build a reference artifact from the desired commit first. Then resolve the installed program rather than trusting its displayed version:
+Build a reference artifact from the desired commit first. Then verify that the effective command is an application rather than trusting its displayed version:
 
 ```powershell
-$installed = (Get-Command rayman -CommandType Application).Source
+$commands = @(Get-Command rayman -All)
+if ($commands[0].CommandType -ne 'Application') { throw "rayman is shadowed by $($commands[0].CommandType)" }
+$installed = $commands[0].Source
 ./scripts/verify-release-contract.ps1 `
   -CliPath $installed `
   -ReferenceCliPath $artifact `
@@ -57,10 +71,22 @@ $installed = (Get-Command rayman -CommandType Application).Source
   -RequireSourceFresh
 ```
 
-The reference and installed executables must have the same SHA-256, and both must match an isolated locked rebuild from the clean current source. The supplied deployed skill must have the same SHA-256 as this repository's canonical `SKILL.md`. If any check fails, do not use the PATH installation for release handoff; rebuild and perform the ordinary installation procedure outside this script, update the workspace `skill_sha256`, and rerun both this verifier and `rayman doctor --check`.
+The reference and installed executables must have the same SHA-256, and both must match an isolated locked rebuild from the clean current source. The supplied deployed skill must have the same SHA-256 as this repository's canonical `SKILL.md`. If any check fails, use `scripts/install-rayman.ps1`; do not repair the tuple by copying one file manually.
 
 An intentionally different bootstrap wrapper is not the canonical skill and must not be passed as `-SkillPath`; first inspect where it points, then verify the canonical target. This prevents a wrapper's version prose from being mistaken for the workflow contract.
 
 ## Release tags
 
-After every source-fresh local smoke test and the normal test suite pass, create an exact tag matching the manifest, for example `v2.1.0`. CI always runs the source-fresh verifier; tag-triggered builds additionally run `-VerifyGitTag` and reject any other tag. Existing historical non-semver tags are not retroactively claimed as releases under this contract.
+After every source-fresh local smoke test and the normal test suite pass, create an exact tag matching the manifest, for example `v2.1.0`. CI always runs the source-fresh verifier; tag-triggered builds additionally run `-VerifyGitTag`, read the exact tag from Git, and cross-check GitHub's ref type, ref name, full ref, and SHA against that checked-out `HEAD`. Forged or inconsistent `GITHUB_REF_*` values never substitute for repository evidence. Existing historical non-semver tags are not retroactively claimed as releases under this contract.
+
+## One complete audit
+
+The verifier above is one release primitive, not the test suite. The single full repository handoff lane is:
+
+```powershell
+./scripts/audit-repository.ps1 `
+  -CliPath <installed-rayman-application> `
+  -SkillPath <deployed-canonical-SKILL.md>
+```
+
+It includes root and evals fmt/Clippy/tests/dependency policy, `cargo package` and `cargo install` smoke, context refresh, strict quality, release readiness, state/assets checks, and this installed release contract. See [AUDIT.md](AUDIT.md).

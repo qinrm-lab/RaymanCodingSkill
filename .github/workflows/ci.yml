@@ -6,6 +6,11 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [main]
+  schedule:
+    - cron: "23 3 * * 1"
+
+permissions:
+  contents: read
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -13,7 +18,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-D warnings"
 
 jobs:
   # 唯一非自证的强制门禁：机器化执行 fmt / clippy / test，替代此前手打的 validation records。
@@ -25,15 +29,15 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable, pinned 2026-07-14
         with:
           components: rustfmt, clippy
 
       - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
       - name: Format check
         run: cargo fmt --all --check
@@ -48,15 +52,15 @@ jobs:
     name: MSRV (Rust 1.88.0)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install MSRV toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable action, explicit MSRV below
         with:
           toolchain: 1.88.0
 
       - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
       - name: Build release artifact with MSRV
         run: cargo build --locked --release
@@ -72,20 +76,33 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable, pinned 2026-07-14
 
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+      - name: Release verifier command/tag negative self-test
+        shell: pwsh
+        run: ./scripts/verify-release-contract.ps1 -SelfTest
 
-      - name: Build release artifact
-        run: cargo build --locked --release
-
-      - name: Verify artifact, PATH, skill binding, and CLI contract
+      - name: Build and verify artifact, PATH, skill binding, and CLI contract
         shell: pwsh
         run: |
+          # The pinned rust-toolchain action exports CARGO_INCREMENTAL=0 through
+          # GITHUB_ENV. The verifier correctly rejects ambient build shaping, so
+          # remove this known action injection before BOTH the reference build and
+          # isolated rebuild. Any other value is unexpected and fails closed.
+          if (-not [string]::IsNullOrWhiteSpace($env:CARGO_INCREMENTAL) -and
+              $env:CARGO_INCREMENTAL -ne '0') {
+            throw "Unexpected CARGO_INCREMENTAL before release proof: $env:CARGO_INCREMENTAL"
+          }
+          Remove-Item Env:CARGO_INCREMENTAL -ErrorAction SilentlyContinue
+          if (Test-Path Env:CARGO_INCREMENTAL) {
+            throw 'Unable to clear action-injected CARGO_INCREMENTAL.'
+          }
+          & cargo build --locked --release
+          if ($LASTEXITCODE -ne 0) { throw "release build failed: $LASTEXITCODE" }
+
           $artifactDirectory = Join-Path $PWD "target/release"
           $artifactName = if ($IsWindows) { "rayman.exe" } else { "rayman" }
           $artifact = Join-Path $artifactDirectory $artifactName
@@ -101,6 +118,15 @@ jobs:
             "skill_file: SKILL.md"
             "skill_sha256: $skillHash"
           ) | Set-Content -Path ".RaymanCodingSkill/workspace_skill.yaml" -Encoding utf8
+
+          # Exercise the current artifact as its own managed workspace. The tracked
+          # quality policy participates in the refreshed index and strict gate.
+          & $artifact context refresh
+          if ($LASTEXITCODE -ne 0) { throw "context refresh failed: $LASTEXITCODE" }
+          & $artifact map quality --profile strict --check
+          if ($LASTEXITCODE -ne 0) { throw "strict quality self-dogfood failed: $LASTEXITCODE" }
+          & $artifact check --profile release
+          if ($LASTEXITCODE -ne 0) { throw "release workspace self-dogfood failed: $LASTEXITCODE" }
 
           $contractArgs = @{
             CliPath = $artifact
@@ -118,13 +144,13 @@ jobs:
     name: cargo-deny
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Root workspace
-        uses: EmbarkStudios/cargo-deny-action@v2
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           command: check
       - name: Evals workspace
-        uses: EmbarkStudios/cargo-deny-action@v2
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           command: check
           manifest-path: evals/Cargo.toml
@@ -143,11 +169,11 @@ jobs:
       run:
         working-directory: evals
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable, pinned 2026-07-14
         with:
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: evals
       - run: cargo fmt --all --check
@@ -169,6 +195,23 @@ jobs:
           $text = ($output | Out-String)
           if ($exitCode -eq 0 -or $text -notmatch '--unsafe-host-exec') {
             throw "A real backend must fail closed without --unsafe-host-exec. Exit=$exitCode`n$text"
+          }
+
+      - name: Reject third-party grade command without separate acknowledgement
+        shell: pwsh
+        run: |
+          $tasks = Join-Path $PWD '.runs-custom-grade-ci/tasks'
+          $task = Join-Path $tasks 'custom'
+          New-Item -ItemType Directory -Force (Join-Path $task 'fixture/src') | Out-Null
+          Set-Content -LiteralPath (Join-Path $task 'prompt.md') -Value 'Make no change.' -Encoding utf8
+          Set-Content -LiteralPath (Join-Path $task 'grade.txt') -Value 'echo must-not-run' -Encoding utf8
+          Set-Content -LiteralPath (Join-Path $task 'fixture/src/lib.rs') -Value 'pub fn sample() {}' -Encoding utf8
+          $PSNativeCommandUseErrorActionPreference = $false
+          $output = & cargo run --locked -- --backend mock --tasks $tasks --task custom --trials 1 --runs-dir (Join-Path $PWD '.runs-custom-grade-ci/runs') 2>&1
+          $exitCode = $LASTEXITCODE
+          $text = ($output | Out-String)
+          if ($exitCode -eq 0 -or $text -notmatch '--unsafe-custom-grade-exec') {
+            throw "A third-party grade must fail closed without --unsafe-custom-grade-exec. Exit=$exitCode`n$text"
           }
 
       - name: Offline mock evaluator CLI smoke and report provenance
@@ -198,6 +241,56 @@ jobs:
           $report = Get-Content -Raw -LiteralPath $reportPath | ConvertFrom-Json -ErrorAction Stop
           if ($report.provenance.execution_mode -ne 'mock' -or
               [uint64]$report.provenance.seed -ne [uint64]20260711 -or
+              $report.provenance.grade_execution.mode -ne 'trusted_builtin_manifest' -or
+              $report.provenance.grade_execution.custom_execution_acknowledged -or
               @($report.trials).Count -ne 4) {
             throw "Unexpected offline mock provenance or trial count in $reportPath"
           }
+
+  package-install:
+    name: cargo package + install smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable, pinned 2026-07-14
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - name: Installer path/hash/rollback self-test
+        shell: pwsh
+        run: ./scripts/install-rayman.ps1 -SelfTest
+      - name: Legacy PowerShell profile migration self-test
+        shell: pwsh
+        run: ./scripts/repair-rayman-powershell-profile.ps1 -SelfTest
+      - run: cargo package --locked -p rayman
+      - run: cargo install --locked --path crates/rayman --root .install-smoke
+      - run: ./.install-smoke/bin/rayman --version
+
+  coverage:
+    name: shipped CLI line coverage threshold
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable, pinned 2026-07-14
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - run: cargo install cargo-llvm-cov --locked --version 0.8.7
+      - run: cargo llvm-cov --locked --workspace --all-features --all-targets --fail-under-lines 75
+
+  scheduled-advisories:
+    name: scheduled dependency advisory refresh
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Root advisories
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check
+          command-arguments: advisories
+      - name: Evals advisories
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check
+          manifest-path: evals/Cargo.toml
+          arguments: --config evals/deny.toml
+          command-arguments: advisories

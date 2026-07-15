@@ -6,19 +6,18 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::context::{self, ContextIndex, FileEntry};
-use crate::project_store::{now_iso, read_json, write_json};
+use crate::project_store::{now_iso, write_json};
 use crate::state_paths;
 
-const QUALITY_CONFIG_RELATIVE_PATH: &str = ".RaymanCodingSkill/quality.json";
+mod quality;
+
+pub use quality::{
+    QualityConfig, QualityExemption, QualityFinding, QualityReport, load_quality_config,
+    quality_report, quality_report_with_config,
+};
+use quality::{infer_risks, severity_rank};
+
 const PROJECT_MAP_STATE_RELATIVE: &str = "context/project_map.json";
-const QUALITY_CONFIG_STATE_RELATIVE: &str = "quality.json";
-const LARGE_SOURCE_WARNING_LINES: usize = 2_000;
-const LARGE_TEST_WARNING_LINES: usize = 3_000;
-const BLOCKABLE_WARNING_KINDS: &[&str] = &[
-    "large_file",
-    "high_fan_in",
-    "public_api_without_test_evidence",
-];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectMap {
@@ -164,6 +163,7 @@ pub struct TopologyReport {
 pub struct ImpactReport {
     pub changed_path: String,
     pub package: Option<String>,
+    pub manifest_path: Option<String>,
     pub direct_dependencies: Vec<Dependency>,
     pub direct_dependents: Vec<Dependency>,
     pub package_dependencies: Vec<PackageDependency>,
@@ -193,40 +193,6 @@ pub struct PlanFile {
     pub path: String,
     pub role: String,
     pub reason: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct QualityReport {
-    pub ready: bool,
-    pub profile: String,
-    pub source_files: usize,
-    pub test_files: usize,
-    pub candidate_test_covered_source_files: usize,
-    pub public_api_files_without_test_evidence: usize,
-    pub error_count: usize,
-    pub warning_count: usize,
-    pub info_count: usize,
-    pub findings: Vec<QualityFinding>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct QualityConfig {
-    #[serde(default = "default_quality_profile")]
-    pub profile: String,
-    #[serde(default = "default_multi_source_no_test_min_sources")]
-    pub multi_source_no_test_min_sources: usize,
-    #[serde(default)]
-    pub block_warning_kinds: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct QualityFinding {
-    pub severity: String,
-    pub kind: String,
-    pub path: String,
-    pub detail: String,
-    pub recommendation: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -271,35 +237,11 @@ pub fn build(root: &Path) -> Result<ProjectMap> {
 
 pub fn build_readonly(root: &Path) -> Result<ProjectMap> {
     // Map conclusions are used by standard/release planning, so a stat-only ready
-    // result is insufficient: verify content hashes before deriving topology/risk.
-    let freshness = context::strong_freshness(root);
-    if freshness.status != "ready" {
-        bail!(
-            "上下文索引不是 ready（当前: {}）。先运行 `rayman context refresh`。",
-            freshness.status
-        );
-    }
-    let Some(index) = context::load(root)? else {
-        bail!("上下文索引缺失。先运行 `rayman context refresh`。");
-    };
+    // result is insufficient. `verified_index` returns the same in-memory index
+    // object whose full entries were compared; never validate and reopen the
+    // cache because that permits an unverified replacement between the calls.
+    let index = context::verified_index(root)?;
     build_from_index(root, &index)
-}
-
-pub fn load_quality_config(root: &Path, profile: &str) -> Result<QualityConfig> {
-    let mut config = match profile {
-        "strict" => QualityConfig::strict(),
-        _ => QualityConfig::standard(),
-    };
-    let path =
-        state_paths::managed_state_file(root, Path::new(QUALITY_CONFIG_STATE_RELATIVE), false)?;
-    if let Some(file_config) = read_json::<QualityConfig>(&path)? {
-        validate_quality_config(&file_config)?;
-        config.multi_source_no_test_min_sources =
-            file_config.multi_source_no_test_min_sources.max(1);
-        config.block_warning_kinds = file_config.block_warning_kinds;
-        config.profile = profile.into();
-    }
-    Ok(config)
 }
 
 pub fn summary(map: &ProjectMap) -> MapSummary {
@@ -477,6 +419,7 @@ pub fn impact_report(map: &ProjectMap, path: &str) -> Result<ImpactReport> {
     Ok(ImpactReport {
         changed_path: path.clone(),
         package,
+        manifest_path: package_entry.map(|package| package.manifest_path.clone()),
         direct_dependencies,
         direct_dependents,
         package_dependencies,
@@ -671,174 +614,6 @@ fn is_source_path(path: &str) -> bool {
     )
 }
 
-impl QualityConfig {
-    pub fn standard() -> Self {
-        Self {
-            profile: "standard".into(),
-            multi_source_no_test_min_sources: default_multi_source_no_test_min_sources(),
-            block_warning_kinds: Vec::new(),
-        }
-    }
-
-    pub fn strict() -> Self {
-        Self {
-            profile: "strict".into(),
-            multi_source_no_test_min_sources: default_multi_source_no_test_min_sources(),
-            // Genuinely stricter than `standard` by default, not just a label:
-            // block the two objective (non-heuristic) warning kinds. Leaves
-            // `public_api_without_test_evidence` warning-only by default since
-            // its test-coverage inference is a substring-match heuristic prone
-            // to false positives; a workspace can still opt it in via
-            // `.RaymanCodingSkill/quality.json`.
-            block_warning_kinds: vec!["large_file".into(), "high_fan_in".into()],
-        }
-    }
-}
-
-fn default_quality_profile() -> String {
-    "standard".into()
-}
-
-fn default_multi_source_no_test_min_sources() -> usize {
-    3
-}
-
-fn validate_quality_config(config: &QualityConfig) -> Result<()> {
-    for kind in &config.block_warning_kinds {
-        if !BLOCKABLE_WARNING_KINDS.contains(&kind.as_str()) {
-            bail!(
-                "{} has unknown block_warning_kinds entry `{}`; allowed: {}",
-                QUALITY_CONFIG_RELATIVE_PATH,
-                kind,
-                BLOCKABLE_WARNING_KINDS.join(", ")
-            );
-        }
-    }
-    Ok(())
-}
-
-pub fn quality_report(map: &ProjectMap) -> QualityReport {
-    quality_report_with_config(map, &QualityConfig::standard())
-}
-
-pub fn quality_report_with_config(map: &ProjectMap, config: &QualityConfig) -> QualityReport {
-    let candidate_covered_source_paths: BTreeSet<&str> = map
-        .tests
-        .iter()
-        .flat_map(|test| test.candidate_paths.iter().map(String::as_str))
-        .collect();
-    let public_api_without_test_paths: BTreeSet<&str> = map
-        .risks
-        .iter()
-        .filter(|risk| risk.kind == "public_api_without_test_evidence")
-        .map(|risk| risk.path.as_str())
-        .collect();
-
-    let mut findings: Vec<QualityFinding> = map
-        .risks
-        .iter()
-        .map(|risk| QualityFinding {
-            severity: risk.severity.clone(),
-            kind: risk.kind.clone(),
-            path: risk.path.clone(),
-            detail: risk.detail.clone(),
-            recommendation: recommendation_for_risk(&risk.kind).into(),
-        })
-        .collect();
-
-    // Test-file classification and symbol extraction are Cargo/Rust-shaped heuristics;
-    // outside a Cargo workspace (no Cargo.toml anywhere in the index) they have no real
-    // signal, so this stays a warning instead of a hard error-level blocker.
-    let is_cargo_project = !map.packages.is_empty();
-    if map.source_files >= config.multi_source_no_test_min_sources && map.test_files == 0 {
-        findings.push(QualityFinding {
-            severity: if is_cargo_project { "error" } else { "warning" }.into(),
-            kind: "multi_source_project_without_tests".into(),
-            path: ".".into(),
-            detail: if is_cargo_project {
-                format!(
-                    "{} source files but no indexed test files; large-project edits have no local validation anchor",
-                    map.source_files
-                )
-            } else {
-                format!(
-                    "{} source files but no indexed test files; no Cargo workspace detected, so this heuristic is advisory only — verify test coverage manually",
-                    map.source_files
-                )
-            },
-            recommendation: "add at least one test target or record why this workspace has no executable tests".into(),
-        });
-    }
-    let blocking_warning_kinds: BTreeSet<&str> = config
-        .block_warning_kinds
-        .iter()
-        .map(String::as_str)
-        .collect();
-    for finding in &mut findings {
-        if finding.severity == "warning" && blocking_warning_kinds.contains(finding.kind.as_str()) {
-            finding.severity = "error".into();
-            finding.recommendation = format!(
-                "{}; configured as blocking by .RaymanCodingSkill/quality.json",
-                finding.recommendation
-            );
-        }
-    }
-
-    findings.sort_by(|a, b| {
-        severity_rank(&a.severity)
-            .cmp(&severity_rank(&b.severity))
-            .then_with(|| a.kind.cmp(&b.kind))
-            .then_with(|| a.path.cmp(&b.path))
-    });
-
-    let error_count = findings
-        .iter()
-        .filter(|finding| finding.severity == "error")
-        .count();
-    let warning_count = findings
-        .iter()
-        .filter(|finding| finding.severity == "warning")
-        .count();
-    let info_count = findings
-        .iter()
-        .filter(|finding| finding.severity == "info")
-        .count();
-
-    QualityReport {
-        ready: error_count == 0,
-        profile: config.profile.clone(),
-        source_files: map.source_files,
-        test_files: map.test_files,
-        candidate_test_covered_source_files: candidate_covered_source_paths.len(),
-        public_api_files_without_test_evidence: public_api_without_test_paths.len(),
-        error_count,
-        warning_count,
-        info_count,
-        findings,
-    }
-}
-
-fn recommendation_for_risk(kind: &str) -> &'static str {
-    match kind {
-        "large_file" => "split the file or inspect it before broad edits",
-        "high_fan_in" => "treat changes as shared-contract changes and run broader tests",
-        "public_api_without_test_evidence" => {
-            "add/record a same-package test target before claiming coverage"
-        }
-        "no_symbols" => "confirm whether the file is generated, data-only, or missing indexed code",
-        _ => "review before large-project edits",
-    }
-}
-
-fn severity_rank(severity: &str) -> usize {
-    match severity {
-        "error" => 0,
-        "warning" => 1,
-        "info" => 2,
-        _ => 3,
-    }
-}
-
 fn record_plan_file(
     files: &mut BTreeMap<String, PlanFile>,
     path: String,
@@ -944,7 +719,7 @@ fn cargo_metadata_topology(
     // Metadata owns workspace membership/dependencies. Add indexed nested manifests that
     // Cargo deliberately excludes (fixtures, excluded tools) so their impact still gets a
     // manifest-path test command rather than incorrectly borrowing an ancestor package.
-    let heuristic_workspace = read_workspace_info(root)?;
+    let heuristic_workspace = read_workspace_info(root, index)?;
     for candidate in discover_packages(root, index, &heuristic_workspace)? {
         if !packages
             .iter()
@@ -1041,7 +816,7 @@ fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
 
     for file in &index.files {
         if file.kind == "source" || file.kind == "test" {
-            let bytes = std::fs::read(root.join(&file.path))
+            let bytes = context::read_verified_file(root, file)
                 .with_context(|| format!("项目地图读取失败: {}", file.path))?;
             text_by_path.insert(
                 file.path.clone(),
@@ -1115,9 +890,9 @@ fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
             Err(error) => {
                 // Do not dress the fallback up as Cargo authority. It remains useful for
                 // damaged/nonstandard workspaces, but callers can see the weaker provenance.
-                let workspace = read_workspace_info(root)?;
+                let workspace = read_workspace_info(root, index)?;
                 let packages = discover_packages(root, index, &workspace)?;
-                let dependencies = infer_package_dependencies(root, &packages, &workspace)?;
+                let dependencies = infer_package_dependencies(root, index, &packages, &workspace)?;
                 (
                     packages,
                     dependencies,
@@ -1126,9 +901,9 @@ fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
             }
         }
     } else {
-        let workspace = read_workspace_info(root)?;
+        let workspace = read_workspace_info(root, index)?;
         let packages = discover_packages(root, index, &workspace)?;
-        let dependencies = infer_package_dependencies(root, &packages, &workspace)?;
+        let dependencies = infer_package_dependencies(root, index, &packages, &workspace)?;
         (packages, dependencies, "no_cargo_manifest".to_string())
     };
     // 本地 crate 名来自实际发现的 package，而不是硬编码本工具自己的名字。
@@ -1181,13 +956,12 @@ fn count_kinds(index: &ContextIndex) -> (usize, usize, usize, usize, usize, usiz
     )
 }
 
-fn read_workspace_info(root: &Path) -> Result<WorkspaceInfo> {
-    let manifest = root.join("Cargo.toml");
-    if !manifest.exists() {
+fn read_workspace_info(root: &Path, index: &ContextIndex) -> Result<WorkspaceInfo> {
+    let Some(entry) = index.files.iter().find(|file| file.path == "Cargo.toml") else {
         return Ok(WorkspaceInfo::default());
-    }
-    let text = std::fs::read_to_string(&manifest)
-        .with_context(|| format!("无法读取 Cargo workspace manifest: {}", manifest.display()))?;
+    };
+    let text = String::from_utf8(context::read_verified_file(root, entry)?)
+        .context("Cargo workspace manifest 不是 UTF-8")?;
     let mut info = WorkspaceInfo {
         member_patterns: parse_workspace_array(&text, "members"),
         exclude_patterns: parse_workspace_array(&text, "exclude"),
@@ -1296,8 +1070,8 @@ fn discover_packages(
         if !file.path.ends_with("Cargo.toml") {
             continue;
         }
-        let text = std::fs::read_to_string(root.join(&file.path))
-            .with_context(|| format!("无法读取 Cargo manifest: {}", file.path))?;
+        let text = String::from_utf8(context::read_verified_file(root, file)?)
+            .with_context(|| format!("Cargo manifest 不是 UTF-8: {}", file.path))?;
         let Some(name) = parse_package_name(&text) else {
             continue;
         };
@@ -1330,6 +1104,7 @@ fn discover_packages(
 
 fn infer_package_dependencies(
     root: &Path,
+    index: &ContextIndex,
     packages: &[PackageEntry],
     workspace: &WorkspaceInfo,
 ) -> Result<Vec<PackageDependency>> {
@@ -1341,8 +1116,18 @@ fn infer_package_dependencies(
     let mut seen = BTreeSet::new();
 
     for package in packages {
-        let text = std::fs::read_to_string(root.join(&package.manifest_path))
-            .with_context(|| format!("无法读取 Cargo manifest: {}", package.manifest_path))?;
+        let entry = index
+            .files
+            .iter()
+            .find(|file| file.path == package.manifest_path)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Cargo manifest 不在已验证上下文索引中: {}",
+                    package.manifest_path
+                )
+            })?;
+        let text = String::from_utf8(context::read_verified_file(root, entry)?)
+            .with_context(|| format!("Cargo manifest 不是 UTF-8: {}", package.manifest_path))?;
         let mut section = String::new();
         let mut nested_dependency: Option<String> = None;
         for (line_index, raw) in text.lines().enumerate() {
@@ -1971,85 +1756,6 @@ fn source_root_for(path: &str) -> String {
         parts[..=index].join("/")
     } else {
         "src".into()
-    }
-}
-
-fn infer_risks(
-    index: &ContextIndex,
-    symbols: &[MapSymbol],
-    dependencies: &[Dependency],
-    tests: &[TestTarget],
-) -> Vec<MapRisk> {
-    let mut risks = Vec::new();
-    let mut incoming: BTreeMap<&str, usize> = BTreeMap::new();
-    for dependency in dependencies {
-        *incoming.entry(&dependency.to_path).or_default() += 1;
-    }
-    let covered: BTreeSet<&str> = tests
-        .iter()
-        .flat_map(|test| test.candidate_paths.iter().map(String::as_str))
-        .collect();
-    let public_by_path: BTreeMap<&str, usize> = symbols
-        .iter()
-        .filter(|symbol| symbol.visibility == "public")
-        .fold(BTreeMap::new(), |mut acc, symbol| {
-            *acc.entry(symbol.path.as_str()).or_default() += 1;
-            acc
-        });
-
-    for file in &index.files {
-        if file.kind != "source" && file.kind != "test" {
-            continue;
-        }
-        if file.lines >= large_file_warning_lines(file.kind.as_str()) {
-            risks.push(MapRisk {
-                severity: "warning".into(),
-                kind: "large_file".into(),
-                path: file.path.clone(),
-                detail: format!("{} lines; inspect before broad edits", file.lines),
-            });
-        }
-        if file.kind == "source" && file.symbols.is_empty() {
-            risks.push(MapRisk {
-                severity: "info".into(),
-                kind: "no_symbols".into(),
-                path: file.path.clone(),
-                detail: "source file has no indexed symbols".into(),
-            });
-        }
-        if incoming.get(file.path.as_str()).copied().unwrap_or(0) >= 5 {
-            risks.push(MapRisk {
-                severity: "warning".into(),
-                kind: "high_fan_in".into(),
-                path: file.path.clone(),
-                detail: "many local files depend on this file".into(),
-            });
-        }
-        // 只对 source 文件生效：covered 集合按构造只含源文件，测试辅助文件
-        // （如 tests/common/mod.rs 的 pub fn）必然误报。
-        if file.kind == "source"
-            && public_by_path.get(file.path.as_str()).copied().unwrap_or(0) > 0
-            && !covered.contains(file.path.as_str())
-            && file.path != "src/main.rs"
-        {
-            risks.push(MapRisk {
-                severity: "warning".into(),
-                kind: "public_api_without_test_evidence".into(),
-                path: file.path.clone(),
-                detail:
-                    "public symbols exist but no same-package candidate test target was inferred"
-                        .into(),
-            });
-        }
-    }
-    risks
-}
-
-fn large_file_warning_lines(kind: &str) -> usize {
-    if kind == "test" {
-        LARGE_TEST_WARNING_LINES
-    } else {
-        LARGE_SOURCE_WARNING_LINES
     }
 }
 

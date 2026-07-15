@@ -1,0 +1,206 @@
+[CmdletBinding(DefaultParameterSetName = 'Repair')]
+param(
+    [Parameter(ParameterSetName = 'Repair')]
+    [string]$ProfilePath = $PROFILE.CurrentUserCurrentHost,
+
+    [Parameter(ParameterSetName = 'Repair')]
+    [switch]$Check,
+
+    [Parameter(ParameterSetName = 'Repair')]
+    [switch]$Yes,
+
+    [Parameter(Mandatory = $true, ParameterSetName = 'SelfTest')]
+    [switch]$SelfTest
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    throw 'repair-rayman-powershell-profile.ps1 requires PowerShell 7+.'
+}
+
+$legacyFunction = @"
+function rayman { param([Parameter(ValueFromRemainingArguments=`$true)] `$Args); `$cwd = Get-Location; while (`$cwd) { `$candidate = Join-Path `$cwd '.Rayman\rayman.ps1'; if (Test-Path `$candidate) { & `$candidate @Args; return }; `$parent = Split-Path `$cwd -Parent; if (`$parent -eq `$cwd.Path) { break }; `$cwd = Get-Item `$parent } }
+"@
+
+function Normalize-FunctionText {
+    param([string]$Text)
+
+    return (($Text -replace '\s+', ' ').Trim())
+}
+
+function Get-RaymanFunctionExtent {
+    param([string]$Text, [string]$Label)
+
+    $tokens = $null
+    $parseErrors = $null
+    $ast = [Management.Automation.Language.Parser]::ParseInput(
+        $Text,
+        [ref]$tokens,
+        [ref]$parseErrors
+    )
+    if (@($parseErrors).Count -gt 0) {
+        throw "$Label contains PowerShell parse errors; refusing to edit it."
+    }
+    $functions = @($ast.FindAll({
+        param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq 'rayman'
+    }, $true))
+    if ($functions.Count -eq 0) {
+        return $null
+    }
+    if ($functions.Count -ne 1) {
+        throw "$Label defines rayman more than once; refusing ambiguous migration."
+    }
+    return $functions[0].Extent
+}
+
+function Get-ProfileEncoding {
+    param([byte[]]$Bytes)
+
+    if ($Bytes.Length -ge 3 -and $Bytes[0] -eq 0xef -and $Bytes[1] -eq 0xbb -and $Bytes[2] -eq 0xbf) {
+        return [Text.UTF8Encoding]::new($true)
+    }
+    if ($Bytes.Length -ge 2 -and $Bytes[0] -eq 0xff -and $Bytes[1] -eq 0xfe) {
+        return [Text.UnicodeEncoding]::new($false, $true)
+    }
+    if ($Bytes.Length -ge 2 -and $Bytes[0] -eq 0xfe -and $Bytes[1] -eq 0xff) {
+        return [Text.UnicodeEncoding]::new($true, $true)
+    }
+    return [Text.UTF8Encoding]::new($false)
+}
+
+function Get-LegacyProfileMigration {
+    param([string]$Path)
+
+    $item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+    if ($null -eq $item) {
+        return [pscustomobject]@{ Needed = $false; Path = [IO.Path]::GetFullPath($Path) }
+    }
+    if ($item.PSIsContainer -or $item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw "PowerShell profile must be a regular file: $Path"
+    }
+    $resolved = (Resolve-Path -LiteralPath $Path).Path
+    $bytes = [IO.File]::ReadAllBytes($resolved)
+    $encoding = Get-ProfileEncoding -Bytes $bytes
+    $text = [IO.File]::ReadAllText($resolved, $encoding)
+    $extent = Get-RaymanFunctionExtent -Text $text -Label $resolved
+    if ($null -eq $extent) {
+        return [pscustomobject]@{ Needed = $false; Path = $resolved }
+    }
+    if ((Normalize-FunctionText $extent.Text) -cne (Normalize-FunctionText $legacyFunction)) {
+        throw "PowerShell profile defines a non-legacy rayman function; refusing to remove user-authored code: $resolved"
+    }
+    $updated = $text.Remove($extent.StartOffset, $extent.EndOffset - $extent.StartOffset)
+    if ([string]::IsNullOrWhiteSpace($updated)) {
+        $updated = ''
+    }
+    return [pscustomobject]@{
+        Needed = $true
+        Path = $resolved
+        OriginalHash = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash
+        Updated = $updated
+        Encoding = $encoding
+    }
+}
+
+function Invoke-LegacyProfileMigration {
+    param([string]$Path, [switch]$ConfirmWrite)
+
+    $migration = Get-LegacyProfileMigration -Path $Path
+    if (-not $migration.Needed) {
+        Write-Host "PowerShell profile check passed: no legacy rayman function at $($migration.Path)"
+        return
+    }
+    if (-not $ConfirmWrite) {
+        throw "Legacy rayman profile function detected at $($migration.Path). Re-run with -Yes to remove only that exact function."
+    }
+
+    $nonce = [Guid]::NewGuid().ToString('N')
+    $staged = "$($migration.Path).rayman-migrate-$nonce"
+    $backup = "$($migration.Path).rayman-backup-$nonce"
+    try {
+        [IO.File]::WriteAllText($staged, $migration.Updated, $migration.Encoding)
+        if ((Get-FileHash -LiteralPath $migration.Path -Algorithm SHA256).Hash -ne $migration.OriginalHash) {
+            throw 'PowerShell profile changed after inspection; refusing to overwrite concurrent edits.'
+        }
+        Move-Item -LiteralPath $migration.Path -Destination $backup
+        Move-Item -LiteralPath $staged -Destination $migration.Path
+
+        $verified = Get-LegacyProfileMigration -Path $migration.Path
+        if ($verified.Needed) {
+            throw 'Legacy rayman function remained after migration.'
+        }
+        Remove-Item -LiteralPath $backup -Force
+    } catch {
+        $failure = $_.Exception.Message
+        if (Test-Path -LiteralPath $backup -PathType Leaf) {
+            Remove-Item -LiteralPath $migration.Path -Force -ErrorAction SilentlyContinue
+            Move-Item -LiteralPath $backup -Destination $migration.Path
+        }
+        Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue
+        throw "PowerShell profile migration failed and was rolled back: $failure"
+    }
+    Write-Host "Removed the exact legacy rayman profile function: $($migration.Path)"
+}
+
+function Invoke-SelfTest {
+    $repoRoot = Split-Path -Parent $PSScriptRoot
+    $managedTemp = Join-Path $repoRoot '.RaymanCodingSkill/tmp'
+    New-Item -ItemType Directory -Path $managedTemp -Force | Out-Null
+    $testRoot = Join-Path $managedTemp ("profile-migration-selftest-" + [Guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $testRoot | Out-Null
+    try {
+        $legacy = Join-Path $testRoot 'legacy.ps1'
+        $mixed = Join-Path $testRoot 'mixed.ps1'
+        $custom = Join-Path $testRoot 'custom.ps1'
+        [IO.File]::WriteAllText($legacy, $legacyFunction, [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText($mixed, "`$global:PreserveMe = 7`r`n$legacyFunction`r`n", [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText($custom, 'function rayman { param($Args) & rayman.exe @Args }', [Text.UTF8Encoding]::new($false))
+
+        Invoke-LegacyProfileMigration -Path $legacy -ConfirmWrite
+        Invoke-LegacyProfileMigration -Path $mixed -ConfirmWrite
+        if ((Get-Content -Raw -LiteralPath $mixed) -notmatch '\$global:PreserveMe = 7') {
+            throw 'Profile migration self-test did not preserve unrelated profile content.'
+        }
+        $customRejected = $false
+        try {
+            Invoke-LegacyProfileMigration -Path $custom -ConfirmWrite
+        } catch {
+            $customRejected = $_.Exception.Message -match 'non-legacy rayman function'
+        }
+        if (-not $customRejected -or (Get-Content -Raw -LiteralPath $custom) -notmatch 'rayman\.exe') {
+            throw 'Profile migration self-test did not preserve a custom rayman function.'
+        }
+    } finally {
+        if (Test-Path -LiteralPath $testRoot) {
+            $item = Get-Item -LiteralPath $testRoot -Force
+            $prefix = [IO.Path]::GetFullPath($managedTemp).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+            if (-not $item.PSIsContainer -or
+                $item.Attributes -band [IO.FileAttributes]::ReparsePoint -or
+                -not $item.FullName.StartsWith($prefix, $(if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }))) {
+                throw "Refusing unsafe profile migration self-test cleanup: $testRoot"
+            }
+            Remove-Item -LiteralPath $testRoot -Recurse -Force
+        }
+    }
+    Write-Host 'PowerShell profile migration self-test passed.'
+}
+
+if ($SelfTest) {
+    Invoke-SelfTest
+    return
+}
+
+if ($Check) {
+    $migration = Get-LegacyProfileMigration -Path $ProfilePath
+    if ($migration.Needed) {
+        throw "Legacy rayman profile function detected at $($migration.Path)."
+    }
+    Write-Host "PowerShell profile check passed: no legacy rayman function at $($migration.Path)"
+    return
+}
+
+Invoke-LegacyProfileMigration -Path $ProfilePath -ConfirmWrite:$Yes

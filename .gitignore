@@ -2,7 +2,8 @@
 target/
 Cargo.lock.bak
 
-# Local tool state（quality.json 是可共享的策略文件，允许入库）
+# Local tool state. quality.json is the one exact shared/indexed policy file;
+# never broaden this exception to a directory or wildcard.
 .RaymanCodingSkill/*
 !.RaymanCodingSkill/quality.json
 .claude/

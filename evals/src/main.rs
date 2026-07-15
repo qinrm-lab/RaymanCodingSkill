@@ -1,7 +1,9 @@
 //! RaymanCodingSkill 的 agent A/B outcome eval。
 //!
 //! 真实模型会产生宿主 shell 命令。本二进制没有把它们隔离进容器或 Windows Sandbox，
-//! 因此真实后端必须由操作者显式确认 `--unsafe-host-exec`；mock 始终可离线运行。
+//! 因此真实后端必须由操作者显式确认 `--unsafe-host-exec`；确认后也只有 mandatory
+//! Windows Job Object 路径允许 shell spawn。mock 仅对 hash 绑定的内置任务免确认，
+//! 第三方 grade.txt 仍需独立的宿主执行确认。
 
 mod agent;
 mod anthropic;
@@ -77,6 +79,9 @@ struct Cli {
     /// 明确确认真实模型生成的 shell 命令将在当前用户的宿主机上直接执行（没有 sandbox）
     #[arg(long)]
     unsafe_host_exec: bool,
+    /// 明确确认第三方/已修改任务的 grade.txt 将以当前用户身份在宿主机执行
+    #[arg(long)]
+    unsafe_custom_grade_exec: bool,
     /// 明确允许 backends.json 使用内联 api_key；默认只允许批准的 api_key_env
     #[arg(long)]
     unsafe_inline_api_key: bool,
@@ -401,6 +406,24 @@ fn require_host_execution_ack(acknowledged: bool, backend: &str) -> Result<()> {
     )
 }
 
+/// Keep the two independent real-backend gates ordered and observable. The explicit host-exec
+/// acknowledgement is a pure CLI check and must win when absent. Only after it succeeds may a
+/// platform-containment refusal run, still before backend config, credentials, or network use.
+fn preflight_real_backend(
+    backend: &str,
+    unsafe_host_exec: bool,
+    shell_refusal: Option<&str>,
+) -> Result<()> {
+    if backend == "mock" {
+        return Ok(());
+    }
+    require_host_execution_ack(unsafe_host_exec, backend)?;
+    if let Some(reason) = shell_refusal {
+        bail!("真实后端在读取配置、密钥或请求模型前被拒绝：{reason}");
+    }
+    Ok(())
+}
+
 /// 按 `--backend` 名字构建模型后端。任何非 mock 后端在读取密钥/配置前就先要求宿主执行确认。
 fn build_model(cli: &Cli) -> Result<BuiltModel> {
     match cli.backend.as_str() {
@@ -465,6 +488,7 @@ struct RunContext<'a> {
 fn run_trial(
     ctx: &RunContext,
     task: &task::Task,
+    authorized_task: &TaskProvenance,
     condition: &str,
     trial: usize,
     condition_order: usize,
@@ -487,8 +511,22 @@ fn run_trial(
         .run_dir
         .join("workspaces")
         .join(format!("{}__{}__t{}", task.name, condition, trial));
-    if let Err(error) = task::setup_workspace(task, &workspace) {
+    if authorized_task.name != task.name {
+        result.error = Some(format!(
+            "trial 任务与已授权 manifest 不匹配: task={}, manifest={}",
+            task.name, authorized_task.name
+        ));
+        return result;
+    }
+    if let Err(error) = task::setup_workspace(task, &workspace, &authorized_task.fixture_sha256) {
         result.error = Some(format!("{error:#}"));
+        return result;
+    }
+    // Unsupported hosts may still exercise task-copy/report orchestration with the offline
+    // mock, but no model or grade is started: both can lead to arbitrary shell requests and the
+    // evaluator has no reliable descendant supervisor on those platforms.
+    if let Some(reason) = grade::shell_execution_refusal_reason() {
+        result.error = Some(reason.into());
         return result;
     }
     // Windows `cmd` resolves a bare command from the trial CWD before PATH. Reject a fixture
@@ -580,6 +618,11 @@ fn run() -> Result<()> {
     if cli.max_steps == 0 {
         bail!("--max-steps 必须大于 0");
     }
+    preflight_real_backend(
+        &cli.backend,
+        cli.unsafe_host_exec,
+        grade::shell_execution_refusal_reason(),
+    )?;
 
     // 先建后端，确保真实后端在读取密钥、请求网络前被 --unsafe-host-exec 拦住。
     let built = build_model(&cli)?;
@@ -601,6 +644,12 @@ fn run() -> Result<()> {
         .iter()
         .map(task::Task::provenance)
         .collect::<Result<Vec<_>>>()?;
+    let grade_execution = task::authorize_grade_execution(
+        &tasks_dir,
+        cli.task.as_deref(),
+        &task_manifests,
+        cli.unsafe_custom_grade_exec,
+    )?;
 
     // with_skill 组的 system prompt 宣称 rayman 在 PATH 上，找不到二进制就不能开跑，
     // 否则会系统性压低处理组。
@@ -621,6 +670,7 @@ fn run() -> Result<()> {
     let input_baseline =
         InputBaseline::new(skill_hash.clone(), rayman_hash.clone(), &task_manifests);
 
+    let runs_dir = ensure_or_create_real_directory(&runs_dir, "runs 目录")?;
     let (run_id, run_dir) = create_run_directory(&runs_dir)?;
     let provenance = RunProvenance {
         run_id: run_id.clone(),
@@ -629,6 +679,7 @@ fn run() -> Result<()> {
         backend: model_label.clone(),
         execution_mode: built.mode.label().into(),
         unsandboxed_host_execution: built.mode.is_unsandboxed(),
+        grade_execution,
         release_contract_verified,
         release_contract,
         git_head: git_head(&repo_root),
@@ -644,6 +695,8 @@ fn run() -> Result<()> {
             os: std::env::consts::OS.into(),
             family: std::env::consts::FAMILY.into(),
             arch: std::env::consts::ARCH.into(),
+            shell_execution_supported: grade::shell_execution_supported(),
+            shell_containment: grade::shell_containment_mode().into(),
         },
         seed,
         order_strategy:
@@ -692,7 +745,14 @@ fn run() -> Result<()> {
                     break 'evaluation;
                 }
                 eprintln!("  [#{order} {condition}] {} trial {trial}", task.name);
-                let mut result = run_trial(&ctx, task, condition, trial, order);
+                let Some(authorized_task) = input_baseline.tasks.get(&task.name) else {
+                    input_integrity.drift_detected = true;
+                    input_integrity
+                        .events
+                        .push(format!("任务 `{}` 缺少已授权 manifest", task.name));
+                    break 'evaluation;
+                };
+                let mut result = run_trial(&ctx, task, authorized_task, condition, trial, order);
                 let after = input_baseline.verify(&skill_path, &rayman_binary.path, &tasks);
                 if !after.is_empty() {
                     let drift_error = format!("评测输入漂移: {}", after.join("; "));
@@ -756,9 +816,7 @@ fn condition_order(seed: u64, task_name: &str, trial: usize) -> [&'static str; 2
 }
 
 fn create_run_directory(runs_dir: &Path) -> Result<(String, PathBuf)> {
-    fs::create_dir_all(runs_dir)
-        .with_context(|| format!("无法创建 runs 目录: {}", runs_dir.display()))?;
-    ensure_real_directory(runs_dir, "runs 目录")?;
+    let runs_dir = ensure_or_create_real_directory(runs_dir, "runs 目录")?;
     for _ in 0..128 {
         let run_id = format!(
             "run-{}-p{}-{}",
@@ -781,6 +839,71 @@ fn create_run_directory(runs_dir: &Path) -> Result<(String, PathBuf)> {
         }
     }
     bail!("无法分配唯一 run id（重复 128 次）")
+}
+
+/// Validate every existing ancestor before creating the first missing component. Calling
+/// create_dir_all first would already traverse a symlink/junction and could create output in
+/// an attacker-selected location before the final-directory check noticed anything.
+fn ensure_or_create_real_directory(path: &Path, label: &str) -> Result<PathBuf> {
+    use std::path::Component;
+
+    if path.as_os_str().is_empty() {
+        bail!("{label} 路径不能为空");
+    }
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .context("无法读取当前目录")?
+            .join(path)
+    };
+    if absolute
+        .components()
+        .any(|component| matches!(component, Component::ParentDir))
+    {
+        bail!("{label} 路径不能包含 `..`: {}", path.display());
+    }
+
+    let mut current = PathBuf::new();
+    for component in absolute.components() {
+        match component {
+            Component::CurDir => continue,
+            Component::ParentDir => unreachable!("parent components rejected above"),
+            Component::Prefix(_) => {
+                current.push(component.as_os_str());
+                continue;
+            }
+            Component::RootDir | Component::Normal(_) => {
+                current.push(component.as_os_str());
+            }
+        }
+        match fs::symlink_metadata(&current) {
+            Ok(metadata) => {
+                if is_link_or_reparse(&metadata) || !metadata.is_dir() {
+                    bail!("{label} 祖先必须是非 symlink 目录: {}", current.display());
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                match fs::create_dir(&current) {
+                    Ok(()) => {}
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                    Err(error) => {
+                        return Err(error).with_context(|| {
+                            format!("无法创建 {label} 目录组件: {}", current.display())
+                        });
+                    }
+                }
+                // Re-check after create/AlreadyExists so a racing link never becomes an
+                // accepted component merely because another actor won create_dir.
+                ensure_real_directory(&current, label)?;
+            }
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("无法检查 {label} 祖先: {}", current.display()));
+            }
+        }
+    }
+    Ok(absolute)
 }
 
 fn ensure_real_directory(path: &Path, label: &str) -> Result<()> {
@@ -979,6 +1102,35 @@ mod tests {
     }
 
     #[test]
+    fn missing_host_ack_is_reported_before_platform_supervisor_refusal() {
+        let error = preflight_real_backend(
+            "anthropic",
+            false,
+            Some("forced missing descendant supervisor"),
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(error.contains("--unsafe-host-exec"), "{error}");
+        assert!(!error.contains("descendant supervisor"), "{error}");
+    }
+
+    #[test]
+    fn acknowledged_real_backend_is_refused_before_config_on_unsupported_host() {
+        let error = preflight_real_backend(
+            "custom-provider",
+            true,
+            Some("forced missing descendant supervisor"),
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(error.contains("descendant supervisor"), "{error}");
+        assert!(error.contains("读取配置、密钥或请求模型前"), "{error}");
+        assert!(!error.contains("--unsafe-host-exec"), "{error}");
+    }
+
+    #[test]
     fn real_release_binding_rejects_a_skill_that_differs_from_workspace() {
         let temp = tempfile::tempdir().unwrap();
         let repo = temp.path().join("repo");
@@ -1154,7 +1306,8 @@ mod tests {
             max_steps: 2,
         };
 
-        let result = run_trial(&ctx, &task, CONTROL, 0, 0);
+        let manifest = task.provenance().unwrap();
+        let result = run_trial(&ctx, &task, &manifest, CONTROL, 0, 0);
 
         assert_eq!(result.outcome, Outcome::Error);
         assert_eq!(result.grade_outcome, GradeOutcome::NotRun);
@@ -1163,6 +1316,48 @@ mod tests {
                 .error
                 .as_deref()
                 .is_some_and(|error| error.contains("当前目录命令冲突")),
+            "{result:?}"
+        );
+    }
+
+    #[test]
+    fn trial_fixture_mismatch_blocks_the_model_and_grade_before_execution() {
+        let temp = tempfile::tempdir().unwrap();
+        let task = sample_task(temp.path());
+        let run_dir = temp.path().join("run");
+        fs::create_dir_all(run_dir.join("workspaces")).unwrap();
+        let model = MockModel::new(
+            "must-not-run",
+            vec![vec![(
+                "write_file".into(),
+                json!({
+                    "path": "agent-ran.txt",
+                    "content": "model executed"
+                }),
+            )]],
+        );
+        let ctx = RunContext {
+            model: &model,
+            skill_text: "",
+            rayman_bin_dir: temp.path(),
+            run_dir: &run_dir,
+            max_steps: 2,
+        };
+        let mut stale_manifest = task.provenance().unwrap();
+        stale_manifest.fixture_sha256 = "0".repeat(64);
+
+        let result = run_trial(&ctx, &task, &stale_manifest, WITH_SKILL, 0, 0);
+        let workspace = run_dir.join("workspaces/sample__with_skill__t0");
+
+        assert_eq!(result.outcome, Outcome::Error);
+        assert_eq!(result.grade_outcome, GradeOutcome::NotRun);
+        assert_eq!(result.steps, 0, "model must not be called");
+        assert!(!workspace.join("agent-ran.txt").exists());
+        assert!(
+            result
+                .error
+                .as_deref()
+                .is_some_and(|error| error.contains("拒绝任何 agent/grade 执行")),
             "{result:?}"
         );
     }
@@ -1238,6 +1433,68 @@ mod tests {
             fs::create_dir(&first).is_err(),
             "existing run must not be reused"
         );
+    }
+
+    #[test]
+    fn runs_directory_creation_rejects_a_non_directory_ancestor_before_writing() {
+        let temp = tempfile::tempdir().unwrap();
+        let blocker = temp.path().join("blocker");
+        write(&blocker, "not a directory\n");
+        let requested = blocker.join("runs");
+
+        let error = ensure_or_create_real_directory(&requested, "runs 目录")
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("祖先"), "{error}");
+        assert!(!requested.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn runs_directory_creation_rejects_a_symlink_ancestor_before_writing() {
+        use std::os::unix::fs::symlink;
+
+        let temp = tempfile::tempdir().unwrap();
+        let outside = temp.path().join("outside");
+        fs::create_dir(&outside).unwrap();
+        let link = temp.path().join("linked");
+        symlink(&outside, &link).unwrap();
+
+        let error = ensure_or_create_real_directory(&link.join("runs"), "runs 目录")
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("symlink"), "{error}");
+        assert!(!outside.join("runs").exists());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn runs_directory_creation_rejects_a_junction_ancestor_before_writing() {
+        let temp = tempfile::tempdir().unwrap();
+        let outside = temp.path().join("outside");
+        fs::create_dir(&outside).unwrap();
+        let junction = temp.path().join("linked");
+        let output = Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(&junction)
+            .arg(&outside)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "mklink /J failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let error = ensure_or_create_real_directory(&junction.join("runs"), "runs 目录")
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("symlink"), "{error}");
+        assert!(!outside.join("runs").exists());
+        fs::remove_dir(&junction).unwrap();
     }
 
     #[test]

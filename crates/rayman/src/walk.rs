@@ -21,6 +21,11 @@ const ALWAYS_IGNORE: &[&str] = &[
     "__pycache__",
 ];
 
+/// `.RaymanCodingSkill` is runtime state and remains pruned, except for the one
+/// repository policy file whose bytes must participate in context freshness and
+/// workspace fingerprints.
+const INDEXED_STATE_POLICY: &str = ".RaymanCodingSkill/quality.json";
+
 /// 遍历期间的一个错误。错误不可被安全敏感调用方静默忽略。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WalkIssue {
@@ -108,8 +113,98 @@ pub fn workspace_walk(root: &Path) -> WorkspaceWalk {
             }),
         }
     }
+    append_indexed_state_policy(root, &mut report);
     report.files.sort();
+    report.files.dedup();
     report
+}
+
+fn append_indexed_state_policy(root: &Path, report: &mut WorkspaceWalk) {
+    let state_dir = root.join(".RaymanCodingSkill");
+    let policy_path = root.join(INDEXED_STATE_POLICY);
+    let state_metadata = match std::fs::symlink_metadata(&state_dir) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return,
+        Err(error) => {
+            report.errors.push(WalkIssue {
+                error: format!("无法检查共享 policy 目录 {}: {error}", state_dir.display()),
+            });
+            return;
+        }
+    };
+    if !state_metadata.file_type().is_dir() || is_link_or_reparse(&state_metadata) {
+        report.errors.push(WalkIssue {
+            error: format!(
+                "共享 quality policy 的父目录必须是工作区内真实目录，不能是链接/reparse: {}",
+                state_dir.display()
+            ),
+        });
+        return;
+    }
+
+    let metadata = match std::fs::symlink_metadata(&policy_path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return,
+        Err(error) => {
+            report.errors.push(WalkIssue {
+                error: format!(
+                    "无法检查共享 quality policy {}: {error}",
+                    policy_path.display()
+                ),
+            });
+            return;
+        }
+    };
+    if !metadata.file_type().is_file() || is_link_or_reparse(&metadata) {
+        report.errors.push(WalkIssue {
+            error: format!(
+                "共享 quality policy 必须是工作区内普通文件，不能是链接/reparse/非常规文件: {}",
+                policy_path.display()
+            ),
+        });
+        return;
+    }
+
+    let containment = root.canonicalize().and_then(|canonical_root| {
+        let canonical_state = state_dir.canonicalize()?;
+        let canonical_policy = policy_path.canonicalize()?;
+        Ok((canonical_root, canonical_state, canonical_policy))
+    });
+    match containment {
+        Ok((canonical_root, canonical_state, canonical_policy))
+            if canonical_state.starts_with(&canonical_root)
+                && canonical_policy.parent() == Some(canonical_state.as_path()) =>
+        {
+            report.files.push(policy_path);
+        }
+        Ok((_, _, canonical_policy)) => report.errors.push(WalkIssue {
+            error: format!(
+                "共享 quality policy 逃逸工作区或不在精确 policy 目录: {} -> {}",
+                policy_path.display(),
+                canonical_policy.display()
+            ),
+        }),
+        Err(error) => report.errors.push(WalkIssue {
+            error: format!(
+                "无法验证共享 quality policy containment {}: {error}",
+                policy_path.display()
+            ),
+        }),
+    }
+}
+
+fn is_link_or_reparse(metadata: &std::fs::Metadata) -> bool {
+    if metadata.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+    }
+    #[cfg(not(windows))]
+    false
 }
 
 /// 遍历工作区，遇到任何遍历错误即返回错误。
@@ -148,6 +243,7 @@ mod tests {
         fs::write(root.join("node_modules/pkg/index.js"), "x").unwrap();
         fs::create_dir_all(root.join(".RaymanCodingSkill")).unwrap();
         fs::write(root.join(".RaymanCodingSkill/state.json"), "{}").unwrap();
+        fs::write(root.join(".RaymanCodingSkill/quality.json"), "{}").unwrap();
         fs::write(root.join(".gitignore"), "ignored.txt\n").unwrap();
         fs::write(root.join("ignored.txt"), "secret").unwrap();
         fs::write(root.join("README.md"), "# x").unwrap();
@@ -161,7 +257,8 @@ mod tests {
         assert!(keys.contains(&"src/main.rs".to_string()));
         assert!(keys.contains(&"README.md".to_string()));
         assert!(!keys.iter().any(|key| key.starts_with("node_modules")));
-        assert!(!keys.iter().any(|key| key.starts_with(".RaymanCodingSkill")));
+        assert!(keys.contains(&".RaymanCodingSkill/quality.json".to_string()));
+        assert!(!keys.contains(&".RaymanCodingSkill/state.json".to_string()));
         assert!(!keys.contains(&"ignored.txt".to_string()));
     }
 
@@ -172,6 +269,25 @@ mod tests {
         let report = workspace_walk(&missing);
         assert!(!report.errors.is_empty(), "missing root must be reported");
         assert!(workspace_files_checked(&missing).is_err());
+    }
+
+    #[test]
+    fn walk_refuses_a_non_directory_quality_policy_parent() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::write(root.join(".RaymanCodingSkill"), "not a directory").unwrap();
+
+        let report = workspace_walk(root);
+        assert!(
+            report
+                .errors
+                .iter()
+                .any(|issue| issue.error.contains("quality policy")
+                    && issue.error.contains("父目录")),
+            "issues={:?}",
+            report.errors
+        );
+        assert!(workspace_files_checked(root).is_err());
     }
 
     #[cfg(unix)]
@@ -196,5 +312,32 @@ mod tests {
         // The checked variant must fail closed rather than report a complete
         // traversal that silently omitted the symlinked file.
         assert!(workspace_files_checked(root).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn walk_refuses_quality_policy_through_a_symlinked_state_parent() {
+        use std::os::unix::fs::symlink;
+
+        let workspace = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        fs::write(outside.path().join("quality.json"), "{}").unwrap();
+        symlink(outside.path(), workspace.path().join(".RaymanCodingSkill")).unwrap();
+
+        let report = workspace_walk(workspace.path());
+        assert!(
+            report.errors.iter().any(|issue| {
+                issue.error.contains("quality policy") && issue.error.contains("父目录")
+            }),
+            "issues={:?}",
+            report.errors
+        );
+        assert!(
+            !report
+                .files
+                .iter()
+                .any(|path| relative_key(workspace.path(), path) == INDEXED_STATE_POLICY)
+        );
+        assert!(workspace_files_checked(workspace.path()).is_err());
     }
 }

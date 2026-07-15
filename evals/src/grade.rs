@@ -6,27 +6,50 @@
 //! - `EnvPolicy`：with_skill 组把 `rayman` 所在目录前置 PATH，让技能声称的“rayman 可用”
 //!   名副其实；control 组反向剔除 PATH 里暴露 `rayman` 的目录。它只是 PATH hygiene，
 //!   不能把未隔离宿主 shell 变成安全或可比较的实验边界。
-//! - `timeout`：agent 生成的命令可能挂起（交互提示、死循环），超时后杀整棵进程树，
-//!   否则 cargo/rustc 孤儿会持有文件锁，殃及后续评分与工作区准备。
+//! - `timeout`：agent 生成的命令可能挂起（交互提示、死循环）。Windows 只在 suspended
+//!   child 成功绑定 kill-on-close Job Object 后执行；Job 创建/绑定失败不回退。其他平台
+//!   没有本二进制可证明可靠的 descendant supervisor，因此在 shell spawn 前 fail closed。
 
 use std::ffi::{OsStr, OsString};
-use std::fs::{self, File};
-use std::io::{Read, Seek, SeekFrom};
+use std::fs;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use tempfile::{Builder as TempFileBuilder, NamedTempFile};
 
 /// agent `run` 工具的默认超时（首次 cargo 编译可能偏慢）。
 pub const RUN_TIMEOUT: Duration = Duration::from_secs(240);
 /// 评分命令的超时。
 pub const GRADE_TIMEOUT: Duration = Duration::from_secs(300);
+/// stdout/stderr each retain only this many trailing bytes while the pipes are drained.
+const OUTPUT_CAPTURE_BYTES: usize = 16 * 1024;
+const UNSUPPORTED_SHELL_MESSAGE: &str = "拒绝宿主 shell 执行：此平台没有评测器可证明可靠的 descendant supervisor；Unix process group 可被 setsid/新 session 绕过。请在 Windows Job Object 路径运行，或在评测器外提供并审计真正的隔离/监督器后再实现对应后端";
+
+/// Whether this build has a process-containment primitive strong enough for arbitrary shell
+/// descendants. Windows Job Objects are mandatory; there is deliberately no Unix process-group
+/// fallback because a child can call `setsid` without using a recognizable launcher string.
+pub fn shell_execution_supported() -> bool {
+    cfg!(windows)
+}
+
+pub fn shell_containment_mode() -> &'static str {
+    if cfg!(windows) {
+        "windows_job_object_kill_on_close_required"
+    } else {
+        "shell_refused_no_reliable_descendant_supervisor"
+    }
+}
+
+pub fn shell_execution_refusal_reason() -> Option<&'static str> {
+    (!shell_execution_supported()).then_some(UNSUPPORTED_SHELL_MESSAGE)
+}
 
 pub fn rayman_exe() -> &'static str {
     if cfg!(windows) {
@@ -158,6 +181,20 @@ pub fn run_shell(
     env: &EnvPolicy,
     timeout: Duration,
 ) -> GradeResult {
+    let mut captures = ThreadCaptureFactory;
+    run_shell_with_capture_factory(workspace, command, env, timeout, &mut captures)
+}
+
+fn run_shell_with_capture_factory(
+    workspace: &Path,
+    command: &str,
+    env: &EnvPolicy,
+    timeout: Duration,
+    captures: &mut dyn CaptureFactory,
+) -> GradeResult {
+    if let Some(reason) = shell_execution_refusal_reason() {
+        return exec_error(command, reason);
+    }
     // `cmd /C rayman` searches the current directory before PATH. PATH filtering alone
     // cannot protect the control arm from a fixture/agent-provided rayman.cmd/.bat/.exe.
     // This is a narrow experiment-integrity preflight, not a sandbox claim.
@@ -167,56 +204,113 @@ pub fn run_shell(
     if let Err(error) = env.check_control_workspace(workspace) {
         return exec_error(command, &error);
     }
-    let temp = match temp_pair() {
-        Ok(pair) => pair,
-        Err(error) => return exec_error(command, &format!("无法创建临时文件: {error}")),
-    };
+    if let Err(error) = reject_uncontained_launch(command) {
+        return exec_error(command, &error);
+    }
     let mut cmd = shell(command);
     cmd.current_dir(workspace);
     apply_env(&mut cmd, env);
-    // Keep four handles to the exclusively-created files: two are inherited by the
-    // child and two are held by the evaluator for reading. Reading through retained
-    // handles, rather than re-opening the path after the child returns, prevents a
-    // same-user host shell from swapping a discovered temp pathname under the report.
-    let (out_file, mut out_reader, err_file, mut err_reader) = match (
-        temp.stdout.as_file().try_clone(),
-        temp.stdout.as_file().try_clone(),
-        temp.stderr.as_file().try_clone(),
-        temp.stderr.as_file().try_clone(),
-    ) {
-        (Ok(out_file), Ok(out_reader), Ok(err_file), Ok(err_reader)) => {
-            (out_file, out_reader, err_file, err_reader)
-        }
-        _ => return exec_error(command, "无法打开临时输出文件"),
-    };
-    cmd.stdout(out_file).stderr(err_file);
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
 
-    let mut child = match cmd.spawn() {
-        Ok(child) => child,
+    let (mut child, containment) = match spawn_contained(&mut cmd) {
+        Ok(spawned) => spawned,
         Err(error) => return exec_error(command, &format!("无法执行命令 `{command}`: {error}")),
+    };
+    let stdout = match child.stdout.take() {
+        Some(stdout) => stdout,
+        None => {
+            let cleanup_error = terminate_drop_and_reap(child, containment);
+            return exec_error(
+                command,
+                &with_cleanup_error("无法捕获命令 stdout".into(), cleanup_error),
+            );
+        }
+    };
+    let stderr = match child.stderr.take() {
+        Some(stderr) => stderr,
+        None => {
+            drop(stdout);
+            let cleanup_error = terminate_drop_and_reap(child, containment);
+            return exec_error(
+                command,
+                &with_cleanup_error("无法捕获命令 stderr".into(), cleanup_error),
+            );
+        }
+    };
+    let stdout_capture = match captures.spawn(Box::new(stdout), "stdout") {
+        Ok(capture) => capture,
+        Err(error) => {
+            let cleanup_error = terminate_drop_and_reap(child, containment);
+            return exec_error(
+                command,
+                &with_cleanup_error(format!("无法启动 stdout 捕获线程: {error}"), cleanup_error),
+            );
+        }
+    };
+    let stderr_capture = match captures.spawn(Box::new(stderr), "stderr") {
+        Ok(capture) => capture,
+        Err(error) => {
+            // Do not join an already-running reader while a descendant can still retain its
+            // inherited pipe. Explicit termination, Job drop, and Child drop must all happen
+            // first; otherwise a capture-thread creation failure can hang this error path.
+            let cleanup_error = terminate_drop_and_reap(child, containment);
+            let reader_error = stdout_capture.finish().err();
+            let mut message =
+                with_cleanup_error(format!("无法启动 stderr 捕获线程: {error}"), cleanup_error);
+            if let Some(reader_error) = reader_error {
+                message.push_str(&format!("; 已有 stdout 捕获线程失败: {reader_error}"));
+            }
+            return exec_error(command, &message);
+        }
     };
 
     let start = Instant::now();
     let mut timed_out = false;
     let exit = loop {
         match child.try_wait() {
-            Ok(Some(status)) => break status.code().unwrap_or(-1),
+            Ok(Some(status)) => break Ok(status.code().unwrap_or(-1)),
             Ok(None) => {
                 if start.elapsed() >= timeout {
-                    kill_tree(&mut child);
                     timed_out = true;
-                    break -1;
+                    break Ok(-1);
                 }
                 std::thread::sleep(Duration::from_millis(50));
             }
-            Err(error) => {
-                return exec_error(command, &format!("等待命令失败: {error}"));
-            }
+            Err(error) => break Err(format!("等待命令失败: {error}")),
         }
     };
 
-    let stdout = truncate(&read_lossy_file(&mut out_reader));
-    let mut stderr = truncate(&read_lossy_file(&mut err_reader));
+    // Always terminate the containment boundary, even after a successful/non-zero root
+    // exit. A shell can otherwise return while background descendants retain pipe/file
+    // handles and mutate later trials. The mandatory Windows Job Object makes cleanup a normal
+    // postcondition rather than a timeout-only best effort.
+    // Closing the Windows job with KILL_ON_JOB_CLOSE is an independent backstop if the
+    // explicit termination API reported an error. The Child is also reaped and dropped before
+    // joining pipe readers so no evaluator-owned process/pipe state can extend their lifetime.
+    let cleanup_error = terminate_drop_and_reap(child, containment);
+
+    let stdout_result = stdout_capture.finish();
+    let stderr_result = stderr_capture.finish();
+    let stdout = match stdout_result {
+        Ok(output) => output,
+        Err(error) => return exec_error(command, &format!("读取 stdout 失败: {error}")),
+    };
+    let mut stderr = match stderr_result {
+        Ok(output) => output,
+        Err(error) => return exec_error(command, &format!("读取 stderr 失败: {error}")),
+    };
+    if let Some(error) = cleanup_error {
+        return exec_error(
+            command,
+            &format!("无法确认命令进程树已清理: {error}; stderr: {stderr}"),
+        );
+    }
+    let exit = match exit {
+        Ok(exit) => exit,
+        Err(error) => return exec_error(command, &format!("{error}; stderr: {stderr}")),
+    };
     if timed_out {
         stderr = format!("命令超时（>{}s），已终止。\n{stderr}", timeout.as_secs());
     }
@@ -243,35 +337,350 @@ fn shell(command: &str) -> Command {
     } else {
         let mut cmd = Command::new("sh");
         cmd.arg("-c").arg(command);
-        // 独立进程组：超时后对整组发 SIGKILL 才能带走 cargo/rustc 孙进程。
-        #[cfg(unix)]
-        {
-            use std::os::unix::process::CommandExt;
-            cmd.process_group(0);
-        }
         cmd
     }
 }
 
-/// 超时后杀整棵进程树：只杀 shell 会留下持有文件锁的 cargo/rustc 孤儿。
-fn kill_tree(child: &mut Child) {
-    #[cfg(windows)]
-    let _ = Command::new("taskkill")
-        .args(["/T", "/F", "/PID", &child.id().to_string()])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
-    #[cfg(unix)]
-    // spawn 时已 process_group(0)，对负 pid 发信号即覆盖全组。
-    let _ = Command::new("kill")
-        .arg("-KILL")
-        .arg(format!("-{}", child.id()))
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
-    // 兜底：无论树杀是否成功，直接结束 shell 本身并回收，避免 wait 悬挂。
+/// Terminate and drop every process-lifetime guard before any reader join. This ordering is a
+/// safety invariant, not cleanup cosmetics: a descendant retaining stdout/stderr would keep a
+/// reader blocked if Job drop were delayed until function return.
+fn terminate_drop_and_reap(
+    mut child: Child,
+    mut containment: ProcessContainment,
+) -> Option<io::Error> {
+    let cleanup_error = containment.terminate().err();
+    drop(containment);
     let _ = child.kill();
     let _ = child.wait();
+    drop(child);
+    cleanup_error
+}
+
+fn with_cleanup_error(mut message: String, cleanup_error: Option<io::Error>) -> String {
+    if let Some(error) = cleanup_error {
+        message.push_str(&format!("; containment cleanup reported: {error}"));
+    }
+    message
+}
+
+/// Reject launchers whose purpose is to move work outside the descendant boundary.
+/// Ordinary background jobs remain allowed only on Windows because the mandatory Job Object
+/// owns and terminates them after every root exit. Schedulers/services would create work outside
+/// that boundary, so recognizable launchers are additionally rejected before the shell.
+#[cfg(windows)]
+fn reject_uncontained_launch(command: &str) -> Result<(), String> {
+    let mut forbidden = None;
+    for token in command
+        .split(|ch: char| {
+            ch.is_whitespace() || matches!(ch, '&' | '|' | ';' | '<' | '>' | '(' | ')' | '=' | ',')
+        })
+        .map(|token| token.trim_matches(|ch| matches!(ch, '\'' | '"' | '`')))
+        .filter(|token| !token.is_empty())
+    {
+        let base = token
+            .rsplit(['/', '\\'])
+            .next()
+            .unwrap_or(token)
+            .to_ascii_lowercase();
+        if matches!(
+            base.as_str(),
+            "schtasks" | "schtasks.exe" | "wmic" | "wmic.exe" | "sc" | "sc.exe" | "at" | "at.exe"
+        ) {
+            forbidden = Some(base);
+            break;
+        }
+    }
+    match forbidden {
+        Some(launcher) => Err(format!(
+            "拒绝可将进程移出评测进程树的后台/调度启动器 `{launcher}`"
+        )),
+        None => Ok(()),
+    }
+}
+
+#[cfg(not(windows))]
+fn reject_uncontained_launch(_command: &str) -> Result<(), String> {
+    // `run_shell_with_capture_factory` refuses this platform before reaching this guard.
+    Ok(())
+}
+
+fn spawn_contained(cmd: &mut Command) -> io::Result<(Child, ProcessContainment)> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        use windows_sys::Win32::System::Threading::CREATE_SUSPENDED;
+
+        let job = WindowsJob::new()?;
+        // Suspend before any shell byte executes, then bind the process to the job. This
+        // closes the spawn->AssignProcessToJobObject race in which a fast shell could
+        // otherwise create an untracked child first.
+        cmd.creation_flags(CREATE_SUSPENDED);
+        let mut child = cmd.spawn()?;
+        if let Err(error) = job.assign_and_resume(&child) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(error);
+        }
+        Ok((
+            child,
+            ProcessContainment {
+                job,
+                terminated: false,
+            },
+        ))
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = cmd;
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            UNSUPPORTED_SHELL_MESSAGE,
+        ))
+    }
+}
+
+struct ProcessContainment {
+    #[cfg(windows)]
+    job: WindowsJob,
+    terminated: bool,
+}
+
+impl ProcessContainment {
+    fn terminate(&mut self) -> io::Result<()> {
+        if self.terminated {
+            return Ok(());
+        }
+        #[cfg(windows)]
+        self.job.terminate()?;
+        self.terminated = true;
+        Ok(())
+    }
+}
+
+impl Drop for ProcessContainment {
+    fn drop(&mut self) {
+        let _ = self.terminate();
+    }
+}
+
+#[cfg(windows)]
+struct WindowsJob {
+    handle: windows_sys::Win32::Foundation::HANDLE,
+}
+
+#[cfg(windows)]
+impl WindowsJob {
+    fn new() -> io::Result<Self> {
+        use std::mem::size_of;
+        use windows_sys::Win32::System::JobObjects::{
+            CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
+            SetInformationJobObject,
+        };
+
+        // SAFETY: null security/name pointers request a private job with default security.
+        let handle = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
+        if handle.is_null() {
+            return Err(io::Error::last_os_error());
+        }
+        let job = Self { handle };
+        let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        // SAFETY: handle is a live job and the information pointer/length match the class.
+        let configured = unsafe {
+            SetInformationJobObject(
+                job.handle,
+                JobObjectExtendedLimitInformation,
+                (&raw const limits).cast(),
+                size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            )
+        };
+        if configured == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(job)
+    }
+
+    fn assign_and_resume(&self, child: &Child) -> io::Result<()> {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::System::JobObjects::AssignProcessToJobObject;
+
+        // SAFETY: both handles remain owned/live for the duration of this call.
+        let assigned =
+            unsafe { AssignProcessToJobObject(self.handle, child.as_raw_handle().cast()) };
+        if assigned == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        resume_suspended_process(child.id())
+    }
+
+    fn terminate(&self) -> io::Result<()> {
+        use windows_sys::Win32::System::JobObjects::TerminateJobObject;
+
+        // SAFETY: handle is a live private job owned by self.
+        if unsafe { TerminateJobObject(self.handle, 1) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
+}
+
+#[cfg(windows)]
+impl Drop for WindowsJob {
+    fn drop(&mut self) {
+        use windows_sys::Win32::Foundation::CloseHandle;
+
+        // KILL_ON_JOB_CLOSE is the panic/early-return backstop for every assigned child.
+        // SAFETY: handle was returned by CreateJobObjectW and is closed exactly once.
+        let _ = unsafe { CloseHandle(self.handle) };
+    }
+}
+
+#[cfg(windows)]
+fn resume_suspended_process(pid: u32) -> io::Result<()> {
+    use std::mem::size_of;
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First, Thread32Next,
+    };
+    use windows_sys::Win32::System::Threading::{OpenThread, ResumeThread, THREAD_SUSPEND_RESUME};
+
+    // SAFETY: flags/pid follow CreateToolhelp32Snapshot's documented contract.
+    let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
+    if snapshot == INVALID_HANDLE_VALUE {
+        return Err(io::Error::last_os_error());
+    }
+    let mut entry = THREADENTRY32 {
+        dwSize: size_of::<THREADENTRY32>() as u32,
+        ..Default::default()
+    };
+    let mut resumed = false;
+    // SAFETY: snapshot is live and entry points to a correctly-sized writable structure.
+    let mut has_entry = unsafe { Thread32First(snapshot, &raw mut entry) } != 0;
+    while has_entry {
+        if entry.th32OwnerProcessID == pid {
+            // SAFETY: the thread id came from the live system snapshot.
+            let thread = unsafe { OpenThread(THREAD_SUSPEND_RESUME, 0, entry.th32ThreadID) };
+            if thread.is_null() {
+                // SAFETY: snapshot is still live and owned by this function.
+                let _ = unsafe { CloseHandle(snapshot) };
+                return Err(io::Error::last_os_error());
+            }
+            // SAFETY: thread is a live handle opened with THREAD_SUSPEND_RESUME.
+            let previous = unsafe { ResumeThread(thread) };
+            // SAFETY: thread is closed exactly once after ResumeThread.
+            let _ = unsafe { CloseHandle(thread) };
+            if previous == u32::MAX {
+                // SAFETY: snapshot is still live and owned by this function.
+                let _ = unsafe { CloseHandle(snapshot) };
+                return Err(io::Error::last_os_error());
+            }
+            resumed = true;
+            break;
+        }
+        // SAFETY: snapshot/entry remain valid for the next enumeration step.
+        has_entry = unsafe { Thread32Next(snapshot, &raw mut entry) } != 0;
+    }
+    // SAFETY: snapshot is closed exactly once after enumeration.
+    let _ = unsafe { CloseHandle(snapshot) };
+    if !resumed {
+        return Err(io::Error::other(format!(
+            "找不到 suspended child {pid} 的主线程"
+        )));
+    }
+    Ok(())
+}
+
+struct BoundedCapture {
+    thread: JoinHandle<io::Result<BoundedBytes>>,
+}
+
+trait CaptureFactory {
+    fn spawn(
+        &mut self,
+        reader: Box<dyn Read + Send>,
+        stream: &'static str,
+    ) -> io::Result<BoundedCapture>;
+}
+
+struct ThreadCaptureFactory;
+
+impl CaptureFactory for ThreadCaptureFactory {
+    fn spawn(
+        &mut self,
+        reader: Box<dyn Read + Send>,
+        stream: &'static str,
+    ) -> io::Result<BoundedCapture> {
+        BoundedCapture::spawn(reader, stream)
+    }
+}
+
+impl BoundedCapture {
+    fn spawn(reader: impl Read + Send + 'static, stream: &'static str) -> io::Result<Self> {
+        let thread = std::thread::Builder::new()
+            .name(format!("rayman-eval-{stream}"))
+            .spawn(move || read_bounded(reader))?;
+        Ok(Self { thread })
+    }
+
+    fn finish(self) -> io::Result<String> {
+        self.thread
+            .join()
+            .map_err(|_| io::Error::other("输出捕获线程 panic"))?
+            .map(BoundedBytes::into_string)
+    }
+}
+
+struct BoundedBytes {
+    tail: Vec<u8>,
+    truncated: bool,
+}
+
+impl BoundedBytes {
+    fn push(&mut self, bytes: &[u8]) {
+        if bytes.len() >= OUTPUT_CAPTURE_BYTES {
+            self.tail.clear();
+            self.tail
+                .extend_from_slice(&bytes[bytes.len() - OUTPUT_CAPTURE_BYTES..]);
+            self.truncated = true;
+            return;
+        }
+        let overflow = self
+            .tail
+            .len()
+            .saturating_add(bytes.len())
+            .saturating_sub(OUTPUT_CAPTURE_BYTES);
+        if overflow > 0 {
+            self.tail.drain(..overflow);
+            self.truncated = true;
+        }
+        self.tail.extend_from_slice(bytes);
+    }
+
+    fn into_string(self) -> String {
+        let tail = String::from_utf8_lossy(&self.tail);
+        if self.truncated {
+            format!("…(stream truncated to last {OUTPUT_CAPTURE_BYTES} bytes)\n{tail}")
+        } else {
+            tail.into_owned()
+        }
+    }
+}
+
+fn read_bounded(mut reader: impl Read) -> io::Result<BoundedBytes> {
+    let mut capture = BoundedBytes {
+        tail: Vec::with_capacity(OUTPUT_CAPTURE_BYTES),
+        truncated: false,
+    };
+    let mut chunk = [0u8; 8 * 1024];
+    loop {
+        let read = reader.read(&mut chunk)?;
+        if read == 0 {
+            break;
+        }
+        capture.push(&chunk[..read]);
+    }
+    Ok(capture)
 }
 
 /// 清空继承环境，只透传白名单变量；PATH 单独按策略重组后写入。
@@ -473,41 +882,6 @@ fn is_link_or_reparse(metadata: &fs::Metadata) -> bool {
         || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
 }
 
-struct TempOutputPair {
-    stdout: NamedTempFile,
-    stderr: NamedTempFile,
-}
-
-/// Random, exclusively-created output files. `tempfile` retains the open handles
-/// and removes the paths on drop, closing the former predictable-name preoccupation
-/// and symlink/hardlink race.
-fn temp_pair() -> std::io::Result<TempOutputPair> {
-    temp_pair_in(&std::env::temp_dir())
-}
-
-fn temp_pair_in(base: &Path) -> std::io::Result<TempOutputPair> {
-    let stdout = TempFileBuilder::new()
-        .prefix("rayman-eval-")
-        .suffix(".out")
-        .tempfile_in(base)?;
-    let stderr = TempFileBuilder::new()
-        .prefix("rayman-eval-")
-        .suffix(".err")
-        .tempfile_in(base)?;
-    Ok(TempOutputPair { stdout, stderr })
-}
-
-fn read_lossy_file(file: &mut File) -> String {
-    if file.seek(SeekFrom::Start(0)).is_err() {
-        return String::new();
-    }
-    let mut bytes = Vec::new();
-    if file.read_to_end(&mut bytes).is_err() {
-        return String::new();
-    }
-    String::from_utf8_lossy(&bytes).into_owned()
-}
-
 fn exec_error(command: &str, message: &str) -> GradeResult {
     let _ = command;
     GradeResult {
@@ -518,26 +892,11 @@ fn exec_error(command: &str, message: &str) -> GradeResult {
     }
 }
 
-fn truncate(text: &str) -> String {
-    const MAX: usize = 4000;
-    if text.len() <= MAX {
-        return text.to_string();
-    }
-    let tail: String = text
-        .chars()
-        .rev()
-        .take(MAX)
-        .collect::<Vec<_>>()
-        .into_iter()
-        .rev()
-        .collect();
-    format!("…(truncated)\n{tail}")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    #[cfg(windows)]
     #[test]
     fn run_shell_captures_success_and_failure() {
         let dir = tempfile::tempdir().unwrap();
@@ -548,6 +907,7 @@ mod tests {
         assert_eq!(bad.exit, 3);
     }
 
+    #[cfg(windows)]
     #[test]
     fn run_shell_injects_extra_path_into_child_env() {
         let dir = tempfile::tempdir().unwrap();
@@ -568,6 +928,7 @@ mod tests {
         );
     }
 
+    #[cfg(windows)]
     #[test]
     fn run_shell_hides_parent_secrets_from_child() {
         // set_var 在 2024 edition 是 unsafe（与并发 getenv 有竞态），测试进程里可接受。
@@ -696,36 +1057,139 @@ mod tests {
     }
 
     #[test]
-    fn temp_pair_ignores_preoccupied_legacy_predictable_paths() {
-        let dir = tempfile::tempdir().unwrap();
-        let legacy_out = dir
-            .path()
-            .join(format!("rayman-eval-{}-0.out", std::process::id()));
-        let legacy_err = dir
-            .path()
-            .join(format!("rayman-eval-{}-0.err", std::process::id()));
-        std::fs::create_dir(&legacy_out).unwrap();
-        std::fs::create_dir(&legacy_err).unwrap();
+    fn output_capture_is_streamed_and_memory_bounded() {
+        let mut input = vec![b'x'; OUTPUT_CAPTURE_BYTES * 32];
+        input.extend_from_slice(b"tail-marker");
 
-        let pair = temp_pair_in(dir.path()).unwrap();
+        let captured = read_bounded(std::io::Cursor::new(input)).unwrap();
 
-        assert_ne!(pair.stdout.path(), legacy_out);
-        assert_ne!(pair.stderr.path(), legacy_err);
-        assert_ne!(pair.stdout.path(), pair.stderr.path());
-        assert!(pair.stdout.path().is_file());
-        assert!(pair.stderr.path().is_file());
+        assert!(captured.truncated);
+        assert_eq!(captured.tail.len(), OUTPUT_CAPTURE_BYTES);
+        assert!(captured.into_string().ends_with("tail-marker"));
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn background_descendants_are_reaped_after_success_and_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        for (exit, expected, marker) in [
+            (0, GradeOutcome::Passed, "success-leak.txt"),
+            (3, GradeOutcome::Failed, "failure-leak.txt"),
+        ] {
+            let script = format!("delayed-{exit}.cmd");
+            std::fs::write(
+                dir.path().join(&script),
+                format!("@echo off\r\nping 127.0.0.1 -n 3 >NUL\r\necho leaked>{marker}\r\n"),
+            )
+            .unwrap();
+            let command = format!("start /B {script} & exit {exit}");
+            let result = run_shell(dir.path(), &command, &EnvPolicy::default(), RUN_TIMEOUT);
+            assert_eq!(result.outcome, expected, "{}", result.stderr);
+        }
+        std::thread::sleep(Duration::from_secs(3));
+        assert!(!dir.path().join("success-leak.txt").exists());
+        assert!(!dir.path().join("failure-leak.txt").exists());
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn host_shell_is_refused_before_spawn_without_a_reliable_descendant_supervisor() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = run_shell(
+            dir.path(),
+            "echo leaked > must-not-exist.txt",
+            &EnvPolicy::default(),
+            RUN_TIMEOUT,
+        );
+        assert_eq!(result.outcome, GradeOutcome::InfrastructureError);
+        assert!(result.stderr.contains("descendant supervisor"));
+        assert!(!shell_execution_supported());
+        assert_eq!(
+            shell_containment_mode(),
+            "shell_refused_no_reliable_descendant_supervisor"
+        );
+        assert!(!dir.path().join("must-not-exist.txt").exists());
+    }
+
+    #[cfg(windows)]
+    struct FailStderrCaptureFactory;
+
+    #[cfg(windows)]
+    impl CaptureFactory for FailStderrCaptureFactory {
+        fn spawn(
+            &mut self,
+            reader: Box<dyn Read + Send>,
+            stream: &'static str,
+        ) -> io::Result<BoundedCapture> {
+            if stream == "stderr" {
+                drop(reader);
+                Err(io::Error::other("forced stderr capture failure"))
+            } else {
+                BoundedCapture::spawn(reader, stream)
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn second_capture_thread_failure_drops_job_and_child_before_joining_first_reader() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("delayed-capture.cmd"),
+            "@echo off\r\nping 127.0.0.1 -n 3 >NUL\r\necho leaked>capture-leak.txt\r\n",
+        )
+        .unwrap();
+        let mut captures = FailStderrCaptureFactory;
+        let start = Instant::now();
+
+        let result = run_shell_with_capture_factory(
+            dir.path(),
+            "start /B delayed-capture.cmd & exit 0",
+            &EnvPolicy::default(),
+            RUN_TIMEOUT,
+            &mut captures,
+        );
+
+        assert_eq!(result.outcome, GradeOutcome::InfrastructureError);
+        assert!(
+            result.stderr.contains("forced stderr capture failure"),
+            "{}",
+            result.stderr
+        );
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "capture failure cleanup must not wait for inherited pipe EOF"
+        );
+        std::thread::sleep(Duration::from_secs(3));
+        assert!(!dir.path().join("capture-leak.txt").exists());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn scheduler_launcher_is_rejected_before_shell_start() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = run_shell(
+            dir.path(),
+            "schtasks /Create /TN rayman-eval-leak /TR calc.exe /SC ONCE /ST 00:00",
+            &EnvPolicy::default(),
+            RUN_TIMEOUT,
+        );
+        assert_eq!(result.outcome, GradeOutcome::InfrastructureError);
+        assert!(result.stderr.contains("移出评测进程树"));
+    }
+
+    #[cfg(windows)]
     #[test]
     fn run_shell_times_out_and_reports() {
         let dir = tempfile::tempdir().unwrap();
         // 睡 30 秒但只给 1 秒超时 → 应被杀掉并标记失败。
-        let cmd = if cfg!(windows) {
-            // ping 作为跨平台“sleep”：ping 本机 30 次约 30 秒。
-            "ping 127.0.0.1 -n 30 > NUL"
-        } else {
-            "sleep 30"
-        };
+        // The delayed background marker proves timeout cleanup covers descendants too.
+        std::fs::write(
+            dir.path().join("delayed-timeout.cmd"),
+            "@echo off\r\nping 127.0.0.1 -n 3 >NUL\r\necho leaked>timeout-leak.txt\r\n",
+        )
+        .unwrap();
+        let cmd = "start /B delayed-timeout.cmd & ping 127.0.0.1 -n 30 >NUL";
         let start = Instant::now();
         let result = run_shell(
             dir.path(),
@@ -736,8 +1200,11 @@ mod tests {
         assert_eq!(result.outcome, GradeOutcome::TimedOut);
         assert!(result.stderr.contains("超时"));
         assert!(start.elapsed() < Duration::from_secs(15), "应尽快超时返回");
+        std::thread::sleep(Duration::from_secs(3));
+        assert!(!dir.path().join("timeout-leak.txt").exists());
     }
 
+    #[cfg(windows)]
     #[test]
     fn run_shell_classifies_spawn_failures_as_infrastructure_errors() {
         let dir = tempfile::tempdir().unwrap();

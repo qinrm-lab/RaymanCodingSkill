@@ -1,0 +1,86 @@
+{
+  "multi_source_no_test_min_sources": 3,
+  "block_warning_kinds": [],
+  "exemptions": [
+    {
+      "path": "crates/rayman/src/context.rs",
+      "kind": "high_fan_in",
+      "reason": "Content-proven context indexing is intentionally a shared workspace authority; context unit tests, CLI integration tests, and strict self-dogfood cover its consumers."
+    },
+    {
+      "path": "crates/rayman/src/file_io.rs",
+      "kind": "high_fan_in",
+      "reason": "Atomic file replacement and durable-write helpers are intentionally centralized; focused file_io tests plus the full root suite validate all callers together."
+    },
+    {
+      "path": "crates/rayman/src/hash.rs",
+      "kind": "high_fan_in",
+      "reason": "This small SHA-256 primitive is intentionally shared; root workspace tests and release artifact verification cover its consumers."
+    },
+    {
+      "path": "crates/rayman/src/pathfmt.rs",
+      "kind": "high_fan_in",
+      "reason": "Cross-platform display formatting is deliberately centralized so every caller receives the same path contract; the full root suite covers its consumers."
+    },
+    {
+      "path": "crates/rayman/src/state_paths.rs",
+      "kind": "high_fan_in",
+      "reason": "Managed-state containment is a shared security boundary by design; the full root suite and release self-dogfood validate all state consumers together."
+    },
+    {
+      "path": "crates/rayman/src/walk.rs",
+      "kind": "high_fan_in",
+      "reason": "Workspace traversal is intentionally the single shared ignore and completeness boundary; walk unit tests plus the full root suite cover its callers."
+    },
+    {
+      "path": "evals/tasks/adjacent-bug-escalation/fixture/src/config.rs",
+      "kind": "public_api_without_test_evidence",
+      "reason": "This exact intentionally incomplete source file is synthetic input for the adjacent-bug escalation evaluation, not shipped production code."
+    },
+    {
+      "path": "evals/tasks/large-repo-nav/fixture/src/ast.rs",
+      "kind": "public_api_without_test_evidence",
+      "reason": "This exact public surface is synthetic navigation fixture input; the eval grader, not a fixture-local Cargo test, validates the task outcome."
+    },
+    {
+      "path": "evals/tasks/large-repo-nav/fixture/src/errors.rs",
+      "kind": "high_fan_in",
+      "reason": "This exact synthetic dependency hub is intentional test data for the large-repository navigation evaluation and is not shipped production code."
+    },
+    {
+      "path": "evals/tasks/large-repo-nav/fixture/src/errors.rs",
+      "kind": "public_api_without_test_evidence",
+      "reason": "This exact public error surface is synthetic navigation fixture input; the eval grader validates it outside the fixture package."
+    },
+    {
+      "path": "evals/tasks/large-repo-nav/fixture/src/evaluator.rs",
+      "kind": "public_api_without_test_evidence",
+      "reason": "This exact public surface is synthetic navigation fixture input; the eval grader, not a fixture-local Cargo test, validates the task outcome."
+    },
+    {
+      "path": "evals/tasks/large-repo-nav/fixture/src/parser.rs",
+      "kind": "public_api_without_test_evidence",
+      "reason": "This exact public surface is synthetic navigation fixture input; the eval grader, not a fixture-local Cargo test, validates the task outcome."
+    },
+    {
+      "path": "evals/tasks/large-repo-nav/fixture/src/tokenizer.rs",
+      "kind": "public_api_without_test_evidence",
+      "reason": "This exact public surface is synthetic navigation fixture input; the eval grader, not a fixture-local Cargo test, validates the task outcome."
+    },
+    {
+      "path": "evals/tasks/large-repo-nav/fixture/src/util/math.rs",
+      "kind": "public_api_without_test_evidence",
+      "reason": "This exact public helper is synthetic navigation fixture input; the eval grader validates it outside the fixture package."
+    },
+    {
+      "path": "evals/tasks/large-repo-nav/fixture/src/util/mod.rs",
+      "kind": "public_api_without_test_evidence",
+      "reason": "This exact public module is synthetic navigation fixture input; the eval grader validates it outside the fixture package."
+    },
+    {
+      "path": "evals/tasks/large-repo-nav/fixture/src/util/strings.rs",
+      "kind": "public_api_without_test_evidence",
+      "reason": "This exact public helper is synthetic navigation fixture input; the eval grader validates it outside the fixture package."
+    }
+  ]
+}

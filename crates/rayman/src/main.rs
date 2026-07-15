@@ -156,6 +156,7 @@ fn run_state_audit(root: &Path, json: bool, check: bool) -> Result<()> {
         "pending.json",
         "context",
         "autosave.json",
+        "autosave.lock",
         "tmp",
         "workspace_skill.yaml",
         "quality.json",
@@ -256,7 +257,11 @@ fn audit_allowed_state_entry(root: &Path, name: &str) -> Result<()> {
             };
             Ok(())
         }
-        "pending.json" | "autosave.json" | "workspace_skill.yaml" | "quality.json" => {
+        "pending.json"
+        | "autosave.json"
+        | "autosave.lock"
+        | "workspace_skill.yaml"
+        | "quality.json" => {
             let path = rayman::state_paths::managed_state_file(root, Path::new(name), false)?;
             match std::fs::symlink_metadata(&path) {
                 Ok(_) => Ok(()),
@@ -718,7 +723,10 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 println!("暂无目标。");
             } else {
                 for goal in goals {
-                    println!("{}  [{}]  {}", goal.id, goal.status, goal.title);
+                    println!(
+                        "{}  [{}/{}]  {}",
+                        goal.id, goal.lifecycle, goal.status, goal.title
+                    );
                 }
             }
         }
@@ -727,7 +735,10 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
             if json {
                 print(&serde_json::to_value(&goal)?);
             } else if let Some(goal) = goal {
-                println!("{} [{}] {}", goal.id, goal.status, goal.title);
+                println!(
+                    "{} [{}/{}] {}",
+                    goal.id, goal.lifecycle, goal.status, goal.title
+                );
                 for req in goal.requirements {
                     println!(
                         "  {} [{}/{}] {}{}",
@@ -805,15 +816,39 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
             req,
             message,
             changed,
+            non_code,
             command,
         } => {
             if message.trim().is_empty() || command.trim().is_empty() {
                 bail!("`--message` 与 `--command` 都不能为空");
             }
             let impacts = impact_evidence_for_changed_paths(root, &changed)?;
-            let before = workspace_fingerprint(root)?;
-            let output = run_validation_command(root, &command)?;
-            let after = workspace_fingerprint(root)?;
+            goal::validate_command_for_impacts(root, &command, &impacts, non_code)?;
+            let parsed = goal::parse_validation_command(&command)?;
+            let contract_sha256 = store.validation_contract_hash(&id, &req)?;
+            let before = goal::workspace_fingerprint(root)?;
+            let (listed_tests, list_stdout_sha256, list_stderr_sha256) =
+                if let Some(list_command) = goal::validation_list_command(&parsed)? {
+                    let list_output = run_validation_command(root, &list_command)?;
+                    if !list_output.status.success() {
+                        bail!(
+                            "独立 test list proof 失败（exit={}）；不会写入 receipt",
+                            list_output.status.code().unwrap_or(-1)
+                        );
+                    }
+                    (
+                        Some(goal::listed_test_count(
+                            &list_output.stdout,
+                            &list_output.stderr,
+                        )?),
+                        Some(sha256_hex(&list_output.stdout)),
+                        Some(sha256_hex(&list_output.stderr)),
+                    )
+                } else {
+                    (None, None, None)
+                };
+            let output = run_validation_command(root, &parsed)?;
+            let after = goal::workspace_fingerprint(root)?;
             if !output.status.success() {
                 bail!(
                     "验证命令失败（exit={}）；不会写入 receipt。stdout_sha256={} stderr_sha256={}",
@@ -822,6 +857,20 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                     sha256_hex(&output.stderr)
                 );
             }
+            let test_proof = goal::validation_execution_proof(
+                &parsed,
+                &output.stdout,
+                &output.stderr,
+                listed_tests,
+            )?;
+            if before != after {
+                bail!(
+                    "验证命令修改了工作区内容；不会写入 receipt。before={} after={}",
+                    before,
+                    after
+                );
+            }
+            let impact_scopes = goal::validation_scopes_for_impacts(&impacts);
             let receipt = goal::ValidationReceipt {
                 exit_code: output.status.code().unwrap_or(0),
                 cwd: root.display().to_string(),
@@ -829,9 +878,29 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 workspace_fingerprint_after: after,
                 stdout_sha256: sha256_hex(&output.stdout),
                 stderr_sha256: sha256_hex(&output.stderr),
+                invocation_sha256: goal::validation_invocation_sha256_scoped(
+                    &command,
+                    &impact_scopes,
+                    non_code,
+                ),
+                passed_tests: test_proof.map(|proof| proof.passed),
+                listed_tests: test_proof.map(|proof| proof.listed),
+                ignored_tests: test_proof.map(|proof| proof.ignored),
+                list_stdout_sha256,
+                list_stderr_sha256,
+                contract_sha256,
             };
-            let goal =
-                store.record_validation_receipt(&id, &req, &message, command, receipt, impacts)?;
+            let goal = store.record_validation_receipt(
+                &id,
+                &req,
+                goal::ValidationReceiptSubmission {
+                    evidence: message,
+                    command,
+                    receipt,
+                    impacts,
+                    non_code,
+                },
+            )?;
             if json {
                 print(&serde_json::to_value(&goal)?);
             } else {
@@ -844,6 +913,51 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 print(&serde_json::to_value(&goal)?);
             } else {
                 println!("目标 {} 已关闭为 {}", goal.id, goal.status);
+            }
+        }
+        GoalAction::Archive {
+            id,
+            reason,
+            migrate_unreceipted,
+        } => {
+            let goal = store.archive(&id, &reason, migrate_unreceipted)?;
+            if json {
+                print(&serde_json::to_value(&goal)?);
+            } else {
+                println!("目标 {} 已归档：{}", goal.id, reason.trim());
+            }
+        }
+        GoalAction::Supersede { id, replacement } => {
+            let goal = store.supersede(&id, &replacement)?;
+            if json {
+                print(&serde_json::to_value(&goal)?);
+            } else {
+                println!("目标 {} 已由 {} 取代", goal.id, replacement);
+            }
+        }
+        GoalAction::Current { id } => {
+            if let Some(id) = id {
+                let goal = store.mark_current(&id)?;
+                if json {
+                    print(&serde_json::to_value(&goal)?);
+                } else {
+                    println!("目标 {} 已恢复为 current", goal.id);
+                }
+            } else {
+                let goals = store
+                    .list()?
+                    .into_iter()
+                    .filter(|goal| goal.lifecycle == goal::GoalLifecycle::Current)
+                    .collect::<Vec<_>>();
+                if json {
+                    print(&serde_json::to_value(&goals)?);
+                } else if goals.is_empty() {
+                    println!("暂无 current 目标。");
+                } else {
+                    for goal in goals {
+                        println!("{}  [{}]  {}", goal.id, goal.status, goal.title);
+                    }
+                }
             }
         }
         GoalAction::Pending(PendingCmd { action }) => match action {
@@ -904,36 +1018,15 @@ fn impact_evidence_for_changed_paths(
         .collect()
 }
 
-fn run_validation_command(root: &Path, command: &str) -> Result<std::process::Output> {
-    let mut process = if cfg!(windows) {
-        let mut process = ProcessCommand::new("cmd");
-        process.args(["/C", command]);
-        process
-    } else {
-        let mut process = ProcessCommand::new("sh");
-        process.args(["-c", command]);
-        process
-    };
-    process
+fn run_validation_command(
+    root: &Path,
+    command: &goal::ParsedValidationCommand,
+) -> Result<std::process::Output> {
+    ProcessCommand::new(&command.program)
+        .args(&command.args)
         .current_dir(root)
         .output()
-        .with_context(|| format!("无法执行验证命令: {command}"))
-}
-
-fn workspace_fingerprint(root: &Path) -> Result<String> {
-    let mut hasher = Sha256::new();
-    for path in rayman::walk::workspace_files_checked(root)? {
-        let relative = path
-            .strip_prefix(root)
-            .unwrap_or(&path)
-            .to_string_lossy()
-            .replace('\\', "/");
-        hasher.update(relative.as_bytes());
-        hasher.update([0]);
-        hasher.update(rayman::hash::sha256_file(&path)?.as_bytes());
-        hasher.update([0]);
-    }
-    Ok(format!("{:x}", hasher.finalize()))
+        .with_context(|| format!("无法执行验证程序: {}", command.program))
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -945,6 +1038,8 @@ fn sha256_hex(bytes: &[u8]) -> String {
 fn impact_evidence_from_report(report: &map::ImpactReport) -> goal::ImpactEvidence {
     goal::ImpactEvidence {
         changed_path: report.changed_path.clone(),
+        package: report.package.clone(),
+        manifest_path: report.manifest_path.clone(),
         direct_dependencies: report
             .direct_dependencies
             .iter()
@@ -1024,7 +1119,7 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
                 }
             }
         }
-        let current_fingerprint = match workspace_fingerprint(root) {
+        let current_fingerprint = match goal::workspace_fingerprint(root) {
             Ok(fingerprint) => Some(fingerprint),
             Err(error) => {
                 standard_blockers.push(format!("无法计算工作区内容指纹: {error}"));
@@ -1032,22 +1127,45 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
             }
         };
         for checked_goal in &goals {
-            if checked_goal.loaded_from_legacy {
-                if checked_goal.status != goal::GoalStatus::Success {
-                    standard_blockers.push(format!(
-                        "legacy goal {} 状态为 {}；请迁移或显式关闭",
-                        checked_goal.id, checked_goal.status
-                    ));
-                } else {
-                    standard_warnings.push(format!(
-                        "legacy goal {} 没有可验证 receipt，作为历史记录忽略；不能用于当前交付声明",
-                        checked_goal.id
-                    ));
-                }
-                continue;
-            }
             if let Some(error) = checked_goal.current_schema_error() {
                 standard_blockers.push(format!("goal {} 合约无效: {error}", checked_goal.id));
+                continue;
+            }
+            if let Some(error) = checked_goal.lifecycle_proof_error(root) {
+                standard_blockers.push(format!(
+                    "goal {} lifecycle proof 无效: {error}",
+                    checked_goal.id
+                ));
+                continue;
+            }
+            if let Some(fingerprint) = current_fingerprint.as_deref()
+                && let Some(error) =
+                    goal::supersession_error(checked_goal, &goals, root, fingerprint)
+            {
+                standard_blockers.push(format!(
+                    "goal {} supersession 合约无效: {error}",
+                    checked_goal.id
+                ));
+                continue;
+            }
+            if checked_goal.lifecycle != goal::GoalLifecycle::Current {
+                standard_warnings.push(format!(
+                    "historical goal {} lifecycle={} 已保留但不参与当前 readiness{}",
+                    checked_goal.id,
+                    checked_goal.lifecycle,
+                    checked_goal
+                        .superseded_by
+                        .as_deref()
+                        .map(|id| format!("（superseded_by={id}）"))
+                        .unwrap_or_default()
+                ));
+                continue;
+            }
+            if checked_goal.loaded_from_legacy {
+                standard_blockers.push(format!(
+                    "legacy goal {} 仍为 current（status={}）；legacy 记录不能生成当前 receipt，请显式 archive 历史 success，或新建 current-schema replacement 后 supersede",
+                    checked_goal.id, checked_goal.status
+                ));
                 continue;
             }
             let requires_receipt = checked_goal.is_current_schema();
@@ -1103,18 +1221,25 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
                         checked_goal.id, req.id
                     ));
                 }
-                if !req.impacts.is_empty() && !req.validations.is_empty() {
-                    for gap in validation_relevance_gaps(req) {
+                if !req.impacts.is_empty()
+                    && let Some(fingerprint) = current_fingerprint.as_deref()
+                {
+                    for gap in goal::validation_relevance_gaps(req, checked_goal, root, fingerprint)
+                    {
                         standard_blockers
                             .push(format!("goal {} 需求 {} {gap}", checked_goal.id, req.id));
                     }
                 }
                 if requires_receipt && checked_goal.status == goal::GoalStatus::Success && is_must {
                     let has_current_receipt = req.validations.iter().any(|validation| {
-                        validation.receipt.as_ref().is_some_and(|receipt| {
-                            receipt.exit_code == 0
-                                && current_fingerprint.as_deref()
-                                    == Some(receipt.workspace_fingerprint_after.as_str())
+                        current_fingerprint.as_deref().is_some_and(|fingerprint| {
+                            goal::validation_has_current_receipt(
+                                validation,
+                                checked_goal,
+                                req,
+                                root,
+                                fingerprint,
+                            )
                         })
                     });
                     if !has_current_receipt {
@@ -1249,79 +1374,6 @@ fn check_readiness_scope(profile: CheckProfile) -> &'static str {
         CheckProfile::Standard => "workspace_standard",
         CheckProfile::Release => "workspace_strict_quality",
     }
-}
-
-fn validation_relevance_gaps(req: &goal::Requirement) -> Vec<String> {
-    let mut gaps = Vec::new();
-    for impact in &req.impacts {
-        let Some(expectation) = validation_expectation_for_impact(impact) else {
-            continue;
-        };
-        if !req
-            .validations
-            .iter()
-            .any(|validation| validation_matches_expectation(&validation.command, expectation))
-        {
-            gaps.push(format!(
-                "validation 不覆盖 {}；需要 {}",
-                impact.changed_path,
-                validation_expectation_label(expectation)
-            ));
-        }
-    }
-    gaps
-}
-
-#[derive(Copy, Clone)]
-enum ValidationExpectation {
-    RustBuildOrTest,
-    CargoManifestValidation,
-}
-
-fn validation_expectation_for_impact(
-    impact: &goal::ImpactEvidence,
-) -> Option<ValidationExpectation> {
-    let path = impact.changed_path.to_ascii_lowercase();
-    if path.ends_with(".rs") {
-        return Some(ValidationExpectation::RustBuildOrTest);
-    }
-    if path.ends_with("cargo.toml") || path.ends_with("cargo.lock") {
-        return Some(ValidationExpectation::CargoManifestValidation);
-    }
-    None
-}
-
-fn validation_expectation_label(expectation: ValidationExpectation) -> &'static str {
-    match expectation {
-        ValidationExpectation::RustBuildOrTest => {
-            "Rust build/test validation such as `cargo test`, `cargo clippy`, `cargo check`, or `cargo build`"
-        }
-        ValidationExpectation::CargoManifestValidation => {
-            "Cargo manifest validation such as `cargo test`, `cargo clippy`, `cargo check`, `cargo build`, `cargo deny check`, or `cargo audit`"
-        }
-    }
-}
-
-fn validation_matches_expectation(command: &str, expectation: ValidationExpectation) -> bool {
-    let command = command.to_ascii_lowercase();
-    match expectation {
-        ValidationExpectation::RustBuildOrTest => is_rust_build_or_test_command(&command),
-        ValidationExpectation::CargoManifestValidation => {
-            is_rust_build_or_test_command(&command) || is_dependency_audit_command(&command)
-        }
-    }
-}
-
-fn is_rust_build_or_test_command(command: &str) -> bool {
-    command.contains("cargo test")
-        || command.contains("cargo nextest")
-        || command.contains("cargo clippy")
-        || command.contains("cargo check")
-        || command.contains("cargo build")
-}
-
-fn is_dependency_audit_command(command: &str) -> bool {
-    command.contains("cargo deny") || command.contains("cargo audit")
 }
 
 fn print_assets(report: &assets::AssetReport) {
@@ -1578,7 +1630,7 @@ mod tests {
     #[test]
     fn workspace_fingerprint_refuses_an_incomplete_workspace_walk() {
         let dir = tempfile::tempdir().unwrap();
-        assert!(workspace_fingerprint(&dir.path().join("missing-workspace")).is_err());
+        assert!(goal::workspace_fingerprint(&dir.path().join("missing-workspace")).is_err());
     }
 
     #[test]

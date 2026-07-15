@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 
 use crate::grade::GradeOutcome;
-use crate::task::TaskProvenance;
+use crate::task::{GradeExecutionProvenance, TaskProvenance};
 
 pub const WITH_SKILL: &str = "with_skill";
 pub const CONTROL: &str = "control";
@@ -25,6 +25,11 @@ pub struct HostProvenance {
     pub os: String,
     pub family: String,
     pub arch: String,
+    /// Arbitrary agent/grade shell commands are admitted only when the evaluator has a
+    /// mandatory descendant-containment primitive. Unsupported hosts record refusal rather
+    /// than silently falling back to a weaker process-group claim.
+    pub shell_execution_supported: bool,
+    pub shell_containment: String,
 }
 
 /// The parsed identity returned by the selected rayman binary before a real trial.
@@ -69,6 +74,9 @@ pub struct RunProvenance {
     /// `mock` 或 `unsandboxed_host_execution`；不存在将 host shell 说成隔离环境的第三种状态。
     pub execution_mode: String,
     pub unsandboxed_host_execution: bool,
+    /// Host execution of hidden grade commands is independently authorized from the
+    /// model backend: either exact built-in task hashes or a dedicated custom-task ack.
+    pub grade_execution: GradeExecutionProvenance,
     /// 真实后端开始前，选定二进制已在固定 PATH 下通过 doctor 的 installed-identity
     /// 校验，且选定 skill 与工作区 SKILL.md 的内容一致。这不是 source-fresh 证明；
     /// 后者单独记录在 `release_contract`。mock 不需要受管元数据。
@@ -282,6 +290,13 @@ impl EvalReport {
     fn interpretation(&self, with: &CellStat, control: &CellStat) -> Interpretation {
         let mut reasons = Vec::new();
         let mut non_comparative = false;
+        if !self.provenance.host.shell_execution_supported {
+            non_comparative = true;
+            reasons.push(
+                "当前平台缺少评测器可证明可靠的 descendant supervisor；所有 agent/grade shell 执行均在 spawn 前拒绝，本 run 仅保留编排取证，不可比较。"
+                    .into(),
+            );
+        }
         if self.provenance.unsandboxed_host_execution {
             non_comparative = true;
             reasons.push(
@@ -472,6 +487,24 @@ impl EvalReport {
         } else {
             out.push_str("- Execution mode: mock backend (no real model request)\n");
         }
+        if self.provenance.host.shell_execution_supported {
+            out.push_str(&format!(
+                "- Shell containment: `{}` (mandatory; no weaker fallback)\n",
+                self.provenance.host.shell_containment
+            ));
+        } else {
+            out.push_str(&format!(
+                "- Shell execution: **REFUSED BEFORE SPAWN** (`{}`)\n",
+                self.provenance.host.shell_containment
+            ));
+        }
+        if let Some(manifest) = &self.provenance.grade_execution.trusted_manifest {
+            out.push_str(&format!(
+                "- Grade execution: trusted built-in task manifest `{manifest}` (task hashes verified)\n"
+            ));
+        } else {
+            out.push_str("- Grade execution: **CUSTOM HOST COMMANDS EXPLICITLY ACKNOWLEDGED**\n");
+        }
         out.push_str(&format!(
             "- Provenance: skill SHA-256 `{}`, rayman SHA-256 `{}`, {} task/fixture manifests in `report.json`\n\n",
             self.provenance.skill.sha256,
@@ -543,6 +576,12 @@ mod tests {
             backend: "mock".into(),
             execution_mode: "mock".into(),
             unsandboxed_host_execution: false,
+            grade_execution: GradeExecutionProvenance {
+                mode: "trusted_builtin_manifest".into(),
+                tasks_root: "tasks".into(),
+                trusted_manifest: Some("test-manifest".into()),
+                custom_execution_acknowledged: false,
+            },
             release_contract_verified: false,
             release_contract: ReleaseContractProvenance::not_required_for_mock(),
             git_head: Some("head".into()),
@@ -558,6 +597,8 @@ mod tests {
                 os: "test".into(),
                 family: "test".into(),
                 arch: "test".into(),
+                shell_execution_supported: true,
+                shell_containment: "windows_job_object_kill_on_close_required".into(),
             },
             seed: 7,
             order_strategy: "test".into(),
@@ -734,6 +775,30 @@ mod tests {
         assert!(markdown.contains("NON-COMPARATIVE"));
         assert!(markdown.contains("forensic review"));
         assert!(!markdown.contains("**Observed delta**"), "{markdown}");
+    }
+
+    #[test]
+    fn unsupported_shell_host_is_reported_as_refused_and_non_comparative() {
+        let mut report = report(
+            1,
+            2,
+            vec![
+                trial("t1", WITH_SKILL, Outcome::Pass, 0),
+                trial("t1", CONTROL, Outcome::Fail, 1),
+                trial("t1", WITH_SKILL, Outcome::Fail, 1),
+                trial("t1", CONTROL, Outcome::Pass, 0),
+            ],
+        );
+        report.provenance.host.shell_execution_supported = false;
+        report.provenance.host.shell_containment =
+            "shell_refused_no_reliable_descendant_supervisor".into();
+
+        let markdown = report.markdown();
+        let summary = report.summary_json();
+
+        assert!(markdown.contains("REFUSED BEFORE SPAWN"), "{markdown}");
+        assert!(markdown.contains("NON-COMPARATIVE"), "{markdown}");
+        assert_eq!(summary["interpretation"]["status"], "non_comparative");
     }
 
     #[test]

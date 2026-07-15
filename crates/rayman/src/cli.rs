@@ -248,7 +248,10 @@ pub enum GoalAction {
         /// 本次验证覆盖的变更文件；会记录 map impact 快照（可重复）
         #[arg(long = "changed")]
         changed: Vec<String>,
-        /// 由当前 shell 执行；非零退出不会写入 receipt
+        /// 明确声明这是非代码需求；与 --changed 互斥
+        #[arg(long, conflicts_with = "changed")]
+        non_code: bool,
+        /// 作为单一程序 + argv 直接执行；拒绝 shell 控制符，非零退出不会写入 receipt
         #[arg(long)]
         command: String,
     },
@@ -258,6 +261,23 @@ pub enum GoalAction {
         #[arg(long, default_value = "success")]
         status: String,
     },
+    /// 将历史目标显式归档；保留 JSON，但不再参与 readiness
+    Archive {
+        id: String,
+        #[arg(long)]
+        reason: String,
+        /// Migrate a pre-rollout schema-v2 success record that cannot carry the new receipt proof
+        #[arg(long)]
+        migrate_unreceipted: bool,
+    },
+    /// 标记旧目标已由另一个 current 目标取代
+    Supersede {
+        id: String,
+        #[arg(long = "by")]
+        replacement: String,
+    },
+    /// 不带 id 时列出 current 目标；带 id 时把该目标恢复为 current
+    Current { id: Option<String> },
     /// 待完成项
     Pending(PendingCmd),
 }

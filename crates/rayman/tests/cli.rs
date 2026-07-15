@@ -72,10 +72,21 @@ fn run_json(dir: &Path, args: &[&str]) -> Value {
         .unwrap_or_else(|error| panic!("输出不是 JSON: {error}\n{}", output.stdout))
 }
 
-/// Current-schema goals need a receipt produced by the CLI itself. `echo` is
-/// deliberately harmless and cross-shell; command authenticity is proven by
-/// the actual process exit/output/fingerprint, not by a typed attestation.
+/// Current-schema goals need a receipt produced by the CLI itself. `rustc
+/// --version` is a harmless direct argv invocation available in the test
+/// toolchain; no shell is involved.
 fn validate_goal(root: &Path, id: &str, req: &str, message: &str, changed: &[&str]) -> Value {
+    let command = if let Some(path) = changed.iter().find(|path| path.ends_with(".rs")) {
+        std::fs::create_dir_all(root.join("target/rayman-validation")).unwrap();
+        format!("rustc --crate-type lib {path} --out-dir target/rayman-validation")
+    } else if changed
+        .iter()
+        .any(|path| path.ends_with("Cargo.toml") || path.ends_with("Cargo.lock"))
+    {
+        "cargo check --quiet".into()
+    } else {
+        "rustc --version".into()
+    };
     let mut args = vec![
         "goal",
         "validate",
@@ -85,10 +96,13 @@ fn validate_goal(root: &Path, id: &str, req: &str, message: &str, changed: &[&st
         "-m",
         message,
         "--command",
-        "echo receipt",
+        command.as_str(),
     ];
     for path in changed {
         args.extend(["--changed", *path]);
+    }
+    if changed.is_empty() {
+        args.push("--non-code");
     }
     run_json(root, &args)
 }
@@ -97,6 +111,15 @@ fn write(dir: &Path, rel: &str, body: &str) {
     let path = dir.join(rel);
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(path, body).unwrap();
+}
+
+fn generate_lockfile(root: &Path) {
+    let status = Command::new("cargo")
+        .arg("generate-lockfile")
+        .current_dir(root)
+        .status()
+        .expect("cargo must be available to build the fixture lockfile");
+    assert!(status.success());
 }
 
 fn state_snapshot(root: &Path) -> BTreeMap<String, (u64, std::time::SystemTime, Vec<u8>)> {
@@ -203,7 +226,7 @@ fn goal_success_close_is_refused_without_must_evidence() {
     let denied = run(root, &["goal", "close", &id]);
     assert_eq!(denied.status, 1);
     assert!(
-        denied.stderr.contains("缺少证据"),
+        denied.stderr.contains("未完成") || denied.stderr.contains("evidence"),
         "stderr={}",
         denied.stderr
     );
@@ -214,7 +237,7 @@ fn goal_success_close_is_refused_without_must_evidence() {
         0
     );
 
-    // 记录 must 证据后允许 success。
+    // Typed evidence alone is still insufficient; an executed receipt closes it.
     assert_eq!(
         run(
             root,
@@ -231,6 +254,8 @@ fn goal_success_close_is_refused_without_must_evidence() {
         .status,
         0
     );
+    assert_eq!(run(root, &["goal", "close", &id]).status, 1);
+    validate_goal(root, &id, "req_1", "executed receipt", &[]);
     let closed = run(root, &["goal", "close", &id]);
     assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
     assert_eq!(run_json(root, &["goal", "show", &id])["status"], "success");
@@ -330,7 +355,7 @@ fn standard_check_blocks_done_requirement_without_validation_receipt() {
     );
     assert_eq!(recorded.status, 0, "stderr={}", recorded.stderr);
     let closed = run(root, &["goal", "close", id]);
-    assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
+    assert_eq!(closed.status, 1, "stderr={}", closed.stderr);
 
     let standard = run(root, &["check", "--profile", "standard"]);
     assert_eq!(standard.status, 1);
@@ -495,17 +520,17 @@ fn standard_check_reads_legacy_goal_schema_and_blocks_missing_validation() {
     let listed = run_json(root, &["goal", "list"]);
     assert_eq!(listed[0]["id"], "goal_legacy");
     let standard = run(root, &["check", "--profile", "standard"]);
-    assert_eq!(standard.status, 0);
+    assert_eq!(standard.status, 1);
     assert!(
         standard.stdout.contains("legacy goal goal_legacy")
-            && standard.stdout.contains("不能用于当前交付声明"),
+            && standard.stdout.contains("仍为 current"),
         "stdout={}",
         standard.stdout
     );
 }
 
 #[test]
-fn standard_check_accepts_legacy_goal_level_verification() {
+fn standard_check_blocks_legacy_goal_level_verification_without_a_receipt() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
@@ -537,13 +562,10 @@ fn standard_check_accepts_legacy_goal_level_verification() {
     run_json(root, &["context", "refresh"]);
 
     let standard = run(root, &["check", "--profile", "standard"]);
-    assert_eq!(
-        standard.status, 0,
-        "stdout={} stderr={}",
-        standard.stdout, standard.stderr
-    );
+    assert_eq!(standard.status, 1, "stdout={}", standard.stdout);
     assert!(
-        standard.stdout.contains("legacy goal goal_legacy"),
+        standard.stdout.contains("legacy goal goal_legacy")
+            && standard.stdout.contains("仍为 current"),
         "stdout={}",
         standard.stdout
     );
@@ -745,7 +767,13 @@ fn standard_check_does_not_change_state_tree() {
             "cargo test --all",
         ],
     );
-    validate_goal(root, id, "req_1", "executed validation receipt", &[]);
+    validate_goal(
+        root,
+        id,
+        "req_1",
+        "executed validation receipt",
+        &["src/lib.rs"],
+    );
     let closed = run(root, &["goal", "close", id]);
     assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
     let before = state_snapshot(root);
@@ -787,7 +815,13 @@ fn release_check_does_not_change_state_tree() {
             "cargo test --all",
         ],
     );
-    validate_goal(root, id, "req_1", "executed validation receipt", &[]);
+    validate_goal(
+        root,
+        id,
+        "req_1",
+        "executed validation receipt",
+        &["src/lib.rs"],
+    );
     let closed = run(root, &["goal", "close", id]);
     assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
     let before = state_snapshot(root);
@@ -849,7 +883,17 @@ fn standard_check_accepts_done_requirement_with_validation_and_no_impact_warning
 fn goal_evidence_changed_requires_validation_and_standard_accepts_it() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    write(
+        root,
+        "Cargo.toml",
+        "[package]\nname = \"impact-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(
+        root,
+        "src/lib.rs",
+        "pub fn answer() -> i32 { 42 }\n#[cfg(test)]\nmod tests { #[test] fn answer_is_42() { assert_eq!(super::answer(), 42); } }\n",
+    );
+    generate_lockfile(root);
     run_json(root, &["context", "refresh"]);
     let goal = run_json(
         root,
@@ -908,7 +952,23 @@ fn goal_evidence_changed_requires_validation_and_standard_accepts_it() {
             .unwrap()
             .contains("heuristic")
     );
-    validate_goal(root, id, "req_1", "executed validation receipt", &[]);
+    let validated = run(
+        root,
+        &[
+            "goal",
+            "validate",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "executed validation receipt",
+            "--changed",
+            "src/lib.rs",
+            "--command",
+            "cargo test --quiet",
+        ],
+    );
+    assert_eq!(validated.status, 0, "stderr={}", validated.stderr);
     let closed = run(root, &["goal", "close", id]);
     assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
 
@@ -955,7 +1015,7 @@ fn standard_check_blocks_irrelevant_validation_for_source_changes() {
         ],
     );
     let closed = run(root, &["goal", "close", id]);
-    assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
+    assert_eq!(closed.status, 1, "stderr={}", closed.stderr);
 
     let standard = run(root, &["check", "--profile", "standard"]);
     assert_eq!(standard.status, 1);
@@ -976,6 +1036,7 @@ fn standard_check_accepts_rust_validation_for_cargo_manifest_changes() {
         "[package]\nname = \"sample\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
     );
     write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    generate_lockfile(root);
     run_json(root, &["context", "refresh"]);
     let goal = run_json(
         root,
@@ -1006,7 +1067,13 @@ fn standard_check_accepts_rust_validation_for_cargo_manifest_changes() {
         ],
     );
     assert_eq!(recorded.status, 0, "stderr={}", recorded.stderr);
-    validate_goal(root, id, "req_1", "executed validation receipt", &[]);
+    validate_goal(
+        root,
+        id,
+        "req_1",
+        "executed validation receipt",
+        &["Cargo.toml"],
+    );
     let closed = run(root, &["goal", "close", id]);
     assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
 
@@ -1027,12 +1094,8 @@ fn standard_check_accepts_rust_validation_for_cargo_lock_changes() {
         "Cargo.toml",
         "[package]\nname = \"sample\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
     );
-    write(
-        root,
-        "Cargo.lock",
-        "# This file is automatically @generated by Cargo.\nversion = 4\n",
-    );
     write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    generate_lockfile(root);
     run_json(root, &["context", "refresh"]);
     let goal = run_json(
         root,
@@ -1063,7 +1126,13 @@ fn standard_check_accepts_rust_validation_for_cargo_lock_changes() {
         ],
     );
     assert_eq!(recorded.status, 0, "stderr={}", recorded.stderr);
-    validate_goal(root, id, "req_1", "executed validation receipt", &[]);
+    validate_goal(
+        root,
+        id,
+        "req_1",
+        "executed validation receipt",
+        &["Cargo.lock"],
+    );
     let closed = run(root, &["goal", "close", id]);
     assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
 
@@ -1887,11 +1956,11 @@ fn legacy_goal_mutation_remains_legacy_history_after_writeback() {
     assert_eq!(recorded.status, 0, "stderr={}", recorded.stderr);
     assert_eq!(
         run(root, &["goal", "close", "goal_legacy_active"]).status,
-        0
+        1
     );
 
     let standard = run(root, &["check", "--profile", "standard"]);
-    assert_eq!(standard.status, 0, "stdout={}", standard.stdout);
+    assert_eq!(standard.status, 1, "stdout={}", standard.stdout);
     assert!(standard.stdout.contains("legacy goal goal_legacy_active"));
     assert!(!standard.stdout.contains("合约无效"));
 }
@@ -1918,8 +1987,10 @@ fn goal_validate_failure_never_records_a_receipt() {
             "req_1",
             "-m",
             "expected failure",
+            "--changed",
+            "src/lib.rs",
             "--command",
-            "exit 7",
+            "rustc --crate-type lib src/lib.rs --out-dir missing-validation-output",
         ],
     );
     assert_eq!(
@@ -1969,14 +2040,14 @@ fn typed_validated_claim_cannot_replace_an_executed_receipt() {
         ],
     );
     assert_eq!(claimed.status, 0, "stderr={}", claimed.stderr);
-    assert_eq!(run(root, &["goal", "close", id]).status, 0);
+    let close = run(root, &["goal", "close", id]);
+    assert_eq!(close.status, 1);
+    assert!(close.stderr.contains("validation receipt"));
 
     let standard = run(root, &["check", "--profile", "standard"]);
     assert_eq!(standard.status, 1);
     assert!(
-        standard
-            .stdout
-            .contains("没有绑定当前工作区的成功 validation receipt"),
+        standard.stdout.contains("仍为 active"),
         "stdout={}",
         standard.stdout
     );
@@ -2008,6 +2079,199 @@ fn source_change_after_receipt_invalidates_standard_readiness() {
         "stdout={}",
         standard.stdout
     );
+}
+
+#[test]
+fn goal_validate_rejects_forged_shell_and_zero_test_receipts() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(
+        root,
+        "Cargo.toml",
+        "[package]\nname = \"receipt-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(
+        root,
+        "src/lib.rs",
+        "pub fn answer() -> i32 { 42 }\n#[cfg(test)]\nmod tests { #[test] fn answer_is_42() { assert_eq!(super::answer(), 42); } }\n",
+    );
+    generate_lockfile(root);
+    run_json(root, &["context", "refresh"]);
+    let goal = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "secure receipt",
+            "--must",
+            "validate source",
+        ],
+    );
+    let id = goal["id"].as_str().unwrap();
+
+    for command in [
+        "echo cargo test",
+        "cargo test || rustc --version",
+        "sh -c 'cargo test'",
+        "cargo test --no-run",
+        "cargo test -- --list",
+        "cargo test nonexistent_filter",
+    ] {
+        let failed = run(
+            root,
+            &[
+                "goal",
+                "validate",
+                id,
+                "--req",
+                "req_1",
+                "-m",
+                "must not record",
+                "--changed",
+                "src/lib.rs",
+                "--command",
+                command,
+            ],
+        );
+        assert_eq!(
+            failed.status, 1,
+            "command={command}\nstdout={}\nstderr={}",
+            failed.stdout, failed.stderr
+        );
+    }
+    let still_open = run_json(root, &["goal", "show", id]);
+    assert_eq!(still_open["requirements"][0]["status"], "open");
+    assert!(
+        still_open["requirements"][0]["validations"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+
+    // The intentionally executed zero-test command may populate ignored build
+    // artifacts; refresh proves current content before the real validation.
+    run_json(root, &["context", "refresh"]);
+
+    let validated = run_json(
+        root,
+        &[
+            "goal",
+            "validate",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "one test actually passed",
+            "--changed",
+            "src/lib.rs",
+            "--command",
+            "cargo test --quiet",
+        ],
+    );
+    let validation = &validated["requirements"][0]["validations"][0];
+    assert_eq!(validation["impact_paths"][0], "src/lib.rs");
+    assert!(validation["receipt"]["passed_tests"].as_u64().unwrap() >= 1);
+    assert_eq!(run(root, &["goal", "close", id]).status, 0);
+    assert_eq!(run(root, &["check", "--profile", "standard"]).status, 0);
+}
+
+#[test]
+fn typed_relevance_cannot_be_combined_with_an_unscoped_receipt() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(
+        root,
+        "Cargo.toml",
+        "[package]\nname = \"split-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+    let goal = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "split receipt",
+            "--must",
+            "validate source",
+        ],
+    );
+    let id = goal["id"].as_str().unwrap();
+    validate_goal(root, id, "req_1", "unscoped receipt", &[]);
+    let typed = run(
+        root,
+        &[
+            "goal",
+            "evidence",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "typed cargo claim",
+            "--changed",
+            "src/lib.rs",
+            "--validated",
+            "cargo test",
+        ],
+    );
+    assert_eq!(typed.status, 0, "stderr={}", typed.stderr);
+    assert_eq!(run(root, &["goal", "close", id]).status, 1);
+
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(standard.status, 1);
+    assert!(
+        standard.stdout.contains("同一条当前成功 receipt"),
+        "stdout={}",
+        standard.stdout
+    );
+}
+
+#[test]
+fn goal_lifecycle_preserves_history_without_hiding_unfinished_work() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+    let old = run_json(
+        root,
+        &["goal", "start", "old work", "--must", "preserve invariant"],
+    );
+    let old_id = old["id"].as_str().unwrap();
+
+    let hidden = run(
+        root,
+        &["goal", "archive", old_id, "--reason", "hide blocker"],
+    );
+    assert_eq!(hidden.status, 1);
+
+    let replacement = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "replacement",
+            "--must",
+            "preserve invariant",
+        ],
+    );
+    let replacement_id = replacement["id"].as_str().unwrap();
+    validate_goal(root, replacement_id, "req_1", "replacement validated", &[]);
+    assert_eq!(run(root, &["goal", "close", replacement_id]).status, 0);
+    let superseded = run_json(root, &["goal", "supersede", old_id, "--by", replacement_id]);
+    assert_eq!(superseded["lifecycle"], "superseded");
+    assert!(
+        root.join(".RaymanCodingSkill/goals")
+            .join(format!("{old_id}.json"))
+            .is_file()
+    );
+
+    let standard = run(root, &["check", "--profile", "standard"]);
+    assert_eq!(standard.status, 0, "stdout={}", standard.stdout);
+    assert!(standard.stdout.contains("lifecycle=superseded"));
+
+    let restored = run_json(root, &["goal", "current", old_id]);
+    assert_eq!(restored["lifecycle"], "current");
+    assert_eq!(run(root, &["check", "--profile", "standard"]).status, 1);
 }
 
 #[test]

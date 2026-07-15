@@ -4,7 +4,7 @@
 //! 报告复用统计，不能作为跳过内容证明的依据。
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Component, Path};
 use std::time::UNIX_EPOCH;
 
 use anyhow::{Context, Result, bail};
@@ -280,10 +280,42 @@ fn build_entry(root: &Path, path: &Path, size: u64, mtime: u128) -> Result<FileE
 /// 链接，但路径可能在遍历完成后被替换；拒绝链接/reparse，避免把工作区外
 /// 内容纳入上下文索引。
 fn ensure_source_file(root: &Path, path: &Path) -> Result<()> {
-    let metadata = std::fs::symlink_metadata(path)
-        .with_context(|| format!("上下文索引无法读取文件元数据: {}", display_path(path)))?;
-    if is_link_or_reparse(&metadata) || !metadata.file_type().is_file() {
-        bail!("上下文索引拒绝非普通文件: {}", display_path(path));
+    let relative = path.strip_prefix(root).with_context(|| {
+        format!(
+            "上下文索引文件不属于工作区: {} under {}",
+            display_path(path),
+            display_path(root)
+        )
+    })?;
+    let components = relative.components().collect::<Vec<_>>();
+    if components.is_empty()
+        || components
+            .iter()
+            .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        bail!("上下文索引拒绝不安全相对路径: {}", display_path(path));
+    }
+    let mut current = root.to_path_buf();
+    for (index, component) in components.iter().enumerate() {
+        let Component::Normal(name) = component else {
+            bail!("上下文索引拒绝不安全相对路径: {}", display_path(path));
+        };
+        current.push(name);
+        let metadata = std::fs::symlink_metadata(&current)
+            .with_context(|| format!("上下文索引无法读取文件元数据: {}", display_path(&current)))?;
+        if is_link_or_reparse(&metadata) {
+            bail!(
+                "上下文索引拒绝链接/reparse 路径: {}",
+                display_path(&current)
+            );
+        }
+        if index + 1 == components.len() {
+            if !metadata.file_type().is_file() {
+                bail!("上下文索引拒绝非普通文件: {}", display_path(&current));
+            }
+        } else if !metadata.file_type().is_dir() {
+            bail!("上下文索引路径组件不是目录: {}", display_path(&current));
+        }
     }
     let workspace = root
         .canonicalize()
@@ -299,6 +331,45 @@ fn ensure_source_file(root: &Path, path: &Path) -> Result<()> {
         );
     }
     Ok(())
+}
+
+/// Read a file named by an already strongly verified index and bind the exact
+/// bytes consumed by a downstream map to that same [`FileEntry`].  This closes
+/// the gap where a caller validated the cache, then reopened a changed source or
+/// followed a newly substituted parent link while deriving trusted conclusions.
+pub(crate) fn read_verified_file(root: &Path, entry: &FileEntry) -> Result<Vec<u8>> {
+    let relative = Path::new(&entry.path);
+    if relative.as_os_str().is_empty()
+        || relative
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        bail!("上下文索引条目含不安全路径: {}", entry.path);
+    }
+    let path = root.join(relative);
+    ensure_source_file(root, &path)?;
+    let before = std::fs::symlink_metadata(&path)
+        .with_context(|| format!("无法读取已验证上下文文件元数据: {}", entry.path))?;
+    let bytes = std::fs::read(&path)
+        .with_context(|| format!("无法读取已验证上下文文件: {}", entry.path))?;
+    ensure_source_file(root, &path)?;
+    let after = std::fs::symlink_metadata(&path)
+        .with_context(|| format!("无法复查已验证上下文文件元数据: {}", entry.path))?;
+    let actual_hash = sha256_bytes(&bytes);
+    if before.len() != after.len()
+        || bytes.len() as u64 != entry.size
+        || actual_hash != entry.sha256
+    {
+        bail!(
+            "上下文文件在索引验证后发生变化: {} (size {} != {} or sha256 {} != {})",
+            entry.path,
+            bytes.len(),
+            entry.size,
+            actual_hash,
+            entry.sha256
+        );
+    }
+    Ok(bytes)
 }
 
 fn is_link_or_reparse(metadata: &std::fs::Metadata) -> bool {
@@ -476,42 +547,173 @@ pub fn freshness(root: &Path) -> FreshnessReport {
     }
 }
 
-/// 强新鲜度：用于 map、standard/release 检查。它复核每个内容摘要，避免 size+mtime
-/// 恰好相同或被保留时的 false-ready。
+/// 强新鲜度：用于 map、standard/release 检查。它从当前工作区遍历结果重新构造
+/// 每个完整 [`FileEntry`]，同时复核内容摘要和 kind/lines/symbols 等派生字段。
+///
+/// 缓存里的 `path` 只是待比较的数据，绝不能反过来驱动文件读取：状态文件可被
+/// 手工编辑，直接 `root.join(cached.path)` 会形成工作区外读取，也会让伪造的派生
+/// 字段在 hash 不变时进入 map/quality 信任链。
+/// Return the exact cached index object that passed the strong content check.
+///
+/// Callers that derive trusted conclusions from the index must use this API
+/// instead of checking [`strong_freshness`] and then reopening the state file:
+/// the latter creates a validate-then-reopen window in which a different cache
+/// can be substituted after validation.
+pub fn verified_index(root: &Path) -> Result<ContextIndex> {
+    let (report, index) = strong_freshness_with_index(root);
+    if report.status != "ready" {
+        let mut details = Vec::new();
+        if !report.changed.is_empty() {
+            details.push(format!("changed={:?}", report.changed));
+        }
+        if !report.added.is_empty() {
+            details.push(format!("added={:?}", report.added));
+        }
+        if !report.removed.is_empty() {
+            details.push(format!("removed={:?}", report.removed));
+        }
+        if !report.errors.is_empty() {
+            details.push(format!("errors={:?}", report.errors));
+        }
+        bail!(
+            "上下文索引不是 ready（当前: {}）。先运行 `rayman context refresh`。{}",
+            report.status,
+            if details.is_empty() {
+                String::new()
+            } else {
+                format!(" {}", details.join(" "))
+            }
+        );
+    }
+    index.ok_or_else(|| anyhow::anyhow!("上下文索引缺失。先运行 `rayman context refresh`。"))
+}
+
 pub fn strong_freshness(root: &Path) -> FreshnessReport {
-    let mut report = freshness(root);
+    strong_freshness_with_index(root).0
+}
+
+fn strong_freshness_with_index(root: &Path) -> (FreshnessReport, Option<ContextIndex>) {
     let index = match load_cached(root) {
         Ok(Some(index)) => index,
-        Ok(None) => return report,
+        Ok(None) => {
+            return (
+                FreshnessReport {
+                    status: "missing".into(),
+                    changed: Vec::new(),
+                    removed: Vec::new(),
+                    added: Vec::new(),
+                    errors: Vec::new(),
+                },
+                None,
+            );
+        }
         Err(error) => {
-            report
-                .errors
-                .push(format!("无法安全读取 context 状态: {error:#}"));
-            report.status = "incomplete".into();
-            return report;
+            return (
+                FreshnessReport {
+                    status: "incomplete".into(),
+                    changed: Vec::new(),
+                    removed: Vec::new(),
+                    added: Vec::new(),
+                    errors: vec![format!("无法安全读取 context 状态: {error:#}")],
+                },
+                None,
+            );
         }
     };
-    if report.status == "missing" {
-        return report;
+    if index.schema_version != CONTEXT_SCHEMA_VERSION
+        || index.workspace_identity != workspace_identity(root)
+    {
+        return (
+            FreshnessReport {
+                status: "missing".into(),
+                changed: Vec::new(),
+                removed: Vec::new(),
+                added: Vec::new(),
+                errors: vec!["context schema/workspace identity 不匹配".into()],
+            },
+            None,
+        );
     }
+
+    let mut errors = Vec::new();
+    let mut cached = BTreeMap::new();
     for entry in &index.files {
-        let path = root.join(&entry.path);
-        match sha256_file(&path) {
-            Ok(hash) if hash == entry.sha256 && entry.read_error.is_none() => {}
-            Ok(_) => report.changed.push(entry.path.clone()),
-            Err(error) => report.errors.push(format!("{}: {error}", entry.path)),
+        if cached.insert(entry.path.as_str(), entry).is_some() {
+            errors.push(format!("context 索引包含重复路径: {}", entry.path));
+        }
+        if entry.read_error.is_some() {
+            errors.push(format!("context 索引包含读取失败条目: {}", entry.path));
         }
     }
-    report.changed.sort();
-    report.changed.dedup();
-    report.status = if !report.errors.is_empty() {
-        "incomplete".into()
-    } else if report.changed.is_empty() && report.added.is_empty() && report.removed.is_empty() {
-        "ready".into()
-    } else {
-        "stale".into()
+    let paths = match workspace_files_checked(root) {
+        Ok(paths) => paths,
+        Err(error) => {
+            errors.push(format!("工作区遍历失败: {error:#}"));
+            return (
+                FreshnessReport {
+                    status: "incomplete".into(),
+                    changed: Vec::new(),
+                    removed: Vec::new(),
+                    added: Vec::new(),
+                    errors,
+                },
+                None,
+            );
+        }
     };
-    report
+    let mut changed = Vec::new();
+    let mut added = Vec::new();
+    let mut present = std::collections::BTreeSet::new();
+    for path in paths {
+        let metadata = match std::fs::metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                errors.push(format!("{}: {error}", display_path(&path)));
+                continue;
+            }
+        };
+        let rel = relative_key(root, &path);
+        present.insert(rel.clone());
+        match build_entry(root, &path, metadata.len(), mtime_ns(&metadata)) {
+            Ok(current)
+                if cached
+                    .get(rel.as_str())
+                    .is_some_and(|entry| **entry == current) => {}
+            Ok(_) if cached.contains_key(rel.as_str()) => changed.push(rel),
+            Ok(_) => added.push(rel),
+            Err(error) => errors.push(format!("{}: {error:#}", display_path(&path))),
+        }
+    }
+    let removed = cached
+        .keys()
+        .filter(|path| !present.contains(**path))
+        .map(|path| (*path).to_string())
+        .collect::<Vec<_>>();
+    changed.sort();
+    changed.dedup();
+    added.sort();
+    added.dedup();
+    let status = if !errors.is_empty() {
+        "incomplete"
+    } else if changed.is_empty() && added.is_empty() && removed.is_empty() {
+        "ready"
+    } else {
+        "stale"
+    };
+    let ready = status == "ready";
+    // `cached` borrows `index`; end that borrow before returning the exact
+    // validated object to the caller.
+    drop(cached);
+    (
+        FreshnessReport {
+            status: status.into(),
+            changed,
+            removed,
+            added,
+            errors,
+        },
+        ready.then_some(index),
+    )
 }
 
 #[cfg(test)]
@@ -685,6 +887,143 @@ mod tests {
             .unwrap();
         assert_eq!(freshness(root).status, "ready");
         assert_eq!(strong_freshness(root).status, "stale");
+    }
+
+    #[test]
+    fn strong_freshness_rejects_forged_derived_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        touch(&root.join("src/lib.rs"), "pub fn answer() -> u32 { 42 }\n");
+        let (mut index, _) = refresh(root).unwrap();
+        let entry = index
+            .files
+            .iter_mut()
+            .find(|entry| entry.path == "src/lib.rs")
+            .unwrap();
+        entry.kind = "asset".into();
+        entry.lines = 0;
+        entry.symbols.clear();
+        write_json(&root.join(INDEX_RELATIVE_PATH), &index).unwrap();
+
+        let report = strong_freshness(root);
+        assert_eq!(report.status, "stale", "errors={:?}", report.errors);
+        assert_eq!(report.changed, vec!["src/lib.rs".to_string()]);
+    }
+
+    #[test]
+    fn strong_freshness_never_reads_paths_supplied_only_by_cache() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        touch(&root.join("src/lib.rs"), "pub fn answer() -> u32 { 42 }\n");
+        let (mut index, _) = refresh(root).unwrap();
+        index.files.push(FileEntry {
+            path: "../outside-do-not-read.rs".into(),
+            size: 1,
+            mtime_ns: 1,
+            sha256: "0".repeat(64),
+            kind: "source".into(),
+            lines: 1,
+            symbols: Vec::new(),
+            read_error: None,
+        });
+        write_json(&root.join(INDEX_RELATIVE_PATH), &index).unwrap();
+
+        let report = strong_freshness(root);
+        assert_eq!(report.status, "stale");
+        assert!(report.errors.is_empty(), "errors={:?}", report.errors);
+        assert_eq!(
+            report.removed,
+            vec!["../outside-do-not-read.rs".to_string()]
+        );
+    }
+
+    #[test]
+    fn strong_freshness_rejects_duplicate_cached_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        touch(&root.join("src/lib.rs"), "pub fn answer() -> u32 { 42 }\n");
+        let (mut index, _) = refresh(root).unwrap();
+        index.files.push(index.files[0].clone());
+        write_json(&root.join(INDEX_RELATIVE_PATH), &index).unwrap();
+
+        let report = strong_freshness(root);
+        assert_eq!(report.status, "incomplete");
+        assert!(
+            report.errors.iter().any(|error| error.contains("重复路径")),
+            "errors={:?}",
+            report.errors
+        );
+    }
+
+    #[test]
+    fn verified_index_is_the_same_object_that_passed_validation() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        touch(&root.join("src/lib.rs"), "pub fn answer() -> u32 { 42 }\n");
+        refresh(root).unwrap();
+
+        let validated = verified_index(root).unwrap();
+        let mut replacement = load(root).unwrap().unwrap();
+        replacement.files[0].path = "../outside.rs".into();
+        write_json(&root.join(INDEX_RELATIVE_PATH), &replacement).unwrap();
+
+        assert_eq!(validated.files.len(), 1);
+        assert_eq!(validated.files[0].path, "src/lib.rs");
+        assert_ne!(strong_freshness(root).status, "ready");
+    }
+
+    #[test]
+    fn verified_index_stale_error_names_the_changed_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        touch(&root.join("src/lib.rs"), "pub fn answer() -> u32 { 42 }\n");
+        refresh(root).unwrap();
+        touch(&root.join("src/new.rs"), "pub fn new_item() {}\n");
+
+        let error = verified_index(root).unwrap_err().to_string();
+        assert!(error.contains("added"), "{error}");
+        assert!(error.contains("src/new.rs"), "{error}");
+    }
+
+    #[test]
+    fn verified_file_read_rejects_post_validation_byte_drift() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        touch(&root.join("src/lib.rs"), "pub fn alpha() {}\n");
+        let index = refresh(root).unwrap().0;
+        let entry = index
+            .files
+            .iter()
+            .find(|entry| entry.path == "src/lib.rs")
+            .unwrap();
+        touch(&root.join("src/lib.rs"), "pub fn bravo() {}\n");
+
+        let error = read_verified_file(root, entry).unwrap_err().to_string();
+        assert!(error.contains("索引验证后发生变化"), "{error}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn verified_file_read_rejects_a_substituted_parent_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        touch(&root.join("src/lib.rs"), "pub fn answer() {}\n");
+        let index = refresh(root).unwrap().0;
+        let entry = index
+            .files
+            .iter()
+            .find(|entry| entry.path == "src/lib.rs")
+            .unwrap();
+        fs::remove_file(root.join("src/lib.rs")).unwrap();
+        fs::remove_dir(root.join("src")).unwrap();
+        touch(&outside.path().join("lib.rs"), "pub fn answer() {}\n");
+        symlink(outside.path(), root.join("src")).unwrap();
+
+        let error = read_verified_file(root, entry).unwrap_err().to_string();
+        assert!(error.contains("链接/reparse"), "{error}");
     }
 
     #[test]

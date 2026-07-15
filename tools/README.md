@@ -39,11 +39,11 @@ rayman autosave start --no-auto-stop              # 不自动停，需手动 sto
 一次快照 = **当前工作树**（尊重 `.gitignore`，跳过 `target/`、`node_modules/` 等）+ **v2 白名单任务状态**：goals、`pending.json`、context index/project map 和 `autosave.json`。它不会把整份 `.RaymanCodingSkill/` 当作备份源，因此不带入 `tmp/`、退役状态、评测运行物或其它未列入白名单的数据。
 
 - 存到**用户级**目录，不进仓库：Windows 为 `%LOCALAPPDATA%\Rayman\checkpoints\<工作区名>-<哈希>\<时间戳>\`；其它平台优先为 `$XDG_DATA_HOME/Rayman/checkpoints/`，否则为 `$HOME/.local/share/Rayman/checkpoints/`。若这些变量不可用而有 `$USERPROFILE`，则退回 `$USERPROFILE/Rayman/checkpoints/`。`--dir` 会覆盖以上位置。
-- 每次成功保存只**滚动清理完整快照**，默认保留最近 3 个（`--keep N`）；`partial`/`corrupt` 是故障取证，不会被自动轮换删除。
-- 保存是“先写暂存目录再原子改名”。复制、遍历或完整性校验失败会留下 `partial` 取证快照并以非零失败，绝不替换或污染最近的完整快照。
+- save/restore/prune 共用跨进程锁，重叠的手工/计划任务不会互删正在写的 staging。每次成功保存只**滚动清理完整快照**，默认保留最近 3 个（`--keep N`）；`partial`/`corrupt` 及 crash 遗留 staging 都保留取证，自动 prune 不删除 staging。
+- 保存是“先写暂存目录再原子改名”。复制、遍历或完整性校验失败会留下取证状态并以非零失败，绝不替换或污染最近的完整快照。
 - `checkpoint list` 会标记每个快照为 `complete`、`partial` 或 `corrupt`；`checkpoint status` 只选择最近一次已验证的 `complete` 快照。
 - `checkpoint verify [id|latest]` 只读复核 v2 manifest、路径、文件数、大小和 SHA-256；`latest` 是最近完整快照。
-- **恢复是叠加式**：只允许经过验证的完整快照，先检查全部源/目标路径再覆盖同名文件，不删除工作区里多出来的文件。
+- **恢复是叠加式、逐文件原子、可幂等重跑**：只允许经过验证的完整快照，先检查全部 manifest/源/目标路径，再对每个文件在目标同目录 staging，`flush`/`fsync` 后原子 rename。它不是整批事务；崩溃可能留下已恢复的前缀，但重跑会安全完成其余文件。不会删除工作区里多出来的文件。
 
 > 快照默认**不含被 `.gitignore` 忽略的文件**（`.RaymanCodingSkill/` 任务状态是特意加回来的例外）。重要代码请照常 `git commit`；快照是“切工具 / 断电”的第二道保险，不是版本控制替代。
 
@@ -81,3 +81,22 @@ cargo run -- --backend deepseek --task fix-failing-test --unsafe-host-exec   # �
 ```
 
 `--unsafe-host-exec` 是刻意的显式确认：真实后端生成的 shell 命令会直接在当前宿主机执行。仅在你接受风险的隔离环境中使用；这种运行永远不可比较（non-comparative），不能用于比较两组或作因果结论。CI 运行 `evals` 的 fmt、clippy、unit tests、依赖策略检查和离线 mock CLI smoke；smoke 会确认未传该参数的真实后端被拒绝，并验证 mock run 的不可变报告指针、seed、执行模式和 trial 数。它不配置真实后端密钥、不发出模型请求，也不把 mock 结果当作模型效果结论。真实 backend 运行前请先阅读 `evals/README.md` 并遵守本机隔离与凭据要求。
+
+## 安装、升级与全仓审计
+
+不要手工复制二进制或只跑 `cargo install`；它们不会同步 canonical skill，也没有回滚/身份验证。源码 checkout 的唯一安装/升级入口是：
+
+```powershell
+# 先从 $PROFILE/启动脚本删除持久 Function/Alias，再在同一 pwsh 7 环境确认无 shadow
+./scripts/install-rayman.ps1 -Yes -AddToUserPath
+```
+
+安装器只替换目标目录中的 `rayman[.exe]` 与 `SKILL.md`，写入前要求 clean source-fresh 字节一致；同目录 staging、backup move、最终替换与 Windows user PATH 更新处于同一回滚事务。`-AddToUserPath` 会把目标放到 user segment 最前，再按真实未来顺序 `Machine PATH + User PATH` 验证，机器级旧 `rayman` 在前会直接阻断；不传该开关时，当前 PATH 必须已优先解析到目标，非 Windows 传该开关会明确失败。完整交接审计只有一条命令；它要求显式给出已经安装的 application 与已部署 canonical skill：
+
+```powershell
+./scripts/audit-repository.ps1 `
+  -CliPath (Get-Command rayman -CommandType Application).Source `
+  -SkillPath "$HOME/.codex/skills/raymancodingskill/SKILL.md"
+```
+
+此审计依次覆盖 root/evals fmt、Clippy、tests、deny，`cargo package`/`cargo install` smoke，当前 artifact 的 context + strict + release 自食验证，state/assets，以及最终 clean-source/PATH/skill 身份。任一项失败都不能声明发布或安装完成。

@@ -1,26 +1,37 @@
-[CmdletBinding()]
+[CmdletBinding(DefaultParameterSetName = 'Verify')]
 param(
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $true, ParameterSetName = 'Verify')]
     [ValidateNotNullOrEmpty()]
     [string]$CliPath,
 
+    [Parameter(ParameterSetName = 'Verify')]
     [ValidateNotNullOrEmpty()]
     [string]$ReferenceCliPath,
 
+    [Parameter(Mandatory = $true, ParameterSetName = 'Verify')]
     [ValidateNotNullOrEmpty()]
     [string]$SkillPath,
 
+    [Parameter(ParameterSetName = 'Verify')]
     [switch]$RequirePath,
 
+    [Parameter(ParameterSetName = 'Verify')]
     [switch]$VerifyGitTag,
 
     # Rebuild rayman from the current clean checkout in an isolated target directory and
     # require byte identity with -CliPath (and -ReferenceCliPath when supplied).
-    [switch]$RequireSourceFresh
+    [Parameter(ParameterSetName = 'Verify')]
+    [switch]$RequireSourceFresh,
+
+    [Parameter(Mandatory = $true, ParameterSetName = 'SelfTest')]
+    [switch]$SelfTest
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    throw 'verify-release-contract.ps1 requires PowerShell 7+. Run it with pwsh, not Windows PowerShell.'
+}
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $workspaceManifest = Join-Path $repoRoot 'Cargo.toml'
@@ -77,23 +88,86 @@ function Get-Sha256 {
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 
+function Resolve-RequiredApplication {
+    param([string]$Name, [string]$Label)
+
+    $commands = @(Get-Command $Name -All -ErrorAction Stop)
+    if ($commands.Count -eq 0 -or $commands[0].CommandType -ne 'Application') {
+        $kind = if ($commands.Count -eq 0) { 'missing' } else { $commands[0].CommandType }
+        throw "$Label must resolve directly to an Application; effective command is $kind."
+    }
+    return Resolve-RequiredPath -Path $commands[0].Source -Label $Label
+}
+
+function Resolve-EffectiveRaymanApplication {
+    return Resolve-RequiredApplication -Name 'rayman' -Label 'PATH rayman executable'
+}
+
 function Test-WindowsMsvcHost {
     if (-not $IsWindows) {
         return $false
     }
-    $version = (& rustc -vV 2>$null | Out-String).Trim()
+    $version = (& $script:rustcApplication -vV 2>$null | Out-String).Trim()
     if ($LASTEXITCODE -ne 0) {
         throw 'Unable to inspect the Rust host for reproducible release-link verification.'
     }
     return $version -match '(?m)^host:\s+.+-pc-windows-msvc\s*$'
 }
 
+function Get-RustcIdentity {
+    $identity = (& $script:rustcApplication -vV 2>$null | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($identity)) {
+        throw 'Unable to inspect the active Rust compiler identity.'
+    }
+    return $identity
+}
+
+function Assert-NoBuildShapingEnvironment {
+    # These variables can change generated code, native dependencies, target selection,
+    # linker behavior, or release-profile output without changing the checked-in source.
+    # A byte-identical rebuild under such ambient overrides is not a repository-default
+    # active-build-context source identity claim, so refuse it instead of silently
+    # inheriting the overrides. User/parent Cargo config remains a documented input.
+    $exactNames = @(
+        'AR',
+        'CC',
+        'CFLAGS',
+        'CXX',
+        'CXXFLAGS',
+        'LDFLAGS',
+        'SOURCE_DATE_EPOCH',
+        'RUSTC',
+        'RUSTC_WRAPPER',
+        'RUSTC_WORKSPACE_WRAPPER',
+        'RUSTFLAGS',
+        'CARGO_ENCODED_RUSTFLAGS',
+        'CARGO_BUILD_RUSTC',
+        'CARGO_BUILD_RUSTFLAGS',
+        'CARGO_BUILD_TARGET',
+        'CARGO_INCREMENTAL'
+    )
+    $found = @(
+        Get-ChildItem Env: | Where-Object {
+            -not [string]::IsNullOrWhiteSpace($_.Value) -and (
+                $exactNames -contains $_.Name -or
+                $_.Name -match '^CARGO_PROFILE_' -or
+                $_.Name -match '^CARGO_TARGET_.+_(AR|CC|CFLAGS|CXX|CXXFLAGS|LINKER|RUNNER|RUSTFLAGS)$' -or
+                $_.Name -match '^(AR|CC|CFLAGS|CXX|CXXFLAGS|LDFLAGS)_.+$' -or
+                $_.Name -match '^(HOST|TARGET)_(AR|CC|CFLAGS|CXX|CXXFLAGS|LDFLAGS)$'
+            )
+        } | Sort-Object Name | ForEach-Object Name
+    )
+    if ($found.Count -gt 0) {
+        throw "Source-fresh verification refuses ambient build-shaping environment variables: $($found -join ', '). Clear them and rebuild the supplied artifact."
+    }
+}
+
 function Assert-CleanGitSource {
-    $insideWorkTree = (& git -C $repoRoot rev-parse --is-inside-work-tree 2>$null | Out-String).Trim()
+    $insideWorkTree = (& $script:gitApplication -C $repoRoot rev-parse --is-inside-work-tree 2>$null | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or $insideWorkTree -ne 'true') {
         throw "Source-fresh verification requires a Git worktree at $repoRoot."
     }
-    $status = @(& git -C $repoRoot status --porcelain --untracked-files=all 2>$null)
+    $status = @(& $script:gitApplication -C $repoRoot status --porcelain --untracked-files=all 2>$null)
     if ($LASTEXITCODE -ne 0) {
         throw 'Unable to inspect Git worktree status for source-fresh verification.'
     }
@@ -101,7 +175,7 @@ function Assert-CleanGitSource {
     if ($statusText) {
         throw "Source-fresh verification requires a clean Git worktree; found:`n$statusText"
     }
-    $head = (& git -C $repoRoot rev-parse --verify HEAD 2>$null | Out-String).Trim()
+    $head = (& $script:gitApplication -C $repoRoot rev-parse --verify HEAD 2>$null | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($head)) {
         throw 'Unable to resolve the current Git HEAD for source-fresh verification.'
     }
@@ -151,29 +225,21 @@ function Build-SourceFreshArtifact {
     $oldRustFlags = $env:RUSTFLAGS
     $oldEncodedRustFlags = $env:CARGO_ENCODED_RUSTFLAGS
     try {
+        Assert-NoBuildShapingEnvironment
         $env:CARGO_TARGET_DIR = $targetDir
         # Cargo config enables /Brepro for ordinary Windows MSVC builds. Force the
-        # same linker contract here. Do not silently discard caller-provided RUSTFLAGS
-        # (notably -D warnings): converting arbitrary shell-quoted RUSTFLAGS into
-        # Cargo's unit-separator encoding is ambiguous, so fail closed when it is set.
-        # CARGO_ENCODED_RUSTFLAGS is already lossless and can safely receive /Brepro.
+        # same linker contract here. Ambient build-shaping flags were rejected above,
+        # so this exact repository-required flag cannot merge with hidden caller input.
         if (Test-WindowsMsvcHost) {
-            if (-not [string]::IsNullOrWhiteSpace($oldRustFlags)) {
-                throw 'Source-fresh verification refuses non-empty RUSTFLAGS on Windows; use CARGO_ENCODED_RUSTFLAGS so existing warning policy is preserved.'
-            }
             $brepro = @('-C', 'link-arg=/Brepro') -join [char]0x1f
-            $env:CARGO_ENCODED_RUSTFLAGS = if ([string]::IsNullOrWhiteSpace($oldEncodedRustFlags)) {
-                $brepro
-            } else {
-                "$oldEncodedRustFlags$([char]0x1f)$brepro"
-            }
+            $env:CARGO_ENCODED_RUSTFLAGS = $brepro
             Remove-Item Env:RUSTFLAGS -ErrorAction SilentlyContinue
         }
         $pushedLocation = $false
         try {
             Push-Location $repoRoot
             $pushedLocation = $true
-            $buildOutput = & cargo build --locked --release -p rayman 2>&1
+            $buildOutput = & $script:cargoApplication build --locked --release -p rayman 2>&1
             if ($LASTEXITCODE -ne 0) {
                 $buildText = ($buildOutput | Out-String).Trim()
                 throw "Locked source-fresh build failed with exit code ${LASTEXITCODE}:`n$buildText"
@@ -223,6 +289,146 @@ function Invoke-Rayman {
     return $text
 }
 
+function Assert-GitHubTagContext {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SourceHead,
+        [Parameter(Mandatory = $true)]
+        [string]$ExactHeadTag
+    )
+
+    $contextNames = @(
+        'GITHUB_ACTIONS',
+        'GITHUB_REF_TYPE',
+        'GITHUB_REF_NAME',
+        'GITHUB_REF',
+        'GITHUB_SHA'
+    )
+    $contextPresent = $false
+    foreach ($name in $contextNames) {
+        if (-not [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name, 'Process'))) {
+            $contextPresent = $true
+            break
+        }
+    }
+    if (-not $contextPresent) {
+        return
+    }
+
+    if ($env:GITHUB_REF_TYPE -ne 'tag') {
+        throw "GitHub release context must report GITHUB_REF_TYPE=tag; found '$($env:GITHUB_REF_TYPE)'."
+    }
+    if ($env:GITHUB_REF_NAME -ne $ExactHeadTag) {
+        throw "GitHub tag name '$($env:GITHUB_REF_NAME)' does not match the exact tag on HEAD '$ExactHeadTag'."
+    }
+    $expectedRef = "refs/tags/$ExactHeadTag"
+    if ($env:GITHUB_REF -ne $expectedRef) {
+        throw "GitHub ref '$($env:GITHUB_REF)' does not match '$expectedRef'."
+    }
+    if (-not $SourceHead.Equals($env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "GitHub SHA '$($env:GITHUB_SHA)' does not match the verified Git HEAD '$SourceHead'."
+    }
+}
+
+function Invoke-ReleaseVerifierSelfTest {
+    foreach ($name in @('cargo', 'git', 'rustc')) {
+        Set-Item -LiteralPath "Function:$name" -Value { 'forged command' }
+        try {
+            $shadowRejected = $false
+            try {
+                $null = Resolve-RequiredApplication -Name $name -Label "$name self-test executable"
+            } catch {
+                $shadowRejected = $_.Exception.Message -match 'must resolve directly to an Application'
+            }
+            if (-not $shadowRejected) {
+                throw "Release verifier self-test failed: a Function-shadowed $name command was not rejected."
+            }
+        } finally {
+            Remove-Item -LiteralPath "Function:$name" -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    $contextNames = @(
+        'GITHUB_ACTIONS',
+        'GITHUB_REF_TYPE',
+        'GITHUB_REF_NAME',
+        'GITHUB_REF',
+        'GITHUB_SHA'
+    )
+    $savedContext = @{}
+    foreach ($name in $contextNames) {
+        $savedContext[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+    }
+    $sourceHead = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    $exactTag = 'v2.1.0'
+    try {
+        [Environment]::SetEnvironmentVariable('GITHUB_ACTIONS', 'true', 'Process')
+        $forgedCases = @(
+            @{
+                GITHUB_REF_TYPE = 'branch'
+                GITHUB_REF_NAME = $exactTag
+                GITHUB_REF = "refs/tags/$exactTag"
+                GITHUB_SHA = $sourceHead
+            },
+            @{
+                GITHUB_REF_TYPE = 'tag'
+                GITHUB_REF_NAME = 'v9.9.9'
+                GITHUB_REF = 'refs/tags/v9.9.9'
+                GITHUB_SHA = $sourceHead
+            },
+            @{
+                GITHUB_REF_TYPE = 'tag'
+                GITHUB_REF_NAME = $exactTag
+                GITHUB_REF = "refs/tags/$exactTag"
+                GITHUB_SHA = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+            }
+        )
+        foreach ($case in $forgedCases) {
+            foreach ($name in @('GITHUB_REF_TYPE', 'GITHUB_REF_NAME', 'GITHUB_REF', 'GITHUB_SHA')) {
+                [Environment]::SetEnvironmentVariable($name, $case[$name], 'Process')
+            }
+            $forgeryRejected = $false
+            try {
+                Assert-GitHubTagContext -SourceHead $sourceHead -ExactHeadTag $exactTag
+            } catch {
+                $forgeryRejected = $true
+            }
+            if (-not $forgeryRejected) {
+                throw 'Release verifier self-test failed: forged GitHub tag context was not rejected.'
+            }
+        }
+
+        [Environment]::SetEnvironmentVariable('GITHUB_REF_TYPE', 'tag', 'Process')
+        [Environment]::SetEnvironmentVariable('GITHUB_REF_NAME', $exactTag, 'Process')
+        [Environment]::SetEnvironmentVariable('GITHUB_REF', "refs/tags/$exactTag", 'Process')
+        [Environment]::SetEnvironmentVariable('GITHUB_SHA', $sourceHead, 'Process')
+        Assert-GitHubTagContext -SourceHead $sourceHead -ExactHeadTag $exactTag
+    } finally {
+        foreach ($name in $contextNames) {
+            [Environment]::SetEnvironmentVariable($name, $savedContext[$name], 'Process')
+        }
+    }
+
+    Write-Host 'Release verifier self-test passed: native command shadows and forged GitHub tag context were rejected.'
+}
+
+if ($SelfTest) {
+    Invoke-ReleaseVerifierSelfTest
+    return
+}
+
+$toolIdentity = @{}
+if ($RequireSourceFresh) {
+    $script:cargoApplication = Resolve-RequiredApplication -Name 'cargo' -Label 'Cargo executable'
+    $script:rustcApplication = Resolve-RequiredApplication -Name 'rustc' -Label 'Rust compiler executable'
+    $toolIdentity['cargo'] = @{ Path = $script:cargoApplication; Hash = Get-Sha256 $script:cargoApplication }
+    $toolIdentity['rustc'] = @{ Path = $script:rustcApplication; Hash = Get-Sha256 $script:rustcApplication }
+}
+if ($RequireSourceFresh -or $VerifyGitTag) {
+    $script:gitApplication = Resolve-RequiredApplication -Name 'git' -Label 'Git executable'
+    $toolIdentity['git'] = @{ Path = $script:gitApplication; Hash = Get-Sha256 $script:gitApplication }
+}
+
 $workspaceContent = Read-RequiredFile -Path $workspaceManifest -Label 'Workspace manifest'
 $crateContent = Read-RequiredFile -Path $crateManifest -Label 'Crate manifest'
 $lockContent = Read-RequiredFile -Path $lockfile -Label 'Lockfile'
@@ -252,6 +458,11 @@ if ($lockMatch.Groups[1].Value -ne $expectedVersion) {
 }
 
 $sourceHeadBefore = $null
+$rustcIdentityBefore = $null
+if ($RequireSourceFresh) {
+    Assert-NoBuildShapingEnvironment
+    $rustcIdentityBefore = Get-RustcIdentity
+}
 if ($RequireSourceFresh -or $VerifyGitTag) {
     $sourceHeadBefore = Assert-CleanGitSource
 }
@@ -260,9 +471,7 @@ $script:resolvedCli = Resolve-RequiredPath -Path $CliPath -Label 'CLI artifact'
 $resolvedReference = if ($ReferenceCliPath) {
     Resolve-RequiredPath -Path $ReferenceCliPath -Label 'Reference CLI artifact'
 }
-$resolvedSkill = if ($SkillPath) {
-    Resolve-RequiredPath -Path $SkillPath -Label 'Deployed canonical skill'
-}
+$resolvedSkill = Resolve-RequiredPath -Path $SkillPath -Label 'Deployed canonical skill'
 $resolvedCanonicalSkill = Resolve-RequiredPath -Path $canonicalSkill -Label 'Repository canonical skill'
 
 Push-Location $repoRoot
@@ -329,12 +538,10 @@ if ($resolvedReference) {
     }
 }
 
-if ($resolvedSkill) {
-    $deployedSkillHash = Get-Sha256 -Path $resolvedSkill
-    $canonicalSkillHash = Get-Sha256 -Path $resolvedCanonicalSkill
-    if ($deployedSkillHash -ne $canonicalSkillHash) {
-        throw "Deployed SKILL.md SHA-256 differs from the repository canonical skill: $deployedSkillHash != $canonicalSkillHash"
-    }
+$deployedSkillHash = Get-Sha256 -Path $resolvedSkill
+$canonicalSkillHash = Get-Sha256 -Path $resolvedCanonicalSkill
+if ($deployedSkillHash -ne $canonicalSkillHash) {
+    throw "Deployed SKILL.md SHA-256 differs from the repository canonical skill: $deployedSkillHash != $canonicalSkillHash"
 }
 
 $sourceFreshHash = $null
@@ -342,6 +549,10 @@ if ($RequireSourceFresh) {
     $sourceFreshBuild = $null
     try {
         $sourceFreshBuild = Build-SourceFreshArtifact
+        $rustcIdentityAfter = Get-RustcIdentity
+        if ($rustcIdentityAfter -ne $rustcIdentityBefore) {
+            throw 'The active Rust compiler changed during source-fresh verification.'
+        }
         $sourceHeadAfter = Assert-CleanGitSource
         if ($sourceHeadAfter -ne $sourceHeadBefore) {
             throw "Source HEAD changed during isolated source-fresh build: $sourceHeadBefore -> $sourceHeadAfter"
@@ -368,11 +579,10 @@ if ($RequireSourceFresh) {
 }
 
 if ($RequirePath) {
-    # PowerShell returns every matching ApplicationInfo when multiple rayman
-    # binaries exist on PATH.  The release contract is about the command that
-    # will actually run, i.e. PATH precedence, so select the first result.
-    $pathCommand = @(Get-Command rayman -CommandType Application -ErrorAction Stop | Select-Object -First 1)[0]
-    $pathCli = Resolve-RequiredPath -Path $pathCommand.Source -Label 'PATH rayman executable'
+    # Check PowerShell's effective command first. Looking only for ApplicationInfo
+    # silently skips higher-precedence aliases/functions and can certify a binary
+    # that `rayman` will not actually invoke in this shell.
+    $pathCli = Resolve-EffectiveRaymanApplication
     $pathHash = Get-Sha256 -Path $pathCli
     if ($pathHash -ne $cliHash) {
         throw "PATH rayman SHA-256 differs from -CliPath: $pathHash != $cliHash"
@@ -385,28 +595,72 @@ if ($VerifyGitTag) {
         throw "Source HEAD changed before Git tag verification: $sourceHeadBefore -> $tagHead"
     }
     $expectedTag = "v$expectedVersion"
-    $actualTag = if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME) {
-        $env:GITHUB_REF_NAME
-    } else {
-        $tagOutput = & git -C $repoRoot describe --exact-match --tags HEAD 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            throw "HEAD is not tagged; expected $expectedTag."
-        }
-        ($tagOutput | Out-String).Trim()
+    $tagOutput = & $script:gitApplication -C $repoRoot describe --exact-match --tags HEAD 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        throw "HEAD is not tagged; expected $expectedTag."
     }
-    if ($actualTag -ne $expectedTag) {
-        throw "Git tag '$actualTag' does not match expected release tag '$expectedTag'."
+    $headTag = ($tagOutput | Out-String).Trim()
+    if ($headTag -ne $expectedTag) {
+        throw "Git tag '$headTag' does not match expected release tag '$expectedTag'."
+    }
+    Assert-GitHubTagContext -SourceHead $tagHead -ExactHeadTag $headTag
+}
+
+# Terminal identity check: all earlier hashes are claims about mutable paths. Re-resolve and
+# re-hash every supplied/deployed/PATH identity immediately before success output so a
+# concurrent replacement cannot inherit an already-validated digest.
+$finalCliPath = Resolve-RequiredPath -Path $CliPath -Label 'CLI artifact (final check)'
+if ($finalCliPath -ne $script:resolvedCli -or (Get-Sha256 -Path $finalCliPath) -ne $cliHash) {
+    throw 'CLI artifact identity changed during release-contract verification.'
+}
+if ($resolvedReference) {
+    $finalReferencePath = Resolve-RequiredPath -Path $ReferenceCliPath -Label 'Reference CLI artifact (final check)'
+    if ($finalReferencePath -ne $resolvedReference -or
+        (Get-Sha256 -Path $finalReferencePath) -ne $referenceHash) {
+        throw 'Reference CLI artifact identity changed during release-contract verification.'
+    }
+}
+$finalSkillPath = Resolve-RequiredPath -Path $SkillPath -Label 'Deployed canonical skill (final check)'
+$finalCanonicalSkill = Resolve-RequiredPath -Path $canonicalSkill -Label 'Repository canonical skill (final check)'
+if ($finalSkillPath -ne $resolvedSkill -or
+    (Get-Sha256 -Path $finalSkillPath) -ne $deployedSkillHash -or
+    (Get-Sha256 -Path $finalCanonicalSkill) -ne $canonicalSkillHash) {
+    throw 'Deployed or repository canonical SKILL.md identity changed during verification.'
+}
+if ($RequirePath) {
+    $finalPathCli = Resolve-EffectiveRaymanApplication
+    if ($finalPathCli -ne $pathCli -or (Get-Sha256 -Path $finalPathCli) -ne $pathHash) {
+        throw 'Effective PATH rayman identity changed during release-contract verification.'
+    }
+}
+if ($RequireSourceFresh) {
+    Assert-NoBuildShapingEnvironment
+    if ((Get-RustcIdentity) -ne $rustcIdentityBefore) {
+        throw 'The active Rust compiler changed before final release-contract output.'
+    }
+    $terminalHead = Assert-CleanGitSource
+    if ($terminalHead -ne $sourceHeadBefore) {
+        throw "Source HEAD changed before final release-contract output: $sourceHeadBefore -> $terminalHead"
+    }
+}
+foreach ($name in @($toolIdentity.Keys | Sort-Object)) {
+    $finalTool = Resolve-RequiredApplication -Name $name -Label "$name executable (final check)"
+    $initialTool = $toolIdentity[$name]
+    if ($finalTool -ne $initialTool.Path -or (Get-Sha256 $finalTool) -ne $initialTool.Hash) {
+        throw "$name executable identity changed during release-contract verification."
     }
 }
 
-Write-Host "Installed release identity verified: rayman $expectedVersion (MSRV $expectedMsrv)"
+if ($RequirePath) {
+    Write-Host "Installed release identity verified: rayman $expectedVersion (MSRV $expectedMsrv)"
+} else {
+    Write-Host "Release artifact contract verified: rayman $expectedVersion (MSRV $expectedMsrv)"
+}
 Write-Host "  CLI SHA-256: $cliHash"
 if ($resolvedReference) {
     Write-Host "  Reference artifact: $resolvedReference"
 }
-if ($resolvedSkill) {
-    Write-Host "  Canonical SKILL.md: $resolvedSkill"
-}
+Write-Host "  Canonical SKILL.md: $resolvedSkill"
 if ($RequirePath) {
     Write-Host '  PATH identity: verified'
 }
@@ -415,6 +669,7 @@ if ($VerifyGitTag) {
 }
 if ($RequireSourceFresh) {
     Write-Host "  Source freshness: verified by locked isolated rebuild ($sourceFreshHash)"
+    Write-Host "  Compiler identity: $($rustcIdentityBefore.Split([Environment]::NewLine)[0]) (active compiler consistency only; not toolchain provenance)"
 } else {
     Write-Warning 'Source freshness was not checked. Release handoff/CI must pass -RequireSourceFresh.'
 }

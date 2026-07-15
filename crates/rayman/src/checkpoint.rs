@@ -8,8 +8,11 @@ use std::collections::HashSet;
 use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
+use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -18,12 +21,82 @@ use crate::{hash, walk};
 
 /// 默认保留的完整快照数（滚动，多留几个以防某次保存中途损坏）。
 pub const DEFAULT_KEEP: usize = 3;
-pub const MANIFEST_SCHEMA: &str = "rayman.checkpoint.v2";
-pub const MANIFEST_VERSION: u32 = 2;
+pub const MANIFEST_SCHEMA: &str = "rayman.checkpoint.v3";
+pub const MANIFEST_VERSION: u32 = 3;
+const LEGACY_MANIFEST_SCHEMA: &str = "rayman.checkpoint.v2";
+const LEGACY_MANIFEST_VERSION: u32 = 2;
 
 const TREE_SUBDIR: &str = "tree";
 const MANIFEST_NAME: &str = "manifest.json";
 const STAGING_PREFIX: &str = ".staging-";
+const LOCK_NAME: &str = ".checkpoint.lock";
+const LOCK_TIMEOUT: Duration = Duration::from_secs(30);
+const RESTORE_TRANSACTION_PREFIX: &str = ".restore-transaction-";
+const RESTORE_JOURNAL_NAME: &str = "journal.json";
+const RESTORE_JOURNAL_SCHEMA: &str = "rayman.restore-transaction.v1";
+const RESTORE_JOURNAL_VERSION: u32 = 1;
+
+struct CheckpointLock {
+    file: fs::File,
+}
+
+impl CheckpointLock {
+    fn acquire(ws_dir: &Path) -> Result<Self> {
+        ensure_real_directory(ws_dir)?;
+        let path = ws_dir.join(LOCK_NAME);
+        match fs::symlink_metadata(&path) {
+            Ok(metadata) if is_link_or_reparse(&metadata) || !metadata.file_type().is_file() => {
+                bail!("checkpoint 锁不是安全普通文件: {}", display_path(&path));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("无法检查 checkpoint 锁: {}", display_path(&path)));
+            }
+        }
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&path)
+            .with_context(|| format!("无法打开 checkpoint 锁: {}", display_path(&path)))?;
+        let metadata = fs::symlink_metadata(&path)
+            .with_context(|| format!("无法复查 checkpoint 锁: {}", display_path(&path)))?;
+        if is_link_or_reparse(&metadata) || !metadata.file_type().is_file() {
+            bail!("checkpoint 锁被替换为非普通文件: {}", display_path(&path));
+        }
+        let started = Instant::now();
+        loop {
+            match file.try_lock_exclusive() {
+                Ok(()) => return Ok(Self { file }),
+                Err(error)
+                    if is_checkpoint_lock_busy(&error) && started.elapsed() < LOCK_TIMEOUT =>
+                {
+                    thread::sleep(Duration::from_millis(25));
+                }
+                Err(error) if is_checkpoint_lock_busy(&error) => {
+                    bail!("等待 checkpoint 锁超过 {} 秒", LOCK_TIMEOUT.as_secs());
+                }
+                Err(error) => return Err(error).context("无法取得 checkpoint 独占锁"),
+            }
+        }
+    }
+}
+
+fn is_checkpoint_lock_busy(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::WouldBlock
+        // Windows LockFileEx commonly maps contention to ERROR_LOCK_VIOLATION
+        // rather than WouldBlock; sharing violations are the same retryable state.
+        || matches!(error.raw_os_error(), Some(32) | Some(33))
+}
+
+impl Drop for CheckpointLock {
+    fn drop(&mut self) {
+        let _ = FileExt::unlock(&self.file);
+    }
+}
 
 /// 当前 v2 允许随快照携带的状态文件。不要把整个 `.RaymanCodingSkill/` 当作备份源：
 /// 其中可能有旧版本状态、评测运行物或数 GB 的托管临时文件。
@@ -52,6 +125,16 @@ pub struct FileIntegrity {
     pub path: String,
     pub size: u64,
     pub sha256: String,
+    /// `None` only occurs when deserializing a legacy v2 manifest.  Such a
+    /// snapshot remains inspectable, but verification/restore refuses it: byte
+    /// identity alone cannot safely reconstruct platform permission metadata.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub readonly: Option<bool>,
+    /// Unix permission/special bits (`st_mode & 0o7777`).  A snapshot created
+    /// on a platform that cannot provide them is deliberately not restorable on
+    /// Unix, where silently inventing executable/write bits would be unsafe.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unix_mode: Option<u32>,
 }
 
 /// 单个快照的 v2 元数据。
@@ -101,6 +184,59 @@ pub struct RestoreOutcome {
     pub id: String,
     pub restored: usize,
     pub failed: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RestoreTransactionEntry {
+    expected: FileIntegrity,
+    #[serde(default)]
+    original: Option<FileIntegrity>,
+    #[serde(default)]
+    destination_prepared: bool,
+    #[serde(default)]
+    publish_attempted: bool,
+    #[serde(default)]
+    rollback_complete: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum RestorePhase {
+    Preparing,
+    Publishing,
+    RollingBack,
+    Committed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum RestoreDirectoryState {
+    Planned,
+    Created,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RestoreCreatedDirectory {
+    path: String,
+    state: RestoreDirectoryState,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RestoreJournal {
+    schema: String,
+    version: u32,
+    workspace_root: String,
+    phase: RestorePhase,
+    entries: Vec<RestoreTransactionEntry>,
+    #[serde(default)]
+    created_directories: Vec<RestoreCreatedDirectory>,
+}
+
+struct RestoreTransaction {
+    path: PathBuf,
+    staged: PathBuf,
+    backups: PathBuf,
+    journal: RestoreJournal,
 }
 
 /// checkpoint 根：`override_dir` 优先，否则用户级默认目录。
@@ -253,6 +389,7 @@ pub fn save(root: &Path, override_dir: Option<&Path>, keep: usize) -> Result<Sav
         .with_context(|| format!("无法规范化工作区根: {}", display_path(root)))?;
 
     let ckpt_root = checkpoints_root(override_dir)?;
+    ensure_real_directory_chain(&ckpt_root)?;
     fs::create_dir_all(&ckpt_root)
         .with_context(|| format!("无法创建 checkpoint 目录: {}", display_path(&ckpt_root)))?;
     ensure_real_directory_chain(&ckpt_root)?;
@@ -261,9 +398,14 @@ pub fn save(root: &Path, override_dir: Option<&Path>, keep: usize) -> Result<Sav
         .canonicalize()
         .with_context(|| format!("无法规范化 checkpoint 目录: {}", display_path(&ckpt_root)))?;
     let ws_dir = ckpt_root.join(workspace_key(&root));
+    ensure_real_directory_chain(&ws_dir)?;
     fs::create_dir_all(&ws_dir)
         .with_context(|| format!("无法创建工作区 checkpoint 目录: {}", display_path(&ws_dir)))?;
     ensure_real_directory(&ws_dir)?;
+    let _lock = CheckpointLock::acquire(&ws_dir)?;
+    // A saver must never snapshot a workspace left halfway through a crashed
+    // restore.  Recovery runs under the same per-workspace lock as restore.
+    recover_orphaned_restore_transactions(&root, &ws_dir)?;
 
     let timestamp = state_store::now_iso();
     let id = fs_safe_id(&timestamp);
@@ -465,8 +607,10 @@ fn prune(ws_dir: &Path, keep: usize) -> Result<usize> {
             continue;
         }
         if name.starts_with(STAGING_PREFIX) {
-            // 只清理真实目录，绝不 remove_dir_all 一个可能指向外部的链接。
-            let _ = fs::remove_dir_all(&path);
+            // Staging may belong to another live saver.  The workspace lock
+            // serializes new saves, but never reap an uncommitted directory
+            // implicitly: a crashed staging tree is forensic evidence and can
+            // only be removed by an explicit maintenance action.
             continue;
         }
         if name.starts_with('.') {
@@ -543,9 +687,14 @@ pub fn verify_snapshot(snapshot: &Path) -> Result<Manifest> {
     ensure_safe_file_under(snapshot, Path::new(MANIFEST_NAME))?;
     let manifest = state_store::read_json::<Manifest>(&snapshot.join(MANIFEST_NAME))?
         .ok_or_else(|| anyhow::anyhow!("checkpoint 缺少 manifest: {}", display_path(snapshot)))?;
+    if manifest.schema == LEGACY_MANIFEST_SCHEMA && manifest.version == LEGACY_MANIFEST_VERSION {
+        bail!(
+            "checkpoint 使用旧 v2 content-only manifest，缺少权限完整性证明，不能安全恢复；请用当前 Rayman 新建 v3 checkpoint"
+        );
+    }
     if manifest.schema != MANIFEST_SCHEMA || manifest.version != MANIFEST_VERSION {
         bail!(
-            "checkpoint manifest 不是受支持的 v2 schema: schema={:?} version={}",
+            "checkpoint manifest 不是受支持的 v3 schema: schema={:?} version={}",
             manifest.schema,
             manifest.version
         );
@@ -601,13 +750,14 @@ fn verify_manifest_tree(tree: &Path, manifest: &Manifest) -> Result<()> {
         if !is_valid_sha256(&expected.sha256) {
             bail!("manifest 含无效 SHA-256: {}", expected.path);
         }
+        validate_integrity_record(expected)?;
         let relative = manifest_relative_path(&expected.path)?;
         let key = normalized_path_key(&relative)?;
         if !seen.insert(key) {
             bail!("manifest 包含重复路径: {}", expected.path);
         }
         let actual = integrity_for_file(tree, &relative)?;
-        if actual.size != expected.size || actual.sha256 != expected.sha256 {
+        if actual != *expected {
             bail!("checkpoint 文件完整性不匹配: {}", expected.path);
         }
         total = total
@@ -624,508 +774,6 @@ fn verify_manifest_tree(tree: &Path, manifest: &Manifest) -> Result<()> {
     Ok(())
 }
 
-/// 把某个完整快照（默认最近完整快照）叠加恢复到工作区。
-/// 覆盖同名文件，但不删除工作区里多出来的文件；所有源文件和目标路径先验证，
-/// 之后才写入第一个文件。
-pub fn restore(
-    root: &Path,
-    override_dir: Option<&Path>,
-    which: Option<&str>,
-) -> Result<RestoreOutcome> {
-    let checkpoints = list(root, override_dir)?;
-    if checkpoints.is_empty() {
-        bail!("没有可恢复的 checkpoint");
-    }
-    let target = match which {
-        None | Some("latest") => checkpoints
-            .iter()
-            .rev()
-            .find(|checkpoint| checkpoint.status == SnapshotStatus::Complete)
-            .ok_or_else(|| anyhow::anyhow!("没有完整且已验证的 checkpoint"))?,
-        Some(id) => checkpoints
-            .iter()
-            .find(|checkpoint| checkpoint.id == id)
-            .ok_or_else(|| anyhow::anyhow!("找不到 checkpoint: {id}"))?,
-    };
-    if target.status != SnapshotStatus::Complete {
-        bail!(
-            "拒绝恢复非完整 checkpoint {}（状态：{:?}）",
-            target.id,
-            target.status
-        );
-    }
-    let manifest = verify_snapshot(&target.path)?;
-    ensure_real_directory(root)?;
-    let tree = target.path.join(TREE_SUBDIR);
+include!("checkpoint/restore.rs");
 
-    let mut files = manifest.files.clone();
-    files.sort_by(|a, b| a.path.cmp(&b.path));
-    // 先验证每个目标目录和目标文件，避免写到一半才发现符号链接/reparse traversal。
-    for expected in &files {
-        let relative = manifest_relative_path(&expected.path)?;
-        prepare_destination_file(root, &relative)?;
-    }
-
-    let mut restored = 0;
-    for expected in &files {
-        let relative = manifest_relative_path(&expected.path)?;
-        let source = integrity_for_file(&tree, &relative)?;
-        if source.size != expected.size || source.sha256 != expected.sha256 {
-            bail!("恢复前源文件完整性发生变化: {}", expected.path);
-        }
-        let destination = root.join(&relative);
-        prepare_destination_file(root, &relative)?;
-        // Re-check source and destination immediately around the write.  This is
-        // deliberately fail-closed for symlink/reparse substitutions; a hostile
-        // same-user process can still race these path-based checks (documented).
-        ensure_safe_file_under(&tree, &relative)?;
-        prepare_destination_file(root, &relative)?;
-        fs::copy(tree.join(&relative), &destination).with_context(|| {
-            format!(
-                "无法恢复 checkpoint 文件: {} -> {}",
-                display_path(&tree.join(&relative)),
-                display_path(&destination)
-            )
-        })?;
-        ensure_safe_file_under(&tree, &relative)?;
-        prepare_destination_file(root, &relative)?;
-        let written = integrity_for_file(root, &relative)?;
-        if written.size != expected.size || written.sha256 != expected.sha256 {
-            bail!("恢复后目标文件完整性不匹配: {}", expected.path);
-        }
-        restored += 1;
-    }
-    Ok(RestoreOutcome {
-        id: target.id.clone(),
-        restored,
-        failed: 0,
-    })
-}
-
-fn manifest_relative_path(text: &str) -> Result<PathBuf> {
-    let relative = PathBuf::from(text);
-    if relative.as_os_str().is_empty()
-        || relative
-            .components()
-            .any(|component| !matches!(component, Component::Normal(_)))
-    {
-        bail!("checkpoint manifest 含不安全相对路径: {text}");
-    }
-    Ok(relative)
-}
-
-fn normalized_path_key(relative: &Path) -> Result<String> {
-    let text = relative
-        .to_str()
-        .ok_or_else(|| anyhow::anyhow!("checkpoint 路径不是有效 UTF-8: {}", relative.display()))?
-        .replace('\\', "/");
-    #[cfg(windows)]
-    {
-        Ok(text.to_ascii_lowercase())
-    }
-    #[cfg(not(windows))]
-    {
-        Ok(text)
-    }
-}
-
-fn integrity_for_file(root: &Path, relative: &Path) -> Result<FileIntegrity> {
-    ensure_safe_file_under(root, relative)?;
-    let path = root.join(relative);
-    let before = fs::symlink_metadata(&path)
-        .with_context(|| format!("无法读取文件元数据: {}", display_path(&path)))?;
-    if is_link_or_reparse(&before) || !before.file_type().is_file() {
-        bail!("拒绝非普通文件: {}", display_path(&path));
-    }
-    let sha256 = hash::sha256_file(&path)?;
-    let after = fs::symlink_metadata(&path)
-        .with_context(|| format!("无法复查文件元数据: {}", display_path(&path)))?;
-    if is_link_or_reparse(&after) || !after.file_type().is_file() || after.len() != before.len() {
-        bail!("文件在读取期间变更或变为链接: {}", display_path(&path));
-    }
-    Ok(FileIntegrity {
-        path: normalized_path_key(relative)?,
-        size: after.len(),
-        sha256,
-    })
-}
-
-fn prepare_destination_file(root: &Path, relative: &Path) -> Result<PathBuf> {
-    ensure_real_directory(root)?;
-    let components: Vec<_> = relative.components().collect();
-    if components.is_empty()
-        || components
-            .iter()
-            .any(|component| !matches!(component, Component::Normal(_)))
-    {
-        bail!("不安全的 checkpoint 目标路径: {}", relative.display());
-    }
-    let mut current = root.to_path_buf();
-    for (index, component) in components.iter().enumerate() {
-        let Component::Normal(name) = component else {
-            bail!("不安全的 checkpoint 目标路径: {}", relative.display());
-        };
-        current.push(name);
-        if index + 1 == components.len() {
-            match fs::symlink_metadata(&current) {
-                Ok(metadata) if is_link_or_reparse(&metadata) => {
-                    bail!("拒绝链接/reparse 恢复目标: {}", display_path(&current));
-                }
-                Ok(metadata) if metadata.file_type().is_dir() => {
-                    bail!("恢复目标是目录而非文件: {}", display_path(&current));
-                }
-                Ok(metadata) if !metadata.file_type().is_file() => {
-                    bail!("恢复目标不是普通文件: {}", display_path(&current));
-                }
-                Ok(_) => {}
-                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-                Err(error) => {
-                    return Err(error)
-                        .with_context(|| format!("无法读取恢复目标: {}", display_path(&current)));
-                }
-            }
-        } else {
-            ensure_or_create_real_directory(&current)?;
-        }
-    }
-    Ok(current)
-}
-
-fn ensure_or_create_real_directory(path: &Path) -> Result<()> {
-    match fs::symlink_metadata(path) {
-        Ok(_) => ensure_real_directory(path),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            match fs::create_dir(path) {
-                Ok(()) => {}
-                Err(create_error) if create_error.kind() == io::ErrorKind::AlreadyExists => {}
-                Err(create_error) => {
-                    return Err(create_error)
-                        .with_context(|| format!("无法创建恢复目标目录: {}", display_path(path)));
-                }
-            }
-            ensure_real_directory(path)
-        }
-        Err(error) => {
-            Err(error).with_context(|| format!("无法读取恢复目标目录: {}", display_path(path)))
-        }
-    }
-}
-
-fn ensure_safe_file_under(root: &Path, relative: &Path) -> Result<()> {
-    ensure_real_directory(root)?;
-    let components: Vec<_> = relative.components().collect();
-    if components.is_empty()
-        || components
-            .iter()
-            .any(|component| !matches!(component, Component::Normal(_)))
-    {
-        bail!("不安全的 checkpoint 相对路径: {}", relative.display());
-    }
-    let mut current = root.to_path_buf();
-    for (index, component) in components.iter().enumerate() {
-        let Component::Normal(name) = component else {
-            bail!("不安全的 checkpoint 相对路径: {}", relative.display());
-        };
-        current.push(name);
-        let metadata = fs::symlink_metadata(&current)
-            .with_context(|| format!("无法读取 checkpoint 路径: {}", display_path(&current)))?;
-        if is_link_or_reparse(&metadata) {
-            bail!("拒绝链接/reparse 路径: {}", display_path(&current));
-        }
-        if index + 1 == components.len() {
-            if !metadata.file_type().is_file() {
-                bail!("checkpoint 路径不是普通文件: {}", display_path(&current));
-            }
-        } else if !metadata.file_type().is_dir() {
-            bail!("checkpoint 路径组件不是目录: {}", display_path(&current));
-        }
-    }
-    Ok(())
-}
-
-fn ensure_real_directory(path: &Path) -> Result<()> {
-    let metadata = fs::symlink_metadata(path)
-        .with_context(|| format!("无法读取目录元数据: {}", display_path(path)))?;
-    if is_link_or_reparse(&metadata) {
-        bail!("拒绝链接/reparse 目录: {}", display_path(path));
-    }
-    if !metadata.file_type().is_dir() {
-        bail!("路径不是目录: {}", display_path(path));
-    }
-    Ok(())
-}
-
-/// Reject symlink/reparse components in a checkpoint root's existing ancestor
-/// chain.  The final directory check alone would still allow a symlinked parent
-/// to redirect checkpoint writes outside the requested root.
-fn ensure_real_directory_chain(path: &Path) -> Result<()> {
-    let mut current = Some(path);
-    while let Some(candidate) = current {
-        match fs::symlink_metadata(candidate) {
-            Ok(metadata) if is_link_or_reparse(&metadata) => {
-                bail!(
-                    "拒绝链接/reparse checkpoint 路径组件: {}",
-                    display_path(candidate)
-                );
-            }
-            Ok(_) => {}
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => {
-                return Err(error).with_context(|| {
-                    format!("无法读取 checkpoint 路径组件: {}", display_path(candidate))
-                });
-            }
-        }
-        current = candidate.parent();
-    }
-    Ok(())
-}
-
-fn is_link_or_reparse(metadata: &fs::Metadata) -> bool {
-    if metadata.file_type().is_symlink() {
-        return true;
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
-        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-    }
-    #[cfg(not(windows))]
-    false
-}
-
-fn is_valid_sha256(value: &str) -> bool {
-    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn write(path: &Path, text: &str) {
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(path, text).unwrap();
-    }
-
-    #[test]
-    fn save_with_dir_inside_workspace_excludes_prior_snapshots() {
-        let ws = tempfile::tempdir().unwrap();
-        let root = ws.path();
-        write(&root.join("src/main.rs"), "fn main() {}");
-        let ckpt_dir = root.join(".ckpts");
-
-        let first = save(root, Some(&ckpt_dir), DEFAULT_KEEP).unwrap();
-        let second = save(root, Some(&ckpt_dir), DEFAULT_KEEP).unwrap();
-
-        // 快照目录在工作区内时，旧快照绝不能被递归拷进新快照（体积会几何级膨胀）。
-        let tree = second.path.join(TREE_SUBDIR);
-        assert!(
-            !tree.join(".ckpts").exists(),
-            "旧快照被拷进了新快照: {}",
-            tree.display()
-        );
-        assert_eq!(second.file_count, first.file_count);
-    }
-
-    #[test]
-    fn save_with_keep_zero_still_retains_latest_snapshot() {
-        let ws = tempfile::tempdir().unwrap();
-        let store = tempfile::tempdir().unwrap();
-        let root = ws.path();
-        write(&root.join("src/main.rs"), "fn main() {}");
-
-        let outcome = save(root, Some(store.path()), 0).unwrap();
-        assert!(
-            outcome.path.join(MANIFEST_NAME).exists(),
-            "keep=0 不得把刚保存的快照也删掉"
-        );
-        assert_eq!(
-            verify_snapshot(&outcome.path).unwrap().status,
-            SnapshotStatus::Complete
-        );
-    }
-
-    #[test]
-    fn save_captures_only_v2_state_whitelist_and_restores() {
-        let ws = tempfile::tempdir().unwrap();
-        let store = tempfile::tempdir().unwrap();
-        let root = ws.path();
-        let dir = Some(store.path());
-
-        write(&root.join("src/main.rs"), "fn main() {}");
-        write(&root.join(".gitignore"), "ignored.txt\n");
-        write(&root.join("ignored.txt"), "secret");
-        write(&root.join("node_modules/pkg/index.js"), "x");
-        write(
-            &root.join(".RaymanCodingSkill/goals/g1.json"),
-            "{\"id\":\"g1\"}",
-        );
-        write(
-            &root.join(".RaymanCodingSkill/pending.json"),
-            "{\"items\":[]}",
-        );
-        write(
-            &root.join(".RaymanCodingSkill/context/index.json"),
-            "{\"version\":2}",
-        );
-        write(
-            &root.join(".RaymanCodingSkill/context/project_map.json"),
-            "{\"version\":2}",
-        );
-        write(
-            &root.join(".RaymanCodingSkill/autosave.json"),
-            "{\"active\":false}",
-        );
-        write(
-            &root.join(".RaymanCodingSkill/tmp/scratch.txt"),
-            "transient",
-        );
-        write(
-            &root.join(".RaymanCodingSkill/regression/history.jsonl"),
-            "retired",
-        );
-
-        let outcome = save(root, dir, DEFAULT_KEEP).unwrap();
-        let tree = outcome.path.join(TREE_SUBDIR);
-        assert!(tree.join("src/main.rs").exists());
-        assert!(tree.join(".RaymanCodingSkill/goals/g1.json").exists());
-        assert!(tree.join(".RaymanCodingSkill/pending.json").exists());
-        assert!(tree.join(".RaymanCodingSkill/context/index.json").exists());
-        assert!(
-            tree.join(".RaymanCodingSkill/context/project_map.json")
-                .exists()
-        );
-        assert!(tree.join(".RaymanCodingSkill/autosave.json").exists());
-        // gitignore 命中、vendor 目录、易变 tmp 和已退役状态都不应进快照。
-        assert!(!tree.join("ignored.txt").exists());
-        assert!(!tree.join("node_modules/pkg/index.js").exists());
-        assert!(!tree.join(".RaymanCodingSkill/tmp/scratch.txt").exists());
-        assert!(
-            !tree
-                .join(".RaymanCodingSkill/regression/history.jsonl")
-                .exists()
-        );
-
-        fs::remove_file(root.join("src/main.rs")).unwrap();
-        let restored = restore(root, dir, None).unwrap();
-        assert!(restored.restored >= 2);
-        assert_eq!(
-            fs::read_to_string(root.join("src/main.rs")).unwrap(),
-            "fn main() {}"
-        );
-    }
-
-    #[test]
-    fn partial_save_is_not_latest_and_does_not_prune_last_complete_snapshot() {
-        let ws = tempfile::tempdir().unwrap();
-        let store = tempfile::tempdir().unwrap();
-        let root = ws.path();
-        write(&root.join("a.txt"), "a");
-        let complete = save(root, Some(store.path()), 1).unwrap();
-
-        // goals 应为目录；用同名普通文件模拟状态遍历失败，不依赖权限模型。
-        write(&root.join(".RaymanCodingSkill/goals"), "not a directory");
-        assert!(save(root, Some(store.path()), 1).is_err());
-
-        let checkpoints = list(root, Some(store.path())).unwrap();
-        assert!(
-            checkpoints
-                .iter()
-                .any(|checkpoint| checkpoint.status == SnapshotStatus::Partial)
-        );
-        let latest_complete = latest(root, Some(store.path())).unwrap().unwrap();
-        assert_eq!(latest_complete.id, complete.id);
-        assert!(
-            latest_complete.path.exists(),
-            "last complete snapshot must survive"
-        );
-    }
-
-    #[test]
-    fn verify_rejects_tampering_before_restore_writes_any_file() {
-        let ws = tempfile::tempdir().unwrap();
-        let store = tempfile::tempdir().unwrap();
-        let root = ws.path();
-        write(&root.join("a.txt"), "a");
-        write(&root.join("b.txt"), "b");
-        let saved = save(root, Some(store.path()), DEFAULT_KEEP).unwrap();
-        fs::write(saved.path.join(TREE_SUBDIR).join("b.txt"), "tampered").unwrap();
-
-        fs::remove_file(root.join("a.txt")).unwrap();
-        fs::remove_file(root.join("b.txt")).unwrap();
-        assert!(verify_snapshot(&saved.path).is_err());
-        assert!(restore(root, Some(store.path()), Some(&saved.id)).is_err());
-        assert!(
-            !root.join("a.txt").exists(),
-            "restore must verify before its first write"
-        );
-        assert!(!root.join("b.txt").exists());
-    }
-
-    #[test]
-    fn prune_only_removes_verified_complete_snapshots() {
-        let ws = tempfile::tempdir().unwrap();
-        let store = tempfile::tempdir().unwrap();
-        let root = ws.path();
-        write(&root.join("a.txt"), "a");
-        let first = save(root, Some(store.path()), 10).unwrap();
-        write(&root.join("a.txt"), "b");
-        let second = save(root, Some(store.path()), 10).unwrap();
-        write(&root.join("a.txt"), "c");
-        let third = save(root, Some(store.path()), 10).unwrap();
-
-        let ws_dir = workspace_dir(root, Some(store.path())).unwrap();
-        assert_eq!(prune(&ws_dir, 2).unwrap(), 1);
-        assert!(!first.path.exists());
-        assert!(second.path.exists());
-        assert!(third.path.exists());
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn save_and_restore_reject_symlink_traversal() {
-        use std::os::unix::fs::symlink;
-
-        let ws = tempfile::tempdir().unwrap();
-        let store = tempfile::tempdir().unwrap();
-        let outside = tempfile::tempdir().unwrap();
-        let root = ws.path();
-        write(&root.join("nested/link/a.txt"), "a");
-        let saved = save(root, Some(store.path()), DEFAULT_KEEP).unwrap();
-
-        // 恢复目标的父目录若是 symlink，绝不能把内容写到工作区外。
-        fs::remove_file(root.join("nested/link/a.txt")).unwrap();
-        fs::remove_dir(root.join("nested/link")).unwrap();
-        symlink(outside.path(), root.join("nested/link")).unwrap();
-        // manifest 仍完整有效，目的路径本身才是被替换的攻击面。
-        assert!(verify_snapshot(&saved.path).is_ok());
-        assert!(restore(root, Some(store.path()), Some(&saved.id)).is_err());
-        assert!(!outside.path().join("a.txt").exists());
-
-        // 状态白名单中的 symlink 也会使保存 fail-closed，而不是跟随链接抓取外部文件。
-        let second = tempfile::tempdir().unwrap();
-        write(&second.path().join("source.txt"), "x");
-        write(&outside.path().join("pending.json"), "outside");
-        fs::create_dir_all(second.path().join(".RaymanCodingSkill")).unwrap();
-        symlink(
-            outside.path().join("pending.json"),
-            second.path().join(".RaymanCodingSkill/pending.json"),
-        )
-        .unwrap();
-        assert!(save(second.path(), Some(store.path()), DEFAULT_KEEP).is_err());
-
-        // The checkpoint root itself must not be reached through a symlinked
-        // parent, even when the final directory resolves to a real directory.
-        let redirected_parent = store.path().join("redirected");
-        symlink(outside.path(), &redirected_parent).unwrap();
-        assert!(
-            save(
-                root,
-                Some(&redirected_parent.join("checkpoints")),
-                DEFAULT_KEEP
-            )
-            .is_err()
-        );
-    }
-}
+include!("checkpoint/tests.rs");

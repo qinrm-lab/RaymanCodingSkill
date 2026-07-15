@@ -3,6 +3,7 @@
 //! Fixture 是评测输入的一部分，不能把其中的 symlink 当作普通文件递归跟随；否则一个
 //! 看似局部的任务可以在复制时把宿主机任意目录带进 trial。这里一律拒绝 symlink。
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -11,6 +12,38 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use crate::grade;
+
+const BUILTIN_TASK_MANIFEST: &str = "rayman-evals-builtins-v1";
+const BUILTIN_TASK_HASHES: &[(&str, &str)] = &[
+    (
+        "add-feature",
+        "f8a05b5e3ba4cccaef80986186ec8865f6ad2245dc4d994ddfb80efeeb703a77",
+    ),
+    (
+        "adjacent-bug-escalation",
+        "54bf916baa83c8e9411414340d2205c671ebfa6798b2ec3375c71843697efebe",
+    ),
+    (
+        "edge-case-split",
+        "45c4f17c9c6310d25ca5cd603b43ed59c9cb9d6e920e0d2487ef9da1f4fa2fa0",
+    ),
+    (
+        "evidence-first-overflow",
+        "779ae1c4f694bec425d3a3f7577ba7d03a97e873d442951a6ed52479f2fe5c1d",
+    ),
+    (
+        "fix-failing-test",
+        "beaac5e4337ee279eeb40163c2b46f1f9e7e9562bd5ab5742a120a09f3fac58f",
+    ),
+    (
+        "large-repo-nav",
+        "dfb278083b50b11c415bf8e852db82c57087019ec6b22878db8380622219b49d",
+    ),
+    (
+        "remove-dead-code",
+        "a087adbdd867d39d193bc2daedad993febb88e94fa0b3cdb5c51499fbc3bb141",
+    ),
+];
 
 #[derive(Debug, Clone)]
 pub struct Task {
@@ -33,14 +66,41 @@ pub struct TaskProvenance {
     pub task_sha256: String,
 }
 
+/// Why this run is allowed to execute hidden grade commands on the host.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct GradeExecutionProvenance {
+    pub mode: String,
+    pub tasks_root: String,
+    pub trusted_manifest: Option<String>,
+    pub custom_execution_acknowledged: bool,
+}
+
 impl Task {
     pub fn provenance(&self) -> Result<TaskProvenance> {
         // Re-read all task source inputs for every integrity check. The task keeps the
         // startup strings used by the agent/grade, but a later host-shell mutation of
         // prompt.md or grade.txt must still invalidate the run rather than leave the
         // original hashes looking current.
-        let prompt_sha256 = sha256_bytes(read(&self.prompt_path)?.trim().as_bytes());
-        let grade_sha256 = sha256_bytes(read(&self.grade_path)?.trim().as_bytes());
+        let prompt = read(&self.prompt_path)?.trim().to_string();
+        let grade = read(&self.grade_path)?.trim().to_string();
+        // Authorization must bind the exact strings that the evaluator will actually
+        // use.  Hashing only the second disk read would leave a load->authorize race:
+        // an attacker could make `Task` cache one grade command, restore the trusted
+        // file before this read, and obtain approval for bytes that will not execute.
+        if prompt != self.prompt {
+            bail!(
+                "task prompt changed after load; refusing stale cached input: {}",
+                self.prompt_path.display()
+            );
+        }
+        if grade != self.grade_cmd {
+            bail!(
+                "task grade changed after load; refusing stale cached command: {}",
+                self.grade_path.display()
+            );
+        }
+        let prompt_sha256 = sha256_bytes(self.prompt.as_bytes());
+        let grade_sha256 = sha256_bytes(self.grade_cmd.as_bytes());
         let fixture_sha256 = hash_tree(&self.fixture_dir)?;
         let task_sha256 = sha256_parts(&[
             self.name.as_bytes(),
@@ -60,6 +120,7 @@ impl Task {
 
 /// 从 `tasks_root` 加载所有任务；`filter` 非空时只保留名字匹配的那个。
 pub fn load_tasks(tasks_root: &Path, filter: Option<&str>) -> Result<Vec<Task>> {
+    ensure_real_dir(tasks_root, "任务根目录")?;
     let mut tasks = Vec::new();
     let entries = fs::read_dir(tasks_root)
         .with_context(|| format!("无法读取任务目录: {}", tasks_root.display()))?;
@@ -118,6 +179,84 @@ pub fn load_tasks(tasks_root: &Path, filter: Option<&str>) -> Result<Vec<Task>> 
     Ok(tasks)
 }
 
+/// Built-in grades execute without an acknowledgement only when both their repository
+/// location and complete task-input hashes match the compiled manifest. A copied or edited
+/// task tree is third-party input, even if it reuses a built-in task name/grade string.
+pub fn authorize_grade_execution(
+    tasks_root: &Path,
+    filter: Option<&str>,
+    manifests: &[TaskProvenance],
+    custom_execution_acknowledged: bool,
+) -> Result<GradeExecutionProvenance> {
+    let builtin_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tasks");
+    authorize_grade_execution_with_builtin_root(
+        tasks_root,
+        filter,
+        manifests,
+        custom_execution_acknowledged,
+        &builtin_root,
+    )
+}
+
+fn authorize_grade_execution_with_builtin_root(
+    tasks_root: &Path,
+    filter: Option<&str>,
+    manifests: &[TaskProvenance],
+    custom_execution_acknowledged: bool,
+    builtin_root: &Path,
+) -> Result<GradeExecutionProvenance> {
+    let canonical_root = fs::canonicalize(tasks_root)
+        .with_context(|| format!("无法解析任务根目录: {}", tasks_root.display()))?;
+    // An explicit custom-task acknowledgement authorizes the exact loaded task manifest;
+    // it must not depend on the build machine's repository `tasks/` directory still being
+    // present at runtime (for example after installing only the evaluator binary).
+    if custom_execution_acknowledged {
+        return Ok(GradeExecutionProvenance {
+            mode: "custom_tasks_explicitly_acknowledged".into(),
+            tasks_root: canonical_root.display().to_string(),
+            trusted_manifest: None,
+            custom_execution_acknowledged: true,
+        });
+    }
+
+    // Built-in trust is fail-closed: inability to resolve the compiled repository path means
+    // it cannot establish built-in identity, but the resulting error must still route the
+    // operator to the explicit custom-task acknowledgement instead of exposing an unrelated
+    // installation-layout dependency.
+    let canonical_builtin = fs::canonicalize(builtin_root).ok();
+    if canonical_builtin.as_ref() == Some(&canonical_root)
+        && builtin_manifest_matches(filter, manifests)
+    {
+        return Ok(GradeExecutionProvenance {
+            mode: "trusted_builtin_manifest".into(),
+            tasks_root: canonical_root.display().to_string(),
+            trusted_manifest: Some(BUILTIN_TASK_MANIFEST.into()),
+            custom_execution_acknowledged: false,
+        });
+    }
+    let reason = if canonical_builtin.as_ref() == Some(&canonical_root) {
+        "内置任务内容与编译时可信 manifest/hash 不一致"
+    } else if canonical_builtin.is_none() {
+        "运行时无法建立编译期内置任务目录身份"
+    } else {
+        "--tasks 指向第三方任务目录"
+    };
+    bail!(
+        "拒绝执行 grade.txt：{reason}；grade 命令会以当前用户身份在宿主机执行。审核任务树后显式传 --unsafe-custom-grade-exec 确认"
+    )
+}
+
+fn builtin_manifest_matches(filter: Option<&str>, manifests: &[TaskProvenance]) -> bool {
+    let expected: BTreeMap<&str, &str> = BUILTIN_TASK_HASHES.iter().copied().collect();
+    let expected_len = if filter.is_some() { 1 } else { expected.len() };
+    manifests.len() == expected_len
+        && manifests.iter().all(|manifest| {
+            expected
+                .get(manifest.name.as_str())
+                .is_some_and(|hash| *hash == manifest.task_sha256)
+        })
+}
+
 fn read(path: &Path) -> Result<String> {
     let metadata =
         fs::symlink_metadata(path).with_context(|| format!("无法检查: {}", path.display()))?;
@@ -153,12 +292,24 @@ fn is_link_or_reparse(metadata: &fs::Metadata) -> bool {
     }
 }
 
-/// 把任务的 fixture/ 递归复制到一个全新的工作区。既有目标是错误，而不是可删除的旧 run。
-pub fn setup_workspace(task: &Task, dest: &Path) -> Result<()> {
+/// 把已授权任务的 fixture/ 递归复制到一个全新的工作区。既有目标是错误，而不是可删除的旧 run。
+///
+/// `expected_fixture_sha256` comes from the authorized run manifest. Hashing the completed
+/// trial copy with the exact same tree algorithm closes the source verify->copy race: a source
+/// mutation before or during copying cannot reach the model or grade unless the resulting copy
+/// still has the exact authorized identity.
+pub fn setup_workspace(task: &Task, dest: &Path, expected_fixture_sha256: &str) -> Result<()> {
     if fs::symlink_metadata(dest).is_ok() {
         bail!("拒绝覆写既有 trial 工作区: {}", dest.display());
     }
     copy_dir(&task.fixture_dir, dest)?;
+    let actual_fixture_sha256 = hash_tree(dest)?;
+    if actual_fixture_sha256 != expected_fixture_sha256 {
+        bail!(
+            "trial fixture 副本与已授权输入不一致，拒绝任何 agent/grade 执行: expected {expected_fixture_sha256}, actual {actual_fixture_sha256}, workspace {}",
+            dest.display()
+        );
+    }
     // 给每个 fixture 一个 .RaymanCodingSkill/ 标记，让 rayman 把这个副本当作工作区根，
     // 否则它会沿目录向上找到真实仓库的 .git，把整个仓库当工作区（污染 + 超时）。
     fs::create_dir(dest.join(".RaymanCodingSkill"))
@@ -328,6 +479,110 @@ mod tests {
     }
 
     #[test]
+    fn repository_tasks_match_the_compiled_trusted_manifest() {
+        let tasks_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tasks");
+        let tasks = load_tasks(&tasks_root, None).unwrap();
+        let manifests = tasks
+            .iter()
+            .map(Task::provenance)
+            .collect::<Result<Vec<_>>>()
+            .unwrap();
+
+        let authorization =
+            authorize_grade_execution(&tasks_root, None, &manifests, false).unwrap();
+
+        assert_eq!(authorization.mode, "trusted_builtin_manifest");
+        assert_eq!(
+            authorization.trusted_manifest.as_deref(),
+            Some(BUILTIN_TASK_MANIFEST)
+        );
+        assert!(!authorization.custom_execution_acknowledged);
+    }
+
+    #[test]
+    fn custom_tasks_require_a_separate_explicit_grade_acknowledgement() {
+        let dir = tempfile::tempdir().unwrap();
+        let task_dir = dir.path().join("custom");
+        write(&task_dir.join("prompt.md"), "fix it\n");
+        write(&task_dir.join("grade.txt"), "echo host-command\n");
+        write(&task_dir.join("fixture/src/lib.rs"), "pub fn ok() {}\n");
+        let tasks = load_tasks(dir.path(), None).unwrap();
+        let manifests = tasks
+            .iter()
+            .map(Task::provenance)
+            .collect::<Result<Vec<_>>>()
+            .unwrap();
+
+        let error = authorize_grade_execution(dir.path(), None, &manifests, false)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("--unsafe-custom-grade-exec"), "{error}");
+
+        let authorization = authorize_grade_execution(dir.path(), None, &manifests, true).unwrap();
+        assert_eq!(authorization.mode, "custom_tasks_explicitly_acknowledged");
+        assert!(authorization.custom_execution_acknowledged);
+        assert!(authorization.trusted_manifest.is_none());
+    }
+
+    #[test]
+    fn custom_ack_does_not_require_the_compiled_builtin_directory_at_runtime() {
+        let dir = tempfile::tempdir().unwrap();
+        let tasks_root = dir.path().join("custom-tasks");
+        let task_dir = tasks_root.join("custom");
+        write(&task_dir.join("prompt.md"), "fix it\n");
+        write(&task_dir.join("grade.txt"), "echo host-command\n");
+        write(&task_dir.join("fixture/src/lib.rs"), "pub fn ok() {}\n");
+        let tasks = load_tasks(&tasks_root, None).unwrap();
+        let manifests = tasks
+            .iter()
+            .map(Task::provenance)
+            .collect::<Result<Vec<_>>>()
+            .unwrap();
+        let missing_builtin_root = dir.path().join("compiled-builtins-not-installed");
+
+        let authorization = authorize_grade_execution_with_builtin_root(
+            &tasks_root,
+            None,
+            &manifests,
+            true,
+            &missing_builtin_root,
+        )
+        .unwrap();
+
+        assert_eq!(authorization.mode, "custom_tasks_explicitly_acknowledged");
+        assert!(authorization.custom_execution_acknowledged);
+        assert!(authorization.trusted_manifest.is_none());
+
+        let error = authorize_grade_execution_with_builtin_root(
+            &tasks_root,
+            None,
+            &manifests,
+            false,
+            &missing_builtin_root,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("--unsafe-custom-grade-exec"), "{error}");
+    }
+
+    #[test]
+    fn builtin_hash_mismatch_is_not_trusted() {
+        let mut manifest = TaskProvenance {
+            name: "add-feature".into(),
+            prompt_sha256: String::new(),
+            grade_sha256: String::new(),
+            fixture_sha256: String::new(),
+            task_sha256: BUILTIN_TASK_HASHES[0].1.into(),
+        };
+        assert!(builtin_manifest_matches(
+            Some("add-feature"),
+            &[manifest.clone()]
+        ));
+        manifest.task_sha256 = "0".repeat(64);
+        assert!(!builtin_manifest_matches(Some("add-feature"), &[manifest]));
+    }
+
+    #[test]
     fn load_tasks_skips_stray_dirs_without_prompt() {
         let dir = tempfile::tempdir().unwrap();
         let tasks = dir.path();
@@ -376,15 +631,43 @@ mod tests {
         };
         let dest = dir.path().join("workspace");
 
-        setup_workspace(&task, &dest).unwrap();
+        let expected_fixture_sha256 = hash_tree(&task.fixture_dir).unwrap();
+        setup_workspace(&task, &dest, &expected_fixture_sha256).unwrap();
 
         assert!(dest.join("src/lib.rs").exists());
         assert!(dest.join(".RaymanCodingSkill").is_dir());
-        assert!(setup_workspace(&task, &dest).is_err());
+        assert!(setup_workspace(&task, &dest, &expected_fixture_sha256).is_err());
     }
 
     #[test]
-    fn provenance_hash_binds_fixture_content() {
+    fn setup_workspace_rejects_a_source_change_after_authorization() {
+        let dir = tempfile::tempdir().unwrap();
+        let fixture = dir.path().join("fixture");
+        write(&fixture.join("src/lib.rs"), "pub fn authorized() {}\n");
+        let expected_fixture_sha256 = hash_tree(&fixture).unwrap();
+        let task = Task {
+            name: "sample".into(),
+            prompt: "fix it".into(),
+            prompt_path: dir.path().join("prompt.md"),
+            fixture_dir: fixture.clone(),
+            grade_cmd: "cargo test".into(),
+            grade_path: dir.path().join("grade.txt"),
+        };
+        // Simulate the exact verify->copy window: authorization hashed the first tree, then
+        // the task source changed before this trial copied it.
+        write(&fixture.join("src/lib.rs"), "pub fn unauthorized() {}\n");
+        let dest = dir.path().join("workspace");
+
+        let error = setup_workspace(&task, &dest, &expected_fixture_sha256)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("拒绝任何 agent/grade 执行"), "{error}");
+        assert!(!dest.join(".RaymanCodingSkill").exists());
+    }
+
+    #[test]
+    fn provenance_hash_binds_fixture_content_and_rejects_cached_input_drift() {
         let dir = tempfile::tempdir().unwrap();
         let fixture = dir.path().join("fixture");
         write(&fixture.join("src/lib.rs"), "pub fn ok() {}\n");
@@ -407,14 +690,13 @@ mod tests {
         assert_ne!(first.task_sha256, second.task_sha256);
 
         write(&prompt_path, "fix a different issue\n");
-        let third = task.provenance().unwrap();
-        assert_ne!(second.prompt_sha256, third.prompt_sha256);
-        assert_ne!(second.task_sha256, third.task_sha256);
+        let prompt_error = task.provenance().unwrap_err().to_string();
+        assert!(prompt_error.contains("prompt changed after load"));
 
+        write(&prompt_path, "fix it\n");
         write(&grade_path, "cargo test --all\n");
-        let fourth = task.provenance().unwrap();
-        assert_ne!(third.grade_sha256, fourth.grade_sha256);
-        assert_ne!(third.task_sha256, fourth.task_sha256);
+        let grade_error = task.provenance().unwrap_err().to_string();
+        assert!(grade_error.contains("grade changed after load"));
     }
 
     #[cfg(windows)]

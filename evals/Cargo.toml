@@ -23,3 +23,12 @@ sha2 = "0.10"
 # release. The standalone evaluator intentionally denies duplicate
 # dependency versions, and reqwest/ring still require getrandom 0.2.
 tempfile = "=3.10.1"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+] }

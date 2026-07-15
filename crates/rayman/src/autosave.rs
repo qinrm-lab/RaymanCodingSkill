@@ -6,17 +6,130 @@
 //! 计划任务用 Windows 内置 `schtasks` + 任务 XML 注册，XML 里开了 `StartWhenAvailable`，
 //! 断电/关机错过的那次会在开机后补跑；另挂一个登录触发器，重启登录后自动接着跑。
 
+use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
+use std::thread;
+use std::time::{Duration, Instant};
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
+use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 
-use crate::goal::{GoalStatus, GoalStore, PendingStore};
+use crate::goal::{
+    GoalLifecycle, GoalStatus, GoalStore, PendingStore, RequirementKind, RequirementStatus,
+};
 use crate::state_paths;
 use crate::state_store::{self, display_path};
 use crate::{checkpoint, workspace_root};
 
 const DEFAULT_INTERVAL_MIN: u64 = 30;
+const AUTOSAVE_LOCK_NAME: &str = "autosave.lock";
+const AUTOSAVE_LOCK_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Serialize the complete autosave lifecycle across processes.  Keeping the
+/// lock file stable (rather than deleting it after unlock) prevents different
+/// processes from locking different file identities after an unlink/recreate
+/// race.
+struct AutosaveLock {
+    file: fs::File,
+}
+
+impl AutosaveLock {
+    fn acquire(root: &Path) -> Result<Self> {
+        Self::acquire_with_timeout(root, AUTOSAVE_LOCK_TIMEOUT)
+    }
+
+    fn acquire_with_timeout(root: &Path, timeout: Duration) -> Result<Self> {
+        let path = state_paths::managed_state_file(root, Path::new(AUTOSAVE_LOCK_NAME), true)?;
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&path)
+            .with_context(|| format!("无法打开 autosave 独占锁: {}", display_path(&path)))?;
+        let metadata = fs::symlink_metadata(&path)
+            .with_context(|| format!("无法复查 autosave 独占锁: {}", display_path(&path)))?;
+        if is_link_or_reparse(&metadata) || !metadata.file_type().is_file() {
+            bail!("autosave 独占锁不是安全普通文件: {}", display_path(&path));
+        }
+        if !file
+            .metadata()
+            .with_context(|| format!("无法读取 autosave 锁句柄: {}", display_path(&path)))?
+            .file_type()
+            .is_file()
+        {
+            bail!("autosave 锁句柄不是普通文件: {}", display_path(&path));
+        }
+
+        let started = Instant::now();
+        loop {
+            match file.try_lock_exclusive() {
+                Ok(()) => return Ok(Self { file }),
+                Err(error) if is_lock_busy(&error) && started.elapsed() < timeout => {
+                    thread::sleep(Duration::from_millis(25));
+                }
+                Err(error) if is_lock_busy(&error) => {
+                    bail!("等待 autosave 独占锁超过 {} 秒", timeout.as_secs_f64());
+                }
+                Err(error) => return Err(error).context("无法取得 autosave 独占锁"),
+            }
+        }
+    }
+}
+
+impl Drop for AutosaveLock {
+    fn drop(&mut self) {
+        let _ = FileExt::unlock(&self.file);
+    }
+}
+
+fn is_lock_busy(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::WouldBlock || matches!(error.raw_os_error(), Some(32) | Some(33))
+}
+
+fn is_link_or_reparse(metadata: &fs::Metadata) -> bool {
+    if metadata.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+    }
+    #[cfg(not(windows))]
+    false
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TaskRegistration {
+    Present,
+    Absent,
+}
+
+trait TaskScheduler: Send + Sync {
+    fn register(&self, root: &Path, name: &str, interval_min: u64) -> Result<()>;
+    fn unregister(&self, name: &str) -> Result<bool>;
+    fn registration(&self, name: &str) -> Result<TaskRegistration>;
+}
+
+struct SystemTaskScheduler;
+
+impl TaskScheduler for SystemTaskScheduler {
+    fn register(&self, root: &Path, name: &str, interval_min: u64) -> Result<()> {
+        register_task(root, name, interval_min)
+    }
+
+    fn unregister(&self, name: &str) -> Result<bool> {
+        unregister_task(name)
+    }
+
+    fn registration(&self, name: &str) -> Result<TaskRegistration> {
+        task_registration(name)
+    }
+}
 
 /// 自动保存的持久状态（单一事实来源；tick/stop/status 都读它）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,31 +169,83 @@ pub fn task_name(root: &Path) -> String {
     format!("RaymanCheckpoint-{}", checkpoint::workspace_key(root))
 }
 
-/// 工作是否“全部完成”：有目标、每一个目标都明确为 success、且没有待完成项。
-/// 没有任何目标时返回 false（无从判断完成，交给显式 `stop`）。
+/// 工作是否“全部完成”：至少有一个 current 目标，所有 current 目标都满足
+/// standard goal/receipt freshness 合同，且没有待完成项。Archived/superseded
+/// records are retained as history but do not keep autosave alive.
+/// 没有任何 current 目标时返回 false（无从判断完成，交给显式 `stop`）。
 /// 任何状态文件读不出来都按“未完成”处理：损坏的 active 目标被当成不存在
 /// 会导致自动快照在工作进行中自停并注销。
 pub fn work_is_complete(root: &Path) -> bool {
     let Ok((goals, issues)) = GoalStore::new(root).list_with_issues() else {
         return false;
     };
-    if !issues.is_empty() || goals.is_empty() {
+    if !issues.is_empty() {
         return false;
     }
-    // A goal that deserializes but violates the current contract (for example,
-    // a future schema version) must not make autosave stop.  Legacy successful
-    // history deliberately remains compatible: `current_schema_error` returns
-    // None for records explicitly recognized as legacy.
-    if goals
+    let Ok(fingerprint) = crate::goal::workspace_fingerprint(root) else {
+        return false;
+    };
+    if goals.iter().any(|goal| {
+        goal.current_schema_error().is_some()
+            || goal.lifecycle_proof_error(root).is_some()
+            || crate::goal::supersession_error(goal, &goals, root, &fingerprint).is_some()
+    }) {
+        return false;
+    }
+    let current = goals
         .iter()
-        .any(|goal| goal.current_schema_error().is_some())
-    {
+        .filter(|goal| goal.lifecycle == GoalLifecycle::Current)
+        .collect::<Vec<_>>();
+    if current.is_empty() {
         return false;
     }
-    // `partial`、`blocked` 及未知状态都是未完成。只检查“没有 active”会让这些
-    // 仍需人工处理的目标触发 auto-stop。
-    if goals.iter().any(|goal| goal.status != GoalStatus::Success) {
-        return false;
+    for goal in current {
+        if goal.loaded_from_legacy
+            || goal.current_schema_error().is_some()
+            || goal.status != GoalStatus::Success
+        {
+            return false;
+        }
+        for requirement in &goal.requirements {
+            let is_must = requirement.kind == RequirementKind::Must;
+            if is_must
+                && (requirement.status != RequirementStatus::Done
+                    || requirement
+                        .evidence
+                        .as_deref()
+                        .map(str::trim)
+                        .unwrap_or_default()
+                        .is_empty())
+            {
+                return false;
+            }
+            if requirement.status == RequirementStatus::Done
+                && (requirement.validations.is_empty()
+                    || (!requirement.impacts.is_empty()
+                        && !crate::goal::validation_relevance_gaps(
+                            requirement,
+                            goal,
+                            root,
+                            &fingerprint,
+                        )
+                        .is_empty()))
+            {
+                return false;
+            }
+            if is_must
+                && !requirement.validations.iter().any(|validation| {
+                    crate::goal::validation_has_current_receipt(
+                        validation,
+                        goal,
+                        requirement,
+                        root,
+                        &fingerprint,
+                    )
+                })
+            {
+                return false;
+            }
+        }
     }
     matches!(PendingStore::new(root).list(), Ok(items) if items.is_empty())
 }
@@ -103,6 +268,25 @@ pub fn start(
     auto_stop: bool,
     dir: Option<&Path>,
 ) -> Result<ActionOutcome> {
+    let _lock = AutosaveLock::acquire(root)?;
+    start_with_scheduler(
+        root,
+        interval_min,
+        keep,
+        auto_stop,
+        dir,
+        &SystemTaskScheduler,
+    )
+}
+
+fn start_with_scheduler(
+    root: &Path,
+    interval_min: u64,
+    keep: usize,
+    auto_stop: bool,
+    dir: Option<&Path>,
+    scheduler: &dyn TaskScheduler,
+) -> Result<ActionOutcome> {
     let interval_min = interval_min.max(1);
     // 不覆盖损坏的 autosave.json；使用者需要先保全并修复它。
     let _ = load_state(root)?;
@@ -121,8 +305,18 @@ pub fn start(
         stopped_at: None,
         stop_status: None,
     };
-    save_state(root, &state)?;
-    register_task(root, &name, interval_min)?;
+    activate_state_with(
+        root,
+        &state,
+        || scheduler.register(root, &name, interval_min),
+        || {
+            if scheduler.unregister(&name)? {
+                Ok(())
+            } else {
+                bail!("注册成功后回滚计划任务失败：任务未找到")
+            }
+        },
+    )?;
 
     Ok(ActionOutcome {
         message: format!(
@@ -143,25 +337,38 @@ pub fn start(
 
 /// 计划任务每次触发：存一次快照；未激活则自注销；开启 auto-stop 且完成则存最后一次并自停。
 pub fn tick(root: &Path) -> Result<ActionOutcome> {
+    let _lock = AutosaveLock::acquire(root)?;
+    tick_with_scheduler(root, &SystemTaskScheduler)
+}
+
+fn tick_with_scheduler(root: &Path, scheduler: &dyn TaskScheduler) -> Result<ActionOutcome> {
     let Some(mut state) = load_state(root)? else {
         // 没有状态：不该有任务在跑，尽力注销后退出。
         let name = task_name(root);
-        let _ = unregister_task(&name);
+        let removed = scheduler.unregister(&name)?;
         return Ok(ActionOutcome {
-            message: "无自动保存状态，已尝试注销计划任务。".into(),
+            message: if removed {
+                "无自动保存状态，遗留计划任务已注销。".into()
+            } else {
+                "无自动保存状态，也没有已注册的计划任务。".into()
+            },
             state: None,
         });
     };
     if !state.active {
-        let _ = unregister_task(&state.task_name);
+        let removed = scheduler.unregister(&state.task_name)?;
         return Ok(ActionOutcome {
-            message: "自动保存已停止，已注销计划任务。".into(),
+            message: if removed {
+                "自动保存已停止，遗留计划任务已注销。".into()
+            } else {
+                "自动保存已停止，计划任务未注册。".into()
+            },
             state: Some(state),
         });
     }
 
     if state.auto_stop && work_is_complete(root) {
-        finalize(root, &mut state, "success (auto)")?;
+        finalize_with_scheduler(root, &mut state, "success (auto)", scheduler)?;
         return Ok(ActionOutcome {
             message: "检测到全部目标均为 success：已存最后一次快照并停止自动保存。".into(),
             state: Some(state),
@@ -180,6 +387,15 @@ pub fn tick(root: &Path) -> Result<ActionOutcome> {
 
 /// 显式停止（“全部完成”传 success，“出错”传 error 等）：存最后一次快照 + 注销任务。
 pub fn stop(root: &Path, status: &str) -> Result<ActionOutcome> {
+    let _lock = AutosaveLock::acquire(root)?;
+    stop_with_scheduler(root, status, &SystemTaskScheduler)
+}
+
+fn stop_with_scheduler(
+    root: &Path,
+    status: &str,
+    scheduler: &dyn TaskScheduler,
+) -> Result<ActionOutcome> {
     let mut state = match load_state(root)? {
         Some(state) => state,
         None => AutosaveState {
@@ -195,7 +411,7 @@ pub fn stop(root: &Path, status: &str) -> Result<ActionOutcome> {
             stop_status: None,
         },
     };
-    finalize(root, &mut state, status)?;
+    finalize_with_scheduler(root, &mut state, status, scheduler)?;
     Ok(ActionOutcome {
         message: format!(
             "已存最后一次快照并停止自动保存（状态：{status}）。计划任务 '{}' 已注销。",
@@ -206,20 +422,142 @@ pub fn stop(root: &Path, status: &str) -> Result<ActionOutcome> {
 }
 
 /// 存最后一次快照，标记停止，注销任务。
-fn finalize(root: &Path, state: &mut AutosaveState, status: &str) -> Result<()> {
+fn finalize_with_scheduler(
+    root: &Path,
+    state: &mut AutosaveState,
+    status: &str,
+    scheduler: &dyn TaskScheduler,
+) -> Result<()> {
+    let task_name = state.task_name.clone();
+    let persist_rollback_name = task_name.clone();
+    let checkpoint_rollback_name = task_name.clone();
+    let interval_min = state.interval_min;
+    finalize_with(
+        root,
+        state,
+        status,
+        move || scheduler.unregister(&task_name),
+        || scheduler.register(root, &persist_rollback_name, interval_min),
+        || scheduler.register(root, &checkpoint_rollback_name, interval_min),
+    )
+}
+
+fn finalize_with<F, R, C>(
+    root: &Path,
+    state: &mut AutosaveState,
+    status: &str,
+    unregister: F,
+    reregister: R,
+    checkpoint_reregister: C,
+) -> Result<()>
+where
+    F: FnOnce() -> Result<bool>,
+    R: FnOnce() -> Result<()>,
+    C: FnOnce() -> Result<()>,
+{
     // 保存失败（含 partial checkpoint）时保持 active 状态和计划任务，交给调用者处理；
     // 不能伪造“已最终保存并停止”的结果。
+    let original = state.clone();
     checkpoint::save(root, dir_override(&state.dir).as_deref(), state.keep)?;
-    state.active = false;
-    state.stopped_at = Some(state_store::now_iso());
-    state.stop_status = Some(status.to_string());
-    save_state(root, state)?;
-    let _ = unregister_task(&state.task_name);
+    finalize_state_with(
+        state,
+        status,
+        unregister,
+        |stopped| save_state(root, stopped),
+        reregister,
+    )?;
+    if let Err(checkpoint_error) =
+        checkpoint::save(root, dir_override(&state.dir).as_deref(), state.keep)
+    {
+        if original.active {
+            if let Err(state_error) = save_state(root, &original) {
+                bail!(
+                    "停止状态已写入，但最终 checkpoint 失败且 active 状态回滚失败：checkpoint={checkpoint_error}; state={state_error}"
+                );
+            }
+            if let Err(register_error) = checkpoint_reregister() {
+                // Registration could not be restored.  Put the persisted state
+                // back to stopped so it truthfully matches the absent scheduler.
+                let stopped = state.clone();
+                let _ = save_state(root, &stopped);
+                bail!(
+                    "最终 checkpoint 失败，active 状态已尝试回滚但计划任务重注册失败：checkpoint={checkpoint_error}; register={register_error}"
+                );
+            }
+            *state = original;
+        }
+        return Err(checkpoint_error);
+    }
+    Ok(())
+}
+
+fn finalize_state_with<F, P, R>(
+    state: &mut AutosaveState,
+    status: &str,
+    unregister: F,
+    persist: P,
+    reregister: R,
+) -> Result<()>
+where
+    F: FnOnce() -> Result<bool>,
+    P: FnOnce(&AutosaveState) -> Result<()>,
+    R: FnOnce() -> Result<()>,
+{
+    // 注销失败时也必须保持 persisted active 状态；否则任务仍在运行，而 status
+    // 和 stop 输出却会谎报已经停止。
+    let _removed = unregister()?;
+    let was_active = state.active;
+    let mut stopped = state.clone();
+    stopped.active = false;
+    stopped.stopped_at = Some(state_store::now_iso());
+    stopped.stop_status = Some(status.to_string());
+    if let Err(state_error) = persist(&stopped) {
+        if was_active {
+            if let Err(register_error) = reregister() {
+                bail!(
+                    "计划任务已注销，但停止状态写入失败且重新注册失败：state={state_error}; register={register_error}"
+                );
+            }
+            bail!("停止状态写入失败；计划任务已重新注册，autosave 保持 active：{state_error}");
+        }
+        return Err(state_error);
+    }
+    *state = stopped;
+    Ok(())
+}
+
+fn activate_state_with<F, R>(
+    root: &Path,
+    state: &AutosaveState,
+    register: F,
+    rollback: R,
+) -> Result<()>
+where
+    F: FnOnce() -> Result<()>,
+    R: FnOnce() -> Result<()>,
+{
+    // Registration precedes the active state write.  If registration fails,
+    // the previous state remains untouched instead of persisting a phantom
+    // active scheduler.
+    register()?;
+    if let Err(state_error) = save_state(root, state) {
+        if let Err(rollback_error) = rollback() {
+            bail!(
+                "计划任务已注册，但 active 状态写入失败且回滚失败：state={state_error}; rollback={rollback_error}"
+            );
+        }
+        return Err(state_error);
+    }
     Ok(())
 }
 
 /// 当前自动保存状态摘要。
 pub fn status(root: &Path) -> Result<ActionOutcome> {
+    let _lock = AutosaveLock::acquire(root)?;
+    status_with_scheduler(root, &SystemTaskScheduler)
+}
+
+fn status_with_scheduler(root: &Path, scheduler: &dyn TaskScheduler) -> Result<ActionOutcome> {
     match load_state(root) {
         Err(error) => bail!("自动保存状态损坏或不可读取；未修改状态，也未注销计划任务：{error}"),
         Ok(None) => Ok(ActionOutcome {
@@ -227,7 +565,7 @@ pub fn status(root: &Path) -> Result<ActionOutcome> {
             state: None,
         }),
         Ok(Some(state)) => {
-            let registered = task_registered(&state.task_name);
+            let registered = scheduler.registration(&state.task_name)?;
             let last = state
                 .last_tick_at
                 .clone()
@@ -244,7 +582,11 @@ pub fn status(root: &Path) -> Result<ActionOutcome> {
                     state.keep,
                     state.auto_stop,
                     state.task_name,
-                    if registered { "已注册" } else { "未注册" },
+                    if registered == TaskRegistration::Present {
+                        "已注册"
+                    } else {
+                        "未注册"
+                    },
                     last
                 ),
                 state: Some(state),
@@ -299,19 +641,68 @@ fn register_task(root: &Path, name: &str, interval_min: u64) -> Result<()> {
 
 #[cfg(windows)]
 fn unregister_task(name: &str) -> Result<bool> {
+    match task_registration(name)? {
+        TaskRegistration::Absent => return Ok(false),
+        TaskRegistration::Present => {}
+    }
     let output = std::process::Command::new("schtasks")
         .args(["/Delete", "/TN", name, "/F"])
         .output()?;
-    Ok(output.status.success())
+    if !output.status.success() {
+        let detail = scheduler_output_text(&output.stdout, &output.stderr);
+        if scheduler_reports_not_found(output.status.code(), &detail) {
+            return Ok(false);
+        }
+        bail!("注销计划任务失败（任务仍可能在运行）：{detail}");
+    }
+    Ok(true)
 }
 
 #[cfg(windows)]
-fn task_registered(name: &str) -> bool {
-    std::process::Command::new("schtasks")
+fn task_registration(name: &str) -> Result<TaskRegistration> {
+    let output = std::process::Command::new("schtasks")
         .args(["/Query", "/TN", name])
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .context("无法启动 schtasks 查询 autosave 计划任务")?;
+    if output.status.success() {
+        return Ok(TaskRegistration::Present);
+    }
+    let detail = scheduler_output_text(&output.stdout, &output.stderr);
+    if scheduler_reports_not_found(output.status.code(), &detail) {
+        return Ok(TaskRegistration::Absent);
+    }
+    bail!("查询 autosave 计划任务失败，不能把未知状态当作未注册：{detail}")
+}
+
+fn scheduler_output_text(stdout: &[u8], stderr: &[u8]) -> String {
+    let stdout = String::from_utf8_lossy(stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(stderr).trim().to_string();
+    match (stdout.is_empty(), stderr.is_empty()) {
+        (false, false) => format!("{stdout}\n{stderr}"),
+        (false, true) => stdout,
+        (true, false) => stderr,
+        (true, true) => "schtasks returned no diagnostic output".into(),
+    }
+}
+
+fn scheduler_reports_not_found(exit_code: Option<i32>, detail: &str) -> bool {
+    // HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND), raw ERROR_FILE_NOT_FOUND,
+    // and the stable English/Chinese schtasks diagnostics.  Generic exit 1 is
+    // deliberately insufficient because access denied and service failures use
+    // the same process exit code.
+    if matches!(exit_code, Some(2) | Some(-2_147_024_894)) {
+        return true;
+    }
+    let detail = detail.to_ascii_lowercase();
+    [
+        "the system cannot find the file specified",
+        "cannot find the task",
+        "找不到指定的文件",
+        "找不到任务",
+        "指定的任务不存在",
+    ]
+    .iter()
+    .any(|marker| detail.contains(marker))
 }
 
 #[cfg(windows)]
@@ -337,8 +728,8 @@ fn unregister_task(_name: &str) -> Result<bool> {
 }
 
 #[cfg(not(windows))]
-fn task_registered(_name: &str) -> bool {
-    false
+fn task_registration(_name: &str) -> Result<TaskRegistration> {
+    Ok(TaskRegistration::Absent)
 }
 
 /// 生成 Windows 任务计划 XML（可测：断言含关键字段）。
@@ -443,6 +834,44 @@ mod tests {
         fs::write(path, text).unwrap();
     }
 
+    fn record_non_code_success(goals: &GoalStore, root: &Path, goal: &crate::goal::Goal) {
+        let command = "echo validation-ok";
+        let fingerprint = crate::goal::workspace_fingerprint(root).unwrap();
+        let contract_sha256 = goals.validation_contract_hash(&goal.id, "req_1").unwrap();
+        goals
+            .record_validation_receipt(
+                &goal.id,
+                "req_1",
+                crate::goal::ValidationReceiptSubmission {
+                    evidence: "non-code validation passed".into(),
+                    command: command.into(),
+                    receipt: crate::goal::ValidationReceipt {
+                        exit_code: 0,
+                        cwd: root.display().to_string(),
+                        workspace_fingerprint_before: fingerprint.clone(),
+                        workspace_fingerprint_after: fingerprint,
+                        stdout_sha256: "a".repeat(64),
+                        stderr_sha256: "b".repeat(64),
+                        invocation_sha256: crate::goal::validation_invocation_sha256_scoped(
+                            command,
+                            &[],
+                            true,
+                        ),
+                        passed_tests: None,
+                        listed_tests: None,
+                        ignored_tests: None,
+                        list_stdout_sha256: None,
+                        list_stderr_sha256: None,
+                        contract_sha256,
+                    },
+                    impacts: Vec::new(),
+                    non_code: true,
+                },
+            )
+            .unwrap();
+        goals.close(&goal.id, "success").unwrap();
+    }
+
     #[test]
     fn work_is_complete_needs_goals_none_active_no_pending() {
         let dir = tempfile::tempdir().unwrap();
@@ -456,24 +885,7 @@ mod tests {
         // 有 active 目标 → 未完成。
         assert!(!work_is_complete(root));
 
-        goals
-            .record_validation_receipt(
-                &g.id,
-                "req_1",
-                "src/x + test passed",
-                "cargo test".into(),
-                crate::goal::ValidationReceipt {
-                    exit_code: 0,
-                    cwd: root.display().to_string(),
-                    workspace_fingerprint_before: "before".into(),
-                    workspace_fingerprint_after: "after".into(),
-                    stdout_sha256: "a".repeat(64),
-                    stderr_sha256: "b".repeat(64),
-                },
-                Vec::new(),
-            )
-            .unwrap();
-        goals.close(&g.id, "success").unwrap();
+        record_non_code_success(&goals, root, &g);
         // 全部关闭、无 pending → 完成。
         assert!(work_is_complete(root));
 
@@ -544,6 +956,31 @@ mod tests {
         // 最后一次快照确实落盘。
         let snaps = checkpoint::list(root, Some(store.path())).unwrap();
         assert!(!snaps.is_empty());
+        let latest = checkpoint::latest(root, Some(store.path()))
+            .unwrap()
+            .unwrap();
+        let snapshot_state: AutosaveState = serde_json::from_str(
+            &fs::read_to_string(
+                latest
+                    .path
+                    .join("tree")
+                    .join(".RaymanCodingSkill/autosave.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(
+            !snapshot_state.active,
+            "the final checkpoint must restore a stopped state"
+        );
+
+        let mut stale_active = after.clone();
+        stale_active.active = true;
+        stale_active.stopped_at = None;
+        stale_active.stop_status = None;
+        save_state(root, &stale_active).unwrap();
+        checkpoint::restore(root, Some(store.path()), Some(&latest.id)).unwrap();
+        assert!(!load_state(root).unwrap().unwrap().active);
     }
 
     #[test]
@@ -596,7 +1033,7 @@ mod tests {
     }
 
     #[test]
-    fn work_is_complete_keeps_legacy_success_history_compatible() {
+    fn work_is_complete_rejects_legacy_success_without_a_current_receipt() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         let goals_dir = root.join(".RaymanCodingSkill/goals");
@@ -622,9 +1059,135 @@ mod tests {
         .unwrap();
 
         assert!(
-            work_is_complete(root),
-            "recognized legacy success history remains auto-stop compatible"
+            !work_is_complete(root),
+            "legacy attestation cannot trigger current standard-ready auto-stop"
         );
+    }
+
+    #[test]
+    fn work_is_complete_ignores_reasoned_history_but_requires_fresh_current_receipt() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        touch(&root.join("src/lib.rs"), "pub fn answer() -> i32 { 42 }\n");
+        let goals = GoalStore::new(root);
+        let historical = goals
+            .start("historical", &[("old work".into(), true)])
+            .unwrap();
+        record_non_code_success(&goals, root, &historical);
+        goals
+            .archive(&historical.id, "older delivery", false)
+            .unwrap();
+
+        let current = goals
+            .start("current", &[("validate now".into(), true)])
+            .unwrap();
+        record_non_code_success(&goals, root, &current);
+        assert!(work_is_complete(root));
+
+        touch(&root.join("src/lib.rs"), "pub fn answer() -> i32 { 43 }\n");
+        assert!(
+            !work_is_complete(root),
+            "a source change must make the current receipt stale"
+        );
+    }
+
+    #[test]
+    fn activation_failure_never_persists_a_phantom_active_state() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let state = AutosaveState {
+            active: true,
+            interval_min: 30,
+            keep: 2,
+            dir: None,
+            auto_stop: true,
+            task_name: task_name(root),
+            started_at: state_store::now_iso(),
+            last_tick_at: None,
+            stopped_at: None,
+            stop_status: None,
+        };
+
+        let result = activate_state_with(
+            root,
+            &state,
+            || bail!("synthetic registration failure"),
+            || Ok(()),
+        );
+        assert!(result.is_err());
+        assert!(load_state(root).unwrap().is_none());
+    }
+
+    #[test]
+    fn unregister_failure_keeps_persisted_state_active_and_returns_error() {
+        let ws = tempfile::tempdir().unwrap();
+        let snapshots = tempfile::tempdir().unwrap();
+        let root = ws.path();
+        touch(&root.join("src/lib.rs"), "pub fn answer() -> i32 { 42 }\n");
+        let mut state = AutosaveState {
+            active: true,
+            interval_min: 30,
+            keep: 2,
+            dir: Some(display_path(snapshots.path())),
+            auto_stop: true,
+            task_name: task_name(root),
+            started_at: state_store::now_iso(),
+            last_tick_at: None,
+            stopped_at: None,
+            stop_status: None,
+        };
+        save_state(root, &state).unwrap();
+
+        let result = finalize_with(
+            root,
+            &mut state,
+            "success",
+            || bail!("synthetic unregister failure"),
+            || Ok(()),
+            || Ok(()),
+        );
+        assert!(result.is_err());
+        let persisted = load_state(root).unwrap().unwrap();
+        assert!(persisted.active);
+        assert!(persisted.stopped_at.is_none());
+        assert!(persisted.stop_status.is_none());
+    }
+
+    #[test]
+    fn state_write_failure_after_unregister_reregisters_and_stays_active() {
+        use std::cell::Cell;
+
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let mut state = AutosaveState {
+            active: true,
+            interval_min: 30,
+            keep: 2,
+            dir: None,
+            auto_stop: true,
+            task_name: task_name(root),
+            started_at: state_store::now_iso(),
+            last_tick_at: None,
+            stopped_at: None,
+            stop_status: None,
+        };
+        save_state(root, &state).unwrap();
+        let reregistered = Cell::new(false);
+
+        let result = finalize_state_with(
+            &mut state,
+            "success",
+            || Ok(false),
+            |_| bail!("synthetic state write failure"),
+            || {
+                reregistered.set(true);
+                Ok(())
+            },
+        );
+        assert!(result.is_err());
+        assert!(reregistered.get());
+        assert!(state.active);
+        assert!(load_state(root).unwrap().unwrap().active);
     }
 
     #[test]

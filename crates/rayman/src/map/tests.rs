@@ -79,6 +79,28 @@ fn map_build_tolerates_non_utf8_source_files() {
 }
 
 #[test]
+fn map_build_rejects_source_drift_after_index_validation() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        root.join("src/lib.rs").as_path(),
+        "pub fn value() -> i32 { 1 }\n",
+    );
+    context::refresh(root).unwrap();
+    let index = context::verified_index(root).unwrap();
+
+    write(
+        root.join("src/lib.rs").as_path(),
+        "pub fn value() -> i32 { 2 }\n",
+    );
+    let error = build_from_index(root, &index).unwrap_err().to_string();
+    assert!(
+        error.contains("项目地图读取失败") && error.contains("src/lib.rs"),
+        "error={error}"
+    );
+}
+
+#[test]
 fn use_of_workspace_crate_name_creates_local_dependency_edge() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
@@ -406,6 +428,162 @@ fn strict_profile_blocks_large_file_by_default_while_standard_does_not() {
     assert!(strict.findings.iter().any(|finding| {
         finding.kind == "large_file" && finding.path == "src/lib.rs" && finding.severity == "error"
     }));
+}
+
+#[test]
+fn strict_quality_file_adds_to_defaults_instead_of_replacing_them() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        root.join(".RaymanCodingSkill/quality.json").as_path(),
+        r#"{
+  "block_warning_kinds": ["public_api_without_test_evidence"]
+}
+"#,
+    );
+
+    let config = load_quality_config(root, "strict").unwrap();
+
+    assert!(
+        config
+            .block_warning_kinds
+            .contains(&"large_file".to_string())
+    );
+    assert!(
+        config
+            .block_warning_kinds
+            .contains(&"high_fan_in".to_string())
+    );
+    assert!(
+        config
+            .block_warning_kinds
+            .contains(&"public_api_without_test_evidence".to_string())
+    );
+    assert_eq!(
+        config.configured_block_warning_kinds,
+        vec!["public_api_without_test_evidence".to_string()]
+    );
+}
+
+#[test]
+fn strict_quality_file_cannot_raise_the_missing_test_threshold() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        root.join(".RaymanCodingSkill/quality.json").as_path(),
+        r#"{
+  "multi_source_no_test_min_sources": 999999
+}
+"#,
+    );
+
+    let config = load_quality_config(root, "strict").unwrap();
+
+    assert_eq!(config.multi_source_no_test_min_sources, 3);
+}
+
+#[test]
+fn strict_quality_exact_exemption_preserves_finding_and_records_provenance() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let big_body = "// pad\n".repeat(2_001);
+    write(root.join("src/lib.rs").as_path(), &big_body);
+    write(
+        root.join(".RaymanCodingSkill/quality.json").as_path(),
+        r#"{
+  "exemptions": [
+    {
+      "path": "src/lib.rs",
+      "kind": "large_file",
+      "reason": "Generated compatibility table is reviewed and covered by package tests."
+    }
+  ]
+}
+"#,
+    );
+    context::refresh(root).unwrap();
+
+    let map = build_readonly(root).unwrap();
+    let config = load_quality_config(root, "strict").unwrap();
+    let quality = quality_report_with_config(&map, &config);
+
+    assert!(quality.ready, "findings={:?}", quality.findings);
+    let finding = quality
+        .findings
+        .iter()
+        .find(|finding| finding.path == "src/lib.rs" && finding.kind == "large_file")
+        .unwrap();
+    assert_eq!(finding.severity, "info");
+    assert_eq!(
+        finding.blocking_policy_source.as_deref(),
+        Some("strict_default")
+    );
+    assert!(finding.exemption_reason.is_some());
+}
+
+#[test]
+fn strict_quality_exemptions_reject_globs_and_blank_reasons() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        root.join(".RaymanCodingSkill/quality.json").as_path(),
+        r#"{
+  "exemptions": [
+    { "path": "evals/tasks/*/fixture/src", "kind": "high_fan_in", "reason": "broad" }
+  ]
+}
+"#,
+    );
+    let glob_error = load_quality_config(root, "strict").unwrap_err().to_string();
+    assert!(glob_error.contains("exact normalized workspace-relative file path"));
+
+    write(
+        root.join(".RaymanCodingSkill/quality.json").as_path(),
+        r#"{
+  "exemptions": [
+    { "path": "src/lib.rs", "kind": "large_file", "reason": "   " }
+  ]
+}
+"#,
+    );
+    let reason_error = load_quality_config(root, "strict").unwrap_err().to_string();
+    assert!(reason_error.contains("requires a non-empty reason"));
+}
+
+#[test]
+fn strict_quality_exemptions_require_an_existing_ordinary_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    write(
+        root.join(".RaymanCodingSkill/quality.json").as_path(),
+        r#"{
+  "exemptions": [
+    { "path": "src", "kind": "large_file", "reason": "directory is too broad" }
+  ]
+}
+"#,
+    );
+    let directory_error = load_quality_config(root, "strict").unwrap_err().to_string();
+    assert!(
+        directory_error.contains("ordinary file"),
+        "{directory_error}"
+    );
+
+    write(
+        root.join(".RaymanCodingSkill/quality.json").as_path(),
+        r#"{
+  "exemptions": [
+    { "path": "src/missing.rs", "kind": "large_file", "reason": "future file" }
+  ]
+}
+"#,
+    );
+    let missing_error = load_quality_config(root, "strict").unwrap_err().to_string();
+    assert!(
+        missing_error.contains("existing ordinary file"),
+        "{missing_error}"
+    );
 }
 
 #[test]

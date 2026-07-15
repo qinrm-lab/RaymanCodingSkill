@@ -23,6 +23,8 @@ const PENDING_PATH: &str = ".RaymanCodingSkill/pending.json";
 const GOALS_RELATIVE: &str = "goals";
 const PENDING_RELATIVE: &str = "pending.json";
 pub const GOAL_SCHEMA_VERSION: u32 = 2;
+const STRICT_RECEIPT_ROLLOUT_AT: &str = "2026-07-14T00:00:00Z";
+const PRE_RECEIPT_MIGRATION: &str = "pre_receipt_schema_v2";
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -79,6 +81,31 @@ pub enum GoalStatus {
     Blocked,
 }
 
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum GoalLifecycle {
+    #[default]
+    Current,
+    Archived,
+    Superseded,
+}
+
+impl GoalLifecycle {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Current => "current",
+            Self::Archived => "archived",
+            Self::Superseded => "superseded",
+        }
+    }
+}
+
+impl fmt::Display for GoalLifecycle {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
 impl GoalStatus {
     pub fn as_str(self) -> &'static str {
         match self {
@@ -116,6 +143,15 @@ pub struct Requirement {
 pub struct ValidationEvidence {
     pub command: String,
     pub recorded_at: String,
+    /// The exact impact paths supplied to the same `goal validate` invocation.
+    /// Requirement-level impact history is retained separately, but cannot be
+    /// combined with an unrelated receipt to satisfy validation relevance.
+    #[serde(default)]
+    pub impact_paths: Vec<String>,
+    #[serde(default)]
+    pub impact_scopes: Vec<ValidationImpactScope>,
+    #[serde(default)]
+    pub non_code: bool,
     /// 旧的人工声明没有实际退出码/工作区绑定，只能作为迁移信息保留。
     #[serde(default)]
     pub receipt: Option<ValidationReceipt>,
@@ -129,17 +165,67 @@ pub struct ValidationReceipt {
     pub workspace_fingerprint_after: String,
     pub stdout_sha256: String,
     pub stderr_sha256: String,
+    /// Binds the executed command and its declared impact paths to this receipt.
+    /// Old receipts without this field are retained as history but cannot make
+    /// a current standard/release claim.
+    #[serde(default)]
+    pub invocation_sha256: String,
+    /// Present only for cargo test/nextest executions.  A zero-test or
+    /// compile-only invocation cannot satisfy a test receipt.
+    #[serde(default)]
+    pub passed_tests: Option<u64>,
+    #[serde(default)]
+    pub listed_tests: Option<u64>,
+    #[serde(default)]
+    pub ignored_tests: Option<u64>,
+    #[serde(default)]
+    pub list_stdout_sha256: Option<String>,
+    #[serde(default)]
+    pub list_stderr_sha256: Option<String>,
+    /// Binds this receipt to the immutable goal and requirement contract.
+    #[serde(default)]
+    pub contract_sha256: String,
+}
+
+pub struct ValidationReceiptSubmission {
+    pub evidence: String,
+    pub command: String,
+    pub receipt: ValidationReceipt,
+    pub impacts: Vec<ImpactEvidence>,
+    pub non_code: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ValidationImpactScope {
+    pub changed_path: String,
+    #[serde(default)]
+    pub package: Option<String>,
+    #[serde(default)]
+    pub manifest_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ImpactEvidence {
     pub changed_path: String,
+    #[serde(default)]
+    pub package: Option<String>,
+    #[serde(default)]
+    pub manifest_path: Option<String>,
     pub direct_dependencies: Vec<String>,
     pub direct_dependents: Vec<String>,
     pub candidate_tests: Vec<String>,
     pub recommended_checks: Vec<String>,
     pub recommendation_basis: String,
     pub recorded_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LifecycleProof {
+    pub recorded_at: String,
+    pub workspace_fingerprint: String,
+    pub contract_sha256: String,
+    #[serde(default)]
+    pub migration: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -149,6 +235,14 @@ pub struct Goal {
     pub id: String,
     pub title: String,
     pub status: GoalStatus,
+    #[serde(default)]
+    pub lifecycle: GoalLifecycle,
+    #[serde(default)]
+    pub lifecycle_reason: Option<String>,
+    #[serde(default)]
+    pub superseded_by: Option<String>,
+    #[serde(default)]
+    pub lifecycle_proof: Option<LifecycleProof>,
     pub created_at: String,
     pub updated_at: String,
     pub requirements: Vec<Requirement>,
@@ -156,84 +250,15 @@ pub struct Goal {
     pub loaded_from_legacy: bool,
 }
 
-impl Goal {
-    pub fn is_current_schema(&self) -> bool {
-        self.schema_version == GOAL_SCHEMA_VERSION && !self.loaded_from_legacy
-    }
-
-    /// Validate the persisted contract before a readiness gate trusts it.  The
-    /// CLI cannot be the only enforcement point: a hand-written or corrupted
-    /// JSON file can otherwise claim `success` with no mandatory requirement.
-    /// Legacy records are deliberately handled by the migration branch in the
-    /// caller and are not reinterpreted as v2.
-    pub fn current_schema_error(&self) -> Option<String> {
-        if self.loaded_from_legacy {
-            return None;
-        }
-        if self.schema_version != GOAL_SCHEMA_VERSION {
-            return Some(format!(
-                "不支持的 goal schema_version={}（当前只接受 v{}；请迁移或重新创建目标）",
-                self.schema_version, GOAL_SCHEMA_VERSION
-            ));
-        }
-        if self.id.trim().is_empty() || self.title.trim().is_empty() {
-            return Some("goal id 或标题为空".into());
-        }
-        let mut ids = BTreeSet::new();
-        let mut must_count = 0usize;
-        for requirement in &self.requirements {
-            if requirement.id.trim().is_empty() || requirement.text.trim().is_empty() {
-                return Some("goal 包含空的 requirement id 或文本".into());
-            }
-            if !ids.insert(requirement.id.as_str()) {
-                return Some(format!("goal 包含重复 requirement id: {}", requirement.id));
-            }
-            if requirement.kind == RequirementKind::Must {
-                must_count += 1;
-            }
-        }
-        if must_count == 0 {
-            return Some("goal 至少需要一个 must 需求".into());
-        }
-        None
-    }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedValidationCommand {
+    pub program: String,
+    pub args: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct LegacyGoal {
-    id: String,
-    status: String,
-    #[serde(default)]
-    created_at: Option<String>,
-    #[serde(default)]
-    updated_at: Option<String>,
-    contract: LegacyContract,
-}
+include!("goal/validation.rs");
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct LegacyContract {
-    goal: String,
-    #[serde(default)]
-    requirements: Vec<LegacyRequirement>,
-    #[serde(default)]
-    verification: Vec<String>,
-    #[serde(default)]
-    created_at: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct LegacyRequirement {
-    id: String,
-    text: String,
-    #[serde(default = "legacy_must_kind")]
-    priority: String,
-    #[serde(default = "legacy_open_status")]
-    status: String,
-    #[serde(default)]
-    evidence: Option<String>,
-    #[serde(default)]
-    validation_commands: Vec<String>,
-}
+include!("goal/lifecycle.rs");
 
 fn legacy_must_kind() -> String {
     "must".into()
@@ -388,6 +413,10 @@ impl GoalStore {
             id: id.clone(),
             title: title.into(),
             status: GoalStatus::Active,
+            lifecycle: GoalLifecycle::Current,
+            lifecycle_reason: None,
+            superseded_by: None,
+            lifecycle_proof: None,
             created_at: now.clone(),
             updated_at: now,
             requirements,
@@ -399,6 +428,13 @@ impl GoalStore {
 
     pub fn get(&self, id: &str) -> Result<Option<Goal>> {
         Self::load_goal_file(&self.goal_path(id)?)
+    }
+
+    pub fn validation_contract_hash(&self, id: &str, requirement_id: &str) -> Result<String> {
+        let Some(goal) = self.get(id)? else {
+            bail!("目标不存在: {id}");
+        };
+        validation_contract_sha256(&goal, requirement_id)
     }
 
     pub fn list(&self) -> Result<Vec<Goal>> {
@@ -523,17 +559,31 @@ impl GoalStore {
         let Some(mut goal) = Self::load_goal_file(&path)? else {
             bail!("目标不存在: {id}");
         };
+        if goal.lifecycle != GoalLifecycle::Current {
+            bail!(
+                "目标 {id} lifecycle={}，不能追加证据；先用 `goal current {id}` 恢复为 current",
+                goal.lifecycle
+            );
+        }
         let Some(req) = goal.requirements.iter_mut().find(|req| req.id == req_id) else {
             bail!("需求不存在: {req_id}");
         };
         let now = now_iso();
         req.evidence = Some(evidence.into());
+        let impact_paths = impacts
+            .iter()
+            .map(|impact| impact.changed_path.clone())
+            .collect::<Vec<_>>();
+        let impact_scopes = validation_scopes_for_impacts(&impacts);
         // 追加而非覆写：补记一条说明不应销毁先前的验证与影响面审计记录。
         for command in validation_commands {
             if !req.validations.iter().any(|v| v.command == command) {
                 req.validations.push(ValidationEvidence {
                     command,
                     recorded_at: now.clone(),
+                    impact_paths: impact_paths.clone(),
+                    impact_scopes: impact_scopes.clone(),
+                    non_code: impacts.is_empty(),
                     receipt: None,
                 });
             }
@@ -551,13 +601,28 @@ impl GoalStore {
         &self,
         id: &str,
         req_id: &str,
-        evidence: &str,
-        command: String,
-        receipt: ValidationReceipt,
-        impacts: Vec<ImpactEvidence>,
+        submission: ValidationReceiptSubmission,
     ) -> Result<Goal> {
+        let ValidationReceiptSubmission {
+            evidence,
+            command,
+            receipt,
+            impacts,
+            non_code,
+        } = submission;
         if evidence.trim().is_empty() {
             bail!("验证证据说明不能为空");
+        }
+        validate_command_for_impacts(&self.root, &command, &impacts, non_code)?;
+        let impact_paths = impacts
+            .iter()
+            .map(|impact| impact.changed_path.clone())
+            .collect::<Vec<_>>();
+        let impact_scopes = validation_scopes_for_impacts(&impacts);
+        if receipt.invocation_sha256
+            != validation_invocation_sha256_scoped(&command, &impact_scopes, non_code)
+        {
+            bail!("validation receipt 与命令/影响路径不匹配");
         }
         let path = self.goal_path(id)?;
         let _lock = acquire_state_lock(&path)?;
@@ -567,14 +632,27 @@ impl GoalStore {
         if !goal.is_current_schema() {
             bail!("目标 {id} 不是当前 schema，不能写入可验证 receipt；请新建目标");
         }
+        if goal.lifecycle != GoalLifecycle::Current {
+            bail!(
+                "目标 {id} lifecycle={}，不能写入 receipt；先用 `goal current {id}` 恢复为 current",
+                goal.lifecycle
+            );
+        }
+        let expected_contract = validation_contract_sha256(&goal, req_id)?;
+        if receipt.contract_sha256 != expected_contract {
+            bail!("validation receipt 与 immutable goal/requirement contract 不匹配");
+        }
         let Some(req) = goal.requirements.iter_mut().find(|req| req.id == req_id) else {
             bail!("需求不存在: {req_id}");
         };
         let now = now_iso();
-        req.evidence = Some(evidence.into());
+        req.evidence = Some(evidence);
         req.validations.push(ValidationEvidence {
             command,
             recorded_at: now.clone(),
+            impact_paths,
+            impact_scopes,
+            non_code,
             receipt: Some(receipt),
         });
         req.impacts.extend(impacts);
@@ -599,34 +677,185 @@ impl GoalStore {
         let Some(mut goal) = Self::load_goal_file(&path)? else {
             bail!("目标不存在: {id}");
         };
+        if goal.lifecycle != GoalLifecycle::Current {
+            bail!(
+                "目标 {id} lifecycle={}，不能关闭；先用 `goal current {id}` 恢复为 current",
+                goal.lifecycle
+            );
+        }
         if status == GoalStatus::Success {
+            if !goal.is_current_schema() {
+                bail!(
+                    "拒绝关闭为 success：legacy goal 不能生成当前 receipt；只可归档已是 success 的历史记录"
+                );
+            }
             if let Some(error) = goal.current_schema_error() {
                 bail!("拒绝关闭为 success：目标合约无效: {error}");
             }
-            let must: Vec<_> = goal
-                .requirements
-                .iter()
-                .filter(|req| req.kind == RequirementKind::Must)
-                .collect();
-            if must.is_empty() {
-                bail!("拒绝关闭为 success：目标必须至少包含一个 must 需求");
-            }
-            let missing: Vec<&str> = must
-                .iter()
-                .filter(|req| {
-                    req.status != RequirementStatus::Done
-                        || req.evidence.as_deref().unwrap_or("").trim().is_empty()
-                })
-                .map(|req| req.id.as_str())
-                .collect();
-            if !missing.is_empty() {
+            let mut candidate = goal.clone();
+            candidate.status = GoalStatus::Success;
+            let fingerprint = workspace_fingerprint(&self.root)?;
+            let gaps = goal_success_receipt_gaps(&candidate, &self.root, &fingerprint);
+            if !gaps.is_empty() {
                 bail!(
-                    "拒绝关闭为 success：以下 must 需求未完成或缺少证据: {}。",
-                    missing.join(", ")
+                    "拒绝关闭为 success：必须先用 goal validate 写入当前且相关的 receipt: {}",
+                    gaps.join("; ")
+                );
+            }
+            goal = candidate;
+        } else {
+            goal.status = status;
+        }
+        goal.updated_at = now_iso();
+        write_json(&path, &goal)?;
+        Ok(goal)
+    }
+
+    /// Keep historical state without deleting its JSON record.  Archiving is
+    /// explicit and reasoned because current goals are readiness blockers.
+    pub fn archive(&self, id: &str, reason: &str, migrate_unreceipted: bool) -> Result<Goal> {
+        if reason.trim().is_empty() {
+            bail!("归档原因不能为空");
+        }
+        let path = self.goal_path(id)?;
+        let _lock = acquire_state_lock(&path)?;
+        let Some(mut goal) = Self::load_goal_file(&path)? else {
+            bail!("目标不存在: {id}");
+        };
+        if goal.lifecycle == GoalLifecycle::Archived && migrate_unreceipted {
+            if !pre_receipt_migration_eligible(&goal) {
+                bail!("只有符合 rollout 前条件的 schema-v2 success goal 可以刷新 migration proof");
+            }
+            goal.lifecycle_reason = Some(reason.trim().to_string());
+            goal.superseded_by = None;
+            goal.lifecycle_proof = None;
+            goal.updated_at = now_iso();
+            let fingerprint = workspace_fingerprint(&self.root)?;
+            goal.lifecycle_proof = Some(issue_lifecycle_proof(
+                &goal,
+                fingerprint,
+                Some(PRE_RECEIPT_MIGRATION.to_string()),
+            ));
+            write_json(&path, &goal)?;
+            return Ok(goal);
+        }
+        if goal.lifecycle != GoalLifecycle::Current {
+            bail!(
+                "只有 current goal 可以归档；已迁移的 archived goal 可用 --migrate-unreceipted 幂等刷新 proof"
+            );
+        }
+        if goal.status != GoalStatus::Success {
+            bail!(
+                "只有 success goal 可以归档；active/partial/blocked 必须完成或由 replacement 承接"
+            );
+        }
+        if let Some(error) = goal.current_schema_error() {
+            bail!("目标合约无效，不能归档: {error}");
+        }
+        let fingerprint = workspace_fingerprint(&self.root)?;
+        let mut migration = None;
+        if !goal.loaded_from_legacy {
+            let gaps = goal_success_receipt_gaps(&goal, &self.root, &fingerprint);
+            if !gaps.is_empty() {
+                if migrate_unreceipted && pre_receipt_migration_eligible(&goal) {
+                    migration = Some(PRE_RECEIPT_MIGRATION.to_string());
+                } else {
+                    bail!(
+                        "目标 success receipt 未通过归档时复核: {}。仅 rollout 前历史可显式使用 --migrate-unreceipted",
+                        gaps.join("; ")
+                    );
+                }
+            }
+        }
+        goal.lifecycle = GoalLifecycle::Archived;
+        goal.lifecycle_reason = Some(reason.trim().to_string());
+        goal.superseded_by = None;
+        goal.lifecycle_proof = None;
+        goal.updated_at = now_iso();
+        goal.lifecycle_proof = Some(issue_lifecycle_proof(&goal, fingerprint, migration));
+        write_json(&path, &goal)?;
+        Ok(goal)
+    }
+
+    /// Mark one goal as historical because another current goal replaced it.
+    pub fn supersede(&self, id: &str, replacement_id: &str) -> Result<Goal> {
+        if id == replacement_id {
+            bail!("目标不能 supersede 自己");
+        }
+        let Some(replacement) = self.get(replacement_id)? else {
+            bail!("替代目标不存在: {replacement_id}");
+        };
+        if replacement.lifecycle != GoalLifecycle::Current {
+            bail!(
+                "替代目标 {replacement_id} lifecycle={}，必须先恢复为 current",
+                replacement.lifecycle
+            );
+        }
+        if !replacement.is_current_schema() {
+            bail!(
+                "替代目标 {replacement_id} 必须是 current schema；legacy success 只能显式 archive"
+            );
+        }
+        if let Some(error) = replacement.current_schema_error() {
+            bail!("替代目标 {replacement_id} 合约无效: {error}");
+        }
+
+        let path = self.goal_path(id)?;
+        let _lock = acquire_state_lock(&path)?;
+        let Some(mut goal) = Self::load_goal_file(&path)? else {
+            bail!("目标不存在: {id}");
+        };
+        if goal.lifecycle != GoalLifecycle::Current {
+            bail!("只有 current goal 可以被 supersede");
+        }
+        if let Some(error) = goal.current_schema_error() {
+            bail!("目标合约无效，不能 supersede: {error}");
+        }
+        let fingerprint = workspace_fingerprint(&self.root)?;
+        if goal.status == GoalStatus::Success && !goal.loaded_from_legacy {
+            let gaps = goal_success_receipt_gaps(&goal, &self.root, &fingerprint);
+            if !gaps.is_empty() {
+                bail!(
+                    "success 目标缺少可验证 receipt，不能 supersede: {}",
+                    gaps.join("; ")
                 );
             }
         }
-        goal.status = status;
+        if let Some(error) = supersession_error(
+            &{
+                let mut candidate = goal.clone();
+                candidate.lifecycle = GoalLifecycle::Superseded;
+                candidate.lifecycle_reason = Some(format!("superseded by {replacement_id}"));
+                candidate.superseded_by = Some(replacement_id.to_string());
+                candidate
+            },
+            std::slice::from_ref(&replacement),
+            &self.root,
+            &fingerprint,
+        ) {
+            bail!("不能 supersede 目标 {id}: {error}");
+        }
+        goal.lifecycle = GoalLifecycle::Superseded;
+        goal.lifecycle_reason = Some(format!("superseded by {replacement_id}"));
+        goal.superseded_by = Some(replacement_id.to_string());
+        goal.lifecycle_proof = None;
+        goal.updated_at = now_iso();
+        goal.lifecycle_proof = Some(issue_lifecycle_proof(&goal, fingerprint, None));
+        write_json(&path, &goal)?;
+        Ok(goal)
+    }
+
+    /// Restore an archived/superseded record to the active readiness set.
+    pub fn mark_current(&self, id: &str) -> Result<Goal> {
+        let path = self.goal_path(id)?;
+        let _lock = acquire_state_lock(&path)?;
+        let Some(mut goal) = Self::load_goal_file(&path)? else {
+            bail!("目标不存在: {id}");
+        };
+        goal.lifecycle = GoalLifecycle::Current;
+        goal.lifecycle_reason = None;
+        goal.superseded_by = None;
+        goal.lifecycle_proof = None;
         goal.updated_at = now_iso();
         write_json(&path, &goal)?;
         Ok(goal)
@@ -672,6 +901,9 @@ fn goal_from_legacy(legacy: LegacyGoal) -> Goal {
                     .map(|command| ValidationEvidence {
                         command,
                         recorded_at: updated_at.clone(),
+                        impact_paths: Vec::new(),
+                        impact_scopes: Vec::new(),
+                        non_code: false,
                         receipt: None,
                     })
                     .collect(),
@@ -689,6 +921,10 @@ fn goal_from_legacy(legacy: LegacyGoal) -> Goal {
             "blocked" => GoalStatus::Blocked,
             _ => GoalStatus::Active,
         },
+        lifecycle: GoalLifecycle::Current,
+        lifecycle_reason: None,
+        superseded_by: None,
+        lifecycle_proof: None,
         created_at,
         updated_at,
         requirements,
@@ -750,247 +986,5 @@ impl PendingStore {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn successful_receipt() -> ValidationReceipt {
-        ValidationReceipt {
-            exit_code: 0,
-            cwd: "fixture".into(),
-            workspace_fingerprint_before: "before".into(),
-            workspace_fingerprint_after: "after".into(),
-            stdout_sha256: "a".repeat(64),
-            stderr_sha256: "b".repeat(64),
-        }
-    }
-
-    #[test]
-    fn close_success_requires_evidence_for_must_requirements() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = GoalStore::new(dir.path());
-        let goal = store
-            .start(
-                "add parser",
-                &[
-                    ("implement parser".into(), true),
-                    ("nice errors".into(), false),
-                ],
-            )
-            .unwrap();
-
-        // 缺 must 证据 → 拒绝 success。
-        assert!(store.close(&goal.id, "success").is_err());
-        // partial 允许。
-        assert_eq!(
-            store.close(&goal.id, "partial").unwrap().status,
-            GoalStatus::Partial
-        );
-
-        // 关闭语义只要求 must evidence；standard/release 会另外要求 receipt。
-        store
-            .record_evidence(&goal.id, "req_1", "src/parser.rs + cargo test passed")
-            .unwrap();
-        let closed = store.close(&goal.id, "success").unwrap();
-        assert_eq!(closed.status, GoalStatus::Success);
-        // receipt carries the stronger evidence required by standard/release.
-        store
-            .record_validation_receipt(
-                &goal.id,
-                "req_1",
-                "cargo test passed",
-                "cargo test".into(),
-                successful_receipt(),
-                Vec::new(),
-            )
-            .unwrap();
-    }
-
-    #[test]
-    fn start_rejects_empty_must_contract() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = GoalStore::new(dir.path());
-        assert!(store.start("empty", &[]).is_err());
-        assert!(store.start("empty", &[(" ".into(), true)]).is_err());
-    }
-
-    #[test]
-    fn current_schema_contract_rejects_forged_or_empty_must_requirements() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = GoalStore::new(dir.path());
-        let goal = store
-            .start("task", &[("must prove it".into(), true)])
-            .unwrap();
-        assert_eq!(goal.current_schema_error(), None);
-
-        let mut zero_must = goal.clone();
-        zero_must.requirements.clear();
-        assert!(
-            zero_must
-                .current_schema_error()
-                .is_some_and(|error| error.contains("must"))
-        );
-
-        let mut unknown_version = goal;
-        unknown_version.schema_version = GOAL_SCHEMA_VERSION + 1;
-        assert!(
-            unknown_version
-                .current_schema_error()
-                .is_some_and(|error| error.contains("schema_version"))
-        );
-    }
-
-    #[test]
-    fn pending_roundtrip() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = PendingStore::new(dir.path());
-        let item = store.add("finish gate", "wire up CI").unwrap();
-        assert_eq!(store.list().unwrap().len(), 1);
-        assert!(store.resolve(&item.id).unwrap());
-        assert!(store.list().unwrap().is_empty());
-    }
-
-    #[test]
-    fn concurrent_pending_and_goal_writes_do_not_lose_records() {
-        use std::collections::BTreeSet;
-        use std::sync::{Arc, Barrier};
-
-        const WORKERS: usize = 8;
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().to_path_buf();
-
-        let pending_barrier = Arc::new(Barrier::new(WORKERS + 1));
-        let pending_handles: Vec<_> = (0..WORKERS)
-            .map(|index| {
-                let root = root.clone();
-                let barrier = Arc::clone(&pending_barrier);
-                std::thread::spawn(move || {
-                    barrier.wait();
-                    PendingStore::new(root)
-                        .add(&format!("pending {index}"), "parallel regression")
-                        .unwrap();
-                })
-            })
-            .collect();
-        pending_barrier.wait();
-        for handle in pending_handles {
-            handle.join().unwrap();
-        }
-        let pending = PendingStore::new(&root).list().unwrap();
-        assert_eq!(pending.len(), WORKERS);
-        assert_eq!(
-            pending
-                .iter()
-                .map(|item| &item.id)
-                .collect::<BTreeSet<_>>()
-                .len(),
-            WORKERS
-        );
-
-        let requirements: Vec<_> = (0..WORKERS)
-            .map(|index| (format!("must {index}"), true))
-            .collect();
-        let goal = GoalStore::new(&root)
-            .start("parallel goal", &requirements)
-            .unwrap();
-        let goal_barrier = Arc::new(Barrier::new(WORKERS + 1));
-        let goal_handles: Vec<_> = (0..WORKERS)
-            .map(|index| {
-                let root = root.clone();
-                let id = goal.id.clone();
-                let barrier = Arc::clone(&goal_barrier);
-                std::thread::spawn(move || {
-                    barrier.wait();
-                    GoalStore::new(root)
-                        .record_evidence(
-                            &id,
-                            &format!("req_{}", index + 1),
-                            &format!("parallel evidence {index}"),
-                        )
-                        .unwrap();
-                })
-            })
-            .collect();
-        goal_barrier.wait();
-        for handle in goal_handles {
-            handle.join().unwrap();
-        }
-        let persisted = GoalStore::new(&root).get(&goal.id).unwrap().unwrap();
-        assert!(
-            persisted
-                .requirements
-                .iter()
-                .all(|requirement| requirement.status == RequirementStatus::Done)
-        );
-    }
-
-    #[test]
-    fn corrupt_pending_store_errors_instead_of_wiping() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = PendingStore::new(dir.path());
-        store.add("keep me", "important").unwrap();
-        let path = dir.path().join(PENDING_PATH);
-        std::fs::write(&path, "{ not json").unwrap();
-
-        // 损坏文件必须报错，且 add/resolve 不得覆盖原文件。
-        assert!(store.list().is_err());
-        assert!(store.add("new", "item").is_err());
-        assert!(store.resolve("pending_x").is_err());
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), "{ not json");
-    }
-
-    #[test]
-    fn close_rejects_unknown_status_and_traversal_ids() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = GoalStore::new(dir.path());
-        let goal = store.start("task", &[("req".into(), true)]).unwrap();
-
-        // 未知状态（含大小写/拼写错误）不得绕过证据门禁。
-        assert!(store.close(&goal.id, "done").is_err());
-        assert!(store.close(&goal.id, "Success").is_err());
-
-        // id 含路径分隔符/.. 时拒绝，防止越出 goals 目录。
-        assert!(store.get("../../x").is_err());
-        assert!(store.close("..\\evil", "partial").is_err());
-    }
-
-    #[test]
-    fn close_success_rejects_a_hand_tampered_goal_with_duplicate_requirement_ids() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = GoalStore::new(dir.path());
-        let goal = store.start("task", &[("req".into(), true)]).unwrap();
-        store
-            .record_evidence(&goal.id, "req_1", "did the work")
-            .unwrap();
-
-        // Simulate a hand-edited state file: clone req_1's evidence onto a
-        // second requirement sharing the same id. The naive "every must has
-        // evidence" scan alone can't detect this kind of tampering; only the
-        // schema re-validation catches the duplicate id.
-        let path = dir.path().join(GOALS_DIR).join(format!("{}.json", goal.id));
-        let mut tampered = GoalStore::load_goal_file(&path).unwrap().unwrap();
-        let cloned = tampered.requirements[0].clone();
-        tampered.requirements.push(cloned);
-        write_json(&path, &tampered).unwrap();
-
-        assert!(store.close(&goal.id, "success").is_err());
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn list_with_issues_rejects_a_linked_goal_file() {
-        use std::os::unix::fs::symlink;
-
-        let workspace = tempfile::tempdir().unwrap();
-        let outside = tempfile::tempdir().unwrap();
-        let goals = workspace.path().join(GOALS_DIR);
-        fs::create_dir_all(&goals).unwrap();
-        let external_goal = outside.path().join("external.json");
-        fs::write(&external_goal, r#"{"id":"external","title":"outside"}"#).unwrap();
-        symlink(&external_goal, goals.join("external.json")).unwrap();
-
-        let (goals, issues) = GoalStore::new(workspace.path()).list_with_issues().unwrap();
-        assert!(goals.is_empty());
-        assert_eq!(issues.len(), 1);
-        assert!(issues[0].error.contains("链接/reparse"));
-    }
-}
+#[path = "goal/tests.rs"]
+mod tests;
