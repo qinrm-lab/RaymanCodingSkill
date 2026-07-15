@@ -310,6 +310,16 @@ impl Drop for StateLock {
     }
 }
 
+fn is_state_lock_contention(error: &std::io::Error) -> bool {
+    // Windows can report a lock file that another thread just closed/removed as
+    // access denied or a share/lock violation while the deletion is still
+    // pending. Treat only these exact transient identities like AlreadyExists;
+    // a persistent ACL denial still exhausts the bounded retry and fails closed.
+    error.kind() == std::io::ErrorKind::AlreadyExists
+        || error.kind() == std::io::ErrorKind::PermissionDenied
+        || matches!(error.raw_os_error(), Some(5 | 32 | 33))
+}
+
 fn acquire_state_lock(target: &Path) -> Result<StateLock> {
     let parent = target.parent().unwrap_or_else(|| Path::new("."));
     state_paths::ensure_real_directory(parent)?;
@@ -320,6 +330,7 @@ fn acquire_state_lock(target: &Path) -> Result<StateLock> {
     let lock_path = parent.join(format!(".{name}.rayman.lock"));
     const ATTEMPTS: usize = 100;
     const STALE_AFTER: Duration = Duration::from_secs(300);
+    let mut last_contention = None;
     for _ in 0..ATTEMPTS {
         match OpenOptions::new()
             .create_new(true)
@@ -331,7 +342,8 @@ fn acquire_state_lock(target: &Path) -> Result<StateLock> {
                 let _ = writeln!(file, "pid={}", std::process::id());
                 return Ok(StateLock { path: lock_path });
             }
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            Err(error) if is_state_lock_contention(&error) => {
+                last_contention = Some(error);
                 let stale = fs::metadata(&lock_path)
                     .and_then(|metadata| metadata.modified())
                     .and_then(|modified| {
@@ -350,7 +362,13 @@ fn acquire_state_lock(target: &Path) -> Result<StateLock> {
             Err(error) => return Err(error.into()),
         }
     }
-    bail!("状态正在被另一个 rayman 进程修改: {}", target.display())
+    let detail = last_contention
+        .map(|error| format!("；最后一次锁冲突: {error}"))
+        .unwrap_or_default();
+    bail!(
+        "状态正在被另一个 rayman 进程修改: {}{detail}",
+        target.display()
+    )
 }
 
 impl GoalStore {

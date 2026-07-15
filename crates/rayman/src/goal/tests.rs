@@ -570,6 +570,21 @@ fn pending_roundtrip() {
 }
 
 #[test]
+fn state_lock_contention_includes_windows_delete_and_share_transients() {
+    assert!(is_state_lock_contention(&std::io::Error::from(
+        std::io::ErrorKind::AlreadyExists
+    )));
+    for code in [5, 32, 33] {
+        assert!(is_state_lock_contention(
+            &std::io::Error::from_raw_os_error(code)
+        ));
+    }
+    assert!(!is_state_lock_contention(&std::io::Error::from(
+        std::io::ErrorKind::NotFound
+    )));
+}
+
+#[test]
 fn concurrent_pending_and_goal_writes_do_not_lose_records() {
     use std::collections::BTreeSet;
     use std::sync::{Arc, Barrier};
