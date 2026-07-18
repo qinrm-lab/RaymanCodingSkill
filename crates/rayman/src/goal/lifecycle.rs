@@ -25,7 +25,7 @@ fn lifecycle_hash_optional_u64(hasher: &mut Sha256, value: Option<u64>) {
 /// New serde-default fields therefore cannot silently invalidate archived
 /// proofs.  Adding a security-relevant field requires an intentional contract
 /// version bump and an explicit proof refresh.
-fn lifecycle_contract_sha256(goal: &Goal) -> String {
+fn legacy_lifecycle_contract_sha256(goal: &Goal) -> String {
     let mut hasher = Sha256::new();
     let extended = goal.baseline.is_some()
         || !goal.plan_receipts.is_empty()
@@ -140,20 +140,34 @@ fn lifecycle_contract_sha256(goal: &Goal) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+fn lifecycle_contract_sha256(goal: &Goal, receipt_policy: Option<&str>) -> String {
+    let legacy_contract = legacy_lifecycle_contract_sha256(goal);
+    let Some(receipt_policy) = receipt_policy else {
+        return legacy_contract;
+    };
+    let mut hasher = Sha256::new();
+    lifecycle_hash_str(&mut hasher, "rayman.lifecycle-proof-policy.v1");
+    lifecycle_hash_str(&mut hasher, receipt_policy);
+    lifecycle_hash_str(&mut hasher, &legacy_contract);
+    format!("{:x}", hasher.finalize())
+}
+
 fn issue_lifecycle_proof(
     goal: &Goal,
     fingerprint: String,
     migration: Option<String>,
+    receipt_policy: Option<String>,
 ) -> LifecycleProof {
     LifecycleProof {
         recorded_at: now_iso(),
         workspace_fingerprint: fingerprint,
-        contract_sha256: lifecycle_contract_sha256(goal),
+        contract_sha256: lifecycle_contract_sha256(goal, receipt_policy.as_deref()),
         migration,
+        receipt_policy,
     }
 }
 
-fn pre_receipt_migration_eligible(goal: &Goal) -> bool {
+fn completed_current_schema_history(goal: &Goal) -> bool {
     if goal.schema_version != GOAL_SCHEMA_VERSION
         || goal.loaded_from_legacy
         || goal.status != GoalStatus::Success
@@ -177,15 +191,37 @@ fn pre_receipt_migration_eligible(goal: &Goal) -> bool {
     {
         return false;
     }
-    let Ok(created_at) = chrono::DateTime::parse_from_rfc3339(&goal.created_at) else {
-        return false;
-    };
-    let rollout = chrono::DateTime::parse_from_rfc3339(STRICT_RECEIPT_ROLLOUT_AT)
-        .expect("receipt rollout timestamp must be valid");
-    created_at < rollout
+    true
 }
 
-fn historical_success_fingerprint(goal: &Goal, root: &Path) -> Option<String> {
+fn goal_created_before_timestamp(timestamp: &str, rollout_at: &str) -> bool {
+    let Ok(timestamp) = chrono::DateTime::parse_from_rfc3339(timestamp) else {
+        return false;
+    };
+    let rollout = chrono::DateTime::parse_from_rfc3339(rollout_at)
+        .expect("receipt policy rollout timestamp must be valid");
+    timestamp < rollout
+}
+
+fn goal_created_before(goal: &Goal, rollout_at: &str) -> bool {
+    goal_created_before_timestamp(&goal.created_at, rollout_at)
+}
+
+fn pre_receipt_migration_eligible(goal: &Goal) -> bool {
+    completed_current_schema_history(goal)
+        && goal_created_before(goal, STRICT_RECEIPT_ROLLOUT_AT)
+}
+
+fn receipt_policy_v1_migration_eligible(goal: &Goal) -> bool {
+    completed_current_schema_history(goal)
+        && goal_created_before(goal, RECEIPT_POLICY_V2_ROLLOUT_AT)
+}
+
+fn historical_success_fingerprint(
+    goal: &Goal,
+    root: &Path,
+    policy: ReceiptValidationPolicy,
+) -> Option<String> {
     let candidates = goal
         .requirements
         .iter()
@@ -198,7 +234,7 @@ fn historical_success_fingerprint(goal: &Goal, root: &Path) -> Option<String> {
         .map(|receipt| receipt.workspace_fingerprint_after.clone())
         .collect::<BTreeSet<_>>();
     candidates.into_iter().find(|fingerprint| {
-        goal_success_receipt_gaps_for_fingerprint(goal, root, fingerprint, false).is_empty()
+        goal_success_receipt_gaps_for_policy(goal, root, fingerprint, false, policy).is_empty()
     })
 }
 
@@ -321,6 +357,7 @@ pub fn goal_planning_gaps(
                 current_fingerprint,
                 &contract_sha256,
                 true,
+                ReceiptValidationPolicy::CurrentV2,
             ) {
                 validated.extend(
                     validation
@@ -506,22 +543,37 @@ impl Goal {
         if !is_sha256(&proof.workspace_fingerprint) || !is_sha256(&proof.contract_sha256) {
             return Some("lifecycle_proof 包含非法摘要".into());
         }
-        let expected = lifecycle_contract_sha256(self);
+        let policy = match proof.receipt_policy.as_deref() {
+            None if goal_created_before(self, RECEIPT_POLICY_V2_ROLLOUT_AT) => {
+                ReceiptValidationPolicy::LegacyV1
+            }
+            None => ReceiptValidationPolicy::CurrentV2,
+            Some(RECEIPT_POLICY_V1) => ReceiptValidationPolicy::LegacyV1,
+            Some(RECEIPT_POLICY_V2) => ReceiptValidationPolicy::CurrentV2,
+            Some(other) => return Some(format!("未知 lifecycle receipt policy: {other}")),
+        };
+        let expected = lifecycle_contract_sha256(self, proof.receipt_policy.as_deref());
         if proof.contract_sha256 != expected {
             return Some("lifecycle_proof 与当前 goal 合约不匹配".into());
         }
         if self.status == GoalStatus::Success && !self.loaded_from_legacy {
             if let Some(migration) = proof.migration.as_deref() {
-                if migration != PRE_RECEIPT_MIGRATION || !pre_receipt_migration_eligible(self) {
-                    return Some("lifecycle_proof 使用了无效的 pre-receipt migration".into());
+                match migration {
+                    PRE_RECEIPT_MIGRATION if pre_receipt_migration_eligible(self) => return None,
+                    RECEIPT_POLICY_V1_MIGRATION
+                        if policy == ReceiptValidationPolicy::LegacyV1
+                            && receipt_policy_v1_migration_eligible(self) => {}
+                    _ => return Some("lifecycle_proof 使用了无效的历史迁移".into()),
                 }
-                return None;
+            } else if proof.receipt_policy.as_deref() == Some(RECEIPT_POLICY_V1) {
+                return Some("显式 v1 receipt policy proof 缺少受控迁移标记".into());
             }
-            let gaps = goal_success_receipt_gaps_for_fingerprint(
+            let gaps = goal_success_receipt_gaps_for_policy(
                 self,
                 root,
                 &proof.workspace_fingerprint,
                 false,
+                policy,
             );
             if !gaps.is_empty() {
                 return Some(format!(

@@ -2280,6 +2280,24 @@ fn goal_lifecycle_preserves_history_without_hiding_unfinished_work() {
         &["goal", "archive", old_id, "--reason", "hide blocker"],
     );
     assert_eq!(hidden.status, 1);
+    let unknown_policy = run(
+        root,
+        &[
+            "goal",
+            "archive",
+            old_id,
+            "--reason",
+            "invalid migration",
+            "--migrate-receipt-policy",
+            "unknown",
+        ],
+    );
+    assert_eq!(unknown_policy.status, 1);
+    assert!(
+        unknown_policy.stderr.contains("未知历史 receipt policy"),
+        "stderr={}",
+        unknown_policy.stderr
+    );
 
     let replacement = run_json(
         root,

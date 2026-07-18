@@ -188,6 +188,13 @@ fn pytest_option_takes_value(argument: &str) -> bool {
             | "--log-file-level"
             | "--log-file-format"
             | "--log-file-date-format"
+            | "-n"
+            | "--numprocesses"
+            | "--dist"
+            | "--tx"
+            | "--px"
+            | "--max-worker-restart"
+            | "--maxprocessesrestart"
     )
 }
 
@@ -622,6 +629,15 @@ fn validation_scope_is_well_formed(validation: &ValidationEvidence) -> bool {
             || (!validation.non_code && !validation.impact_scopes.is_empty()))
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReceiptValidationPolicy {
+    /// Policy used before Python/pytest receipts gained mandatory collect proof
+    /// and Python impact relevance checks.
+    LegacyV1,
+    /// Current receipt integrity, test-proof, and relevance policy.
+    CurrentV2,
+}
+
 pub fn validation_has_current_receipt(
     validation: &ValidationEvidence,
     goal: &Goal,
@@ -638,6 +654,7 @@ pub fn validation_has_current_receipt(
         current_fingerprint,
         &contract_sha256,
         true,
+        ReceiptValidationPolicy::CurrentV2,
     )
 }
 
@@ -647,6 +664,7 @@ fn validation_has_receipt_for_fingerprint(
     fingerprint: &str,
     contract_sha256: &str,
     enforce_current_security: bool,
+    policy: ReceiptValidationPolicy,
 ) -> bool {
     let Ok(parsed) = parse_validation_command(&validation.command) else {
         return false;
@@ -674,10 +692,13 @@ fn validation_has_receipt_for_fingerprint(
                 validation.non_code,
             )
         && validation_scope_is_well_formed(validation)
-        && (!test_invocation(&parsed) || test_receipt_has_structured_proof(receipt))
+        && (!(match policy {
+            ReceiptValidationPolicy::LegacyV1 => cargo_test_invocation(&parsed),
+            ReceiptValidationPolicy::CurrentV2 => test_invocation(&parsed),
+        }) || test_receipt_has_structured_proof(receipt))
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ValidationExpectation {
     RustBuildOrTest,
     CargoManifestValidation,
@@ -696,6 +717,20 @@ fn validation_expectation_for_path(path: &str) -> Option<ValidationExpectation> 
         return Some(ValidationExpectation::PythonTest);
     }
     None
+}
+
+fn validation_expectation_for_policy(
+    path: &str,
+    policy: ReceiptValidationPolicy,
+) -> Option<ValidationExpectation> {
+    let expectation = validation_expectation_for_path(path)?;
+    if policy == ReceiptValidationPolicy::LegacyV1
+        && expectation == ValidationExpectation::PythonTest
+    {
+        None
+    } else {
+        Some(expectation)
+    }
 }
 
 fn validation_expectation_label(expectation: ValidationExpectation) -> &'static str {
@@ -995,7 +1030,14 @@ pub fn validation_relevance_gaps(
     root: &Path,
     current_fingerprint: &str,
 ) -> Vec<String> {
-    validation_relevance_gaps_for_fingerprint(requirement, goal, root, current_fingerprint, true)
+    validation_relevance_gaps_for_fingerprint(
+        requirement,
+        goal,
+        root,
+        current_fingerprint,
+        true,
+        ReceiptValidationPolicy::CurrentV2,
+    )
 }
 
 fn validation_relevance_gaps_for_fingerprint(
@@ -1004,13 +1046,16 @@ fn validation_relevance_gaps_for_fingerprint(
     root: &Path,
     fingerprint: &str,
     enforce_current_security: bool,
+    policy: ReceiptValidationPolicy,
 ) -> Vec<String> {
     let Ok(contract_sha256) = validation_contract_sha256(goal, &requirement.id) else {
         return vec!["validation contract 无法计算".into()];
     };
     let mut gaps = Vec::new();
     for impact in &requirement.impacts {
-        let Some(expectation) = validation_expectation_for_path(&impact.changed_path) else {
+        let Some(expectation) =
+            validation_expectation_for_policy(&impact.changed_path, policy)
+        else {
             continue;
         };
         let covered = requirement.validations.iter().any(|validation| {
@@ -1020,6 +1065,7 @@ fn validation_relevance_gaps_for_fingerprint(
                 fingerprint,
                 &contract_sha256,
                 enforce_current_security,
+                policy,
             ) && validation.impact_scopes.iter().any(|scope| {
                 scope.changed_path.replace('\\', "/") == impact.changed_path.replace('\\', "/")
                     && scope.package == impact.package
@@ -1048,6 +1094,22 @@ fn goal_success_receipt_gaps_for_fingerprint(
     root: &Path,
     fingerprint: &str,
     enforce_current_security: bool,
+) -> Vec<String> {
+    goal_success_receipt_gaps_for_policy(
+        goal,
+        root,
+        fingerprint,
+        enforce_current_security,
+        ReceiptValidationPolicy::CurrentV2,
+    )
+}
+
+fn goal_success_receipt_gaps_for_policy(
+    goal: &Goal,
+    root: &Path,
+    fingerprint: &str,
+    enforce_current_security: bool,
+    policy: ReceiptValidationPolicy,
 ) -> Vec<String> {
     let mut gaps = Vec::new();
     if goal.status != GoalStatus::Success {
@@ -1082,6 +1144,7 @@ fn goal_success_receipt_gaps_for_fingerprint(
                 fingerprint,
                 &contract_sha256,
                 enforce_current_security,
+                policy,
             )
         }) {
             gaps.push(format!(
@@ -1095,6 +1158,7 @@ fn goal_success_receipt_gaps_for_fingerprint(
             root,
             fingerprint,
             enforce_current_security,
+            policy,
         ));
     }
     if enforce_current_security {

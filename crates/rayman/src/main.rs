@@ -964,8 +964,14 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
             id,
             reason,
             migrate_unreceipted,
+            migrate_receipt_policy,
         } => {
-            let goal = store.archive(&id, &reason, migrate_unreceipted)?;
+            let goal = store.archive_with_receipt_policy(
+                &id,
+                &reason,
+                migrate_unreceipted,
+                migrate_receipt_policy.as_deref(),
+            )?;
             if json {
                 print(&serde_json::to_value(&goal)?);
             } else {

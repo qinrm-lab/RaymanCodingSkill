@@ -592,12 +592,155 @@ fn historical_lifecycle_requires_a_bound_proof_and_explicit_old_schema_migration
         Some(PRE_RECEIPT_MIGRATION)
     );
     assert_eq!(migrated.lifecycle_proof_error(dir.path()), None);
+    assert!(
+        store
+            .archive_with_receipt_policy(
+                &migrated.id,
+                "attempt repeated migration",
+                false,
+                Some(RECEIPT_POLICY_V1),
+            )
+            .is_err()
+    );
 
     let mut handwritten = old_success;
     handwritten.lifecycle = GoalLifecycle::Archived;
     handwritten.lifecycle_reason = Some("handwritten".into());
     handwritten.lifecycle_proof = None;
     assert!(handwritten.current_schema_error().is_some());
+}
+
+#[test]
+fn historical_receipt_policy_is_versioned_and_only_real_v1_receipts_can_migrate() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = GoalStore::new(dir.path());
+    fs::create_dir_all(dir.path().join("src")).unwrap();
+    fs::create_dir_all(dir.path().join("tests")).unwrap();
+    fs::write(
+        dir.path().join("src/api.py"),
+        "def value():\n    return 1\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("tests/test_api.py"),
+        "def test_value():\n    assert True\n",
+    )
+    .unwrap();
+
+    let mut historical = store
+        .start(
+            "pre-policy Python delivery",
+            &[("ship Python fix".into(), true)],
+        )
+        .unwrap();
+    historical.created_at = "2026-07-17T00:00:00Z".into();
+    historical.status = GoalStatus::Success;
+    historical.requirements[0].status = RequirementStatus::Done;
+    historical.requirements[0].evidence = Some("pytest passed under the v1 policy".into());
+    let mut python_impact = impact("src/api.py");
+    python_impact.candidate_tests = vec!["tests/test_api.py".into()];
+    historical.requirements[0].impacts = vec![python_impact];
+    let mut validation = current_validation(
+        &historical,
+        "req_1",
+        dir.path(),
+        "python -m pytest tests/test_api.py -q",
+        &["src/api.py"],
+    );
+    let receipt = validation.receipt.as_mut().unwrap();
+    receipt.passed_tests = None;
+    receipt.listed_tests = None;
+    receipt.ignored_tests = None;
+    receipt.list_stdout_sha256 = None;
+    receipt.list_stderr_sha256 = None;
+    historical.requirements[0].validations = vec![validation];
+    let path = dir
+        .path()
+        .join(GOALS_DIR)
+        .join(format!("{}.json", historical.id));
+    write_json(&path, &historical).unwrap();
+
+    assert!(
+        store
+            .archive(&historical.id, "implicit current-policy archive", false)
+            .is_err(),
+        "a current policy failure must not silently downgrade"
+    );
+    let migrated = store
+        .archive_with_receipt_policy(
+            &historical.id,
+            "explicit policy migration",
+            false,
+            Some(RECEIPT_POLICY_V1),
+        )
+        .unwrap();
+    let proof = migrated.lifecycle_proof.as_ref().unwrap();
+    assert_eq!(proof.receipt_policy.as_deref(), Some(RECEIPT_POLICY_V1));
+    assert_eq!(
+        proof.migration.as_deref(),
+        Some(RECEIPT_POLICY_V1_MIGRATION)
+    );
+    assert_eq!(migrated.lifecycle_proof_error(dir.path()), None);
+
+    let mut downgraded = migrated.clone();
+    downgraded.lifecycle_proof.as_mut().unwrap().receipt_policy = Some(RECEIPT_POLICY_V2.into());
+    assert!(downgraded.lifecycle_proof_error(dir.path()).is_some());
+
+    let mut original_v1_proof = migrated.clone();
+    {
+        let proof = original_v1_proof.lifecycle_proof.as_mut().unwrap();
+        proof.receipt_policy = None;
+        proof.migration = None;
+    }
+    let legacy_contract = legacy_lifecycle_contract_sha256(&original_v1_proof);
+    original_v1_proof
+        .lifecycle_proof
+        .as_mut()
+        .unwrap()
+        .contract_sha256 = legacy_contract;
+    assert_eq!(original_v1_proof.lifecycle_proof_error(dir.path()), None);
+
+    let mut post_policy_unversioned = original_v1_proof.clone();
+    post_policy_unversioned.created_at = "2026-07-19T00:00:00Z".into();
+    let contract = validation_contract_sha256(&post_policy_unversioned, "req_1").unwrap();
+    post_policy_unversioned.requirements[0].validations[0]
+        .receipt
+        .as_mut()
+        .unwrap()
+        .contract_sha256 = contract;
+    post_policy_unversioned
+        .lifecycle_proof
+        .as_mut()
+        .unwrap()
+        .contract_sha256 = legacy_lifecycle_contract_sha256(&post_policy_unversioned);
+    assert!(
+        post_policy_unversioned
+            .lifecycle_proof_error(dir.path())
+            .is_some()
+    );
+
+    let mut missing_receipt = original_v1_proof.clone();
+    missing_receipt.requirements[0].validations[0].receipt = None;
+    missing_receipt
+        .lifecycle_proof
+        .as_mut()
+        .unwrap()
+        .contract_sha256 = legacy_lifecycle_contract_sha256(&missing_receipt);
+    assert!(missing_receipt.lifecycle_proof_error(dir.path()).is_some());
+
+    let mut too_new = historical;
+    too_new.created_at = "2026-07-19T00:00:00Z".into();
+    write_json(&path, &too_new).unwrap();
+    assert!(
+        store
+            .archive_with_receipt_policy(
+                &too_new.id,
+                "attempt post-rollout downgrade",
+                false,
+                Some(RECEIPT_POLICY_V1),
+            )
+            .is_err()
+    );
 }
 
 #[test]
@@ -1212,6 +1355,13 @@ fn pytest_selectors_are_scoped_and_terminal_summary_is_not_double_counted() {
     let report_option = parse_validation_command("pytest --junitxml reports/out.xml -q").unwrap();
     assert!(pytest_path_arguments(&report_option).is_empty());
     assert!(command_is_workspace_wide(root.path(), &report_option));
+
+    let parallel = parse_validation_command("python -m pytest -n 4 --dist loadscope -q").unwrap();
+    assert!(pytest_path_arguments(&parallel).is_empty());
+    assert!(command_is_workspace_wide(root.path(), &parallel));
+    let parallel_scoped =
+        parse_validation_command("python -m pytest -n 4 --dist loadscope tests -q").unwrap();
+    assert_eq!(pytest_path_arguments(&parallel_scoped), ["tests"]);
 
     let proof = validation_execution_proof(
         &parse_validation_command("pytest tests/test_api.py -q").unwrap(),

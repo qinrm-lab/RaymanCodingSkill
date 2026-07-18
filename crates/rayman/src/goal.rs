@@ -25,6 +25,10 @@ const PENDING_RELATIVE: &str = "pending.json";
 pub const GOAL_SCHEMA_VERSION: u32 = 2;
 const STRICT_RECEIPT_ROLLOUT_AT: &str = "2026-07-14T00:00:00Z";
 const PRE_RECEIPT_MIGRATION: &str = "pre_receipt_schema_v2";
+const RECEIPT_POLICY_V1: &str = "receipt_integrity_v1";
+const RECEIPT_POLICY_V2: &str = "receipt_integrity_v2";
+const RECEIPT_POLICY_V2_ROLLOUT_AT: &str = "2026-07-18T04:34:13Z";
+const RECEIPT_POLICY_V1_MIGRATION: &str = "pre_receipt_policy_v2";
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -259,6 +263,10 @@ pub struct LifecycleProof {
     pub contract_sha256: String,
     #[serde(default)]
     pub migration: Option<String>,
+    /// Receipt classifier used when this historical proof was issued. Older
+    /// proofs omit the field and are verified with the exact v1 policy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt_policy: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -961,8 +969,24 @@ impl GoalStore {
     /// Keep historical state without deleting its JSON record.  Archiving is
     /// explicit and reasoned because current goals are readiness blockers.
     pub fn archive(&self, id: &str, reason: &str, migrate_unreceipted: bool) -> Result<Goal> {
+        self.archive_with_receipt_policy(id, reason, migrate_unreceipted, None)
+    }
+
+    pub fn archive_with_receipt_policy(
+        &self,
+        id: &str,
+        reason: &str,
+        migrate_unreceipted: bool,
+        migrate_receipt_policy: Option<&str>,
+    ) -> Result<Goal> {
         if reason.trim().is_empty() {
             bail!("归档原因不能为空");
+        }
+        if migrate_unreceipted && migrate_receipt_policy.is_some() {
+            bail!("pre-receipt migration 与 receipt-policy migration 不能同时使用");
+        }
+        if migrate_receipt_policy.is_some_and(|policy| policy != RECEIPT_POLICY_V1) {
+            bail!("未知历史 receipt policy；当前只支持 {RECEIPT_POLICY_V1}");
         }
         let path = self.goal_path(id)?;
         let _lock = acquire_state_lock(&path)?;
@@ -982,6 +1006,44 @@ impl GoalStore {
                 &goal,
                 fingerprint,
                 Some(PRE_RECEIPT_MIGRATION.to_string()),
+                Some(RECEIPT_POLICY_V2.to_string()),
+            ));
+            write_json(&path, &goal)?;
+            return Ok(goal);
+        }
+        if goal.lifecycle == GoalLifecycle::Archived && migrate_receipt_policy.is_some() {
+            if goal
+                .lifecycle_proof
+                .as_ref()
+                .and_then(|proof| proof.receipt_policy.as_deref())
+                .is_some()
+            {
+                bail!("archived goal 已有显式 receipt policy；拒绝降级或重复迁移");
+            }
+            if let Some(error) = goal.current_schema_error() {
+                bail!("目标合约无效，不能迁移 historical policy: {error}");
+            }
+            if !receipt_policy_v1_migration_eligible(&goal) {
+                bail!(
+                    "只有 receipt-policy-v2 rollout 前的 schema-v2 success goal 可以迁移 v1 proof"
+                );
+            }
+            let Some(fingerprint) = historical_success_fingerprint(
+                &goal,
+                &self.root,
+                ReceiptValidationPolicy::LegacyV1,
+            ) else {
+                bail!("历史 goal 不满足 receipt_integrity_v1；拒绝刷新 lifecycle proof");
+            };
+            goal.lifecycle_reason = Some(reason.trim().to_string());
+            goal.superseded_by = None;
+            goal.lifecycle_proof = None;
+            goal.updated_at = now_iso();
+            goal.lifecycle_proof = Some(issue_lifecycle_proof(
+                &goal,
+                fingerprint,
+                Some(RECEIPT_POLICY_V1_MIGRATION.to_string()),
+                Some(RECEIPT_POLICY_V1.to_string()),
             ));
             write_json(&path, &goal)?;
             return Ok(goal);
@@ -1002,19 +1064,37 @@ impl GoalStore {
         let current_fingerprint = workspace_fingerprint(&self.root)?;
         let mut proof_fingerprint = current_fingerprint.clone();
         let mut migration = None;
+        let mut receipt_policy = Some(RECEIPT_POLICY_V2.to_string());
         if !goal.loaded_from_legacy {
             let gaps = goal_success_receipt_gaps(&goal, &self.root, &current_fingerprint);
             if !gaps.is_empty() {
                 if migrate_unreceipted && pre_receipt_migration_eligible(&goal) {
                     migration = Some(PRE_RECEIPT_MIGRATION.to_string());
-                } else if let Some(historical) = historical_success_fingerprint(&goal, &self.root) {
+                } else if let Some(historical) = historical_success_fingerprint(
+                    &goal,
+                    &self.root,
+                    ReceiptValidationPolicy::CurrentV2,
+                ) {
                     proof_fingerprint = historical;
+                } else if migrate_receipt_policy == Some(RECEIPT_POLICY_V1)
+                    && receipt_policy_v1_migration_eligible(&goal)
+                    && let Some(historical) = historical_success_fingerprint(
+                        &goal,
+                        &self.root,
+                        ReceiptValidationPolicy::LegacyV1,
+                    )
+                {
+                    proof_fingerprint = historical;
+                    migration = Some(RECEIPT_POLICY_V1_MIGRATION.to_string());
+                    receipt_policy = Some(RECEIPT_POLICY_V1.to_string());
                 } else {
                     bail!(
-                        "目标 success receipt 未通过当前或历史完整性复核: {}。仅 rollout 前历史可显式使用 --migrate-unreceipted",
+                        "目标 success receipt 未通过当前或历史完整性复核: {}。仅对应 rollout 前历史可显式使用 --migrate-unreceipted 或 --migrate-receipt-policy {RECEIPT_POLICY_V1}",
                         gaps.join("; ")
                     );
                 }
+            } else if migrate_receipt_policy.is_some() {
+                bail!("目标已满足当前 receipt policy，不需要降级迁移");
             }
         }
         goal.lifecycle = GoalLifecycle::Archived;
@@ -1022,7 +1102,12 @@ impl GoalStore {
         goal.superseded_by = None;
         goal.lifecycle_proof = None;
         goal.updated_at = now_iso();
-        goal.lifecycle_proof = Some(issue_lifecycle_proof(&goal, proof_fingerprint, migration));
+        goal.lifecycle_proof = Some(issue_lifecycle_proof(
+            &goal,
+            proof_fingerprint,
+            migration,
+            receipt_policy,
+        ));
         write_json(&path, &goal)?;
         Ok(goal)
     }
@@ -1064,7 +1149,11 @@ impl GoalStore {
         let current_fingerprint = workspace_fingerprint(&self.root)?;
         let mut proof_fingerprint = current_fingerprint.clone();
         if goal.status == GoalStatus::Success && !goal.loaded_from_legacy {
-            let Some(historical) = historical_success_fingerprint(&goal, &self.root) else {
+            let Some(historical) = historical_success_fingerprint(
+                &goal,
+                &self.root,
+                ReceiptValidationPolicy::CurrentV2,
+            ) else {
                 let gaps = goal_success_receipt_gaps(&goal, &self.root, &current_fingerprint);
                 bail!(
                     "success 目标缺少通过历史完整性复核的 receipt，不能 supersede: {}",
@@ -1092,7 +1181,12 @@ impl GoalStore {
         goal.superseded_by = Some(replacement_id.to_string());
         goal.lifecycle_proof = None;
         goal.updated_at = now_iso();
-        goal.lifecycle_proof = Some(issue_lifecycle_proof(&goal, proof_fingerprint, None));
+        goal.lifecycle_proof = Some(issue_lifecycle_proof(
+            &goal,
+            proof_fingerprint,
+            None,
+            Some(RECEIPT_POLICY_V2.to_string()),
+        ));
         write_json(&path, &goal)?;
         Ok(goal)
     }

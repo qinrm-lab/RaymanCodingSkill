@@ -369,6 +369,9 @@ pub enum GoalAction {
         /// Migrate a pre-rollout schema-v2 success record that cannot carry the new receipt proof
         #[arg(long)]
         migrate_unreceipted: bool,
+        /// Explicitly preserve a pre-policy-v2 goal whose real v1 receipts still pass v1 integrity
+        #[arg(long, value_name = "POLICY", conflicts_with = "migrate_unreceipted")]
+        migrate_receipt_policy: Option<String>,
     },
     /// 标记旧目标已由另一个 current 目标取代
     Supersede {
