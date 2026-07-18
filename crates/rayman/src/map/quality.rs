@@ -35,6 +35,15 @@ pub struct QualityReport {
     pub warning_count: usize,
     pub info_count: usize,
     pub findings: Vec<QualityFinding>,
+    pub findings_by_role: BTreeMap<String, QualityRoleSummary>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct QualityRoleSummary {
+    pub findings: usize,
+    pub error_count: usize,
+    pub warning_count: usize,
+    pub info_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,6 +76,7 @@ pub struct QualityFinding {
     pub severity: String,
     pub kind: String,
     pub path: String,
+    pub role: String,
     pub detail: String,
     pub recommendation: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -305,6 +315,7 @@ pub fn quality_report_with_config(map: &ProjectMap, config: &QualityConfig) -> Q
             severity: risk.severity.clone(),
             kind: risk.kind.clone(),
             path: risk.path.clone(),
+            role: quality_role(&risk.path).into(),
             detail: risk.detail.clone(),
             recommendation: recommendation_for_risk(&risk.kind).into(),
             blocking_policy_source: None,
@@ -325,6 +336,7 @@ pub fn quality_report_with_config(map: &ProjectMap, config: &QualityConfig) -> Q
             .into(),
             kind: "multi_source_project_without_tests".into(),
             path: ".".into(),
+            role: "workspace".into(),
             detail: if has_supported_package {
                 format!(
                     "{} source files but no indexed test files; large-project edits have no local validation anchor",
@@ -421,6 +433,18 @@ pub fn quality_report_with_config(map: &ProjectMap, config: &QualityConfig) -> Q
         .filter(|finding| finding.severity == "info")
         .count();
 
+    let mut findings_by_role = BTreeMap::<String, QualityRoleSummary>::new();
+    for finding in &findings {
+        let summary = findings_by_role.entry(finding.role.clone()).or_default();
+        summary.findings += 1;
+        match finding.severity.as_str() {
+            "error" => summary.error_count += 1,
+            "warning" => summary.warning_count += 1,
+            "info" => summary.info_count += 1,
+            _ => {}
+        }
+    }
+
     QualityReport {
         ready: error_count == 0,
         profile: config.profile.clone(),
@@ -435,7 +459,34 @@ pub fn quality_report_with_config(map: &ProjectMap, config: &QualityConfig) -> Q
         warning_count,
         info_count,
         findings,
+        findings_by_role,
     }
+}
+
+fn quality_role(path: &str) -> &'static str {
+    if path == "." {
+        return "workspace";
+    }
+    let segments = path.split('/').collect::<Vec<_>>();
+    if segments.contains(&"fixture") {
+        return "fixture";
+    }
+    if segments.contains(&"benches") || segments.contains(&"benchmarks") {
+        return "benchmark";
+    }
+    if segments.contains(&"tests")
+        || path.ends_with("_test.py")
+        || path
+            .rsplit('/')
+            .next()
+            .is_some_and(|name| name.starts_with("test_"))
+    {
+        return "test";
+    }
+    if segments.contains(&"generated") {
+        return "generated";
+    }
+    "first_party"
 }
 
 fn recommendation_for_risk(kind: &str) -> &'static str {

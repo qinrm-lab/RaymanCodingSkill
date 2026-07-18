@@ -21,6 +21,10 @@ pub struct WorkspaceActivationReport {
     pub enabled: bool,
     pub skill: Option<String>,
     pub skill_file: Option<String>,
+    pub cli_contract: Option<String>,
+    pub cli_version: Option<String>,
+    pub running_cli_contract: String,
+    pub running_cli_version: String,
     pub expected_sha256: Option<String>,
     pub actual_sha256: Option<String>,
     pub issues: Vec<String>,
@@ -45,7 +49,14 @@ fn scalar(value: &str, line_number: usize) -> Result<String> {
 }
 
 fn parse_activation(text: &str) -> Result<BTreeMap<String, String>> {
-    const ALLOWED_FIELDS: &[&str] = &["skill", "enabled", "skill_file", "skill_sha256"];
+    const ALLOWED_FIELDS: &[&str] = &[
+        "skill",
+        "enabled",
+        "skill_file",
+        "skill_sha256",
+        "cli_contract",
+        "cli_version",
+    ];
     let mut fields = BTreeMap::new();
     for (index, raw) in text.lines().enumerate() {
         let line_number = index + 1;
@@ -109,6 +120,10 @@ pub fn activation_status(root: &Path) -> Result<WorkspaceActivationReport> {
             skill: None,
             skill_file: None,
             expected_sha256: None,
+            cli_contract: None,
+            cli_version: None,
+            running_cli_contract: crate::CLI_CONTRACT.into(),
+            running_cli_version: crate::CLI_VERSION.into(),
             actual_sha256: None,
             issues: if state_present {
                 vec!["受管状态存在，但缺少显式 workspace_skill.yaml 激活合同".into()]
@@ -128,6 +143,14 @@ pub fn activation_status(root: &Path) -> Result<WorkspaceActivationReport> {
     let skill_file = fields.get("skill_file").cloned();
     let expected_sha256 = fields.get("skill_sha256").cloned();
     let mut issues = Vec::new();
+    let cli_contract = fields.get("cli_contract").cloned();
+    let cli_version = fields.get("cli_version").cloned();
+    if cli_contract.as_deref() != Some(crate::CLI_CONTRACT) {
+        issues.push(format!("cli_contract 必须精确为 {}", crate::CLI_CONTRACT));
+    }
+    if cli_version.as_deref() != Some(crate::CLI_VERSION) {
+        issues.push(format!("cli_version 必须精确为 {}", crate::CLI_VERSION));
+    }
     if skill.as_deref() != Some(SKILL_NAME) {
         issues.push(format!("skill 必须精确为 {SKILL_NAME}"));
     }
@@ -189,6 +212,10 @@ pub fn activation_status(root: &Path) -> Result<WorkspaceActivationReport> {
         skill_file,
         expected_sha256,
         actual_sha256,
+        cli_contract,
+        cli_version,
+        running_cli_contract: crate::CLI_CONTRACT.into(),
+        running_cli_version: crate::CLI_VERSION.into(),
         issues,
     })
 }
@@ -229,7 +256,9 @@ pub fn activate(root: &Path, skill_file: &Path) -> Result<WorkspaceActivationRep
         bail!("skill_file 路径不能包含换行");
     }
     let config = format!(
-        "skill: {SKILL_NAME}\nenabled: true\nskill_file: {recorded_path}\nskill_sha256: {hash}\n"
+        "skill: {SKILL_NAME}\nenabled: true\nskill_file: {recorded_path}\nskill_sha256: {hash}\ncli_contract: {}\ncli_version: {}\n",
+        crate::CLI_CONTRACT,
+        crate::CLI_VERSION
     );
     let path =
         state_paths::managed_state_file(root.as_path(), Path::new(ACTIVATION_RELATIVE), true)?;
@@ -289,5 +318,43 @@ mod tests {
         ] {
             assert!(parse_activation(invalid).is_err(), "accepted: {invalid:?}");
         }
+    }
+
+    #[test]
+    fn activation_is_bound_to_the_running_cli_contract_and_version() {
+        let root = tempfile::tempdir().unwrap();
+        let skill = root.path().join("SKILL.md");
+        fs::write(&skill, "canonical skill\n").unwrap();
+        let hash = sha256_file(&skill).unwrap();
+        let state = state_paths::managed_state_root(root.path(), true)
+            .unwrap()
+            .unwrap();
+        fs::write(
+            state.join(ACTIVATION_RELATIVE),
+            format!(
+                "skill: {SKILL_NAME}\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {hash}\ncli_contract: rayman-cli-contract-v5\ncli_version: 2.1.0\n"
+            ),
+        )
+        .unwrap();
+
+        let report = activation_status(root.path()).unwrap();
+        assert!(!report.active);
+        assert_eq!(
+            report.cli_contract.as_deref(),
+            Some("rayman-cli-contract-v5")
+        );
+        assert_eq!(report.running_cli_contract, crate::CLI_CONTRACT);
+        assert!(
+            report
+                .issues
+                .iter()
+                .any(|issue| issue.contains("cli_contract"))
+        );
+        assert!(
+            report
+                .issues
+                .iter()
+                .any(|issue| issue.contains("cli_version"))
+        );
     }
 }

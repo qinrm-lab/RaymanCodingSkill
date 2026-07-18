@@ -507,6 +507,22 @@ try {
     $artifact = (Resolve-Path -LiteralPath (Join-Path 'target/release' $artifactName)).Path
     $canonicalSkill = (Resolve-Path -LiteralPath 'SKILL.md').Path
 
+    $artifactIdentityText = & $artifact '--format' 'json' 'doctor'
+    if ($LASTEXITCODE -ne 0) {
+        throw "Built artifact could not report its identity (exit $LASTEXITCODE)."
+    }
+    try {
+        $artifactIdentity = $artifactIdentityText | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        throw "Built artifact returned invalid doctor JSON: $artifactIdentityText"
+    }
+    $artifactContract = [string]$artifactIdentity.contract
+    $artifactVersion = [string]$artifactIdentity.version
+    if ([string]::IsNullOrWhiteSpace($artifactContract) -or
+        [string]::IsNullOrWhiteSpace($artifactVersion)) {
+        throw 'Built artifact doctor output is missing contract or version.'
+    }
+
     # doctor verifies the current workspace binding. Installation is the one
     # operation authorized to refresh this ignored operational state.
     New-Item -ItemType Directory -Path '.RaymanCodingSkill' -Force | Out-Null
@@ -516,6 +532,8 @@ try {
         'enabled: true'
         'skill_file: SKILL.md'
         "skill_sha256: $skillHash"
+        "cli_contract: $artifactContract"
+        "cli_version: $artifactVersion"
     ) | Set-Content -LiteralPath '.RaymanCodingSkill/workspace_skill.yaml' -Encoding utf8
 
     $originalPath = $env:PATH

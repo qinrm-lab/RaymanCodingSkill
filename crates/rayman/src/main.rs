@@ -1,6 +1,9 @@
 mod cli;
+mod doctor;
+mod task_workflow;
 
-use std::path::{Path, PathBuf};
+use std::collections::BTreeMap;
+use std::path::Path;
 use std::process::Command as ProcessCommand;
 
 use anyhow::{Context, Result, bail};
@@ -10,11 +13,13 @@ use sha2::{Digest, Sha256};
 
 use cli::{
     AutosaveAction, AutosaveCmd, CheckCmd, CheckProfile, CheckpointAction, CheckpointCmd, Cli,
-    Command, ContextAction, ContextCmd, DoctorCmd, Format, GoalAction, GoalCmd, MapAction, MapCmd,
+    Command, ContextAction, ContextCmd, Format, GoalAction, GoalCmd, MapAction, MapCmd,
     PendingAction, PendingCmd, QualityProfile, StateAction, StateCmd, TempAction, TempCmd,
     WorkspaceAction, WorkspaceCmd,
 };
-use rayman::{assets, autosave, checkpoint, context, goal, map, temp, workspace, workspace_root};
+use rayman::{
+    assets, autosave, checkpoint, context, goal, map, source_state, temp, workspace, workspace_root,
+};
 
 fn main() {
     let cli = Cli::parse();
@@ -37,7 +42,16 @@ fn run(cli: Cli) -> Result<()> {
     let root = workspace_root()?;
     if !matches!(
         &cli.command,
-        Command::Workspace(_) | Command::Assets | Command::State(_) | Command::Doctor(_)
+        Command::Workspace(_)
+            | Command::Assets
+            | Command::State(_)
+            | Command::Doctor(_)
+            | Command::LegacyAudit(_)
+            | Command::LegacyWorkspaceSkill(_)
+            | Command::LegacySubagent(_)
+            | Command::Context(ContextCmd {
+                action: ContextAction::LegacyOs { .. } | ContextAction::LegacyTask { .. }
+            })
     ) {
         workspace::require_active(&root)?;
     }
@@ -74,9 +88,43 @@ fn run(cli: Cli) -> Result<()> {
                     );
                 }
             }
+            ContextAction::LegacyOs { args } => {
+                let suffix = if args.is_empty() {
+                    String::new()
+                } else {
+                    format!(" {}", args.join(" "))
+                };
+                bail!(
+                    "`rayman context os{suffix}` 已退役；使用 `rayman context refresh` 更新内容索引，使用 `rayman check --goal <id>` 验证任务"
+                );
+            }
+            ContextAction::LegacyTask { args } => {
+                let suffix = if args.is_empty() {
+                    String::new()
+                } else {
+                    format!(" {}", args.join(" "))
+                };
+                bail!(
+                    "`rayman context task{suffix}` 已退役；使用 `rayman prepare --goal <id>` 或 `rayman goal show <id>`"
+                );
+            }
         },
 
         Command::Goal(GoalCmd { action }) => run_goal(&root, json, action)?,
+        Command::Prepare(cmd) => return task_workflow::run_prepare(&root, json, cmd),
+
+        Command::Finish(cmd) => {
+            return run_check(
+                &root,
+                json,
+                CheckCmd {
+                    profile: cmd.profile,
+                    goal: Some(cmd.goal),
+                    require_current_goal: true,
+                    refresh_context: true,
+                },
+            );
+        }
 
         Command::Assets => {
             let report = assets::scan(&root)?;
@@ -154,7 +202,16 @@ fn run(cli: Cli) -> Result<()> {
 
         Command::Autosave(cmd) => return run_autosave(&root, json, cmd),
 
-        Command::Doctor(cmd) => return run_doctor(&root, json, cmd),
+        Command::Doctor(cmd) => return doctor::run(&root, json, cmd),
+        Command::LegacyAudit(_) => bail!(
+            "`rayman audit` 已退役；工作区门禁使用 `rayman check --profile standard`，任务交付使用 `rayman finish --goal <id>`，状态卫生使用 `rayman state audit --check`"
+        ),
+        Command::LegacyWorkspaceSkill(_) => bail!(
+            "`rayman workspace-skill` 已退役；使用 `rayman workspace status|inspect|activate|deactivate`"
+        ),
+        Command::LegacySubagent(_) => bail!(
+            "`rayman subagent` 已退役且 v2 不维护 agent ledger；需要保留未完成工作时使用 `rayman goal pending add`"
+        ),
     }
     Ok(())
 }
@@ -162,6 +219,20 @@ fn run(cli: Cli) -> Result<()> {
 fn run_workspace(root: &Path, json: bool, cmd: WorkspaceCmd) -> Result<()> {
     let report = match cmd.action {
         WorkspaceAction::Status => workspace::activation_status(root)?,
+        WorkspaceAction::Inspect => {
+            let activation = workspace::activation_status(root)?;
+            let source = source_state::inspect(root);
+            if json {
+                print(&json!({ "activation": activation, "source": source }));
+            } else {
+                println!(
+                    "RaymanCodingSkill workspace activation: {} (active={}, config_present={})",
+                    activation.status, activation.active, activation.config_present
+                );
+                print_source_state(&source);
+            }
+            return Ok(());
+        }
         WorkspaceAction::Activate { skill_file, yes } => {
             if !yes {
                 bail!("activation writes a hash-bound workspace_skill.yaml; add --yes to confirm");
@@ -187,6 +258,25 @@ fn run_workspace(root: &Path, json: bool, cmd: WorkspaceCmd) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn print_source_state(source: &source_state::SourceState) {
+    println!(
+        "  source: kind={} available={} clean={} HEAD={} tracked_dirty={} untracked={} path_encoding_lossy={}",
+        source.kind,
+        source.available,
+        source
+            .clean
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "unknown".into()),
+        source.head.as_deref().unwrap_or("unknown"),
+        source.tracked_dirty,
+        source.untracked,
+        source.path_encoding_lossy
+    );
+    if let Some(error) = &source.error {
+        println!("    source error: {error}");
+    }
 }
 
 fn run_state_audit(root: &Path, json: bool, check: bool) -> Result<()> {
@@ -315,137 +405,7 @@ fn audit_allowed_state_entry(root: &Path, name: &str) -> Result<()> {
     }
 }
 
-const CLI_CONTRACT: &str = "rayman-cli-contract-v5";
 const SOURCE_FRESH_VERIFIER: &str = "scripts/verify-release-contract.ps1 -RequireSourceFresh";
-
-fn run_doctor(root: &Path, json: bool, cmd: DoctorCmd) -> Result<()> {
-    let running = std::env::current_exe().context("无法定位当前 rayman 二进制")?;
-    let running_hash = rayman::hash::sha256_file(&running)?;
-    let path_candidate = find_path_rayman();
-    let path_hash = path_candidate
-        .as_deref()
-        .map(rayman::hash::sha256_file)
-        .transpose()?;
-    let path_matches_running = path_hash.as_deref() == Some(running_hash.as_str());
-
-    let activation = workspace::activation_status(root)?;
-    let skill_path = activation
-        .skill_file
-        .as_deref()
-        .map(PathBuf::from)
-        .map(|path| {
-            if path.is_absolute() {
-                path
-            } else {
-                root.join(path)
-            }
-        })
-        .unwrap_or_else(|| root.join("SKILL.md"));
-    let skill_hash = activation.actual_sha256.clone();
-    let metadata_hash = activation.expected_sha256.clone();
-    let metadata_matches = activation.active
-        && match (&skill_hash, &metadata_hash) {
-            (Some(actual), Some(expected)) => actual.eq_ignore_ascii_case(expected),
-            _ => false,
-        };
-    // This proves an installed identity tuple only. It cannot prove that a release artifact was
-    // rebuilt from the checkout's current sources: that requires an isolated locked rebuild and
-    // byte comparison, which the repository verifier performs on explicit handoff/CI paths.
-    // A managed workspace can be an ordinary user project, not this source checkout.
-    // Looking for `<workspace>/target/release/rayman` therefore made `doctor --check`
-    // falsely unusable after a correct installation.  Source-to-artifact byte identity
-    // belongs exclusively to the explicit repository verifier below.
-    let identity_ready = path_matches_running && activation.active && metadata_matches;
-    let report = json!({
-        "workspace_activation": &activation,
-        "contract": CLI_CONTRACT,
-        "version": env!("CARGO_PKG_VERSION"),
-        "running": {
-            "path": running,
-            "sha256": running_hash,
-        },
-        "path_rayman": path_candidate.as_ref().map(|path| json!({
-            "path": path,
-            "sha256": path_hash,
-            "matches_running": path_matches_running,
-        })),
-        "repo_release": {
-            "checked": false,
-            "status": "not_checked_by_doctor",
-            "required_verifier": SOURCE_FRESH_VERIFIER,
-        },
-        "workspace_skill": {
-            "path": skill_path,
-            "sha256": skill_hash,
-            "recorded_sha256": metadata_hash,
-            "matches_recorded": metadata_matches,
-        },
-        "release_identity": {
-            "ready": identity_ready,
-            "scope": "running_binary_path_command_and_workspace_skill_identity",
-        },
-        "source_fresh": {
-            "verified": false,
-            "status": "not_checked_by_doctor",
-            "required_verifier": SOURCE_FRESH_VERIFIER,
-        },
-    });
-    if json {
-        print(&report);
-    } else {
-        println!(
-            "已安装身份契约: {CLI_CONTRACT} v{}",
-            env!("CARGO_PKG_VERSION")
-        );
-        println!("  当前二进制: {}", running.display());
-        println!("  PATH 命令一致: {path_matches_running}");
-        println!("  workspace activation: {}", activation.status);
-        println!("  仓库源码产物: 未由 doctor 检查；交接/CI 由 `{SOURCE_FRESH_VERIFIER}` 验证");
-        println!("  workspace SKILL 一致: {metadata_matches}");
-        println!("  已安装身份 READY: {identity_ready}");
-        println!("  源码新鲜度: 未由 doctor 证明；交接/CI 必须运行 `{SOURCE_FRESH_VERIFIER}`");
-    }
-    if cmd.check && !identity_ready {
-        bail!(
-            "已安装身份契约不一致：请使用仓库 release 二进制同步安装，并更新 .RaymanCodingSkill/workspace_skill.yaml 的 skill_sha256"
-        );
-    }
-    Ok(())
-}
-
-#[cfg(windows)]
-fn find_path_rayman() -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")?;
-    // `cmd`/Windows command discovery uses PATHEXT, not just `.exe`.  Selecting the
-    // first matching command in each PATH directory makes an earlier `.cmd`/`.bat`
-    // wrapper visible to doctor instead of falsely accepting a later rayman.exe.
-    // Fall back to the normal Windows order if PATHEXT is absent or empty.
-    let extensions = std::env::var_os("PATHEXT")
-        .map(|raw| {
-            raw.to_string_lossy()
-                .split(';')
-                .map(str::trim)
-                .filter(|extension| !extension.is_empty())
-                .map(str::to_string)
-                .collect::<Vec<_>>()
-        })
-        .filter(|extensions| !extensions.is_empty())
-        .unwrap_or_else(|| vec![".COM".into(), ".EXE".into(), ".BAT".into(), ".CMD".into()]);
-    std::env::split_paths(&path).find_map(|dir| {
-        extensions
-            .iter()
-            .map(|extension| dir.join(format!("rayman{extension}")))
-            .find(|candidate| candidate.is_file())
-    })
-}
-
-#[cfg(not(windows))]
-fn find_path_rayman() -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path)
-        .map(|dir| dir.join("rayman"))
-        .find(|candidate| candidate.is_file())
-}
 
 fn run_map(root: &std::path::Path, json: bool, cmd: MapCmd) -> Result<()> {
     // Queries must remain read-only. Only the explicit `map refresh` action persists
@@ -1146,10 +1106,31 @@ fn impact_evidence_from_report(report: &map::ImpactReport) -> goal::ImpactEviden
     }
 }
 
+fn task_proof_blockers(
+    goal_blockers: &BTreeMap<String, Vec<String>>,
+    shared_blockers: &[String],
+    goal_id: &str,
+) -> Vec<String> {
+    let mut blockers = goal_blockers.get(goal_id).cloned().unwrap_or_default();
+    blockers.extend_from_slice(shared_blockers);
+    blockers.sort();
+    blockers.dedup();
+    blockers
+}
+
 /// 一次性只读就绪检查：聚合上下文新鲜度、资产扫描、待完成项。
 /// 有硬阻塞（上下文缺失/陈旧、存在待完成项）时以非零码退出，便于脚本/agent 门禁。
 fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
     let activation = workspace::activation_status(root)?;
+    let refresh_report = if cmd.refresh_context {
+        Some(context::refresh(root)?.1)
+    } else {
+        None
+    };
+    let source = source_state::inspect(root);
+    let mut task_goal_id = cmd.goal.clone();
+    let mut task_blockers = Vec::new();
+
     // `check` is a readiness claim, not a cheap UI probe: use content hashes.
     let freshness = context::strong_freshness(root);
     let asset_report = assets::scan(root)?;
@@ -1162,17 +1143,54 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
 
     let context_blocked = freshness.status != "ready";
     let mut standard_blockers = Vec::new();
+    let mut goal_blockers = BTreeMap::<String, Vec<String>>::new();
+    let mut shared_task_proof_blockers = Vec::new();
     let mut standard_warnings = Vec::new();
     let mut map_summary = None;
     let mut map_quality = None;
 
     if matches!(cmd.profile, CheckProfile::Standard | CheckProfile::Release) {
         let (goals, goal_load_issues) = goal_store.list_with_issues()?;
+        if task_goal_id.is_none() && cmd.require_current_goal {
+            let current_ids = goals
+                .iter()
+                .filter(|goal| goal.lifecycle == goal::GoalLifecycle::Current)
+                .map(|goal| goal.id.clone())
+                .collect::<Vec<_>>();
+            match current_ids.as_slice() {
+                [id] => task_goal_id = Some(id.clone()),
+                [] => task_blockers.push(
+                    "要求绑定 current goal，但当前没有 current goal；先运行 goal start".into(),
+                ),
+                _ => task_blockers.push(format!(
+                    "要求绑定唯一 current goal，但当前有 {} 个；请显式传 --goal <id>",
+                    current_ids.len()
+                )),
+            }
+        }
+        if let Some(id) = task_goal_id.as_deref() {
+            match goals.iter().find(|goal| goal.id == id) {
+                None => task_blockers.push(format!("绑定的 goal 不存在: {id}")),
+                Some(selected) => {
+                    if selected.lifecycle != goal::GoalLifecycle::Current {
+                        task_blockers.push(format!(
+                            "绑定的 goal {id} lifecycle={}，必须为 current",
+                            selected.lifecycle
+                        ));
+                    }
+                    if selected.status != goal::GoalStatus::Success {
+                        task_blockers.push(format!(
+                            "绑定的 goal {id} status={}，必须完成验证并 close success",
+                            selected.status
+                        ));
+                    }
+                }
+            }
+        }
         for issue in goal_load_issues {
-            standard_blockers.push(format!(
-                "goal 文件不可读取: {} ({})",
-                issue.path, issue.error
-            ));
+            let blocker = format!("goal 文件不可读取: {} ({})", issue.path, issue.error);
+            standard_blockers.push(blocker.clone());
+            shared_task_proof_blockers.push(blocker);
         }
         if !context_blocked {
             match map::build_readonly(root) {
@@ -1208,13 +1226,20 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
         let current_fingerprint = match goal::workspace_fingerprint(root) {
             Ok(fingerprint) => Some(fingerprint),
             Err(error) => {
-                standard_blockers.push(format!("无法计算工作区内容指纹: {error}"));
+                let blocker = format!("无法计算工作区内容指纹: {error}");
+                standard_blockers.push(blocker.clone());
+                shared_task_proof_blockers.push(blocker);
                 None
             }
         };
         for checked_goal in &goals {
+            let blocker_start = standard_blockers.len();
             if let Some(error) = checked_goal.current_schema_error() {
                 standard_blockers.push(format!("goal {} 合约无效: {error}", checked_goal.id));
+                goal_blockers.insert(
+                    checked_goal.id.clone(),
+                    standard_blockers[blocker_start..].to_vec(),
+                );
                 continue;
             }
             if let Some(error) = checked_goal.lifecycle_proof_error(root) {
@@ -1222,6 +1247,10 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
                     "goal {} lifecycle proof 无效: {error}",
                     checked_goal.id
                 ));
+                goal_blockers.insert(
+                    checked_goal.id.clone(),
+                    standard_blockers[blocker_start..].to_vec(),
+                );
                 continue;
             }
             if let Some(fingerprint) = current_fingerprint.as_deref()
@@ -1232,6 +1261,10 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
                     "goal {} supersession 合约无效: {error}",
                     checked_goal.id
                 ));
+                goal_blockers.insert(
+                    checked_goal.id.clone(),
+                    standard_blockers[blocker_start..].to_vec(),
+                );
                 continue;
             }
             if checked_goal.lifecycle != goal::GoalLifecycle::Current {
@@ -1245,6 +1278,10 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
                         .map(|id| format!("（superseded_by={id}）"))
                         .unwrap_or_default()
                 ));
+                goal_blockers.insert(
+                    checked_goal.id.clone(),
+                    standard_blockers[blocker_start..].to_vec(),
+                );
                 continue;
             }
             if checked_goal.loaded_from_legacy {
@@ -1252,6 +1289,10 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
                     "legacy goal {} 仍为 current（status={}）；legacy 记录不能生成当前 receipt，请显式 archive 历史 success，或新建 current-schema replacement 后 supersede",
                     checked_goal.id, checked_goal.status
                 ));
+                goal_blockers.insert(
+                    checked_goal.id.clone(),
+                    standard_blockers[blocker_start..].to_vec(),
+                );
                 continue;
             }
             let requires_receipt = checked_goal.is_current_schema();
@@ -1345,13 +1386,41 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
                     ));
                 }
             }
+            goal_blockers.insert(
+                checked_goal.id.clone(),
+                standard_blockers[blocker_start..].to_vec(),
+            );
         }
     }
 
-    let blocked = context_blocked
+    if task_goal_id.is_some() && cmd.profile == CheckProfile::Quick {
+        task_blockers
+            .push("goal-bound completion gate requires standard or release profile".into());
+    }
+    if context_blocked && task_goal_id.is_some() {
+        shared_task_proof_blockers
+            .push("任务门禁要求 ready context；使用 --refresh-context 或 prepare/finish".into());
+    }
+    if let Some(id) = task_goal_id.as_deref() {
+        task_blockers.extend(task_proof_blockers(
+            &goal_blockers,
+            &shared_task_proof_blockers,
+            id,
+        ));
+    }
+    task_blockers.sort();
+    task_blockers.dedup();
+    let workspace_blocked = context_blocked
         || !pending.is_empty()
         || pending_error.is_some()
         || !standard_blockers.is_empty();
+    let task_requested = task_goal_id.is_some() || cmd.require_current_goal;
+    let task_ready = if task_requested {
+        Some(task_goal_id.is_some() && task_blockers.is_empty())
+    } else {
+        None
+    };
+    let blocked = workspace_blocked || task_ready == Some(false);
 
     let readiness_scope = check_readiness_scope(cmd.profile);
     let release_contract = if cmd.profile == CheckProfile::Release {
@@ -1371,6 +1440,15 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
     if json {
         print(&json!({
             "ready": !blocked,
+            "workspace_ready": !workspace_blocked,
+            "task": {
+                "requested": task_goal_id.is_some() || cmd.require_current_goal,
+                "goal_id": &task_goal_id,
+                "ready": task_ready,
+                "blockers": &task_blockers,
+            },
+            "source": &source,
+            "context_refresh": &refresh_report,
             "activation": &activation,
             "profile": format!("{:?}", cmd.profile).to_ascii_lowercase(),
             "readiness_scope": readiness_scope,
@@ -1395,6 +1473,13 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
             if blocked { "BLOCKED" } else { "READY" }
         );
         println!("  activation: {}", activation.status);
+        print_source_state(&source);
+        if let Some(refresh) = &refresh_report {
+            println!(
+                "  context refresh: total={} reused={} rehashed={} removed={}",
+                refresh.total, refresh.reused, refresh.rehashed, refresh.removed
+            );
+        }
         println!(
             "  上下文: {}{}",
             freshness.status,
@@ -1412,6 +1497,16 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
         println!("  待完成项: {}", pending.len());
         if let Some(error) = &pending_error {
             println!("    BLOCKER: pending.json 不可读取: {error}");
+        }
+        if task_goal_id.is_some() || cmd.require_current_goal {
+            println!(
+                "  task: goal={} ready={}",
+                task_goal_id.as_deref().unwrap_or("unresolved"),
+                task_ready.unwrap_or(false)
+            );
+            for blocker in &task_blockers {
+                println!("    TASK BLOCKER: {blocker}");
+            }
         }
         if matches!(cmd.profile, CheckProfile::Standard | CheckProfile::Release) {
             if let Some(summary) = &map_summary {
@@ -1695,10 +1790,19 @@ fn print_quality_report(report: &map::QualityReport) {
         "  findings: errors={} warnings={} info={}",
         report.error_count, report.warning_count, report.info_count
     );
+    if !report.findings_by_role.is_empty() {
+        println!("  findings by role:");
+        for (role, summary) in &report.findings_by_role {
+            println!(
+                "    {role}: total={} errors={} warnings={} info={}",
+                summary.findings, summary.error_count, summary.warning_count, summary.info_count
+            );
+        }
+    }
     for finding in &report.findings {
         println!(
-            "    [{}] {} {} — {}",
-            finding.severity, finding.kind, finding.path, finding.detail
+            "    [{}][{}] {} {} — {}",
+            finding.severity, finding.role, finding.kind, finding.path, finding.detail
         );
         println!("      建议: {}", finding.recommendation);
     }
@@ -1752,5 +1856,22 @@ mod tests {
         .unwrap();
 
         assert!(run_state_audit(dir.path(), false, true).is_err());
+    }
+
+    #[test]
+    fn task_proof_blockers_use_structured_goal_ownership() {
+        let mut by_goal = BTreeMap::new();
+        by_goal.insert("goal_selected".into(), vec!["selected blocker".into()]);
+        by_goal.insert(
+            "goal_other".into(),
+            vec!["unrelated message mentions goal_selected".into()],
+        );
+        let shared = vec!["shared proof blocker".into()];
+
+        assert_eq!(
+            task_proof_blockers(&by_goal, &shared, "goal_selected"),
+            vec!["selected blocker", "shared proof blocker"]
+        );
+        assert!(!task_proof_blockers(&by_goal, &shared, "missing").is_empty());
     }
 }

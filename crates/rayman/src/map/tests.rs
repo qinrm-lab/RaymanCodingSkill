@@ -398,10 +398,21 @@ fn quality_report_does_not_exempt_eval_fixture_shaped_paths() {
     let map = build_readonly(root).unwrap();
     let quality = quality_report(&map);
 
-    assert!(quality.findings.iter().any(|finding| {
-        finding.path == "evals/tasks/sample/fixture/src/lib.rs"
-            && finding.kind == "public_api_without_test_evidence"
-    }));
+    let finding = quality
+        .findings
+        .iter()
+        .find(|finding| finding.path == "evals/tasks/sample/fixture/src/lib.rs")
+        .unwrap();
+    assert_eq!(finding.kind, "public_api_without_test_evidence");
+    assert_eq!(finding.role, "fixture");
+    assert_eq!(
+        quality.findings_by_role["fixture"].findings,
+        quality
+            .findings
+            .iter()
+            .filter(|item| item.role == "fixture")
+            .count()
+    );
 }
 
 #[test]

@@ -347,6 +347,30 @@ fn topology_provenance_is_authoritative(root: &Path, provenance: &str) -> bool {
 
 pub fn impact_report(map: &ProjectMap, path: &str) -> Result<ImpactReport> {
     let path = normalize_query_path(path);
+    let directory_prefix = if path == "." {
+        String::new()
+    } else {
+        format!("{}/", path.trim_end_matches('/'))
+    };
+    let has_descendants = (!directory_prefix.is_empty()
+        && (map
+            .modules
+            .iter()
+            .any(|module| module.path.starts_with(&directory_prefix))
+            || map
+                .tests
+                .iter()
+                .any(|test| test.path.starts_with(&directory_prefix))
+            || map
+                .packages
+                .iter()
+                .any(|package| package.manifest_path.starts_with(&directory_prefix))))
+        || (path == "." && (!map.modules.is_empty() || !map.tests.is_empty()));
+    if has_descendants {
+        bail!(
+            "map impact accepts one file path, but `{path}` is an indexed directory; use `map plan <files...>` with concrete files"
+        );
+    }
     let package_entry = package_for_path(map, &path);
     let package = package_entry.map(|package| package.name.clone());
     let direct_dependencies: Vec<Dependency> = map

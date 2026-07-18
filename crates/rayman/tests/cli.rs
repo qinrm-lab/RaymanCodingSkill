@@ -676,7 +676,7 @@ fn doctor_verifies_installed_identity_in_an_ordinary_managed_workspace() {
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
         &format!(
-            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\n"
+            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v6\ncli_version: 2.2.0\n"
         ),
     );
     let binary = std::fs::canonicalize(BIN).unwrap();
@@ -711,7 +711,7 @@ fn doctor_rejects_an_earlier_windows_path_wrapper() {
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
         &format!(
-            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\n"
+            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v6\ncli_version: 2.2.0\n"
         ),
     );
     let wrapper_dir = tempfile::tempdir().unwrap();
@@ -2702,4 +2702,145 @@ fn workspace_activation_contract_rejects_duplicate_and_unknown_fields() {
     let unknown = run_raw(root, &["workspace", "status"]);
     assert_ne!(unknown.status, 0);
     assert!(unknown.stderr.contains("未知字段"), "{}", unknown.stderr);
+}
+
+#[test]
+fn task_bound_check_prepare_and_finish_distinguish_task_from_workspace_readiness() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+
+    let unbound = run(
+        root,
+        &[
+            "--format",
+            "json",
+            "check",
+            "--profile",
+            "standard",
+            "--require-current-goal",
+        ],
+    );
+    assert_eq!(unbound.status, 1);
+    let unbound: Value = serde_json::from_str(&unbound.stdout).unwrap();
+    assert_eq!(unbound["workspace_ready"], true);
+    assert_eq!(unbound["task"]["ready"], false);
+
+    let started = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "bound delivery",
+            "--must",
+            "validate the real source delta",
+        ],
+    );
+    let id = started["id"].as_str().unwrap();
+    let prepared = run_json(root, &["prepare", "--goal", id]);
+    assert_eq!(prepared["ready"], true);
+    assert_eq!(prepared["goal_id"], id);
+
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 43 }\n");
+    run_json(root, &["context", "refresh"]);
+    validate_goal(
+        root,
+        id,
+        "req_1",
+        "compiled the bound source delta",
+        &["src/lib.rs"],
+    );
+    assert_eq!(run(root, &["goal", "close", id]).status, 0);
+
+    let finished = run_json(root, &["finish", "--goal", id]);
+    assert_eq!(finished["workspace_ready"], true);
+    assert_eq!(finished["task"]["goal_id"], id);
+    assert_eq!(finished["task"]["ready"], true);
+    assert_eq!(finished["ready"], true);
+    assert!(finished["context_refresh"].is_object());
+}
+
+#[test]
+fn retired_commands_fail_with_actionable_migrations() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+
+    for (args, expected) in [
+        (&["audit", "--check"][..], "rayman check --profile standard"),
+        (
+            &["workspace-skill", "mark-used"][..],
+            "rayman workspace status",
+        ),
+        (&["subagent", "status"][..], "v2"),
+        (&["context", "os", "--check"][..], "rayman context refresh"),
+        (&["context", "task"][..], "rayman prepare --goal"),
+    ] {
+        let output = run_raw(root, args);
+        assert_eq!(output.status, 1, "args={args:?}");
+        assert!(
+            output.stderr.contains(expected),
+            "args={args:?} stderr={}",
+            output.stderr
+        );
+    }
+}
+
+#[test]
+fn workspace_inspect_reports_git_head_and_dirty_paths() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "tracked.txt", "one\n");
+    let git = |args: &[&str]| {
+        let status = Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {args:?}");
+    };
+    git(&["init", "--quiet"]);
+    git(&["add", "tracked.txt"]);
+    git(&[
+        "-c",
+        "user.name=Rayman Test",
+        "-c",
+        "user.email=rayman@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "fixture",
+    ]);
+
+    let clean = run_raw(root, &["--format", "json", "workspace", "inspect"]);
+    assert_eq!(clean.status, 0, "{}", clean.stderr);
+    let clean: Value = serde_json::from_str(&clean.stdout).unwrap();
+    assert_eq!(clean["source"]["available"], true);
+    assert_eq!(clean["source"]["clean"], true);
+    assert!(clean["source"]["head"].as_str().unwrap().len() >= 40);
+
+    write(root, "tracked.txt", "two\n");
+    write(root, "new.txt", "new\n");
+    let dirty = run_raw(root, &["--format", "json", "workspace", "inspect"]);
+    let dirty: Value = serde_json::from_str(&dirty.stdout).unwrap();
+    assert_eq!(dirty["source"]["clean"], false);
+    assert_eq!(dirty["source"]["tracked_dirty"], 1);
+    assert_eq!(dirty["source"]["untracked"], 1);
+}
+
+#[test]
+fn map_impact_rejects_directory_inputs_instead_of_returning_empty_success() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+
+    let impact = run(root, &["map", "impact", "src"]);
+    assert_eq!(impact.status, 1);
+    assert!(
+        impact.stderr.contains("indexed directory"),
+        "{}",
+        impact.stderr
+    );
+    assert!(impact.stderr.contains("map plan"), "{}", impact.stderr);
 }

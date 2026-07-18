@@ -1285,3 +1285,35 @@ fn current_success_can_refresh_review_after_source_drift() {
     assert_eq!(refreshed.status, GoalStatus::Success);
     assert_eq!(refreshed.review_receipts.len(), 2);
 }
+
+#[test]
+fn with_locked_goal_holds_the_goal_lock_for_the_entire_operation() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = GoalStore::new(dir.path());
+    let goal = store
+        .start("locked operation", &[("stay current".into(), true)])
+        .unwrap();
+    let root = dir.path().to_path_buf();
+    let id = goal.id.clone();
+    let (acquired_tx, acquired_rx) = std::sync::mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        GoalStore::new(root)
+            .with_locked_goal(&id, |_| {
+                acquired_tx.send(()).unwrap();
+                std::thread::sleep(std::time::Duration::from_millis(200));
+                Ok(())
+            })
+            .unwrap();
+    });
+
+    acquired_rx.recv().unwrap();
+    let started = std::time::Instant::now();
+    store
+        .with_locked_goal(&goal.id, |locked| {
+            assert_eq!(locked.id, goal.id);
+            Ok(())
+        })
+        .unwrap();
+    assert!(started.elapsed() >= std::time::Duration::from_millis(100));
+    worker.join().unwrap();
+}

@@ -38,10 +38,14 @@ $workspaceManifest = Join-Path $repoRoot 'Cargo.toml'
 $crateManifest = Join-Path $repoRoot 'crates/rayman/Cargo.toml'
 $lockfile = Join-Path $repoRoot 'Cargo.lock'
 $canonicalSkill = Join-Path $repoRoot 'SKILL.md'
-$expectedContract = 'rayman-cli-contract-v5'
+$installerScript = Join-Path $repoRoot 'scripts/install-rayman.ps1'
+$expectedContract = 'rayman-cli-contract-v6'
 $requiredMsrv = '1.88'
 $requiredCommands = @(
     'context',
+    'workspace',
+    'prepare',
+    'finish',
     'goal',
     'check',
     'map',
@@ -60,6 +64,25 @@ function Read-RequiredFile {
         throw "$Label is missing: $Path"
     }
     return Get-Content -LiteralPath $Path -Raw
+}
+
+function Assert-InstallerIdentityBinding {
+    param([string]$Content)
+
+    if ($Content -match 'cli_contract:\s*rayman-cli-contract-' -or
+        $Content -match 'cli_version:\s*\d+\.\d+\.\d+') {
+        throw 'Installer activation identity must not contain literal contract or version values.'
+    }
+    $requiredPatterns = @(
+        '\$artifactIdentityText\s*=\s*&\s*\$artifact[^\r\n]*doctor',
+        'cli_contract:\s*\$artifactContract',
+        'cli_version:\s*\$artifactVersion'
+    )
+    foreach ($pattern in $requiredPatterns) {
+        if ($Content -notmatch $pattern) {
+            throw "Installer does not derive activation identity from artifact doctor output: missing $pattern"
+        }
+    }
 }
 
 function Get-ManifestValue {
@@ -331,6 +354,24 @@ function Assert-GitHubTagContext {
 }
 
 function Invoke-ReleaseVerifierSelfTest {
+    $validInstaller = @'
+$artifactIdentityText = & $artifact '--format' 'json' 'doctor'
+"cli_contract: $artifactContract"
+"cli_version: $artifactVersion"
+'@
+    Assert-InstallerIdentityBinding -Content $validInstaller
+    foreach ($literal in @('cli_contract: rayman-cli-contract-v999', 'cli_version: 9.9.9')) {
+        $literalRejected = $false
+        try {
+            Assert-InstallerIdentityBinding -Content "$validInstaller`n$literal"
+        } catch {
+            $literalRejected = $true
+        }
+        if (-not $literalRejected) {
+            throw "Release verifier self-test failed: installer literal was accepted: $literal"
+        }
+    }
+
     foreach ($name in @('cargo', 'git', 'rustc')) {
         Set-Item -LiteralPath "Function:$name" -Value { 'forged command' }
         try {
@@ -360,7 +401,7 @@ function Invoke-ReleaseVerifierSelfTest {
         $savedContext[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
     }
     $sourceHead = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-    $exactTag = 'v2.1.0'
+    $exactTag = 'v2.2.0'
     try {
         [Environment]::SetEnvironmentVariable('GITHUB_ACTIONS', 'true', 'Process')
         $forgedCases = @(
@@ -411,6 +452,9 @@ function Invoke-ReleaseVerifierSelfTest {
 
     Write-Host 'Release verifier self-test passed: native command shadows and forged GitHub tag context were rejected.'
 }
+
+$installerContent = Read-RequiredFile -Path $installerScript -Label 'Installer script'
+Assert-InstallerIdentityBinding -Content $installerContent
 
 if ($SelfTest) {
     Invoke-ReleaseVerifierSelfTest

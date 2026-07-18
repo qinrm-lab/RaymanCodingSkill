@@ -3,7 +3,7 @@
 A lean, evidence-first coding-agent helper. One small Rust binary, `rayman`, that gives an agent (or you) the load-bearing basics for working in a repository:
 
 - **Context index** — a content-proven map of the workspace (files, kinds, symbols). `context refresh` hashes indexed content and preserves read failures as blockers; the cheap `context status` command remains a stat-only UI probe, while map and readiness conclusions re-check content hashes.
-- **Explicit activation** — `.RaymanCodingSkill/` by itself is only runtime state. `workspace activate` writes a canonical-skill path and SHA256 contract; orphan state and skill drift are inactive. The four-field activation schema rejects duplicates, unknown fields, nesting, and malformed scalars.
+- **Explicit activation** — `.RaymanCodingSkill/` by itself is only runtime state. `workspace activate` writes a canonical-skill path/SHA256 plus the exact CLI contract/version; orphan state, skill drift, and stale CLIs are inactive. The six-field activation schema rejects duplicates, unknown fields, nesting, and malformed scalars.
 - **Project map** — a derived architecture view (modules, symbols, local dependencies, Cargo/pyproject packages, entrypoints, heuristic test candidates, impact hints). Rust modules/tests and Python imports plus pytest filename conventions are modeled; unsupported ecosystems remain advisory for missing-test conclusions.
 - **Change plan** — capture the workspace's per-file SHA256 baseline at goal start, persist one immutable aggregate path set before mutation, and compare it with the real delta. Missing baselines, split/post-hoc plans, unplanned files, and incomplete validation declarations are blocked instead of trusting an agent's claimed scope.
 - **Quality surface** — machine-readable maintainability findings from the project map; `map quality --check` fails only on error-level gaps. Multi-source Cargo and pyproject packages without indexed tests are blocking; unsupported ecosystems stay advisory. Strict/release always promote the built-in `large_file` and `high_fan_in` warnings. `.RaymanCodingSkill/quality.json` can only add blocking kinds or declare exact `(path, kind)` exemptions with a non-empty reason; it cannot clear those defaults.
@@ -30,7 +30,7 @@ cargo run -p rayman -- context status
 
 ## Release identity and installed CLI
 
-`2.1.0` is the first release identity after the stale `2.0.0` contract. A matching version string alone is not proof that an installed executable contains this CLI. Keep these claims separate: `check --profile release` proves workspace strict-quality only; `doctor --check` proves installed binary/PATH/SKILL identity only; release handoff additionally requires a locked fresh-source rebuild. The exact contract and release procedure live in [docs/RELEASE_CONTRACT.md](docs/RELEASE_CONTRACT.md).
+`2.2.0` binds activation to `rayman-cli-contract-v6` and the exact running CLI version, so an older installed executable cannot report READY against a newer workspace contract. Keep these claims separate: `check --profile release` proves workspace strict-quality only; `doctor --check` proves installed binary/PATH/SKILL/activation identity only; release handoff additionally requires a locked fresh-source rebuild. The exact contract and release procedure live in [docs/RELEASE_CONTRACT.md](docs/RELEASE_CONTRACT.md).
 
 The only supported source-checkout install/upgrade entry point is below. Open a PowerShell 7 (`pwsh`) session first—never Windows PowerShell. A historical profile shim that searches for `.Rayman\rayman.ps1` can loop forever at a drive root; inspect and migrate only that exact known shim before installation:
 
@@ -59,7 +59,8 @@ For an installed executable, pass its resolved path as `-CliPath` and the newly 
 ## Commands
 
 ```
-rayman workspace status         # active/inactive/orphan/invalid activation state
+rayman workspace status         # activation only: active/inactive/orphan/invalid
+rayman workspace inspect        # activation plus Git HEAD/clean/dirty/untracked source state
 rayman workspace activate --skill-file <canonical-SKILL.md> --yes
 rayman workspace deactivate --yes
 rayman context refresh          # rebuild index with content-hash proof; read failures block readiness
@@ -69,14 +70,18 @@ rayman map summary              # project structure summary from the current ind
 rayman map file <path>          # symbols/dependencies/tests/risks for one file
 rayman map symbol <name>        # find indexed symbols by name
 rayman map topology             # Cargo package/path-dependency topology
-rayman map impact <path>        # dependent files, heuristic test candidates, suggested checks
+rayman map impact <file>        # one file only; directories fail with a map-plan migration
 rayman map plan <paths...> [--check] # multi-file change plan; --check blocks unscoped broad edits
-rayman map quality [--profile standard|strict] [--check] # maintainability findings; --check blocks
-                                # on errors; only --profile strict reads .RaymanCodingSkill/quality.json
-rayman check                    # default standard: context + project map/quality + validation relevance + goal evidence
+rayman map quality [--profile standard|strict] [--check] # findings retain severity and report source roles
+rayman check                    # workspace health only unless a goal is explicitly required
+rayman check --goal <id>        # workspace_ready + task_ready bound to one exact goal
+rayman check --require-current-goal # require exactly one current goal
+rayman check --refresh-context  # refresh then check sequentially in the same process
 rayman check --profile quick    # base snapshot only: context + assets + pending; not a delivery-evidence claim
-rayman check --profile standard # explicit default; same standard readiness gate as `rayman check`
-rayman check --profile release  # workspace strict-quality only; not an installed-release/source-fresh claim
+rayman check --profile standard # explicit default workspace readiness gate
+rayman check --profile release  # workspace strict-quality only; not installed-release/source-fresh proof
+rayman prepare --goal <id>      # refresh context, verify current active goal, report source state
+rayman finish --goal <id>       # refresh then run a goal-bound standard completion gate
 rayman assets                   # read-only obsolete-file + work-marker scan
 rayman temp status              # recursive files/dirs/bytes plus traversal errors; read-only
 rayman temp scratch <label> | cleanup
@@ -104,8 +109,12 @@ rayman doctor [--check]                                   # installed binary/PAT
 Every command accepts `--format json` for machine-readable output.
 
 `goal start` records a per-file SHA256 baseline. A baseline-less current v2 goal is never gate-ready; preserve completed history with `archive`, or replace unfinished work with a new baseline-bound goal and `supersede`. For multi-file work, `goal plan` must be written while the workspace still matches that baseline; it is one immutable aggregate path set and records a `normal`/`broad`/`high` review priority. Actual additions, edits, and deletions are recomputed from the baseline, so validation and close reject unplanned delta. A high-priority plan also needs `goal review` bound to the final source fingerprint.
+`check` without a goal remains a workspace-health result and reports `workspace_ready`; it must not be presented as proof that a user task is complete. `check --goal <id>` and `finish --goal <id>` additionally report `task.ready` and fail unless that exact goal is current, closed success, and backed by current receipts. Every check also reports Git/source state when available. `prepare` and `finish` serialize context refresh with their next decision so a parallel stale read cannot masquerade as the current result.
+
 
 `related_tests` and change-plan checks are planning aids, not proof of real coverage. For a current-schema goal, use `goal validate`: it executes the command from the workspace root and stores its zero exit code, output hashes, before/after fingerprints, and declared changed paths. The current receipts must collectively cover the real delta. Pytest validation (`python -m pytest`, `pytest`, or `py.test`) parses positional directory/file/node selectors separately from option values, so `pytest tests` is scoped rather than workspace-wide and `file.py::test_name` covers its source file. It first runs an independent `--collect-only -q` proof, rejects zero tests and collect-only-as-execution, reads one terminal summary instead of arbitrary test output, requires `passed > 0`, and requires passed/skipped/xfailed/xpassed totals to match collection. A nonzero command writes no receipt. `goal evidence --validated` remains legacy human attestation and cannot satisfy a current-schema standard/release claim.
+Retired v1 spellings fail nonzero with migration guidance rather than silently changing meaning: `audit` maps to separate workspace/task/state commands, `workspace-skill` maps to `workspace`, and `context os`, `context task`, and `subagent` name their v2 replacements. They are diagnostic traps, not compatibility aliases.
+
 
 Archiving or superseding a completed goal revalidates its receipt integrity at the fingerprint where that work actually passed; later source changes do not make historical proof current. Supersession still requires a separate current, gate-ready replacement, and lifecycle proof binds the preserved record against hand edits.
 

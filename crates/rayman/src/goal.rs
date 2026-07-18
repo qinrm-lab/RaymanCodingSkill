@@ -623,6 +623,17 @@ impl GoalStore {
         Self::load_goal_file(&self.goal_path(id)?)
     }
 
+    pub fn with_locked_goal<T>(
+        &self,
+        id: &str,
+        operation: impl FnOnce(&Goal) -> Result<T>,
+    ) -> Result<T> {
+        let path = self.goal_path(id)?;
+        let _lock = acquire_state_lock(&path)?;
+        let goal =
+            Self::load_goal_file(&path)?.ok_or_else(|| anyhow::anyhow!("目标不存在: {id}"))?;
+        operation(&goal)
+    }
     pub fn validation_contract_hash(&self, id: &str, requirement_id: &str) -> Result<String> {
         let Some(goal) = self.get(id)? else {
             bail!("目标不存在: {id}");

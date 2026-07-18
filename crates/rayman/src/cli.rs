@@ -33,6 +33,10 @@ pub enum Command {
     Goal(GoalCmd),
     /// 一次性工作区就绪检查（默认 standard；release 仅代表 strict-quality，不代表已安装发布）
     Check(CheckCmd),
+    /// 顺序刷新上下文并确认指定目标仍可继续实施
+    Prepare(TaskWorkflowCmd),
+    /// 顺序刷新上下文并执行绑定指定目标的完成门禁
+    Finish(TaskFinishCmd),
     /// 项目地图与变更影响分析（依赖当前 context 索引）
     Map(MapCmd),
     /// 只读的过时资产与未完成标记扫描
@@ -47,7 +51,20 @@ pub enum Command {
     Autosave(AutosaveCmd),
     /// 检查已安装二进制、PATH 与工作区 skill 的身份契约；不证明源码新鲜度
     Doctor(DoctorCmd),
+    #[command(name = "audit", hide = true)]
+    LegacyAudit(LegacyCommandArgs),
+    #[command(name = "workspace-skill", hide = true)]
+    LegacyWorkspaceSkill(LegacyCommandArgs),
+    #[command(name = "subagent", hide = true)]
+    LegacySubagent(LegacyCommandArgs),
 }
+
+#[derive(Args)]
+pub struct LegacyCommandArgs {
+    #[arg(allow_hyphen_values = true, trailing_var_arg = true)]
+    pub args: Vec<String>,
+}
+
 #[derive(Args)]
 pub struct WorkspaceCmd {
     #[command(subcommand)]
@@ -56,8 +73,10 @@ pub struct WorkspaceCmd {
 
 #[derive(Subcommand)]
 pub enum WorkspaceAction {
-    /// Inspect activation; orphan runtime state is never active.
+    /// Inspect activation only; use `workspace inspect` for Git/source state.
     Status,
+    /// Inspect activation together with current Git/source state.
+    Inspect,
     /// Write a hash-bound workspace_skill.yaml activation contract.
     Activate {
         /// Canonical RaymanCodingSkill SKILL.md; defaults to root/SKILL.md.
@@ -169,6 +188,16 @@ pub enum ContextAction {
     Status,
     /// 刷新索引（只重算变更文件）
     Refresh,
+    #[command(name = "os", hide = true)]
+    LegacyOs {
+        #[arg(allow_hyphen_values = true, trailing_var_arg = true)]
+        args: Vec<String>,
+    },
+    #[command(name = "task", hide = true)]
+    LegacyTask {
+        #[arg(allow_hyphen_values = true, trailing_var_arg = true)]
+        args: Vec<String>,
+    },
 }
 
 #[derive(Args)]
@@ -213,6 +242,32 @@ pub enum MapAction {
 #[derive(Args)]
 pub struct CheckCmd {
     /// 检查强度：默认 standard；quick 仅基础快照；release 为工作区 strict-quality，不是安装发布验证
+    #[arg(long, value_enum, default_value_t = CheckProfile::Standard)]
+    pub profile: CheckProfile,
+    /// Bind this readiness result to one exact goal.
+    #[arg(long)]
+    pub goal: Option<String>,
+    /// Require exactly one current goal when --goal is omitted.
+    #[arg(long)]
+    pub require_current_goal: bool,
+    /// Refresh context in this process immediately before checking.
+    #[arg(long)]
+    pub refresh_context: bool,
+}
+
+#[derive(Args)]
+pub struct TaskWorkflowCmd {
+    /// Exact current goal to prepare.
+    #[arg(long)]
+    pub goal: String,
+}
+
+#[derive(Args)]
+pub struct TaskFinishCmd {
+    /// Exact current goal whose completion must be proven.
+    #[arg(long)]
+    pub goal: String,
+    /// Completion check strength.
     #[arg(long, value_enum, default_value_t = CheckProfile::Standard)]
     pub profile: CheckProfile,
 }
@@ -423,7 +478,17 @@ mod tests {
     fn parses_check() {
         let cli = Cli::try_parse_from(["rayman", "check"]).unwrap();
         match cli.command {
-            Command::Check(CheckCmd { profile }) => assert_eq!(profile, CheckProfile::Standard),
+            Command::Check(CheckCmd {
+                profile,
+                goal,
+                require_current_goal,
+                refresh_context,
+            }) => {
+                assert_eq!(profile, CheckProfile::Standard);
+                assert!(goal.is_none());
+                assert!(!require_current_goal);
+                assert!(!refresh_context);
+            }
             _ => panic!("unexpected command"),
         }
     }
@@ -432,7 +497,7 @@ mod tests {
     fn parses_standard_check_profile() {
         let cli = Cli::try_parse_from(["rayman", "check", "--profile", "standard"]).unwrap();
         match cli.command {
-            Command::Check(CheckCmd { profile }) => assert_eq!(profile, CheckProfile::Standard),
+            Command::Check(CheckCmd { profile, .. }) => assert_eq!(profile, CheckProfile::Standard),
             _ => panic!("unexpected command"),
         }
     }
@@ -441,7 +506,7 @@ mod tests {
     fn parses_release_check_profile() {
         let cli = Cli::try_parse_from(["rayman", "check", "--profile", "release"]).unwrap();
         match cli.command {
-            Command::Check(CheckCmd { profile }) => assert_eq!(profile, CheckProfile::Release),
+            Command::Check(CheckCmd { profile, .. }) => assert_eq!(profile, CheckProfile::Release),
             _ => panic!("unexpected command"),
         }
     }
