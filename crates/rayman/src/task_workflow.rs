@@ -48,3 +48,35 @@ pub(crate) fn run_prepare(root: &Path, json_output: bool, cmd: TaskWorkflowCmd) 
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prepare_refreshes_context_for_current_active_goal() {
+        let workspace = tempfile::tempdir().unwrap();
+        let root = workspace.path();
+        std::fs::create_dir(root.join("src")).unwrap();
+        std::fs::write(root.join("src/lib.rs"), "pub fn answer() -> u8 { 42 }\n").unwrap();
+
+        let store = rayman::goal::GoalStore::new(root);
+        let goal = store
+            .start("prepare task", &[("refresh context".into(), true)])
+            .unwrap();
+
+        run_prepare(
+            root,
+            true,
+            TaskWorkflowCmd {
+                goal: goal.id.clone(),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(rayman::context::strong_freshness(root).status, "ready");
+        let persisted = store.get(&goal.id).unwrap().unwrap();
+        assert_eq!(persisted.lifecycle, rayman::goal::GoalLifecycle::Current);
+        assert_eq!(persisted.status, rayman::goal::GoalStatus::Active);
+    }
+}
