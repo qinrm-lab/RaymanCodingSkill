@@ -3,7 +3,7 @@
 //! 只保留真正有用的那一条门禁：**关闭为 success 时，每个 `must` 需求都必须带证据**。
 //! 砍掉 counterexample_challenges / search_effort / claim_ledger 等仪式化元数据。
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
@@ -195,6 +195,39 @@ pub struct ValidationReceiptSubmission {
     pub non_code: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WorkspaceBaseline {
+    pub recorded_at: String,
+    pub workspace_fingerprint: String,
+    pub files: BTreeMap<String, String>,
+}
+
+pub struct PlanReceiptSubmission {
+    pub changed_paths: Vec<String>,
+    pub review_priority: String,
+    pub impacted_paths: Vec<String>,
+    pub recommended_checks: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PlanReceipt {
+    pub recorded_at: String,
+    pub baseline_fingerprint: String,
+    pub changed_paths: Vec<String>,
+    pub review_priority: String,
+    pub impacted_paths: Vec<String>,
+    pub recommended_checks: Vec<String>,
+    pub plan_sha256: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ReviewReceipt {
+    pub recorded_at: String,
+    pub source_fingerprint: String,
+    pub reviewer: String,
+    pub summary: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ValidationImpactScope {
     pub changed_path: String,
@@ -245,6 +278,12 @@ pub struct Goal {
     pub lifecycle_proof: Option<LifecycleProof>,
     pub created_at: String,
     pub updated_at: String,
+    #[serde(default)]
+    pub baseline: Option<WorkspaceBaseline>,
+    #[serde(default)]
+    pub plan_receipts: Vec<PlanReceipt>,
+    #[serde(default)]
+    pub review_receipts: Vec<ReviewReceipt>,
     pub requirements: Vec<Requirement>,
     #[serde(default, skip)]
     pub loaded_from_legacy: bool,
@@ -371,6 +410,38 @@ fn acquire_state_lock(target: &Path) -> Result<StateLock> {
     )
 }
 
+fn normalize_path_list(paths: &mut Vec<String>) {
+    for path in paths.iter_mut() {
+        *path = path
+            .trim()
+            .trim_start_matches("./")
+            .trim_start_matches(".\\")
+            .replace('\\', "/");
+    }
+    paths.retain(|path| !path.is_empty());
+    paths.sort();
+    paths.dedup();
+}
+
+fn hash_string_sequence(hasher: &mut Sha256, values: &[String]) {
+    hasher.update((values.len() as u64).to_le_bytes());
+    for value in values {
+        hasher.update((value.len() as u64).to_le_bytes());
+        hasher.update(value.as_bytes());
+    }
+}
+
+pub fn plan_receipt_sha256(receipt: &PlanReceipt) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"rayman.goal-plan-receipt.v1");
+    hasher.update(receipt.baseline_fingerprint.as_bytes());
+    hasher.update(receipt.review_priority.as_bytes());
+    hash_string_sequence(&mut hasher, &receipt.changed_paths);
+    hash_string_sequence(&mut hasher, &receipt.impacted_paths);
+    hash_string_sequence(&mut hasher, &receipt.recommended_checks);
+    format!("{:x}", hasher.finalize())
+}
+
 impl GoalStore {
     pub fn new(root: impl Into<PathBuf>) -> Self {
         Self { root: root.into() }
@@ -426,6 +497,7 @@ impl GoalStore {
                 impacts: Vec::new(),
             })
             .collect();
+        let baseline = Some(workspace_baseline(&self.root)?);
         let goal = Goal {
             schema_version: GOAL_SCHEMA_VERSION,
             id: id.clone(),
@@ -437,10 +509,113 @@ impl GoalStore {
             lifecycle_proof: None,
             created_at: now.clone(),
             updated_at: now,
+            baseline,
+            plan_receipts: Vec::new(),
+            review_receipts: Vec::new(),
             requirements,
             loaded_from_legacy: false,
         };
         write_json(&self.goal_path(&id)?, &goal)?;
+        Ok(goal)
+    }
+
+    pub fn record_plan(&self, id: &str, mut submission: PlanReceiptSubmission) -> Result<Goal> {
+        if !matches!(
+            submission.review_priority.as_str(),
+            "normal" | "broad" | "high"
+        ) {
+            bail!("未知 review_priority: {}", submission.review_priority);
+        }
+        normalize_path_list(&mut submission.changed_paths);
+        normalize_path_list(&mut submission.impacted_paths);
+        submission.recommended_checks.sort();
+        submission.recommended_checks.dedup();
+        if submission.changed_paths.is_empty() {
+            bail!("goal plan 至少需要一个变更路径");
+        }
+
+        let path = self.goal_path(id)?;
+        let _lock = acquire_state_lock(&path)?;
+        let Some(mut goal) = Self::load_goal_file(&path)? else {
+            bail!("目标不存在: {id}");
+        };
+        if !goal.is_current_schema() {
+            bail!("目标 {id} 不是当前 schema，不能记录 plan receipt");
+        }
+        if goal.lifecycle != GoalLifecycle::Current || goal.status != GoalStatus::Active {
+            bail!("只有 active/current 目标可以记录 plan receipt");
+        }
+        let Some(baseline) = goal.baseline.as_ref() else {
+            bail!("目标缺少开工 baseline；请新建目标后在首次修改前执行 goal plan");
+        };
+        let current = workspace_baseline(&self.root)?;
+        if current.workspace_fingerprint != baseline.workspace_fingerprint {
+            bail!(
+                "工作区已偏离 goal 开工 baseline；拒绝事后补 plan。baseline={} current={}",
+                baseline.workspace_fingerprint,
+                current.workspace_fingerprint
+            );
+        }
+        let mut receipt = PlanReceipt {
+            recorded_at: now_iso(),
+            baseline_fingerprint: baseline.workspace_fingerprint.clone(),
+            changed_paths: submission.changed_paths,
+            review_priority: submission.review_priority,
+            impacted_paths: submission.impacted_paths,
+            recommended_checks: submission.recommended_checks,
+            plan_sha256: String::new(),
+        };
+        receipt.plan_sha256 = plan_receipt_sha256(&receipt);
+        if let Some(existing) = goal.plan_receipts.first() {
+            if goal.plan_receipts.len() != 1 {
+                bail!("目标包含多个 plan receipt；拒绝继续使用可拆分绕过的计划状态");
+            }
+            if existing.plan_sha256 == receipt.plan_sha256 {
+                return Ok(goal);
+            }
+            bail!(
+                "goal plan 是首次修改前的一次性聚合合同，不能追加或拆分；请在变更前一次列出完整路径"
+            );
+        }
+        goal.plan_receipts.push(receipt);
+        goal.updated_at = now_iso();
+        write_json(&path, &goal)?;
+        Ok(goal)
+    }
+
+    pub fn record_review(&self, id: &str, reviewer: &str, summary: &str) -> Result<Goal> {
+        if reviewer.trim().is_empty() || summary.trim().is_empty() {
+            bail!("reviewer 与 summary 都不能为空");
+        }
+        let path = self.goal_path(id)?;
+        let _lock = acquire_state_lock(&path)?;
+        let Some(mut goal) = Self::load_goal_file(&path)? else {
+            bail!("目标不存在: {id}");
+        };
+        if !goal.is_current_schema()
+            || goal.lifecycle != GoalLifecycle::Current
+            || !matches!(goal.status, GoalStatus::Active | GoalStatus::Success)
+        {
+            bail!("只有 active/success 的 current-schema 目标可以记录 review receipt");
+        }
+        if goal.plan_receipts.is_empty() {
+            bail!("review receipt 必须绑定已记录的 goal plan");
+        }
+        let receipt = ReviewReceipt {
+            recorded_at: now_iso(),
+            source_fingerprint: workspace_fingerprint(&self.root)?,
+            reviewer: reviewer.trim().to_string(),
+            summary: summary.trim().to_string(),
+        };
+        if !goal.review_receipts.iter().any(|existing| {
+            existing.source_fingerprint == receipt.source_fingerprint
+                && existing.reviewer == receipt.reviewer
+                && existing.summary == receipt.summary
+        }) {
+            goal.review_receipts.push(receipt);
+            goal.updated_at = now_iso();
+            write_json(&path, &goal)?;
+        }
         Ok(goal)
     }
 
@@ -656,6 +831,49 @@ impl GoalStore {
                 goal.lifecycle
             );
         }
+        if let Some(baseline) = goal.baseline.as_ref() {
+            let current = workspace_baseline(&self.root)?;
+            let actual = workspace_delta(baseline, &current);
+            let valid_plans = goal
+                .plan_receipts
+                .iter()
+                .filter(|plan| {
+                    plan.baseline_fingerprint == baseline.workspace_fingerprint
+                        && plan.plan_sha256 == plan_receipt_sha256(plan)
+                })
+                .collect::<Vec<_>>();
+            if actual.len() >= 2 && valid_plans.is_empty() {
+                bail!(
+                    "实际变更 {} 个文件但缺少首次修改前的 goal plan receipt",
+                    actual.len()
+                );
+            }
+            let planned = valid_plans
+                .iter()
+                .flat_map(|plan| plan.changed_paths.iter().cloned())
+                .collect::<BTreeSet<_>>();
+            let unplanned = actual
+                .iter()
+                .filter(|changed| !planned.contains(*changed))
+                .cloned()
+                .collect::<Vec<_>>();
+            if !valid_plans.is_empty() && !unplanned.is_empty() {
+                bail!("validation 拒绝未计划的实际变更: {}", unplanned.join(", "));
+            }
+            if !valid_plans.is_empty() {
+                let undeclared_plan = impact_paths
+                    .iter()
+                    .map(|path| path.replace('\\', "/"))
+                    .filter(|changed| !planned.contains(changed))
+                    .collect::<Vec<_>>();
+                if !undeclared_plan.is_empty() {
+                    bail!(
+                        "validation --changed 超出 goal plan: {}",
+                        undeclared_plan.join(", ")
+                    );
+                }
+            }
+        }
         let expected_contract = validation_contract_sha256(&goal, req_id)?;
         if receipt.contract_sha256 != expected_contract {
             bail!("validation receipt 与 immutable goal/requirement contract 不匹配");
@@ -770,16 +988,19 @@ impl GoalStore {
         if let Some(error) = goal.current_schema_error() {
             bail!("目标合约无效，不能归档: {error}");
         }
-        let fingerprint = workspace_fingerprint(&self.root)?;
+        let current_fingerprint = workspace_fingerprint(&self.root)?;
+        let mut proof_fingerprint = current_fingerprint.clone();
         let mut migration = None;
         if !goal.loaded_from_legacy {
-            let gaps = goal_success_receipt_gaps(&goal, &self.root, &fingerprint);
+            let gaps = goal_success_receipt_gaps(&goal, &self.root, &current_fingerprint);
             if !gaps.is_empty() {
                 if migrate_unreceipted && pre_receipt_migration_eligible(&goal) {
                     migration = Some(PRE_RECEIPT_MIGRATION.to_string());
+                } else if let Some(historical) = historical_success_fingerprint(&goal, &self.root) {
+                    proof_fingerprint = historical;
                 } else {
                     bail!(
-                        "目标 success receipt 未通过归档时复核: {}。仅 rollout 前历史可显式使用 --migrate-unreceipted",
+                        "目标 success receipt 未通过当前或历史完整性复核: {}。仅 rollout 前历史可显式使用 --migrate-unreceipted",
                         gaps.join("; ")
                     );
                 }
@@ -790,7 +1011,7 @@ impl GoalStore {
         goal.superseded_by = None;
         goal.lifecycle_proof = None;
         goal.updated_at = now_iso();
-        goal.lifecycle_proof = Some(issue_lifecycle_proof(&goal, fingerprint, migration));
+        goal.lifecycle_proof = Some(issue_lifecycle_proof(&goal, proof_fingerprint, migration));
         write_json(&path, &goal)?;
         Ok(goal)
     }
@@ -829,15 +1050,17 @@ impl GoalStore {
         if let Some(error) = goal.current_schema_error() {
             bail!("目标合约无效，不能 supersede: {error}");
         }
-        let fingerprint = workspace_fingerprint(&self.root)?;
+        let current_fingerprint = workspace_fingerprint(&self.root)?;
+        let mut proof_fingerprint = current_fingerprint.clone();
         if goal.status == GoalStatus::Success && !goal.loaded_from_legacy {
-            let gaps = goal_success_receipt_gaps(&goal, &self.root, &fingerprint);
-            if !gaps.is_empty() {
+            let Some(historical) = historical_success_fingerprint(&goal, &self.root) else {
+                let gaps = goal_success_receipt_gaps(&goal, &self.root, &current_fingerprint);
                 bail!(
-                    "success 目标缺少可验证 receipt，不能 supersede: {}",
+                    "success 目标缺少通过历史完整性复核的 receipt，不能 supersede: {}",
                     gaps.join("; ")
                 );
-            }
+            };
+            proof_fingerprint = historical;
         }
         if let Some(error) = supersession_error(
             &{
@@ -849,7 +1072,7 @@ impl GoalStore {
             },
             std::slice::from_ref(&replacement),
             &self.root,
-            &fingerprint,
+            &current_fingerprint,
         ) {
             bail!("不能 supersede 目标 {id}: {error}");
         }
@@ -858,7 +1081,7 @@ impl GoalStore {
         goal.superseded_by = Some(replacement_id.to_string());
         goal.lifecycle_proof = None;
         goal.updated_at = now_iso();
-        goal.lifecycle_proof = Some(issue_lifecycle_proof(&goal, fingerprint, None));
+        goal.lifecycle_proof = Some(issue_lifecycle_proof(&goal, proof_fingerprint, None));
         write_json(&path, &goal)?;
         Ok(goal)
     }
@@ -944,6 +1167,9 @@ fn goal_from_legacy(legacy: LegacyGoal) -> Goal {
         superseded_by: None,
         lifecycle_proof: None,
         created_at,
+        baseline: None,
+        plan_receipts: Vec::new(),
+        review_receipts: Vec::new(),
         updated_at,
         requirements,
         loaded_from_legacy: true,

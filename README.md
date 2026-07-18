@@ -3,10 +3,11 @@
 A lean, evidence-first coding-agent helper. One small Rust binary, `rayman`, that gives an agent (or you) the load-bearing basics for working in a repository:
 
 - **Context index** — a content-proven map of the workspace (files, kinds, symbols). `context refresh` hashes indexed content and preserves read failures as blockers; the cheap `context status` command remains a stat-only UI probe, while map and readiness conclusions re-check content hashes.
-- **Project map** — a derived architecture view (modules, symbols, local dependencies, Cargo package topology, entrypoints, heuristic test candidates, impact hints). It refuses stale context instead of guessing. Symbol extraction and test-anchor detection are Cargo/Rust-shaped heuristics; on a workspace with no `Cargo.toml`, the map still builds (files, kinds, risks) but the "no test anchor" findings below are advisory, not blocking — see Quality surface.
-- **Change plan** — aggregate multiple intended change paths into impacted files, package dependents, candidate tests, risks, and validation commands before broad edits. The "no candidate test anchor" blocker only fires as a hard `plan --check` failure inside a detected Cargo workspace; elsewhere it's a warning.
-- **Quality surface** — machine-readable maintainability findings from the project map; `map quality --check` fails only on error-level gaps, and `multi_source_project_without_tests` is only ever error-level inside a detected Cargo workspace (outside one it's a non-blocking warning, since the underlying test-detection heuristics don't understand other languages). Strict/release always promote the built-in `large_file` and `high_fan_in` warnings. `.RaymanCodingSkill/quality.json` can only add blocking kinds or declare exact `(path, kind)` exemptions with a non-empty reason; it cannot clear those defaults.
-- **Goal contract** — capture a task as `must`/`should` requirements; closing as success is refused until every `must` has recorded evidence. Pending-work items carry across sessions.
+- **Explicit activation** — `.RaymanCodingSkill/` by itself is only runtime state. `workspace activate` writes a canonical-skill path and SHA256 contract; orphan state and skill drift are inactive. The four-field activation schema rejects duplicates, unknown fields, nesting, and malformed scalars.
+- **Project map** — a derived architecture view (modules, symbols, local dependencies, Cargo/pyproject packages, entrypoints, heuristic test candidates, impact hints). Rust modules/tests and Python imports plus pytest filename conventions are modeled; unsupported ecosystems remain advisory for missing-test conclusions.
+- **Change plan** — capture the workspace's per-file SHA256 baseline at goal start, persist one immutable aggregate path set before mutation, and compare it with the real delta. Missing baselines, split/post-hoc plans, unplanned files, and incomplete validation declarations are blocked instead of trusting an agent's claimed scope.
+- **Quality surface** — machine-readable maintainability findings from the project map; `map quality --check` fails only on error-level gaps. Multi-source Cargo and pyproject packages without indexed tests are blocking; unsupported ecosystems stay advisory. Strict/release always promote the built-in `large_file` and `high_fan_in` warnings. `.RaymanCodingSkill/quality.json` can only add blocking kinds or declare exact `(path, kind)` exemptions with a non-empty reason; it cannot clear those defaults.
+- **Goal contract** — capture `must`/`should` requirements, a baseline-bound pre-change plan, validation receipts that cover the real delta, and fingerprint-bound review for high-priority changes. Pending-work items carry across sessions.
 - **Asset scan** — read-only report of obsolete-looking files and work-in-progress markers. It never deletes anything.
 - **State audit** — a read-only inventory of allowed v2 state, retired entries, and recursive managed-temp metrics. `state audit --check` fails on retired state, audit errors, or traversal errors; it never deletes files.
 - **Managed temp** — workspace-local scratch under `.RaymanCodingSkill/tmp/`, never system temp. `temp status` reports recursive files, directories, bytes, and traversal errors rather than only the top-level entry count.
@@ -58,6 +59,9 @@ For an installed executable, pass its resolved path as `-CliPath` and the newly 
 ## Commands
 
 ```
+rayman workspace status         # active/inactive/orphan/invalid activation state
+rayman workspace activate --skill-file <canonical-SKILL.md> --yes
+rayman workspace deactivate --yes
 rayman context refresh          # rebuild index with content-hash proof; read failures block readiness
 rayman context status           # cheap stat-only UI probe; not proof for map/check readiness
 rayman map refresh              # rebuild the project map from the current index
@@ -80,10 +84,14 @@ rayman state audit [--check]    # read-only v2/retired-state + recursive-temp au
 
 rayman goal start "<title>" --must "<req>" [--should "<req>"]
 rayman goal list | show <id>
+rayman goal plan <id> <paths...> --check
+rayman goal review <id> --reviewer <name> -m "<review>"
 rayman goal evidence <id> --req <req_id> -m "<legacy attestation>" --validated "<command claimed to have passed>"
 rayman goal evidence <id> --req <req_id> -m "<legacy attestation>" --validated "<command claimed to have passed>" --changed <path>
 rayman goal validate <id> --req <req_id> -m "<evidence>" --command "<command to execute>" [--changed <path>]
 rayman goal close <id> [--status success|partial|blocked] # only these three; standard READY requires closed success
+rayman goal archive <id> --reason "<historical reason>"
+rayman goal supersede <id> --by <current gate-ready replacement>
 rayman goal pending add "<title>" -m "<detail>" | list | resolve <id>
 
 rayman checkpoint save | list | status                    # list exposes complete/partial/corrupt status
@@ -95,7 +103,11 @@ rayman doctor [--check]                                   # installed binary/PAT
 
 Every command accepts `--format json` for machine-readable output.
 
-`related_tests` and change-plan checks are heuristic planning aids, not proof of real coverage. For a current-schema goal, use `goal validate`: it executes the command from the workspace root and stores its zero exit code, output hashes, and before/after workspace fingerprints in a receipt. A nonzero command writes no receipt. Closing `success` requires at least one `must`, with every `must` done and carrying evidence; an evidence-only closure is still not a standard/release delivery claim. `check --profile standard` / `release` additionally require a successful receipt bound to the current workspace. `goal evidence --validated` is retained only as a legacy human attestation and cannot satisfy a current-schema standard/release success claim. A receipt whose after-fingerprint is no longer current is also insufficient.
+`goal start` records a per-file SHA256 baseline. A baseline-less current v2 goal is never gate-ready; preserve completed history with `archive`, or replace unfinished work with a new baseline-bound goal and `supersede`. For multi-file work, `goal plan` must be written while the workspace still matches that baseline; it is one immutable aggregate path set and records a `normal`/`broad`/`high` review priority. Actual additions, edits, and deletions are recomputed from the baseline, so validation and close reject unplanned delta. A high-priority plan also needs `goal review` bound to the final source fingerprint.
+
+`related_tests` and change-plan checks are planning aids, not proof of real coverage. For a current-schema goal, use `goal validate`: it executes the command from the workspace root and stores its zero exit code, output hashes, before/after fingerprints, and declared changed paths. The current receipts must collectively cover the real delta. Pytest validation (`python -m pytest`, `pytest`, or `py.test`) parses positional directory/file/node selectors separately from option values, so `pytest tests` is scoped rather than workspace-wide and `file.py::test_name` covers its source file. It first runs an independent `--collect-only -q` proof, rejects zero tests and collect-only-as-execution, reads one terminal summary instead of arbitrary test output, requires `passed > 0`, and requires passed/skipped/xfailed/xpassed totals to match collection. A nonzero command writes no receipt. `goal evidence --validated` remains legacy human attestation and cannot satisfy a current-schema standard/release claim.
+
+Archiving or superseding a completed goal revalidates its receipt integrity at the fingerprint where that work actually passed; later source changes do not make historical proof current. Supersession still requires a separate current, gate-ready replacement, and lifecycle proof binds the preserved record against hand edits.
 
 ## State and checkpoint integrity
 
@@ -103,7 +115,7 @@ Every command accepts `--format json` for machine-readable output.
 
 Checkpoint manifests are v2 integrity records. Saves take a cross-process workspace/store lock; a failed or crashed save keeps its staging/partial directory for forensics and automatic pruning never deletes staging. `checkpoint list` labels complete/partial/corrupt snapshots and `checkpoint status` selects only the newest verified complete one. `checkpoint verify` is read-only. Restore validates the complete manifest first, then durably replaces each destination file through same-directory staging (`flush`/`fsync` + atomic rename). It is an idempotently rerunnable per-file overlay, not an all-files transaction: a crash can leave a verified prefix restored, and rerunning completes the remainder without deleting extra workspace files.
 
-Cargo topology includes direct path dependencies and workspace-inherited path dependencies from `[workspace.dependencies]` plus `{ workspace = true }`, including common dotted TOML forms. Impact recommendations use `cargo test -p <name>` only for unique workspace member packages; excluded fixtures, non-workspace nested packages, and duplicate package names use `cargo test --manifest-path <path>` instead. `map plan --check` treats package-level checks as broad-change anchors only when the package has an indexed test target.
+Cargo topology includes direct path dependencies and workspace-inherited path dependencies from `[workspace.dependencies]` plus `{ workspace = true }`, including common dotted TOML forms. Impact recommendations use `cargo test -p <name>` only for unique workspace member packages; excluded fixtures, non-workspace nested packages, and duplicate package names use `cargo test --manifest-path <path>` instead. Pyproject packages use `python -m pytest` (scoped to the package root when nested), and Python impact resolves local `import`/`from ... import ...` edges from the nearest nested pyproject root (including its `src/` layout) plus `test_*.py`/`*_test.py` naming. Mixed Cargo/Python workspaces choose checks by the changed file's package type. `map plan --check` treats package-level checks as broad-change anchors only when the package has an indexed test target.
 
 Optional strict quality policy lives at `.RaymanCodingSkill/quality.json` (the one file under `.RaymanCodingSkill/` that is **not** gitignored, so the policy can be committed and shared):
 

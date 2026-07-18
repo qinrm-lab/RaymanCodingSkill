@@ -834,6 +834,22 @@ mod tests {
         fs::write(path, text).unwrap();
     }
 
+    struct AbsentScheduler;
+
+    impl TaskScheduler for AbsentScheduler {
+        fn register(&self, _root: &Path, _name: &str, _interval_min: u64) -> Result<()> {
+            Ok(())
+        }
+
+        fn unregister(&self, _name: &str) -> Result<bool> {
+            Ok(false)
+        }
+
+        fn registration(&self, _name: &str) -> Result<TaskRegistration> {
+            Ok(TaskRegistration::Absent)
+        }
+    }
+
     fn record_non_code_success(goals: &GoalStore, root: &Path, goal: &crate::goal::Goal) {
         let command = "echo validation-ok";
         let fingerprint = crate::goal::workspace_fingerprint(root).unwrap();
@@ -949,7 +965,7 @@ mod tests {
         assert!(load_state(root).unwrap().unwrap().active);
 
         // stop 会存最后一次快照并标记 inactive（unregister 在非注册状态下是 no-op）。
-        let outcome = stop(root, "success").unwrap();
+        let outcome = stop_with_scheduler(root, "success", &AbsentScheduler).unwrap();
         let after = outcome.state.unwrap();
         assert!(!after.active);
         assert_eq!(after.stop_status.as_deref(), Some("success"));

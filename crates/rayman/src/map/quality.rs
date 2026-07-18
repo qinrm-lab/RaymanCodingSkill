@@ -312,22 +312,27 @@ pub fn quality_report_with_config(map: &ProjectMap, config: &QualityConfig) -> Q
         })
         .collect();
 
-    // Test-file classification and symbol extraction are Cargo/Rust-shaped heuristics;
-    // without a Cargo package they cannot support a hard missing-test conclusion.
-    let is_cargo_project = !map.packages.is_empty();
+    // Cargo and pyproject packages have language-aware test anchors. Other ecosystems remain
+    // advisory until their dependency and test conventions are modeled explicitly.
+    let has_supported_package = !map.packages.is_empty();
     if map.source_files >= config.multi_source_no_test_min_sources && map.test_files == 0 {
         findings.push(QualityFinding {
-            severity: if is_cargo_project { "error" } else { "warning" }.into(),
+            severity: if has_supported_package {
+                "error"
+            } else {
+                "warning"
+            }
+            .into(),
             kind: "multi_source_project_without_tests".into(),
             path: ".".into(),
-            detail: if is_cargo_project {
+            detail: if has_supported_package {
                 format!(
                     "{} source files but no indexed test files; large-project edits have no local validation anchor",
                     map.source_files
                 )
             } else {
                 format!(
-                    "{} source files but no indexed test files; no Cargo workspace detected, so this heuristic is advisory only — verify test coverage manually",
+                    "{} source files but no indexed test files; no Cargo or pyproject package detected, so this heuristic is advisory only — verify test coverage manually",
                     map.source_files
                 )
             },

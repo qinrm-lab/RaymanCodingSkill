@@ -12,6 +12,7 @@ pub mod map;
 pub mod state_paths;
 pub mod temp;
 pub mod walk;
+pub mod workspace;
 
 mod file_io;
 mod pathfmt;

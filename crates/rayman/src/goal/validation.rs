@@ -129,12 +129,103 @@ fn cargo_test_invocation(command: &ParsedValidationCommand) -> bool {
     matches!(cargo_subcommand(command), Some(("test", _)))
         || matches!(cargo_subcommand(command), Some(("nextest", Some("run"))))
 }
+fn pytest_invocation(command: &ParsedValidationCommand) -> bool {
+    let executable = executable_name(command);
+    if matches!(executable.as_str(), "pytest" | "py.test") {
+        return true;
+    }
+    if executable == "py" || executable.starts_with("python") {
+        return command
+            .args
+            .windows(2)
+            .any(|window| window[0] == "-m" && window[1] == "pytest");
+    }
+    false
+}
 
+fn test_invocation(command: &ParsedValidationCommand) -> bool {
+    cargo_test_invocation(command) || pytest_invocation(command)
+}
+
+fn pytest_arguments(command: &ParsedValidationCommand) -> &[String] {
+    let executable = executable_name(command);
+    if (executable == "py" || executable.starts_with("python"))
+        && let Some(index) = command
+            .args
+            .windows(2)
+            .position(|window| window[0] == "-m" && window[1] == "pytest")
+    {
+        return &command.args[index + 2..];
+    }
+    &command.args
+}
+
+fn pytest_option_takes_value(argument: &str) -> bool {
+    matches!(
+        argument,
+        "-k"
+            | "-m"
+            | "-o"
+            | "--override-ini"
+            | "--rootdir"
+            | "--confcutdir"
+            | "--basetemp"
+            | "--junitxml"
+            | "--junit-xml"
+            | "--junit-prefix"
+            | "--ignore"
+            | "--ignore-glob"
+            | "--deselect"
+            | "--tb"
+            | "--capture"
+            | "--color"
+            | "--code-highlight"
+            | "--durations"
+            | "--durations-min"
+            | "--verbosity"
+            | "--maxfail"
+            | "--log-file"
+            | "--log-file-level"
+            | "--log-file-format"
+            | "--log-file-date-format"
+    )
+}
+
+fn pytest_path_arguments(command: &ParsedValidationCommand) -> Vec<&str> {
+    if !pytest_invocation(command) {
+        return Vec::new();
+    }
+    let mut selectors = Vec::new();
+    let mut positional_only = false;
+    let mut skip_value = false;
+    for argument in pytest_arguments(command) {
+        if skip_value {
+            skip_value = false;
+            continue;
+        }
+        if !positional_only && argument == "--" {
+            positional_only = true;
+            continue;
+        }
+        if !positional_only && argument.starts_with('-') {
+            if !argument.contains('=') && pytest_option_takes_value(argument) {
+                skip_value = true;
+            }
+            continue;
+        }
+        selectors.push(argument.as_str());
+    }
+    selectors
+}
+
+fn pytest_selector_path(argument: &str) -> &str {
+    argument.split("::").next().unwrap_or(argument)
+}
 fn validate_test_execution_mode(command: &ParsedValidationCommand) -> Result<()> {
-    if !cargo_test_invocation(command) {
+    if !test_invocation(command) {
         return Ok(());
     }
-    const NON_EXECUTING: &[&str] = &["--no-run", "--list", "--help", "-h", "--version", "-V"];
+    const NON_EXECUTING: &[&str] = &["--no-run", "--list", "--collect-only", "--help", "-h", "--version", "-V"];
     if let Some(flag) = command
         .args
         .iter()
@@ -193,21 +284,66 @@ pub fn validation_list_command(
     command: &ParsedValidationCommand,
 ) -> Result<Option<ParsedValidationCommand>> {
     validate_test_execution_mode(command)?;
-    if !matches!(cargo_subcommand(command), Some(("test", _))) {
+    let mut args = command.args.clone();
+    if matches!(cargo_subcommand(command), Some(("test", _))) {
+        if let Some(separator) = args.iter().position(|argument| argument == "--") {
+            args.truncate(separator);
+        }
+        args.extend(["--".into(), "--list".into()]);
+    } else if pytest_invocation(command) {
+        args.push("--collect-only".into());
+        if !args.iter().any(|argument| argument == "-q" || argument == "--quiet") {
+            args.push("-q".into());
+        }
+    } else {
         return Ok(None);
     }
-    let mut args = command.args.clone();
-    if let Some(separator) = args.iter().position(|argument| argument == "--") {
-        args.truncate(separator);
-    }
-    args.extend(["--".into(), "--list".into()]);
     Ok(Some(ParsedValidationCommand {
         program: command.program.clone(),
         args,
     }))
 }
 
-pub fn listed_test_count(stdout: &[u8], stderr: &[u8]) -> Result<u64> {
+fn pytest_collected_count(text: &str) -> Option<u64> {
+    for line in text.lines().rev() {
+        let tokens = line
+            .split(|character: char| !character.is_ascii_alphanumeric())
+            .filter(|token| !token.is_empty())
+            .collect::<Vec<_>>();
+        if let Some(index) = tokens.iter().position(|token| *token == "collected")
+            && let Some(count) = tokens[..index]
+                .iter()
+                .rev()
+                .find_map(|token| token.parse::<u64>().ok())
+        {
+            return Some(count);
+        }
+    }
+    None
+}
+
+pub fn listed_test_count(
+    command: &ParsedValidationCommand,
+    stdout: &[u8],
+    stderr: &[u8],
+) -> Result<u64> {
+    if pytest_invocation(command) {
+        if pytest_collected_count(&String::from_utf8_lossy(stderr)).is_some() {
+            bail!("pytest collect proof 出现在 stderr，来源不可区分");
+        }
+        let stdout = String::from_utf8_lossy(stdout);
+        let count = pytest_collected_count(&stdout).unwrap_or_else(|| {
+            stdout
+                .lines()
+                .filter(|line| line.contains("::") && !line.trim_start().starts_with('='))
+                .count() as u64
+        });
+        if count == 0 {
+            bail!("pytest collect proof 没有收集任何测试；不会写入 receipt");
+        }
+        return Ok(count);
+    }
+
     if !stderr.is_empty() {
         let stderr = String::from_utf8_lossy(stderr);
         if stderr
@@ -242,6 +378,35 @@ fn summary_field(line: &str, label: &str) -> Option<u64> {
         .ok()
 }
 
+fn pytest_summary_counts(text: &str) -> Option<(u64, u64)> {
+    for line in text.lines().rev() {
+        let tokens = line
+            .split(|character: char| !character.is_ascii_alphanumeric())
+            .filter(|token| !token.is_empty())
+            .collect::<Vec<_>>();
+        if !tokens.contains(&"in") {
+            continue;
+        }
+        let mut passed = 0u64;
+        let mut ignored = 0u64;
+        for window in tokens.windows(2) {
+            let Ok(count) = window[0].parse::<u64>() else {
+                continue;
+            };
+            match window[1] {
+                "passed" => passed = passed.saturating_add(count),
+                "skipped" | "xfailed" | "xpassed" => {
+                    ignored = ignored.saturating_add(count);
+                }
+                _ => {}
+            }
+        }
+        if passed > 0 || ignored > 0 {
+            return Some((passed, ignored));
+        }
+    }
+    None
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TestExecutionProof {
     pub listed: u64,
@@ -256,10 +421,35 @@ pub fn validation_execution_proof(
     listed_tests: Option<u64>,
 ) -> Result<Option<TestExecutionProof>> {
     validate_test_execution_mode(command)?;
-    if !cargo_test_invocation(command) {
+    if !test_invocation(command) {
         return Ok(None);
     }
-    let listed = listed_tests.ok_or_else(|| anyhow::anyhow!("cargo test 缺少独立 list proof"))?;
+    let listed =
+        listed_tests.ok_or_else(|| anyhow::anyhow!("test command 缺少独立 list/collect proof"))?;
+
+    if pytest_invocation(command) {
+        let stdout = String::from_utf8_lossy(stdout);
+        let stderr = String::from_utf8_lossy(stderr);
+        if pytest_summary_counts(&stderr).is_some() {
+            bail!("pytest summary 出现在 stderr，来源不可区分");
+        }
+        let (passed, ignored) = pytest_summary_counts(&stdout)
+            .ok_or_else(|| anyhow::anyhow!("pytest 成功退出但缺少可验证的终端汇总"))?;
+        if passed == 0 {
+            bail!("pytest 成功退出但没有可验证的 passed>0 汇总；不会写入 receipt");
+        }
+        if passed.saturating_add(ignored) != listed {
+            bail!(
+                "pytest summary 与独立 collect proof 不一致：listed={listed} passed={passed} ignored={ignored}"
+            );
+        }
+        return Ok(Some(TestExecutionProof {
+            listed,
+            passed,
+            ignored,
+        }));
+    }
+
     let mut passed = 0u64;
     let mut ignored = 0u64;
     for line in String::from_utf8_lossy(stdout).lines() {
@@ -484,13 +674,14 @@ fn validation_has_receipt_for_fingerprint(
                 validation.non_code,
             )
         && validation_scope_is_well_formed(validation)
-        && (!cargo_test_invocation(&parsed) || test_receipt_has_structured_proof(receipt))
+        && (!test_invocation(&parsed) || test_receipt_has_structured_proof(receipt))
 }
 
 #[derive(Debug, Clone, Copy)]
 enum ValidationExpectation {
     RustBuildOrTest,
     CargoManifestValidation,
+    PythonTest,
 }
 
 fn validation_expectation_for_path(path: &str) -> Option<ValidationExpectation> {
@@ -500,6 +691,9 @@ fn validation_expectation_for_path(path: &str) -> Option<ValidationExpectation> 
     }
     if path.ends_with("cargo.toml") || path.ends_with("cargo.lock") {
         return Some(ValidationExpectation::CargoManifestValidation);
+    }
+    if path.ends_with(".py") || path.ends_with("pyproject.toml") {
+        return Some(ValidationExpectation::PythonTest);
     }
     None
 }
@@ -511,6 +705,9 @@ fn validation_expectation_label(expectation: ValidationExpectation) -> &'static 
         }
         ValidationExpectation::CargoManifestValidation => {
             "Cargo manifest validation such as `cargo test`, `cargo clippy`, `cargo check`, `cargo build`, `cargo deny check`, or `cargo audit`"
+        }
+        ValidationExpectation::PythonTest => {
+            "Python test validation via direct `python -m pytest` or `pytest`"
         }
     }
 }
@@ -535,6 +732,9 @@ fn validation_matches_expectation(
     command: &ParsedValidationCommand,
     expectation: ValidationExpectation,
 ) -> bool {
+    if pytest_invocation(command) {
+        return matches!(expectation, ValidationExpectation::PythonTest);
+    }
     if powershell_script(command).is_some_and(|script| {
         Path::new(script)
             .file_name()
@@ -571,6 +771,7 @@ fn validation_matches_expectation(
                 || subcommand == "audit"
                 || (subcommand == "deny" && next == Some("check"))
         }
+        ValidationExpectation::PythonTest => false,
     }
 }
 
@@ -600,6 +801,34 @@ fn path_argument_matches(root: &Path, argument: &str, expected: &str) -> bool {
     }
 }
 
+fn pytest_selector_covers(root: &Path, selector: &str, expected: &str) -> bool {
+    let selector = pytest_selector_path(selector);
+    let selector_path = if Path::new(selector).is_absolute() {
+        PathBuf::from(selector)
+    } else {
+        root.join(selector)
+    };
+    let expected_path = if Path::new(expected).is_absolute() {
+        PathBuf::from(expected)
+    } else {
+        root.join(expected)
+    };
+    if let (Ok(selector), Ok(expected)) =
+        (selector_path.canonicalize(), expected_path.canonicalize())
+    {
+        return if selector.is_dir() {
+            expected.starts_with(selector)
+        } else {
+            selector == expected
+        };
+    }
+    let selector = normalized_path_text(selector).trim_end_matches('/').to_string();
+    let expected = normalized_path_text(expected);
+    expected == selector
+        || expected
+            .strip_prefix(&selector)
+            .is_some_and(|rest| rest.starts_with('/'))
+}
 fn cargo_option_values<'a>(
     command: &'a ParsedValidationCommand,
     long: &str,
@@ -626,7 +855,7 @@ fn cargo_option_values<'a>(
     values
 }
 
-fn command_is_workspace_wide(command: &ParsedValidationCommand) -> bool {
+fn command_is_workspace_wide(_root: &Path, command: &ParsedValidationCommand) -> bool {
     powershell_script(command).is_some_and(|script| {
         Path::new(script)
             .file_name()
@@ -642,6 +871,7 @@ fn command_is_workspace_wide(command: &ParsedValidationCommand) -> bool {
             .args
             .iter()
             .any(|argument| matches!(argument.as_str(), "--workspace" | "--all")))
+        || (pytest_invocation(command) && pytest_path_arguments(command).is_empty())
 }
 
 fn validation_matches_impact(
@@ -655,7 +885,7 @@ fn validation_matches_impact(
     if !validation_matches_expectation(command, expectation) {
         return false;
     }
-    if command_is_workspace_wide(command) {
+    if command_is_workspace_wide(root, command) {
         return true;
     }
     if executable_name(command) == "rustc" {
@@ -664,6 +894,16 @@ fn validation_matches_impact(
                 argument.to_ascii_lowercase().ends_with(".rs")
                     && path_argument_matches(root, argument, &impact.changed_path)
             });
+    }
+    if pytest_invocation(command) {
+        let paths = pytest_path_arguments(command);
+        return paths.iter().any(|argument| {
+            pytest_selector_covers(root, argument, &impact.changed_path)
+                || impact
+                    .candidate_tests
+                    .iter()
+                    .any(|test| pytest_selector_covers(root, argument, test))
+        });
     }
     if cargo_subcommand(command).is_some() {
         if impact.package.as_deref().is_some_and(|package| {
@@ -704,7 +944,8 @@ fn validation_command_is_code(command: &ParsedValidationCommand) -> bool {
                 .args
                 .iter()
                 .any(|argument| argument.to_ascii_lowercase().ends_with(".rs"))
-        || command_is_workspace_wide(command)
+        || powershell_script(command).is_some()
+        || pytest_invocation(command)
 }
 
 fn validate_scope_declaration(
@@ -855,6 +1096,9 @@ fn goal_success_receipt_gaps_for_fingerprint(
             fingerprint,
             enforce_current_security,
         ));
+    }
+    if enforce_current_security {
+        gaps.extend(goal_planning_gaps(goal, root, fingerprint));
     }
     gaps
 }

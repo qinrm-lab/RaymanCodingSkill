@@ -27,7 +27,13 @@ fn lifecycle_hash_optional_u64(hasher: &mut Sha256, value: Option<u64>) {
 /// version bump and an explicit proof refresh.
 fn lifecycle_contract_sha256(goal: &Goal) -> String {
     let mut hasher = Sha256::new();
-    lifecycle_hash_str(&mut hasher, "rayman.lifecycle-contract.v1");
+    let extended = goal.baseline.is_some()
+        || !goal.plan_receipts.is_empty()
+        || !goal.review_receipts.is_empty();
+    lifecycle_hash_str(
+        &mut hasher,
+        if extended { "rayman.lifecycle-contract.v2" } else { "rayman.lifecycle-contract.v1" },
+    );
     hasher.update(goal.schema_version.to_le_bytes());
     lifecycle_hash_str(&mut hasher, &goal.id);
     lifecycle_hash_str(&mut hasher, &goal.title);
@@ -37,6 +43,41 @@ fn lifecycle_contract_sha256(goal: &Goal) -> String {
     lifecycle_hash_optional_str(&mut hasher, goal.superseded_by.as_deref());
     lifecycle_hash_str(&mut hasher, &goal.created_at);
     lifecycle_hash_str(&mut hasher, &goal.updated_at);
+    if extended {
+        if let Some(baseline) = goal.baseline.as_ref() {
+            lifecycle_hash_str(&mut hasher, &baseline.recorded_at);
+            lifecycle_hash_str(&mut hasher, &baseline.workspace_fingerprint);
+            hasher.update((baseline.files.len() as u64).to_le_bytes());
+            for (path, hash) in &baseline.files {
+                lifecycle_hash_str(&mut hasher, path);
+                lifecycle_hash_str(&mut hasher, hash);
+            }
+        }
+        hasher.update((goal.plan_receipts.len() as u64).to_le_bytes());
+        for receipt in &goal.plan_receipts {
+            lifecycle_hash_str(&mut hasher, &receipt.recorded_at);
+            lifecycle_hash_str(&mut hasher, &receipt.baseline_fingerprint);
+            lifecycle_hash_str(&mut hasher, &receipt.review_priority);
+            for values in [
+                &receipt.changed_paths,
+                &receipt.impacted_paths,
+                &receipt.recommended_checks,
+            ] {
+                hasher.update((values.len() as u64).to_le_bytes());
+                for value in values {
+                    lifecycle_hash_str(&mut hasher, value);
+                }
+            }
+            lifecycle_hash_str(&mut hasher, &receipt.plan_sha256);
+        }
+        hasher.update((goal.review_receipts.len() as u64).to_le_bytes());
+        for receipt in &goal.review_receipts {
+            lifecycle_hash_str(&mut hasher, &receipt.recorded_at);
+            lifecycle_hash_str(&mut hasher, &receipt.source_fingerprint);
+            lifecycle_hash_str(&mut hasher, &receipt.reviewer);
+            lifecycle_hash_str(&mut hasher, &receipt.summary);
+        }
+    }
     hasher.update((goal.requirements.len() as u64).to_le_bytes());
     for requirement in &goal.requirements {
         lifecycle_hash_str(&mut hasher, &requirement.id);
@@ -144,20 +185,175 @@ fn pre_receipt_migration_eligible(goal: &Goal) -> bool {
     created_at < rollout
 }
 
-pub fn workspace_fingerprint(root: &Path) -> Result<String> {
+fn historical_success_fingerprint(goal: &Goal, root: &Path) -> Option<String> {
+    let candidates = goal
+        .requirements
+        .iter()
+        .flat_map(|requirement| requirement.validations.iter())
+        .filter_map(|validation| validation.receipt.as_ref())
+        .filter(|receipt| {
+            receipt.workspace_fingerprint_before == receipt.workspace_fingerprint_after
+                && is_sha256(&receipt.workspace_fingerprint_after)
+        })
+        .map(|receipt| receipt.workspace_fingerprint_after.clone())
+        .collect::<BTreeSet<_>>();
+    candidates.into_iter().find(|fingerprint| {
+        goal_success_receipt_gaps_for_fingerprint(goal, root, fingerprint, false).is_empty()
+    })
+}
+
+fn fingerprint_for_files(files: &BTreeMap<String, String>) -> String {
     let mut hasher = Sha256::new();
+    for (relative, hash) in files {
+        hasher.update(relative.as_bytes());
+        hasher.update([0]);
+        hasher.update(hash.as_bytes());
+        hasher.update([0]);
+    }
+    format!("{:x}", hasher.finalize())
+}
+
+pub fn workspace_baseline(root: &Path) -> Result<WorkspaceBaseline> {
+    let mut files = BTreeMap::new();
     for path in crate::walk::workspace_files_checked(root)? {
         let relative = path
             .strip_prefix(root)
             .unwrap_or(&path)
             .to_string_lossy()
             .replace('\\', "/");
-        hasher.update(relative.as_bytes());
-        hasher.update([0]);
-        hasher.update(crate::hash::sha256_file(&path)?.as_bytes());
-        hasher.update([0]);
+        files.insert(relative, crate::hash::sha256_file(&path)?);
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(WorkspaceBaseline {
+        recorded_at: now_iso(),
+        workspace_fingerprint: fingerprint_for_files(&files),
+        files,
+    })
+}
+
+pub fn workspace_fingerprint(root: &Path) -> Result<String> {
+    Ok(workspace_baseline(root)?.workspace_fingerprint)
+}
+
+pub fn workspace_delta(
+    baseline: &WorkspaceBaseline,
+    current: &WorkspaceBaseline,
+) -> Vec<String> {
+    let mut paths = baseline
+        .files
+        .keys()
+        .chain(current.files.keys())
+        .filter(|path| baseline.files.get(*path) != current.files.get(*path))
+        .cloned()
+        .collect::<Vec<_>>();
+    paths.sort();
+    paths.dedup();
+    paths
+}
+
+pub fn goal_planning_gaps(
+    goal: &Goal,
+    root: &Path,
+    current_fingerprint: &str,
+) -> Vec<String> {
+    let Some(baseline) = goal.baseline.as_ref() else {
+        return if goal.is_current_schema() && goal.lifecycle == GoalLifecycle::Current {
+            vec![
+                "current goal 缺少开工 baseline；不能作为当前成功证据，请用新的 baseline-bound goal supersede，或将已完成记录显式 archive"
+                    .into(),
+            ]
+        } else {
+            Vec::new()
+        };
+    };
+    let mut gaps = Vec::new();
+    if fingerprint_for_files(&baseline.files) != baseline.workspace_fingerprint {
+        gaps.push("goal baseline 文件清单与 fingerprint 不匹配".into());
+        return gaps;
+    }
+    let current = match workspace_baseline(root) {
+        Ok(current) => current,
+        Err(error) => {
+            gaps.push(format!("无法计算 goal 实际变更集: {error}"));
+            return gaps;
+        }
+    };
+    if current.workspace_fingerprint != current_fingerprint {
+        gaps.push("goal 规划检查与调用方当前 fingerprint 不一致".into());
+        return gaps;
+    }
+    let actual = workspace_delta(baseline, &current);
+    let valid_plans = goal
+        .plan_receipts
+        .iter()
+        .filter(|receipt| {
+            receipt.baseline_fingerprint == baseline.workspace_fingerprint
+                && receipt.plan_sha256 == plan_receipt_sha256(receipt)
+        })
+        .collect::<Vec<_>>();
+    if actual.len() >= 2 && valid_plans.is_empty() {
+        gaps.push(format!(
+            "实际变更 {} 个文件但缺少首次修改前的 goal plan receipt",
+            actual.len()
+        ));
+    }
+    let planned = valid_plans
+        .iter()
+        .flat_map(|receipt| receipt.changed_paths.iter().cloned())
+        .collect::<BTreeSet<_>>();
+    let unplanned = actual
+        .iter()
+        .filter(|path| !planned.contains(*path))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !valid_plans.is_empty() && !unplanned.is_empty() {
+        gaps.push(format!("实际变更超出 plan: {}", unplanned.join(", ")));
+    }
+
+    let mut validated = BTreeSet::new();
+    for requirement in &goal.requirements {
+        let Ok(contract_sha256) = validation_contract_sha256(goal, &requirement.id) else {
+            continue;
+        };
+        for validation in &requirement.validations {
+            if validation_has_receipt_for_fingerprint(
+                validation,
+                root,
+                current_fingerprint,
+                &contract_sha256,
+                true,
+            ) {
+                validated.extend(
+                    validation
+                        .impact_scopes
+                        .iter()
+                        .map(|scope| scope.changed_path.replace('\\', "/")),
+                );
+            }
+        }
+    }
+    let undeclared = actual
+        .iter()
+        .filter(|path| !validated.contains(*path))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !undeclared.is_empty() {
+        gaps.push(format!(
+            "实际变更未被当前 validation receipt 声明: {}",
+            undeclared.join(", ")
+        ));
+    }
+
+    if valid_plans
+        .iter()
+        .any(|receipt| receipt.review_priority == "high")
+        && !goal
+            .review_receipts
+            .iter()
+            .any(|receipt| receipt.source_fingerprint == current_fingerprint)
+    {
+        gaps.push("high-priority plan 缺少绑定最终源码 fingerprint 的 review receipt".into());
+    }
+    gaps
 }
 
 impl Goal {
@@ -261,6 +457,41 @@ impl Goal {
         }
         if must_count == 0 {
             return Some("goal 至少需要一个 must 需求".into());
+        }
+        if let Some(baseline) = self.baseline.as_ref() {
+            if !is_sha256(&baseline.workspace_fingerprint)
+                || fingerprint_for_files(&baseline.files) != baseline.workspace_fingerprint
+            {
+                return Some("goal baseline fingerprint 与文件清单不匹配".into());
+            }
+            if self.plan_receipts.len() > 1 {
+                return Some("goal 只能携带一个不可拆分的聚合 plan receipt".into());
+            }
+            for receipt in &self.plan_receipts {
+                let mut changed = receipt.changed_paths.clone();
+                let mut impacted = receipt.impacted_paths.clone();
+                normalize_path_list(&mut changed);
+                normalize_path_list(&mut impacted);
+                if changed.is_empty()
+                    || changed != receipt.changed_paths
+                    || impacted != receipt.impacted_paths
+                    || receipt.baseline_fingerprint != baseline.workspace_fingerprint
+                    || !matches!(receipt.review_priority.as_str(), "normal" | "broad" | "high")
+                    || receipt.plan_sha256 != plan_receipt_sha256(receipt)
+                {
+                    return Some("goal plan receipt 无效、未规范化或未绑定 baseline".into());
+                }
+            }
+            for receipt in &self.review_receipts {
+                if !is_sha256(&receipt.source_fingerprint)
+                    || receipt.reviewer.trim().is_empty()
+                    || receipt.summary.trim().is_empty()
+                {
+                    return Some("goal review receipt 无效".into());
+                }
+            }
+        } else if !self.plan_receipts.is_empty() || !self.review_receipts.is_empty() {
+            return Some("缺少 baseline 的 goal 不能携带 plan/review receipt".into());
         }
         None
     }

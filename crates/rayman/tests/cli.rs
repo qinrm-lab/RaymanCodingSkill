@@ -16,7 +16,7 @@ struct Output {
 }
 
 /// 在 `dir` 下运行 `rayman <args...>`，返回退出码与输出。
-fn run(dir: &Path, args: &[&str]) -> Output {
+fn run_raw(dir: &Path, args: &[&str]) -> Output {
     let output = Command::new(BIN)
         .args(args)
         .current_dir(dir)
@@ -31,6 +31,38 @@ fn run(dir: &Path, args: &[&str]) -> Output {
 
 /// Run with a deterministic PATH prefix.  Doctor uses this to prove the same
 /// command-resolution path an interactive caller would observe.
+fn run(dir: &Path, args: &[&str]) -> Output {
+    let activation_exempt = matches!(
+        args.first().copied(),
+        Some("workspace" | "doctor" | "assets" | "state")
+    );
+    if !activation_exempt {
+        let status = run_raw(dir, &["--format", "json", "workspace", "status"]);
+        let active = serde_json::from_str::<Value>(&status.stdout)
+            .ok()
+            .and_then(|value| value["active"].as_bool())
+            .unwrap_or(false);
+        if !active {
+            let skill = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../..")
+                .join("SKILL.md")
+                .canonicalize()
+                .unwrap();
+            let skill = skill.to_str().unwrap();
+            let activated = run_raw(
+                dir,
+                &["workspace", "activate", "--skill-file", skill, "--yes"],
+            );
+            assert_eq!(
+                activated.status, 0,
+                "fixture activation failed: {}",
+                activated.stderr
+            );
+        }
+    }
+    run_raw(dir, args)
+}
+
 fn run_with_path(
     dir: &Path,
     args: &[&str],
@@ -643,7 +675,9 @@ fn doctor_verifies_installed_identity_in_an_ordinary_managed_workspace() {
     write(
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
-        &format!("skill_sha256: {skill_hash}\n"),
+        &format!(
+            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\n"
+        ),
     );
     let binary = std::fs::canonicalize(BIN).unwrap();
     let binary_dir = binary.parent().unwrap();
@@ -676,7 +710,9 @@ fn doctor_rejects_an_earlier_windows_path_wrapper() {
     write(
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
-        &format!("skill_sha256: {skill_hash}\n"),
+        &format!(
+            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\n"
+        ),
     );
     let wrapper_dir = tempfile::tempdir().unwrap();
     write(wrapper_dir.path(), "rayman.cmd", "@echo wrong wrapper\r\n");
@@ -1518,10 +1554,10 @@ fn map_plan_check_blocks_broad_source_change_without_test_anchor() {
 }
 
 #[test]
-fn map_plan_check_passes_broad_non_rust_change_without_cargo_workspace() {
+fn map_plan_check_passes_broad_change_without_supported_package() {
     // Real-world basis: dogfooding rayman against a 792-file, 60k-line C# repo showed
     // this heuristic hard-blocking a well-tested change because it only understands
-    // Cargo/Rust project shapes. Outside a detected Cargo workspace it must be advisory.
+    // modeled package shapes. Outside Cargo/pyproject packages it must be advisory.
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     write(root, "src/A.cs", "public class A {}\n");
@@ -1535,7 +1571,8 @@ fn map_plan_check_passes_broad_non_rust_change_without_cargo_workspace() {
     );
     assert_eq!(plan.status, 0, "stdout={}", plan.stdout);
     assert!(
-        plan.stdout.contains("no Cargo workspace detected"),
+        plan.stdout
+            .contains("no Cargo or pyproject package detected"),
         "stdout={}",
         plan.stdout
     );
@@ -2562,4 +2599,107 @@ fn workspace_root_is_discovered_from_a_subdirectory() {
         !sub.join(".RaymanCodingSkill").exists(),
         "从子目录运行不应在子目录另建 .RaymanCodingSkill（会分裂状态）"
     );
+}
+
+#[test]
+fn workspace_activation_is_explicit_and_orphan_state_fails_closed() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join(".RaymanCodingSkill/goals")).unwrap();
+
+    let status = run_raw(root, &["--format", "json", "workspace", "status"]);
+    assert_eq!(status.status, 0);
+    let status: Value = serde_json::from_str(&status.stdout).unwrap();
+    assert_eq!(status["status"], "orphan_state");
+    assert_eq!(status["active"], false);
+    let blocked = run_raw(root, &["context", "refresh"]);
+    assert_ne!(blocked.status, 0);
+    assert!(!root.join(".RaymanCodingSkill/context/index.json").exists());
+
+    let skill = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("SKILL.md")
+        .canonicalize()
+        .unwrap();
+    let activated = run_raw(
+        root,
+        &[
+            "workspace",
+            "activate",
+            "--skill-file",
+            skill.to_str().unwrap(),
+            "--yes",
+        ],
+    );
+    assert_eq!(activated.status, 0, "{}", activated.stderr);
+    assert_eq!(run_raw(root, &["context", "refresh"]).status, 0);
+}
+
+#[test]
+fn goal_plan_and_review_receipts_close_a_real_two_file_delta() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "a.txt", "a0");
+    write(root, "b.txt", "b0");
+    run_json(root, &["context", "refresh"]);
+    let started = run_json(
+        root,
+        &["goal", "start", "planned", "--must", "ship planned delta"],
+    );
+    let id = started["id"].as_str().unwrap();
+    let planned = run_json(root, &["goal", "plan", id, "a.txt", "b.txt", "--check"]);
+    assert_eq!(planned["plan_receipts"][0]["changed_paths"][0], "a.txt");
+
+    write(root, "a.txt", "a1");
+    write(root, "b.txt", "b1");
+    run_json(root, &["context", "refresh"]);
+    let reviewed = run_json(
+        root,
+        &[
+            "goal",
+            "review",
+            id,
+            "--reviewer",
+            "integration-review",
+            "-m",
+            "reviewed final source snapshot",
+        ],
+    );
+    assert!(reviewed["review_receipts"][0]["source_fingerprint"].is_string());
+    validate_goal(
+        root,
+        id,
+        "req_1",
+        "validated exact planned delta",
+        &["a.txt", "b.txt"],
+    );
+    let closed = run_json(root, &["goal", "close", id]);
+    assert_eq!(closed["status"], "success");
+}
+#[test]
+fn workspace_activation_contract_rejects_duplicate_and_unknown_fields() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir_all(root.join(".RaymanCodingSkill")).unwrap();
+    std::fs::write(
+        root.join(".RaymanCodingSkill/workspace_skill.yaml"),
+        "skill: raymancodingskill\nenabled: true\nenabled: true\nskill_file: SKILL.md\nskill_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+    )
+    .unwrap();
+    let duplicate = run_raw(root, &["workspace", "status"]);
+    assert_ne!(duplicate.status, 0);
+    assert!(
+        duplicate.stderr.contains("重复字段"),
+        "{}",
+        duplicate.stderr
+    );
+
+    std::fs::write(
+        root.join(".RaymanCodingSkill/workspace_skill.yaml"),
+        "skill: raymancodingskill\nenabled: true\nauto_use: true\nskill_file: SKILL.md\nskill_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+    )
+    .unwrap();
+    let unknown = run_raw(root, &["workspace", "status"]);
+    assert_ne!(unknown.status, 0);
+    assert!(unknown.stderr.contains("未知字段"), "{}", unknown.stderr);
 }

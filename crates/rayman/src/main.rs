@@ -12,8 +12,9 @@ use cli::{
     AutosaveAction, AutosaveCmd, CheckCmd, CheckProfile, CheckpointAction, CheckpointCmd, Cli,
     Command, ContextAction, ContextCmd, DoctorCmd, Format, GoalAction, GoalCmd, MapAction, MapCmd,
     PendingAction, PendingCmd, QualityProfile, StateAction, StateCmd, TempAction, TempCmd,
+    WorkspaceAction, WorkspaceCmd,
 };
-use rayman::{assets, autosave, checkpoint, context, goal, map, temp, workspace_root};
+use rayman::{assets, autosave, checkpoint, context, goal, map, temp, workspace, workspace_root};
 
 fn main() {
     let cli = Cli::parse();
@@ -34,8 +35,16 @@ fn main() {
 fn run(cli: Cli) -> Result<()> {
     let json = matches!(cli.format, Format::Json);
     let root = workspace_root()?;
+    if !matches!(
+        &cli.command,
+        Command::Workspace(_) | Command::Assets | Command::State(_) | Command::Doctor(_)
+    ) {
+        workspace::require_active(&root)?;
+    }
 
     match cli.command {
+        Command::Workspace(cmd) => run_workspace(&root, json, cmd)?,
+
         Command::Context(ContextCmd { action }) => match action {
             ContextAction::Status => {
                 let report = context::freshness(&root);
@@ -146,6 +155,36 @@ fn run(cli: Cli) -> Result<()> {
         Command::Autosave(cmd) => return run_autosave(&root, json, cmd),
 
         Command::Doctor(cmd) => return run_doctor(&root, json, cmd),
+    }
+    Ok(())
+}
+
+fn run_workspace(root: &Path, json: bool, cmd: WorkspaceCmd) -> Result<()> {
+    let report = match cmd.action {
+        WorkspaceAction::Status => workspace::activation_status(root)?,
+        WorkspaceAction::Activate { skill_file, yes } => {
+            if !yes {
+                bail!("activation writes a hash-bound workspace_skill.yaml; add --yes to confirm");
+            }
+            workspace::activate(root, &skill_file.unwrap_or_else(|| root.join("SKILL.md")))?
+        }
+        WorkspaceAction::Deactivate { yes } => {
+            if !yes {
+                bail!("deactivation rewrites workspace_skill.yaml; add --yes to confirm");
+            }
+            workspace::deactivate(root)?
+        }
+    };
+    if json {
+        print(&serde_json::to_value(&report)?);
+    } else {
+        println!(
+            "RaymanCodingSkill workspace activation: {} (active={}, config_present={})",
+            report.status, report.active, report.config_present
+        );
+        for issue in &report.issues {
+            println!("  issue: {issue}");
+        }
     }
     Ok(())
 }
@@ -289,13 +328,26 @@ fn run_doctor(root: &Path, json: bool, cmd: DoctorCmd) -> Result<()> {
         .transpose()?;
     let path_matches_running = path_hash.as_deref() == Some(running_hash.as_str());
 
-    let skill_path = root.join("SKILL.md");
-    let skill_hash = rayman::hash::sha256_file(&skill_path).ok();
-    let metadata_hash = workspace_skill_hash(root)?;
-    let metadata_matches = match (&skill_hash, &metadata_hash) {
-        (Some(actual), Some(expected)) => actual.eq_ignore_ascii_case(expected),
-        _ => false,
-    };
+    let activation = workspace::activation_status(root)?;
+    let skill_path = activation
+        .skill_file
+        .as_deref()
+        .map(PathBuf::from)
+        .map(|path| {
+            if path.is_absolute() {
+                path
+            } else {
+                root.join(path)
+            }
+        })
+        .unwrap_or_else(|| root.join("SKILL.md"));
+    let skill_hash = activation.actual_sha256.clone();
+    let metadata_hash = activation.expected_sha256.clone();
+    let metadata_matches = activation.active
+        && match (&skill_hash, &metadata_hash) {
+            (Some(actual), Some(expected)) => actual.eq_ignore_ascii_case(expected),
+            _ => false,
+        };
     // This proves an installed identity tuple only. It cannot prove that a release artifact was
     // rebuilt from the checkout's current sources: that requires an isolated locked rebuild and
     // byte comparison, which the repository verifier performs on explicit handoff/CI paths.
@@ -303,8 +355,9 @@ fn run_doctor(root: &Path, json: bool, cmd: DoctorCmd) -> Result<()> {
     // Looking for `<workspace>/target/release/rayman` therefore made `doctor --check`
     // falsely unusable after a correct installation.  Source-to-artifact byte identity
     // belongs exclusively to the explicit repository verifier below.
-    let identity_ready = path_matches_running && metadata_matches;
+    let identity_ready = path_matches_running && activation.active && metadata_matches;
     let report = json!({
+        "workspace_activation": &activation,
         "contract": CLI_CONTRACT,
         "version": env!("CARGO_PKG_VERSION"),
         "running": {
@@ -346,6 +399,7 @@ fn run_doctor(root: &Path, json: bool, cmd: DoctorCmd) -> Result<()> {
         );
         println!("  当前二进制: {}", running.display());
         println!("  PATH 命令一致: {path_matches_running}");
+        println!("  workspace activation: {}", activation.status);
         println!("  仓库源码产物: 未由 doctor 检查；交接/CI 由 `{SOURCE_FRESH_VERIFIER}` 验证");
         println!("  workspace SKILL 一致: {metadata_matches}");
         println!("  已安装身份 READY: {identity_ready}");
@@ -391,25 +445,6 @@ fn find_path_rayman() -> Option<PathBuf> {
     std::env::split_paths(&path)
         .map(|dir| dir.join("rayman"))
         .find(|candidate| candidate.is_file())
-}
-
-fn workspace_skill_hash(root: &Path) -> Result<Option<String>> {
-    let path =
-        rayman::state_paths::managed_state_file(root, Path::new("workspace_skill.yaml"), false)?;
-    let content = match std::fs::read_to_string(&path) {
-        Ok(content) => content,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => {
-            return Err(error)
-                .with_context(|| format!("无法读取工作区 skill 状态: {}", path.display()));
-        }
-    };
-    Ok(content.lines().find_map(|line| {
-        line.strip_prefix("skill_sha256:")
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_string)
-    }))
 }
 
 fn run_map(root: &std::path::Path, json: bool, cmd: MapCmd) -> Result<()> {
@@ -768,6 +803,55 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 println!("目标不存在: {id}");
             }
         }
+        GoalAction::Plan { id, paths, check } => {
+            let project_map = map::build_readonly(root)?;
+            let report = map::change_plan(&project_map, &paths)?;
+            if !report.ready {
+                let mode = if check { " --check" } else { "" };
+                bail!("goal plan{mode} blocked: {}", report.blockers.join("; "));
+            }
+            let goal = store.record_plan(
+                &id,
+                goal::PlanReceiptSubmission {
+                    changed_paths: report.changed_paths,
+                    review_priority: report.review_priority,
+                    impacted_paths: report
+                        .impacted_files
+                        .iter()
+                        .map(|file| file.path.clone())
+                        .collect(),
+                    recommended_checks: report.recommended_checks,
+                },
+            )?;
+            if json {
+                print(&serde_json::to_value(&goal)?);
+            } else {
+                let receipt = goal.plan_receipts.last().expect("recorded plan");
+                println!(
+                    "goal {} plan receipt recorded: priority={} changed={} sha256={}",
+                    goal.id,
+                    receipt.review_priority,
+                    receipt.changed_paths.len(),
+                    receipt.plan_sha256
+                );
+            }
+        }
+        GoalAction::Review {
+            id,
+            reviewer,
+            message,
+        } => {
+            let goal = store.record_review(&id, &reviewer, &message)?;
+            if json {
+                print(&serde_json::to_value(&goal)?);
+            } else {
+                let receipt = goal.review_receipts.last().expect("recorded review");
+                println!(
+                    "goal {} review receipt recorded: reviewer={} source_fingerprint={}",
+                    goal.id, receipt.reviewer, receipt.source_fingerprint
+                );
+            }
+        }
         GoalAction::Evidence {
             id,
             req,
@@ -838,6 +922,7 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                     }
                     (
                         Some(goal::listed_test_count(
+                            &list_command,
                             &list_output.stdout,
                             &list_output.stderr,
                         )?),
@@ -1064,6 +1149,7 @@ fn impact_evidence_from_report(report: &map::ImpactReport) -> goal::ImpactEviden
 /// 一次性只读就绪检查：聚合上下文新鲜度、资产扫描、待完成项。
 /// 有硬阻塞（上下文缺失/陈旧、存在待完成项）时以非零码退出，便于脚本/agent 门禁。
 fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
+    let activation = workspace::activation_status(root)?;
     // `check` is a readiness claim, not a cheap UI probe: use content hashes.
     let freshness = context::strong_freshness(root);
     let asset_report = assets::scan(root)?;
@@ -1285,6 +1371,7 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
     if json {
         print(&json!({
             "ready": !blocked,
+            "activation": &activation,
             "profile": format!("{:?}", cmd.profile).to_ascii_lowercase(),
             "readiness_scope": readiness_scope,
             "release_contract": release_contract,
@@ -1307,6 +1394,7 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
             "工作区就绪检查({readiness_scope}): {}",
             if blocked { "BLOCKED" } else { "READY" }
         );
+        println!("  activation: {}", activation.status);
         println!(
             "  上下文: {}{}",
             freshness.status,
@@ -1664,12 +1752,5 @@ mod tests {
         .unwrap();
 
         assert!(run_state_audit(dir.path(), false, true).is_err());
-    }
-
-    #[test]
-    fn workspace_skill_hash_refuses_an_invalid_state_root() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join(".RaymanCodingSkill"), "not a directory").unwrap();
-        assert!(workspace_skill_hash(dir.path()).is_err());
     }
 }

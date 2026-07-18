@@ -254,11 +254,9 @@ fn change_plan_blocks_broad_source_change_without_test_anchor() {
 }
 
 #[test]
-fn change_plan_warns_instead_of_blocking_without_cargo_workspace() {
-    // Verified against a real 60k-line C# workspace: symbol extraction and test-anchor
-    // detection are Cargo/Rust-shaped and produce near-zero signal outside a Cargo project
-    // (0 symbols across 279 source files). Without a Cargo.toml anywhere in the index, the
-    // "no test anchor" finding must stay advisory, not a hard `plan --check` blocker.
+fn change_plan_warns_instead_of_blocking_without_supported_package() {
+    // Verified against a real 60k-line C# workspace: outside currently modeled package
+    // ecosystems, the "no test anchor" finding must stay advisory rather than hard-blocking.
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     write(root.join("src/a.cs").as_path(), "public class A {}\n");
@@ -281,7 +279,7 @@ fn change_plan_warns_instead_of_blocking_without_cargo_workspace() {
     assert!(
         plan.warnings
             .iter()
-            .any(|warning| { warning.contains("no Cargo workspace detected") })
+            .any(|warning| { warning.contains("no Cargo or pyproject package detected") })
     );
 }
 
@@ -341,9 +339,9 @@ fn quality_report_blocks_multi_source_project_without_tests() {
 }
 
 #[test]
-fn quality_report_downgrades_missing_tests_to_warning_without_cargo_workspace() {
-    // Same real-world basis as change_plan_warns_instead_of_blocking_without_cargo_workspace:
-    // outside a detected Cargo project the test-detection heuristic has no real signal.
+fn quality_report_downgrades_missing_tests_without_supported_package() {
+    // Same real-world basis as change_plan_warns_instead_of_blocking_without_supported_package:
+    // outside Cargo/pyproject packages the test-detection heuristic has no real signal.
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     write(root.join("src/a.cs").as_path(), "public class A {}\n");
@@ -603,4 +601,133 @@ fn quality_report_keeps_non_eval_fixture_source_risks() {
         finding.path == "crates/sample/fixture/src/lib.rs"
             && finding.kind == "public_api_without_test_evidence"
     }));
+}
+
+#[test]
+fn python_map_links_pyproject_imports_and_pytest_targets() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        root.join("pyproject.toml").as_path(),
+        "[project]\nname = \"demo-python\"\n",
+    );
+    write(
+        root.join("app/service.py").as_path(),
+        "def run():\n    return 1\n",
+    );
+    write(
+        root.join("app/api.py").as_path(),
+        "from app.service import run\ndef handler():\n    return run()\n",
+    );
+    write(
+        root.join("app/worker.py").as_path(),
+        "from app.service import run\ndef work():\n    return run()\n",
+    );
+    write(
+        root.join("tests/test_api.py").as_path(),
+        "from app.api import handler\ndef test_handler():\n    assert handler() == 1\n",
+    );
+    context::refresh(root).unwrap();
+
+    let map = build_readonly(root).unwrap();
+    assert!(map.packages.iter().any(|package| {
+        package.name == "demo-python" && package.manifest_path == "pyproject.toml"
+    }));
+    assert!(map.dependencies.iter().any(|dependency| {
+        dependency.from_path == "app/api.py"
+            && dependency.to_path == "app/service.py"
+            && dependency.kind == "python_import"
+    }));
+    let impact = impact_report(&map, "app/api.py").unwrap();
+    assert_eq!(impact.package.as_deref(), Some("demo-python"));
+    assert_eq!(impact.manifest_path.as_deref(), Some("pyproject.toml"));
+    assert!(
+        impact
+            .related_tests
+            .iter()
+            .any(|test| test.path == "tests/test_api.py"
+                && test.basis == "python_import_graph"
+                && test.confidence == "high")
+    );
+    assert!(
+        impact
+            .recommended_checks
+            .iter()
+            .any(|check| check == "python -m pytest")
+    );
+    let plan = change_plan(
+        &map,
+        &[
+            "app/api.py".into(),
+            "app/service.py".into(),
+            "app/worker.py".into(),
+        ],
+    )
+    .unwrap();
+    assert!(plan.ready, "{plan:?}");
+}
+
+#[test]
+fn python_plan_blocks_broad_source_change_without_pytest_anchor() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        root.join("pyproject.toml").as_path(),
+        "[project]\nname = \"uncovered\"\n",
+    );
+    for name in ["a", "b", "c"] {
+        write(
+            root.join(format!("pkg/{name}.py")).as_path(),
+            &format!("def {name}():\n    return 1\n"),
+        );
+    }
+    context::refresh(root).unwrap();
+    let map = build_readonly(root).unwrap();
+    let plan = change_plan(
+        &map,
+        &["pkg/a.py".into(), "pkg/b.py".into(), "pkg/c.py".into()],
+    )
+    .unwrap();
+    assert!(!plan.ready);
+    assert!(
+        plan.blockers
+            .iter()
+            .any(|blocker| blocker.contains("3 source files"))
+    );
+}
+#[test]
+fn nested_pyproject_imports_resolve_against_the_package_root() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        root.join("packages/api/pyproject.toml").as_path(),
+        "[project]\nname = \"nested-api\"\n",
+    );
+    write(
+        root.join("packages/api/src/api/core.py").as_path(),
+        "def value():\n    return 1\n",
+    );
+    write(
+        root.join("packages/api/tests/test_behavior.py").as_path(),
+        "from api import core\ndef test_behavior():\n    assert core.value() == 1\n",
+    );
+    context::refresh(root).unwrap();
+
+    let map = build_readonly(root).unwrap();
+    assert!(map.dependencies.iter().any(|dependency| {
+        dependency.from_path == "packages/api/tests/test_behavior.py"
+            && dependency.to_path == "packages/api/src/api/core.py"
+            && dependency.kind == "python_import"
+    }));
+    let impact = impact_report(&map, "packages/api/src/api/core.py").unwrap();
+    assert_eq!(impact.package.as_deref(), Some("nested-api"));
+    assert!(impact.related_tests.iter().any(|test| {
+        test.path == "packages/api/tests/test_behavior.py" && test.basis == "python_import_graph"
+    }));
+    assert!(
+        impact
+            .recommended_checks
+            .iter()
+            .any(|check| check == "python -m pytest packages/api")
+    );
 }

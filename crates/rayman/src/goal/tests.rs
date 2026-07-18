@@ -351,6 +351,9 @@ fn relevance_requires_one_current_receipt_bound_to_command_and_impact() {
         lifecycle_proof: None,
         created_at: now_iso(),
         updated_at: now_iso(),
+        baseline: None,
+        plan_receipts: Vec::new(),
+        review_receipts: Vec::new(),
         requirements: vec![requirement.clone()],
         loaded_from_legacy: false,
     };
@@ -560,6 +563,180 @@ fn historical_lifecycle_requires_a_bound_proof_and_explicit_old_schema_migration
 }
 
 #[test]
+fn plan_receipt_precedes_changes_and_high_review_is_source_fresh() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    fs::write(root.join("a.txt"), "a0").unwrap();
+    fs::write(root.join("b.txt"), "b0").unwrap();
+    let store = GoalStore::new(root);
+    let goal = store.start("planned", &[("ship".into(), true)]).unwrap();
+    let planned = store
+        .record_plan(
+            &goal.id,
+            PlanReceiptSubmission {
+                changed_paths: vec!["b.txt".into(), "a.txt".into()],
+                review_priority: "high".into(),
+                impacted_paths: vec!["a.txt".into(), "b.txt".into()],
+                recommended_checks: vec!["focused".into()],
+            },
+        )
+        .unwrap();
+    assert_eq!(planned.plan_receipts[0].changed_paths, ["a.txt", "b.txt"]);
+
+    fs::write(root.join("a.txt"), "a1").unwrap();
+    fs::write(root.join("b.txt"), "b1").unwrap();
+    let reviewed = store
+        .record_review(
+            &goal.id,
+            "security-review",
+            "reviewed final two-file change",
+        )
+        .unwrap();
+    let impacts = vec![impact("a.txt"), impact("b.txt")];
+    store
+        .record_validation_receipt(
+            &goal.id,
+            "req_1",
+            ValidationReceiptSubmission {
+                evidence: "validated planned change".into(),
+                command: "echo validation-ok".into(),
+                receipt: successful_receipt(
+                    root,
+                    &reviewed,
+                    "req_1",
+                    "echo validation-ok",
+                    &impacts,
+                    false,
+                ),
+                impacts,
+                non_code: false,
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        store.close(&goal.id, "success").unwrap().status,
+        GoalStatus::Success
+    );
+}
+
+#[test]
+fn plan_cannot_be_backfilled_and_unplanned_delta_blocks_validation() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    fs::write(root.join("a.txt"), "a0").unwrap();
+    fs::write(root.join("b.txt"), "b0").unwrap();
+    fs::write(root.join("c.txt"), "c0").unwrap();
+    let store = GoalStore::new(root);
+
+    let late = store.start("late", &[("ship".into(), true)]).unwrap();
+    fs::write(root.join("a.txt"), "a1").unwrap();
+    assert!(
+        store
+            .record_plan(
+                &late.id,
+                PlanReceiptSubmission {
+                    changed_paths: vec!["a.txt".into()],
+                    review_priority: "normal".into(),
+                    impacted_paths: vec!["a.txt".into()],
+                    recommended_checks: Vec::new(),
+                },
+            )
+            .is_err()
+    );
+
+    fs::write(root.join("a.txt"), "a0").unwrap();
+    let goal = store.start("scope", &[("ship".into(), true)]).unwrap();
+    store
+        .record_plan(
+            &goal.id,
+            PlanReceiptSubmission {
+                changed_paths: vec!["a.txt".into(), "b.txt".into()],
+                review_priority: "broad".into(),
+                impacted_paths: vec!["a.txt".into(), "b.txt".into()],
+                recommended_checks: Vec::new(),
+            },
+        )
+        .unwrap();
+    fs::write(root.join("a.txt"), "a2").unwrap();
+    fs::write(root.join("c.txt"), "c2").unwrap();
+    let current = store.get(&goal.id).unwrap().unwrap();
+    let impacts = vec![impact("a.txt"), impact("c.txt")];
+    assert!(
+        store
+            .record_validation_receipt(
+                &goal.id,
+                "req_1",
+                ValidationReceiptSubmission {
+                    evidence: "attempted broad validation".into(),
+                    command: "echo validation-ok".into(),
+                    receipt: successful_receipt(
+                        root,
+                        &current,
+                        "req_1",
+                        "echo validation-ok",
+                        &impacts,
+                        false,
+                    ),
+                    impacts,
+                    non_code: false,
+                },
+            )
+            .is_err()
+    );
+}
+
+#[test]
+fn high_priority_review_becomes_stale_after_source_change() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    fs::write(root.join("a.txt"), "a0").unwrap();
+    fs::write(root.join("b.txt"), "b0").unwrap();
+    let store = GoalStore::new(root);
+    let goal = store.start("review", &[("ship".into(), true)]).unwrap();
+    store
+        .record_plan(
+            &goal.id,
+            PlanReceiptSubmission {
+                changed_paths: vec!["a.txt".into(), "b.txt".into()],
+                review_priority: "high".into(),
+                impacted_paths: vec!["a.txt".into(), "b.txt".into()],
+                recommended_checks: Vec::new(),
+            },
+        )
+        .unwrap();
+    fs::write(root.join("a.txt"), "a1").unwrap();
+    fs::write(root.join("b.txt"), "b1").unwrap();
+    store
+        .record_review(&goal.id, "reviewer", "reviewed snapshot")
+        .unwrap();
+    fs::write(root.join("a.txt"), "a2").unwrap();
+
+    let current = store.get(&goal.id).unwrap().unwrap();
+    let impacts = vec![impact("a.txt"), impact("b.txt")];
+    store
+        .record_validation_receipt(
+            &goal.id,
+            "req_1",
+            ValidationReceiptSubmission {
+                evidence: "validated after late edit".into(),
+                command: "echo validation-ok".into(),
+                receipt: successful_receipt(
+                    root,
+                    &current,
+                    "req_1",
+                    "echo validation-ok",
+                    &impacts,
+                    false,
+                ),
+                impacts,
+                non_code: false,
+            },
+        )
+        .unwrap();
+    assert!(store.close(&goal.id, "success").is_err());
+}
+
+#[test]
 fn pending_roundtrip() {
     let dir = tempfile::tempdir().unwrap();
     let store = PendingStore::new(dir.path());
@@ -727,4 +904,346 @@ fn list_with_issues_rejects_a_linked_goal_file() {
     assert!(goals.is_empty());
     assert_eq!(issues.len(), 1);
     assert!(issues[0].error.contains("链接/reparse"));
+}
+
+#[test]
+fn pytest_receipt_requires_collect_proof_and_matches_python_impact() {
+    let root = tempfile::tempdir().unwrap();
+    fs::create_dir_all(root.path().join("src")).unwrap();
+    fs::create_dir_all(root.path().join("tests")).unwrap();
+    fs::write(
+        root.path().join("src/api.py"),
+        "def value():\n    return 1\n",
+    )
+    .unwrap();
+    fs::write(
+        root.path().join("tests/test_api.py"),
+        "from src.api import value\ndef test_value():\n    assert value() == 1\n",
+    )
+    .unwrap();
+
+    let parsed = parse_validation_command("python -m pytest tests/test_api.py -q").unwrap();
+    let list = validation_list_command(&parsed).unwrap().unwrap();
+    assert!(
+        list.args
+            .iter()
+            .any(|argument| argument == "--collect-only")
+    );
+    assert_eq!(
+        listed_test_count(
+            &list,
+            b"tests/test_api.py::test_value\n1 test collected in 0.01s\n",
+            b"",
+        )
+        .unwrap(),
+        1
+    );
+    assert_eq!(
+        validation_execution_proof(&parsed, b"1 passed in 0.02s\n", b"", Some(1)).unwrap(),
+        Some(TestExecutionProof {
+            listed: 1,
+            passed: 1,
+            ignored: 0,
+        })
+    );
+
+    let mut python_impact = impact("src/api.py");
+    python_impact.candidate_tests = vec!["tests/test_api.py".into()];
+    assert!(
+        validate_command_for_impacts(
+            root.path(),
+            "python -m pytest tests/test_api.py -q",
+            std::slice::from_ref(&python_impact),
+            false,
+        )
+        .is_ok()
+    );
+    assert!(
+        validate_command_for_impacts(
+            root.path(),
+            "python -m pytest tests/test_other.py -q",
+            &[python_impact],
+            false,
+        )
+        .is_err()
+    );
+    let collect_only = parse_validation_command("pytest --collect-only").unwrap();
+    assert!(validate_command_security(root.path(), &collect_only).is_err());
+}
+
+#[test]
+fn completed_success_can_be_historicized_after_later_source_changes() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = GoalStore::new(dir.path());
+
+    let archived_source = store
+        .start(
+            "archive stale success",
+            &[("validated before drift".into(), true)],
+        )
+        .unwrap();
+    let archived_source = close_non_code_success(&store, dir.path(), &archived_source);
+    let archived_fingerprint = archived_source.requirements[0].validations[0]
+        .receipt
+        .as_ref()
+        .unwrap()
+        .workspace_fingerprint_after
+        .clone();
+    fs::write(dir.path().join("later.txt"), "later source").unwrap();
+    let archived = store
+        .archive(
+            &archived_source.id,
+            "completed before later maintenance",
+            false,
+        )
+        .unwrap();
+    assert_eq!(
+        archived
+            .lifecycle_proof
+            .as_ref()
+            .unwrap()
+            .workspace_fingerprint,
+        archived_fingerprint
+    );
+    assert_eq!(archived.lifecycle_proof_error(dir.path()), None);
+
+    let superseded_source = store
+        .start(
+            "supersede stale success",
+            &[("validated before replacement".into(), true)],
+        )
+        .unwrap();
+    let superseded_source = close_non_code_success(&store, dir.path(), &superseded_source);
+    let superseded_fingerprint = superseded_source.requirements[0].validations[0]
+        .receipt
+        .as_ref()
+        .unwrap()
+        .workspace_fingerprint_after
+        .clone();
+    fs::write(dir.path().join("newer.txt"), "newer source").unwrap();
+    let replacement = store
+        .start(
+            "current replacement",
+            &[("replacement is current".into(), true)],
+        )
+        .unwrap();
+    let replacement = close_non_code_success(&store, dir.path(), &replacement);
+    let superseded = store
+        .supersede(&superseded_source.id, &replacement.id)
+        .unwrap();
+    assert_eq!(
+        superseded
+            .lifecycle_proof
+            .as_ref()
+            .unwrap()
+            .workspace_fingerprint,
+        superseded_fingerprint
+    );
+    assert_eq!(superseded.lifecycle_proof_error(dir.path()), None);
+    let current = workspace_fingerprint(dir.path()).unwrap();
+    assert_eq!(
+        supersession_error(&superseded, &[replacement], dir.path(), &current),
+        None
+    );
+}
+#[test]
+fn baseline_less_current_goal_is_not_gate_ready_but_can_be_historicized() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = GoalStore::new(dir.path());
+    let mut goal = store
+        .start("pre-planning", &[("ship".into(), true)])
+        .unwrap();
+    goal.baseline = None;
+    let current = workspace_fingerprint(dir.path()).unwrap();
+    let gaps = goal_planning_gaps(&goal, dir.path(), &current);
+    assert!(gaps.iter().any(|gap| gap.contains("缺少开工 baseline")));
+
+    goal.lifecycle = GoalLifecycle::Archived;
+    assert!(goal_planning_gaps(&goal, dir.path(), &current).is_empty());
+}
+
+#[test]
+fn goal_plan_is_one_immutable_aggregate_receipt() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("a.txt"), "a0").unwrap();
+    fs::write(dir.path().join("b.txt"), "b0").unwrap();
+    let store = GoalStore::new(dir.path());
+    let goal = store.start("aggregate", &[("ship".into(), true)]).unwrap();
+    let first = PlanReceiptSubmission {
+        changed_paths: vec!["a.txt".into()],
+        review_priority: "normal".into(),
+        impacted_paths: vec!["a.txt".into()],
+        recommended_checks: Vec::new(),
+    };
+    assert_eq!(
+        store
+            .record_plan(
+                &goal.id,
+                PlanReceiptSubmission {
+                    changed_paths: first.changed_paths.clone(),
+                    review_priority: first.review_priority.clone(),
+                    impacted_paths: first.impacted_paths.clone(),
+                    recommended_checks: first.recommended_checks.clone(),
+                }
+            )
+            .unwrap()
+            .plan_receipts
+            .len(),
+        1
+    );
+    assert_eq!(
+        store
+            .record_plan(&goal.id, first)
+            .unwrap()
+            .plan_receipts
+            .len(),
+        1
+    );
+    assert!(
+        store
+            .record_plan(
+                &goal.id,
+                PlanReceiptSubmission {
+                    changed_paths: vec!["b.txt".into()],
+                    review_priority: "normal".into(),
+                    impacted_paths: vec!["b.txt".into()],
+                    recommended_checks: Vec::new(),
+                },
+            )
+            .is_err()
+    );
+}
+
+#[test]
+fn pytest_selectors_are_scoped_and_terminal_summary_is_not_double_counted() {
+    let root = tempfile::tempdir().unwrap();
+    for directory in ["src", "tests", "other_tests"] {
+        fs::create_dir_all(root.path().join(directory)).unwrap();
+    }
+    fs::write(
+        root.path().join("src/api.py"),
+        "def value():\n    return 1\n",
+    )
+    .unwrap();
+    fs::write(
+        root.path().join("src/other.py"),
+        "def other():\n    return 2\n",
+    )
+    .unwrap();
+    fs::write(
+        root.path().join("tests/test_api.py"),
+        "from src.api import value\ndef test_value():\n    assert value() == 1\n",
+    )
+    .unwrap();
+    fs::write(
+        root.path().join("other_tests/test_other.py"),
+        "from src.other import other\ndef test_other():\n    assert other() == 2\n",
+    )
+    .unwrap();
+
+    let directory = parse_validation_command("python -m pytest tests -q").unwrap();
+    assert_eq!(pytest_path_arguments(&directory), ["tests"]);
+    let mut api = impact("src/api.py");
+    api.candidate_tests = vec!["tests/test_api.py".into()];
+    assert!(
+        validate_command_for_impacts(
+            root.path(),
+            "python -m pytest tests -q",
+            std::slice::from_ref(&api),
+            false,
+        )
+        .is_ok()
+    );
+
+    let mut other = impact("src/other.py");
+    other.candidate_tests = vec!["other_tests/test_other.py".into()];
+    assert!(
+        validate_command_for_impacts(root.path(), "python -m pytest tests -q", &[other], false,)
+            .is_err()
+    );
+    assert!(
+        validate_command_for_impacts(
+            root.path(),
+            "pytest tests/test_api.py::test_value -q",
+            &[api],
+            false,
+        )
+        .is_ok()
+    );
+
+    let report_option = parse_validation_command("pytest --junitxml reports/out.xml -q").unwrap();
+    assert!(pytest_path_arguments(&report_option).is_empty());
+    assert!(command_is_workspace_wide(root.path(), &report_option));
+
+    let proof = validation_execution_proof(
+        &parse_validation_command("pytest tests/test_api.py -q").unwrap(),
+        b"debug text: 99 passed\n1 passed in 0.02s\n",
+        b"",
+        Some(1),
+    )
+    .unwrap();
+    assert_eq!(
+        proof,
+        Some(TestExecutionProof {
+            listed: 1,
+            passed: 1,
+            ignored: 0,
+        })
+    );
+}
+#[test]
+fn current_success_can_refresh_review_after_source_drift() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("a.txt"), "a0").unwrap();
+    let store = GoalStore::new(dir.path());
+    let goal = store
+        .start("review-refresh", &[("ship".into(), true)])
+        .unwrap();
+    store
+        .record_plan(
+            &goal.id,
+            PlanReceiptSubmission {
+                changed_paths: vec!["a.txt".into()],
+                review_priority: "high".into(),
+                impacted_paths: vec!["a.txt".into()],
+                recommended_checks: Vec::new(),
+            },
+        )
+        .unwrap();
+    fs::write(dir.path().join("a.txt"), "a1").unwrap();
+    let reviewed = store
+        .record_review(&goal.id, "reviewer", "reviewed first snapshot")
+        .unwrap();
+    let impacts = vec![impact("a.txt")];
+    store
+        .record_validation_receipt(
+            &goal.id,
+            "req_1",
+            ValidationReceiptSubmission {
+                evidence: "validated".into(),
+                command: "echo validation-ok".into(),
+                receipt: successful_receipt(
+                    dir.path(),
+                    &reviewed,
+                    "req_1",
+                    "echo validation-ok",
+                    &impacts,
+                    false,
+                ),
+                impacts,
+                non_code: false,
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        store.close(&goal.id, "success").unwrap().status,
+        GoalStatus::Success
+    );
+
+    fs::write(dir.path().join("a.txt"), "a2").unwrap();
+    let refreshed = store
+        .record_review(&goal.id, "reviewer", "reviewed refreshed snapshot")
+        .unwrap();
+    assert_eq!(refreshed.status, GoalStatus::Success);
+    assert_eq!(refreshed.review_receipts.len(), 2);
 }

@@ -25,6 +25,8 @@ pub enum Format {
 
 #[derive(Subcommand)]
 pub enum Command {
+    /// Explicitly activate, deactivate, or inspect the RaymanCodingSkill workspace contract.
+    Workspace(WorkspaceCmd),
     /// 工作区上下文索引（内容 hash 证明；map/check 会拒绝未验证内容）
     Context(ContextCmd),
     /// 最小目标契约与待完成项续接
@@ -45,6 +47,32 @@ pub enum Command {
     Autosave(AutosaveCmd),
     /// 检查已安装二进制、PATH 与工作区 skill 的身份契约；不证明源码新鲜度
     Doctor(DoctorCmd),
+}
+#[derive(Args)]
+pub struct WorkspaceCmd {
+    #[command(subcommand)]
+    pub action: WorkspaceAction,
+}
+
+#[derive(Subcommand)]
+pub enum WorkspaceAction {
+    /// Inspect activation; orphan runtime state is never active.
+    Status,
+    /// Write a hash-bound workspace_skill.yaml activation contract.
+    Activate {
+        /// Canonical RaymanCodingSkill SKILL.md; defaults to root/SKILL.md.
+        #[arg(long)]
+        skill_file: Option<PathBuf>,
+        /// Explicitly allow the activation contract write.
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Disable the skill while retaining runtime state for audit.
+    Deactivate {
+        /// Explicitly allow deactivation.
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 #[derive(Args)]
@@ -224,6 +252,23 @@ pub enum GoalAction {
     List,
     /// 查看单个目标
     Show { id: String },
+    /// Persist a pre-mutation plan receipt bound to the goal baseline.
+    Plan {
+        id: String,
+        /// Intended change paths.
+        paths: Vec<String>,
+        /// Exit nonzero when the plan is blocked.
+        #[arg(long)]
+        check: bool,
+    },
+    /// Record a review receipt bound to the current source fingerprint.
+    Review {
+        id: String,
+        #[arg(long)]
+        reviewer: String,
+        #[arg(long = "message", short = 'm')]
+        message: String,
+    },
     /// 记录某需求的证据并标记完成
     Evidence {
         id: String,

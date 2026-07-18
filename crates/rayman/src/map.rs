@@ -9,6 +9,7 @@ use crate::context::{self, ContextIndex, FileEntry};
 use crate::project_store::{now_iso, write_json};
 use crate::state_paths;
 
+mod python;
 mod quality;
 
 pub use quality::{
@@ -541,20 +542,20 @@ pub fn change_plan(map: &ProjectMap, paths: &[String]) -> Result<ChangePlan> {
     }
 
     let has_validation_anchor = !tests_by_path.is_empty() || has_package_test_anchor;
-    // Test-anchor detection (symbol extraction, package topology) is Cargo/Rust-shaped;
-    // outside a Cargo workspace it has no real signal and should not hard-block.
-    let is_cargo_project = !map.packages.is_empty();
+    // Cargo and pyproject packages have language-aware test anchors. Other ecosystems remain
+    // advisory until their dependency and test conventions are modeled explicitly.
+    let has_supported_package = !map.packages.is_empty();
 
     let mut blockers = Vec::new();
     if source_changed_count >= 3 && !has_validation_anchor {
         let message = format!(
             "{source_changed_count} source files are in scope but no same-package candidate test target or indexed package test anchor was inferred"
         );
-        if is_cargo_project {
+        if has_supported_package {
             blockers.push(message);
         } else {
             warnings.push(format!(
-                "{message}; no Cargo workspace detected, so this is advisory only — verify test coverage manually"
+                "{message}; no Cargo or pyproject package detected, so this is advisory only — verify test coverage manually"
             ));
         }
     }
@@ -865,7 +866,7 @@ fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
             });
         }
 
-        let test_count = count_tests(text);
+        let test_count = count_tests(file, text);
         if test_count > 0 {
             let inference = infer_candidate_paths(file, text, index);
             tests.push(TestTarget {
@@ -883,7 +884,9 @@ fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
         }
     }
 
-    let (packages, package_dependencies, topology_provenance) = if root.join("Cargo.toml").is_file()
+    let (mut packages, package_dependencies, topology_provenance) = if root
+        .join("Cargo.toml")
+        .is_file()
     {
         match cargo_metadata_topology(root, index) {
             Ok((packages, dependencies)) => (packages, dependencies, "cargo_metadata".to_string()),
@@ -906,9 +909,11 @@ fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
         let dependencies = infer_package_dependencies(root, index, &packages, &workspace)?;
         (packages, dependencies, "no_cargo_manifest".to_string())
     };
+    packages.extend(python::discover_packages(root, index)?);
     // 本地 crate 名来自实际发现的 package，而不是硬编码本工具自己的名字。
     let local_crates: BTreeSet<String> = packages
         .iter()
+        .filter(|package| package.manifest_path.ends_with("Cargo.toml"))
         .map(|package| package.name.replace('-', "_"))
         .collect();
     let dependencies = infer_dependencies(&text_by_path, &path_set, &local_crates);
@@ -1394,13 +1399,24 @@ fn path_is_under_root(path: &str, root: &str) -> bool {
 }
 
 fn package_for_path<'a>(map: &'a ProjectMap, path: &str) -> Option<&'a PackageEntry> {
+    let python_path = path.ends_with(".py") || path.ends_with("pyproject.toml");
     map.packages
         .iter()
         .filter(|package| path_is_under_package(path, &package.root_path))
-        .max_by_key(|package| package.root_path.len())
+        .max_by_key(|package| {
+            let preferred = python_path == package.manifest_path.ends_with("pyproject.toml");
+            (preferred, package.root_path.len())
+        })
 }
 
 fn package_test_command(map: &ProjectMap, package: &PackageEntry) -> String {
+    if package.manifest_path.ends_with("pyproject.toml") {
+        return if package.root_path == "." {
+            "python -m pytest".into()
+        } else {
+            format!("python -m pytest {}", package.root_path)
+        };
+    }
     let unique_workspace_name = package.workspace_member
         && map
             .packages
@@ -1493,7 +1509,18 @@ fn symbol_visibility(text: &str, line: usize) -> &'static str {
     }
 }
 
-fn count_tests(text: &str) -> usize {
+fn count_tests(file: &FileEntry, text: &str) -> usize {
+    if file.path.ends_with(".py") {
+        return text
+            .lines()
+            .filter(|line| {
+                let trimmed = line.trim_start();
+                trimmed.starts_with("def test_")
+                    || trimmed.starts_with("async def test_")
+                    || trimmed.starts_with("class Test")
+            })
+            .count();
+    }
     text.lines()
         .filter(|line| {
             let trimmed = line.trim_start();
@@ -1509,6 +1536,9 @@ struct TestInference {
 }
 
 fn infer_candidate_paths(file: &FileEntry, text: &str, index: &ContextIndex) -> TestInference {
+    if file.path.ends_with(".py") && file.kind == "test" {
+        return python::infer_test_candidates(file, text, index);
+    }
     if file.kind == "source" {
         return TestInference {
             paths: vec![file.path.clone()],
@@ -1573,9 +1603,12 @@ fn infer_dependencies(
     let mut seen = BTreeSet::new();
     for (from_path, text) in text_by_path {
         for (line_index, line) in text.lines().enumerate() {
-            for (target_path, kind, evidence) in
+            let targets = if from_path.ends_with(".py") {
+                python::local_targets(from_path, line, path_set)
+            } else {
                 local_targets(from_path, line, path_set, local_crates)
-            {
+            };
+            for (target_path, kind, evidence) in targets {
                 if target_path == *from_path {
                     continue;
                 }
