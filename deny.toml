@@ -1,8 +1,9 @@
 [graph]
 all-features = true
 
-# db-path 不设：用 cargo-deny 默认的用户级缓存。
-# 以前指向 .RaymanCodingSkill/tmp/，会被 `rayman temp cleanup` 连带删掉。
+# 普通 cargo-deny 调用使用默认用户级缓存。完整审计会把该数据库复制到
+# 一次性受管目录，并仅在临时配置中注入 db-path，避免锁定只读用户缓存；
+# advisories 检查保持启用，源配置也不会被改写。
 [advisories]
 version = 2
 yanked = "deny"

@@ -557,9 +557,12 @@ pub fn supersession_error(
     else {
         return Some(format!("superseded_by 目标不存在: {replacement_id}"));
     };
-    if replacement.lifecycle != GoalLifecycle::Current {
+    if !matches!(
+        replacement.lifecycle,
+        GoalLifecycle::Current | GoalLifecycle::Archived
+    ) {
         return Some(format!(
-            "superseded_by 目标 {replacement_id} lifecycle={}，必须为 current",
+            "superseded_by 目标 {replacement_id} lifecycle={}，必须为 current 或带有效 proof 的 archived success",
             replacement.lifecycle
         ));
     }
@@ -579,12 +582,25 @@ pub fn supersession_error(
             replacement.status
         ));
     }
-    let replacement_gaps = goal_success_receipt_gaps(replacement, root, current_fingerprint);
-    if !replacement_gaps.is_empty() {
-        return Some(format!(
-            "superseded_by 目标 {replacement_id} 尚未 gate-ready: {}",
-            replacement_gaps.join("; ")
-        ));
+    match replacement.lifecycle {
+        GoalLifecycle::Current => {
+            let replacement_gaps =
+                goal_success_receipt_gaps(replacement, root, current_fingerprint);
+            if !replacement_gaps.is_empty() {
+                return Some(format!(
+                    "superseded_by 目标 {replacement_id} 尚未 gate-ready: {}",
+                    replacement_gaps.join("; ")
+                ));
+            }
+        }
+        GoalLifecycle::Archived => {
+            if let Some(error) = replacement.lifecycle_proof_error(root) {
+                return Some(format!(
+                    "superseded_by archived 目标 {replacement_id} proof 无效: {error}"
+                ));
+            }
+        }
+        GoalLifecycle::Superseded => unreachable!("lifecycle was checked above"),
     }
     if goal.status != GoalStatus::Success {
         let replacement_must = replacement

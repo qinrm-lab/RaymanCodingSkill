@@ -480,6 +480,44 @@ fn non_success_supersession_requires_all_must_text_in_the_replacement() {
         None
     );
 }
+#[test]
+fn supersession_accepts_a_proven_archived_success_and_rejects_forgery() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = GoalStore::new(dir.path());
+    let old = store
+        .start("old", &[("preserve delivered invariant".into(), true)])
+        .unwrap();
+    let replacement = store
+        .start(
+            "replacement",
+            &[("preserve delivered invariant".into(), true)],
+        )
+        .unwrap();
+    let replacement = close_non_code_success(&store, dir.path(), &replacement);
+    let superseded = store.supersede(&old.id, &replacement.id).unwrap();
+    let replacement = store
+        .archive(&replacement.id, "delivered replacement", false)
+        .unwrap();
+    let fingerprint = workspace_fingerprint(dir.path()).unwrap();
+    assert_eq!(
+        supersession_error(
+            &superseded,
+            std::slice::from_ref(&replacement),
+            dir.path(),
+            &fingerprint,
+        ),
+        None
+    );
+
+    let replacement_path = dir
+        .path()
+        .join(GOALS_DIR)
+        .join(format!("{}.json", replacement.id));
+    let mut forged = replacement;
+    forged.title.push_str(" forged");
+    write_json(&replacement_path, &forged).unwrap();
+    assert!(supersession_error(&superseded, &[forged], dir.path(), &fingerprint,).is_some());
+}
 
 #[test]
 fn historical_lifecycle_requires_a_bound_proof_and_explicit_old_schema_migration() {

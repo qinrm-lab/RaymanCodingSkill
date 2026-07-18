@@ -12,6 +12,8 @@ edition = "2024"
 rust-version = "1.88"
 license = "MIT"
 authors = ["Rayman"]
+homepage = "https://raymanweb.com"
+publish = false
 
 [workspace.dependencies]
 anyhow = "1.0"

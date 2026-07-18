@@ -19,6 +19,8 @@ param(
     [Parameter(ParameterSetName = 'Audit')]
     [ValidateSet('0.8.7')]
     [string]$CoverageToolVersion = '0.8.7',
+    [Parameter(Mandatory = $true, ParameterSetName = 'DependencyPolicy')]
+    [switch]$DependencyPolicyOnly,
 
     [Parameter(Mandatory = $true, ParameterSetName = 'SelfTest')]
     [switch]$SelfTest
@@ -266,6 +268,192 @@ function Remove-ManagedAuditDirectory {
     Remove-Item -LiteralPath $fullPath -Recurse -Force
 }
 
+function Assert-OrdinaryDirectoryTree {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Label
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
+        throw "$Label is missing or is not a directory: $Path"
+    }
+    $items = @(
+        Get-Item -LiteralPath $Path -Force
+        Get-ChildItem -LiteralPath $Path -Force -Recurse
+    )
+    foreach ($item in $items) {
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            throw "$Label must not contain a symlink or reparse point: $($item.FullName)"
+        }
+    }
+}
+
+function Copy-OrdinaryDirectoryTree {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Source,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Destination,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Label
+    )
+
+    Assert-OrdinaryDirectoryTree -Path $Source -Label "$Label source"
+    if (Test-Path -LiteralPath $Destination) {
+        throw "$Label destination must be new: $Destination"
+    }
+    Copy-Item -LiteralPath $Source -Destination $Destination -Recurse -Force
+    Assert-OrdinaryDirectoryTree -Path $Destination -Label "$Label copy"
+}
+
+function New-IsolatedCargoDenyConfig {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SourceConfig,
+
+        [Parameter(Mandatory = $true)]
+        [string]$DatabasePath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$OutputConfig
+    )
+
+    $sourceItem = Get-Item -LiteralPath $SourceConfig -Force -ErrorAction Stop
+    if ($sourceItem.PSIsContainer -or
+        $sourceItem.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw "cargo-deny source config must be an ordinary file: $SourceConfig"
+    }
+    $text = Get-Content -LiteralPath $sourceItem.FullName -Raw
+    if ($text -match '(?m)^\s*db-path\s*=') {
+        throw "cargo-deny source config must not preconfigure db-path: $SourceConfig"
+    }
+    $sectionPattern = [regex]::new('(?m)^\[advisories\][ \t]*$')
+    $sections = @($sectionPattern.Matches($text))
+    if ($sections.Count -ne 1) {
+        throw "cargo-deny source config must contain exactly one [advisories] section: $SourceConfig"
+    }
+
+    $databaseLiteral = ConvertTo-Json -InputObject ([IO.Path]::GetFullPath($DatabasePath)) -Compress
+    $section = $sections[0]
+    $insertion = [Environment]::NewLine + "db-path = $databaseLiteral"
+    $rewritten = $text.Insert($section.Index + $section.Length, $insertion)
+    [IO.File]::WriteAllText(
+        [IO.Path]::GetFullPath($OutputConfig),
+        $rewritten,
+        [Text.UTF8Encoding]::new($false)
+    )
+    $outputItem = Get-Item -LiteralPath $OutputConfig -Force
+    if ($outputItem.PSIsContainer -or
+        $outputItem.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw "cargo-deny isolated config is not an ordinary file: $OutputConfig"
+    }
+    return $outputItem.FullName
+}
+
+function New-IsolatedCargoDenyState {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RootConfig,
+
+        [Parameter(Mandatory = $true)]
+        [string]$EvalConfig
+    )
+
+    $root = New-ManagedAuditDirectory -Label 'cargo-deny-state'
+    try {
+        $database = Join-Path $root 'advisory-dbs'
+        $cargoHome = if ([string]::IsNullOrWhiteSpace($env:CARGO_HOME)) {
+            Join-Path $HOME '.cargo'
+        } else {
+            $env:CARGO_HOME
+        }
+        $sourceDatabase = [IO.Path]::GetFullPath((Join-Path $cargoHome 'advisory-dbs'))
+        if (Test-Path -LiteralPath $sourceDatabase) {
+            Copy-OrdinaryDirectoryTree `
+                -Source $sourceDatabase `
+                -Destination $database `
+                -Label 'cargo-deny advisory database'
+        } else {
+            $database = Resolve-OrCreateRealAuditDirectory `
+                -Path $database `
+                -Label 'Isolated cargo-deny advisory database'
+        }
+
+        return [pscustomobject]@{
+            Root = $root
+            Database = $database
+            RootConfig = New-IsolatedCargoDenyConfig `
+                -SourceConfig $RootConfig `
+                -DatabasePath $database `
+                -OutputConfig (Join-Path $root 'root-deny.toml')
+            EvalConfig = New-IsolatedCargoDenyConfig `
+                -SourceConfig $EvalConfig `
+                -DatabasePath $database `
+                -OutputConfig (Join-Path $root 'eval-deny.toml')
+        }
+    } catch {
+        Remove-ManagedAuditDirectory -Path $root
+        throw
+    }
+}
+
+function Test-OfflineCargoMode {
+    if ([string]::IsNullOrWhiteSpace($env:CARGO_NET_OFFLINE)) {
+        return $false
+    }
+    return $env:CARGO_NET_OFFLINE.Trim().ToLowerInvariant() -in @('1', 'true')
+}
+
+function Get-CargoDenyArguments {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ConfigPath,
+
+        [string]$ManifestPath
+    )
+
+    $arguments = @('deny')
+    if (-not [string]::IsNullOrWhiteSpace($ManifestPath)) {
+        $arguments += @('--manifest-path', $ManifestPath)
+    }
+    $arguments += @('check', '--config', $ConfigPath)
+    if (Test-OfflineCargoMode) {
+        # cargo still receives CARGO_NET_OFFLINE; this flag independently keeps
+        # cargo-deny from fetching while retaining the advisories check against
+        # the isolated copy of the existing database.
+        $arguments += '--disable-fetch'
+    }
+    return $arguments
+}
+
+function Invoke-IsolatedCargoDenyChecks {
+    param(
+        [Parameter(Mandatory = $true)]
+        $CargoDenyIdentity
+    )
+
+    $state = New-IsolatedCargoDenyState `
+        -RootConfig (Join-Path $repoRoot 'deny.toml') `
+        -EvalConfig (Join-Path $repoRoot 'evals/deny.toml')
+    try {
+        Invoke-NativeChecked $CargoDenyIdentity.Path @(
+            Get-CargoDenyArguments -ConfigPath $state.RootConfig
+        )
+        Invoke-NativeChecked $CargoDenyIdentity.Path @(
+            Get-CargoDenyArguments `
+                -ConfigPath $state.EvalConfig `
+                -ManifestPath 'evals/Cargo.toml'
+        )
+        Assert-NativeApplicationIdentity -Identity $CargoDenyIdentity
+    } finally {
+        Remove-ManagedAuditDirectory -Path $state.Root
+    }
+}
 function Assert-ShadowRejection {
     param(
         [Parameter(Mandatory = $true)]
@@ -385,6 +573,60 @@ function Invoke-AuditScriptSelfTest {
             throw "Audit self-test failed: weakened contract settings were accepted: $($settings | ConvertTo-Json -Compress)"
         }
     }
+    $cargoDenyFixture = New-ManagedAuditDirectory -Label 'cargo-deny-selftest'
+    try {
+        $fixtureDatabase = Join-Path $cargoDenyFixture 'source-db'
+        $fixtureNested = Join-Path $fixtureDatabase 'advisory-db'
+        New-Item -ItemType Directory -Path $fixtureNested | Out-Null
+        Set-Content -LiteralPath (Join-Path $fixtureDatabase 'db.lock') -Value 'lock' -Encoding utf8
+        Set-Content -LiteralPath (Join-Path $fixtureNested 'HEAD') -Value 'fixture' -Encoding utf8
+        $databaseCopy = Join-Path $cargoDenyFixture 'database-copy'
+        Copy-OrdinaryDirectoryTree `
+            -Source $fixtureDatabase `
+            -Destination $databaseCopy `
+            -Label 'cargo-deny self-test database'
+        if (-not (Test-Path -LiteralPath (Join-Path $databaseCopy 'advisory-db/HEAD') -PathType Leaf)) {
+            throw 'Audit self-test failed: isolated cargo-deny database copy is incomplete.'
+        }
+
+        $fixtureConfig = Join-Path $cargoDenyFixture 'source.toml'
+        Set-Content -LiteralPath $fixtureConfig -Value @'
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+'@ -Encoding utf8
+        $isolatedConfig = New-IsolatedCargoDenyConfig `
+            -SourceConfig $fixtureConfig `
+            -DatabasePath $databaseCopy `
+            -OutputConfig (Join-Path $cargoDenyFixture 'isolated.toml')
+        $isolatedText = Get-Content -LiteralPath $isolatedConfig -Raw
+        if ($isolatedText -notmatch '(?m)^db-path\s*=' -or
+            (Get-Content -LiteralPath $fixtureConfig -Raw) -match '(?m)^db-path\s*=') {
+            throw 'Audit self-test failed: isolated cargo-deny db-path injection is missing or mutated the source config.'
+        }
+
+        $preconfigured = Join-Path $cargoDenyFixture 'preconfigured.toml'
+        Set-Content -LiteralPath $preconfigured -Value @'
+[advisories]
+db-path = "unexpected"
+'@ -Encoding utf8
+        $preconfiguredRejected = $false
+        try {
+            $null = New-IsolatedCargoDenyConfig `
+                -SourceConfig $preconfigured `
+                -DatabasePath $databaseCopy `
+                -OutputConfig (Join-Path $cargoDenyFixture 'must-not-exist.toml')
+        } catch {
+            $preconfiguredRejected = $_.Exception.Message -match 'must not preconfigure db-path'
+        }
+        if (-not $preconfiguredRejected) {
+            throw 'Audit self-test failed: a preconfigured cargo-deny db-path was accepted.'
+        }
+    } finally {
+        Remove-ManagedAuditDirectory -Path $cargoDenyFixture
+    }
 
     $verifier = Join-Path $PSScriptRoot 'verify-release-contract.ps1'
     if (-not (Test-Path -LiteralPath $verifier -PathType Leaf)) {
@@ -401,7 +643,7 @@ function Invoke-AuditScriptSelfTest {
     foreach ($identity in $NativeIdentities) {
         Assert-NativeApplicationIdentity -Identity $identity
     }
-    Write-Host 'Audit script self-test passed: native shadow/identity, profile migration, and managed coverage guards fail closed.'
+    Write-Host 'Audit script self-test passed: native shadow/identity, profile migration, isolated advisory state, and managed coverage guards fail closed.'
 }
 
 $nativeApplications = [ordered]@{
@@ -417,6 +659,16 @@ if ($SelfTest) {
     Write-Host 'audit-repository.ps1 self-test passed.'
     return
 }
+if ($DependencyPolicyOnly) {
+    Push-Location $repoRoot
+    try {
+        Invoke-IsolatedCargoDenyChecks -CargoDenyIdentity $nativeApplications.CargoDeny
+    } finally {
+        Pop-Location
+    }
+    Write-Host 'Isolated root/evals dependency policy checks passed.'
+    return
+}
 Assert-AuditContractSettings `
     -Msrv $MsrvToolchain `
     -CoverageThreshold $MinimumCliLineCoverage `
@@ -427,7 +679,7 @@ try {
     Invoke-NativeChecked $nativeApplications.Cargo.Path @('fmt', '--all', '--check')
     Invoke-NativeChecked $nativeApplications.Cargo.Path @('clippy', '--locked', '--workspace', '--all-targets', '--all-features', '--', '-D', 'warnings')
     Invoke-NativeChecked $nativeApplications.Cargo.Path @('test', '--locked', '--workspace', '--all-targets')
-    Invoke-NativeChecked $nativeApplications.CargoDeny.Path @('deny', 'check')
+    Invoke-IsolatedCargoDenyChecks -CargoDenyIdentity $nativeApplications.CargoDeny
 
     # MSRV is mandatory. rustup run fails explicitly when the declared toolchain
     # is unavailable; the complete audit never silently falls back to stable.
@@ -477,7 +729,6 @@ try {
     Invoke-NativeChecked $nativeApplications.Cargo.Path @('fmt', '--manifest-path', 'evals/Cargo.toml', '--all', '--check')
     Invoke-NativeChecked $nativeApplications.Cargo.Path @('clippy', '--manifest-path', 'evals/Cargo.toml', '--locked', '--all-targets', '--all-features', '--', '-D', 'warnings')
     Invoke-NativeChecked $nativeApplications.Cargo.Path @('test', '--manifest-path', 'evals/Cargo.toml', '--locked', '--all-targets')
-    Invoke-NativeChecked $nativeApplications.CargoDeny.Path @('deny', '--manifest-path', 'evals/Cargo.toml', 'check', '--config', 'evals/deny.toml')
 
     Invoke-NativeExpectedFailure $nativeApplications.Cargo.Path @(
         'run', '--manifest-path', 'evals/Cargo.toml', '--locked', '--',
