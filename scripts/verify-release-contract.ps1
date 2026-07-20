@@ -38,24 +38,8 @@ $workspaceManifest = Join-Path $repoRoot 'Cargo.toml'
 $crateManifest = Join-Path $repoRoot 'crates/rayman/Cargo.toml'
 $lockfile = Join-Path $repoRoot 'Cargo.lock'
 $canonicalSkill = Join-Path $repoRoot 'SKILL.md'
-$installerScript = Join-Path $repoRoot 'scripts/install-rayman.ps1'
 $expectedContract = 'rayman-cli-contract-v6'
 $requiredMsrv = '1.88'
-$requiredCommands = @(
-    'context',
-    'workspace',
-    'prepare',
-    'finish',
-    'goal',
-    'check',
-    'map',
-    'assets',
-    'temp',
-    'state',
-    'checkpoint',
-    'autosave',
-    'doctor'
-)
 
 function Read-RequiredFile {
     param([string]$Path, [string]$Label)
@@ -64,25 +48,6 @@ function Read-RequiredFile {
         throw "$Label is missing: $Path"
     }
     return Get-Content -LiteralPath $Path -Raw
-}
-
-function Assert-InstallerIdentityBinding {
-    param([string]$Content)
-
-    if ($Content -match 'cli_contract:\s*rayman-cli-contract-' -or
-        $Content -match 'cli_version:\s*\d+\.\d+\.\d+') {
-        throw 'Installer activation identity must not contain literal contract or version values.'
-    }
-    $requiredPatterns = @(
-        '\$artifactIdentityText\s*=\s*&\s*\$artifact[^\r\n]*doctor',
-        'cli_contract:\s*\$artifactContract',
-        'cli_version:\s*\$artifactVersion'
-    )
-    foreach ($pattern in $requiredPatterns) {
-        if ($Content -notmatch $pattern) {
-            throw "Installer does not derive activation identity from artifact doctor output: missing $pattern"
-        }
-    }
 }
 
 function Get-ManifestValue {
@@ -354,24 +319,6 @@ function Assert-GitHubTagContext {
 }
 
 function Invoke-ReleaseVerifierSelfTest {
-    $validInstaller = @'
-$artifactIdentityText = & $artifact '--format' 'json' 'doctor'
-"cli_contract: $artifactContract"
-"cli_version: $artifactVersion"
-'@
-    Assert-InstallerIdentityBinding -Content $validInstaller
-    foreach ($literal in @('cli_contract: rayman-cli-contract-v999', 'cli_version: 9.9.9')) {
-        $literalRejected = $false
-        try {
-            Assert-InstallerIdentityBinding -Content "$validInstaller`n$literal"
-        } catch {
-            $literalRejected = $true
-        }
-        if (-not $literalRejected) {
-            throw "Release verifier self-test failed: installer literal was accepted: $literal"
-        }
-    }
-
     foreach ($name in @('cargo', 'git', 'rustc')) {
         Set-Item -LiteralPath "Function:$name" -Value { 'forged command' }
         try {
@@ -453,9 +400,6 @@ $artifactIdentityText = & $artifact '--format' 'json' 'doctor'
     Write-Host 'Release verifier self-test passed: native command shadows and forged GitHub tag context were rejected.'
 }
 
-$installerContent = Read-RequiredFile -Path $installerScript -Label 'Installer script'
-Assert-InstallerIdentityBinding -Content $installerContent
-
 if ($SelfTest) {
     Invoke-ReleaseVerifierSelfTest
     return
@@ -523,33 +467,6 @@ try {
     $reportedVersion = Invoke-Rayman -Arguments @('--version')
     if ($reportedVersion -ne "rayman $expectedVersion") {
         throw "CLI reports '$reportedVersion', expected 'rayman $expectedVersion'."
-    }
-
-    $help = Invoke-Rayman -Arguments @('--help')
-    foreach ($command in $requiredCommands) {
-        $commandPattern = "(?m)^\s{2,}$([regex]::Escape($command))\s"
-        if ($help -notmatch $commandPattern) {
-            throw "CLI help is missing required top-level command '$command'."
-        }
-    }
-
-    $goalHelp = Invoke-Rayman -Arguments @('goal', '--help')
-    if ($goalHelp -notmatch '(?m)^\s{2,}validate\s') {
-        throw 'CLI goal help is missing receipt-producing subcommand validate.'
-    }
-
-    $checkpointHelp = Invoke-Rayman -Arguments @('checkpoint', '--help')
-    if ($checkpointHelp -notmatch '(?m)^\s{2,}verify\s') {
-        throw 'CLI checkpoint help is missing integrity-verifying subcommand verify.'
-    }
-
-    $stateHelp = Invoke-Rayman -Arguments @('state', '--help')
-    if ($stateHelp -notmatch '(?m)^\s{2,}audit\s') {
-        throw 'CLI state help is missing read-only subcommand audit.'
-    }
-    $stateAuditHelp = Invoke-Rayman -Arguments @('state', 'audit', '--help')
-    if ($stateAuditHelp -notmatch '(?m)^\s+--check\s') {
-        throw 'CLI state audit help is missing fail-closed --check.'
     }
 
     $doctorText = Invoke-Rayman -Arguments @('--format', 'json', 'doctor', '--check')

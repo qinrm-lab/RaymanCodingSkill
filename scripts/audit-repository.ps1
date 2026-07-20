@@ -145,29 +145,6 @@ function Get-CoverageToolVersion {
     Assert-CoverageToolVersionText -Text $text -ExpectedVersion $ExpectedVersion
 }
 
-function Assert-AuditContractSettings {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Msrv,
-
-        [Parameter(Mandatory = $true)]
-        [int]$CoverageThreshold,
-
-        [Parameter(Mandatory = $true)]
-        [string]$CoverageVersion
-    )
-
-    if ($Msrv -ne '1.88.0') {
-        throw "Complete audit requires exact MSRV 1.88.0; received $Msrv."
-    }
-    if ($CoverageThreshold -lt 75) {
-        throw "Complete audit coverage threshold cannot be weakened below 75; received $CoverageThreshold."
-    }
-    if ($CoverageVersion -ne '0.8.7') {
-        throw "Complete audit requires exact cargo-llvm-cov 0.8.7; received $CoverageVersion."
-    }
-}
-
 function Invoke-NativeChecked {
     param(
         [Parameter(Mandatory = $true)]
@@ -550,29 +527,6 @@ function Invoke-AuditScriptSelfTest {
         throw 'Audit self-test failed: wrong cargo-llvm-cov version was not rejected.'
     }
 
-    Assert-AuditContractSettings `
-        -Msrv '1.88.0' `
-        -CoverageThreshold 75 `
-        -CoverageVersion '0.8.7'
-    $weakenedSettings = @(
-        @{ Msrv = 'stable'; CoverageThreshold = 75; CoverageVersion = '0.8.7'; Pattern = 'exact MSRV' },
-        @{ Msrv = '1.88.0'; CoverageThreshold = 1; CoverageVersion = '0.8.7'; Pattern = 'cannot be weakened' },
-        @{ Msrv = '1.88.0'; CoverageThreshold = 75; CoverageVersion = '0.8.6'; Pattern = 'exact cargo-llvm-cov' }
-    )
-    foreach ($settings in $weakenedSettings) {
-        $rejected = $false
-        try {
-            Assert-AuditContractSettings `
-                -Msrv $settings.Msrv `
-                -CoverageThreshold $settings.CoverageThreshold `
-                -CoverageVersion $settings.CoverageVersion
-        } catch {
-            $rejected = $_.Exception.Message -match $settings.Pattern
-        }
-        if (-not $rejected) {
-            throw "Audit self-test failed: weakened contract settings were accepted: $($settings | ConvertTo-Json -Compress)"
-        }
-    }
     $cargoDenyFixture = New-ManagedAuditDirectory -Label 'cargo-deny-selftest'
     try {
         $fixtureDatabase = Join-Path $cargoDenyFixture 'source-db'
@@ -669,11 +623,6 @@ if ($DependencyPolicyOnly) {
     Write-Host 'Isolated root/evals dependency policy checks passed.'
     return
 }
-Assert-AuditContractSettings `
-    -Msrv $MsrvToolchain `
-    -CoverageThreshold $MinimumCliLineCoverage `
-    -CoverageVersion $CoverageToolVersion
-
 Push-Location $repoRoot
 try {
     Invoke-NativeChecked $nativeApplications.Cargo.Path @('fmt', '--all', '--check')

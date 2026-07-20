@@ -69,7 +69,12 @@ function Get-ProfileEncoding {
     if ($Bytes.Length -ge 2 -and $Bytes[0] -eq 0xfe -and $Bytes[1] -eq 0xff) {
         return [Text.UnicodeEncoding]::new($true, $true)
     }
-    return [Text.UTF8Encoding]::new($false)
+    # throwOnInvalidBytes, like the UTF-16 branches above. A BOM-less profile in a
+    # legacy code page would otherwise decode with U+FFFD replacements and get
+    # rewritten as mojibake, after which the backup is deleted and the run reports
+    # success. Refusing to touch a file we cannot read losslessly is the only safe
+    # outcome for user-authored code.
+    return [Text.UTF8Encoding]::new($false, $true)
 }
 
 function Get-LegacyProfileMigration {
@@ -85,7 +90,11 @@ function Get-LegacyProfileMigration {
     $resolved = (Resolve-Path -LiteralPath $Path).Path
     $bytes = [IO.File]::ReadAllBytes($resolved)
     $encoding = Get-ProfileEncoding -Bytes $bytes
-    $text = [IO.File]::ReadAllText($resolved, $encoding)
+    try {
+        $text = [IO.File]::ReadAllText($resolved, $encoding)
+    } catch {
+        throw "PowerShell profile is not valid UTF-8 or UTF-16 and cannot be rewritten without corrupting it; remove the legacy rayman function by hand, or re-save the profile as UTF-8 first: $resolved"
+    }
     $extent = Get-RaymanFunctionExtent -Text $text -Label $resolved
     if ($null -eq $extent) {
         return [pscustomobject]@{ Needed = $false; Path = $resolved }
@@ -173,6 +182,26 @@ function Invoke-SelfTest {
         }
         if (-not $customRejected -or (Get-Content -Raw -LiteralPath $custom) -notmatch 'rayman\.exe') {
             throw 'Profile migration self-test did not preserve a custom rayman function.'
+        }
+
+        # A BOM-less profile in a legacy code page must be refused, not decoded
+        # lossily and rewritten as mojibake with the backup deleted.
+        $legacyCodePage = Join-Path $testRoot 'legacy-codepage.ps1'
+        $nonAscii = "# " + [char]0x4E2D + [char]0x6587 + "`r`n" + '$global:Keep = 1' + "`r`n"
+        $gbk = [Text.Encoding]::GetEncoding(936)
+        [IO.File]::WriteAllBytes($legacyCodePage, $gbk.GetBytes($nonAscii + $legacyFunction))
+        $originalBytes = [IO.File]::ReadAllBytes($legacyCodePage)
+        $encodingRejected = $false
+        try {
+            Invoke-LegacyProfileMigration -Path $legacyCodePage -ConfirmWrite
+        } catch {
+            $encodingRejected = $_.Exception.Message -match 'not valid UTF-8 or UTF-16'
+        }
+        if (-not $encodingRejected) {
+            throw 'Profile migration self-test did not refuse a non-UTF-8 profile.'
+        }
+        if (-not [Linq.Enumerable]::SequenceEqual($originalBytes, [IO.File]::ReadAllBytes($legacyCodePage))) {
+            throw 'Profile migration self-test modified a non-UTF-8 profile instead of leaving it untouched.'
         }
     } finally {
         if (Test-Path -LiteralPath $testRoot) {
