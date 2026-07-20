@@ -544,14 +544,21 @@ pub(super) fn recover_orphaned_restore_transactions(root: &Path, ws_dir: &Path) 
             )
         })?;
         match transaction.journal.phase {
-            RestorePhase::Committed => {
-                validate_published_restore(root, &transaction).with_context(|| {
-                    format!(
-                        "committed orphan 的工作区结果已漂移，已保留 transaction 并拒绝清理: {}",
-                        display_path(&path)
-                    )
-                })?;
-            }
+            // `Committed` is only ever written after every file was published
+            // *and* `validate_published_restore` already passed, so the restore
+            // is finished and the workspace is the user's to edit again.  This
+            // orphan therefore means nothing more than "the cleanup rmdir did
+            // not land" — an ordinary outcome when an AV scanner or indexer
+            // holds a handle, which is exactly why publishing retries renames.
+            //
+            // Re-validating workspace contents here made that transient failure
+            // permanent: the first ordinary edit afterwards made validation fail
+            // forever, and since both `save` and `restore` run this recovery
+            // under the workspace lock, every autosave tick and every manual
+            // save/restore bailed with no self-healing path short of deleting
+            // the directory by hand.  The journal's own committed invariants are
+            // still enforced by `validate_restore_journal` above.
+            RestorePhase::Committed => {}
             RestorePhase::Preparing | RestorePhase::Publishing | RestorePhase::RollingBack => {
                 rollback_restore_transaction(root, &mut transaction).with_context(|| {
                     format!(
@@ -604,10 +611,12 @@ fn validate_restore_journal(root: &Path, journal: &RestoreJournal) -> Result<()>
     for entry in &journal.entries {
         validate_integrity_record(&entry.expected)?;
         let relative = manifest_relative_path(&entry.expected.path)?;
-        if normalized_path_key(&relative)? != entry.expected.path {
+        if manifest_path_string(&relative)? != entry.expected.path {
             bail!("restore journal 路径未规范化: {}", entry.expected.path);
         }
-        if !paths.insert(entry.expected.path.clone()) {
+        // De-duplicate on the case-folded key: on a case-insensitive filesystem
+        // two entries differing only in case would fight over one destination.
+        if !paths.insert(normalized_path_key(&relative)?) {
             bail!("restore journal 包含重复路径: {}", entry.expected.path);
         }
         if let Some(original) = &entry.original {
@@ -656,10 +665,10 @@ fn validate_restore_journal(root: &Path, journal: &RestoreJournal) -> Result<()>
     let mut directories = HashSet::new();
     for directory in &journal.created_directories {
         let relative = manifest_relative_path(&directory.path)?;
-        if normalized_path_key(&relative)? != directory.path {
+        if manifest_path_string(&relative)? != directory.path {
             bail!("restore journal 新建目录路径未规范化: {}", directory.path);
         }
-        if !directories.insert(directory.path.clone()) {
+        if !directories.insert(normalized_path_key(&relative)?) {
             bail!("restore journal 包含重复新建目录: {}", directory.path);
         }
         if !entry_paths
@@ -709,11 +718,40 @@ pub(super) fn manifest_relative_path(text: &str) -> Result<PathBuf> {
     Ok(relative)
 }
 
+/// The manifest form of a relative path: forward-slash separated, **original
+/// case preserved**.
+///
+/// This is the only string a snapshot may record, because restore turns it back
+/// into a real on-disk path (`root.join(relative)`).  Recording a case-folded
+/// key here would recreate a deleted `README.md` as `readme.md` on Windows —
+/// invisible locally thanks to `core.ignorecase`, but a corrupted tree for every
+/// cross-platform clone and CI run.  Components are joined rather than
+/// `\`-replaced so a Unix file name that legitimately contains a backslash is
+/// not silently split into two components.
+pub(super) fn manifest_path_string(relative: &Path) -> Result<String> {
+    let mut parts = Vec::new();
+    for component in relative.components() {
+        let Component::Normal(name) = component else {
+            bail!("checkpoint 路径含不安全组件: {}", relative.display());
+        };
+        parts.push(name.to_str().ok_or_else(|| {
+            anyhow::anyhow!("checkpoint 路径不是有效 UTF-8: {}", relative.display())
+        })?);
+    }
+    if parts.is_empty() {
+        bail!("checkpoint 路径为空");
+    }
+    Ok(parts.join("/"))
+}
+
+/// Case-folding key for **comparison and de-duplication only**.
+///
+/// Never persist this and never join it onto a root: on a case-insensitive
+/// filesystem two manifest entries differing only in case denote the same file,
+/// but the bytes that must land on disk are the ones in
+/// [`manifest_path_string`].
 pub(super) fn normalized_path_key(relative: &Path) -> Result<String> {
-    let text = relative
-        .to_str()
-        .ok_or_else(|| anyhow::anyhow!("checkpoint 路径不是有效 UTF-8: {}", relative.display()))?
-        .replace('\\', "/");
+    let text = manifest_path_string(relative)?;
     #[cfg(windows)]
     {
         Ok(text.to_ascii_lowercase())
@@ -745,7 +783,7 @@ pub(super) fn integrity_for_file(root: &Path, relative: &Path) -> Result<FileInt
         bail!("文件在读取期间变更或变为链接: {}", display_path(&path));
     }
     Ok(FileIntegrity {
-        path: normalized_path_key(relative)?,
+        path: manifest_path_string(relative)?,
         size: after.len(),
         sha256,
         readonly: Some(after_permissions.0),
@@ -836,7 +874,7 @@ fn prepare_restore_destination_file(
                 let directory_relative = current.strip_prefix(root).map_err(|_| {
                     anyhow::anyhow!("restore 新建目录逃逸工作区: {}", display_path(&current))
                 })?;
-                let key = normalized_path_key(directory_relative)?;
+                let key = manifest_path_string(directory_relative)?;
                 transaction
                     .journal
                     .created_directories

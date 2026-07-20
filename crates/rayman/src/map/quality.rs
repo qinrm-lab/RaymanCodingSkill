@@ -310,9 +310,18 @@ pub fn quality_report_with_config(map: &ProjectMap, config: &QualityConfig) -> Q
         })
         .collect();
 
-    // Cargo and pyproject packages have language-aware test anchors. Other ecosystems remain
-    // advisory until their dependency and test conventions are modeled explicitly.
-    let has_supported_package = !map.packages.is_empty();
+    // Cargo and pyproject packages have language-aware test anchors, but only for the files
+    // their own tooling collects. Apply the same threshold to the source files that really
+    // belong to such a package instead of letting any manifest anywhere in the workspace
+    // promote an unmodeled ecosystem's files from advisory to blocking.
+    let supported_source_files = map
+        .modules
+        .iter()
+        .filter(|module| {
+            module.kind == "source" && super::path_has_supported_package(map, &module.path)
+        })
+        .count();
+    let has_supported_package = supported_source_files >= config.multi_source_no_test_min_sources;
     if map.source_files >= config.multi_source_no_test_min_sources && map.test_files == 0 {
         findings.push(QualityFinding {
             severity: if has_supported_package {
@@ -326,12 +335,12 @@ pub fn quality_report_with_config(map: &ProjectMap, config: &QualityConfig) -> Q
             role: "workspace".into(),
             detail: if has_supported_package {
                 format!(
-                    "{} source files but no indexed test files; large-project edits have no local validation anchor",
+                    "{} source files ({supported_source_files} in Cargo or pyproject packages) but no indexed test files; large-project edits have no local validation anchor",
                     map.source_files
                 )
             } else {
                 format!(
-                    "{} source files but no indexed test files; no Cargo or pyproject package detected, so this heuristic is advisory only — verify test coverage manually",
+                    "{} source files but no indexed test files; no Cargo or pyproject package detected for them, so this heuristic is advisory only — verify test coverage manually",
                     map.source_files
                 )
             },

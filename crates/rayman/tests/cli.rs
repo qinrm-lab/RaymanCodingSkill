@@ -117,7 +117,10 @@ fn validate_goal(root: &Path, id: &str, req: &str, message: &str, changed: &[&st
     {
         "cargo check --quiet".into()
     } else {
-        "rustc --version".into()
+        // 不能用 `rustc --version`：纯 version/help 查询现在被相关性下限判定为
+        // 自证无关的探针，正是这个 helper 要绕开的东西。`--print sysroot` 是一条
+        // 真实执行、退出 0、且不依赖工作区是不是 git 仓库的命令。
+        "rustc --print sysroot".into()
     };
     let mut args = vec![
         "goal",
@@ -2889,6 +2892,136 @@ fn check_blocks_a_baseline_less_goal_instead_of_reporting_ready() {
         "stdout={}",
         checked.stdout
     );
+}
+
+#[test]
+fn unknown_ids_exit_nonzero_across_every_goal_subcommand() {
+    // show / pending resolve 此前对未知 id 静默 exit 0（JSON 还输出裸 null），
+    // 而 evidence/validate/close 对同一 id 都 exit 1。脚本用
+    // `goal show $ID && ...` 判断存在性时会把"不存在"当成"查到了"。
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+
+    assert_eq!(run(root, &["goal", "show", "goal_missing"]).status, 1);
+    assert_eq!(
+        run(root, &["goal", "pending", "resolve", "pending_missing"]).status,
+        1
+    );
+    assert_eq!(run(root, &["goal", "close", "goal_missing"]).status, 1);
+}
+
+#[test]
+fn an_unmodelled_language_still_rejects_a_self_evidently_unrelated_command() {
+    // 相关性检查只对 Rust/Python 建模，其余语言此前完全 fail-open：一条
+    // `rayman --version` 就能当作 main.go 变更的交付证据。下限是拒掉自证
+    // 无关的探针，同时不能误伤真实的 go test / make test / npm test。
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "main.go", "package main\n\nfunc main() {}\n");
+    run_json(root, &["context", "refresh"]);
+    let goal = run_json(root, &["goal", "start", "go work", "--must", "ship"]);
+    let id = goal["id"].as_str().unwrap();
+
+    for probe in ["--version", "--help"] {
+        let rejected = run(
+            root,
+            &[
+                "goal",
+                "validate",
+                id,
+                "--req",
+                "req_1",
+                "-m",
+                "shipped",
+                "--changed",
+                "main.go",
+                "--command",
+                &format!("rayman {probe}"),
+            ],
+        );
+        assert_eq!(
+            rejected.status, 1,
+            "probe={probe} stdout={}",
+            rejected.stdout
+        );
+    }
+    let echoed = run(
+        root,
+        &[
+            "goal",
+            "validate",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "shipped",
+            "--changed",
+            "main.go",
+            "--command",
+            "echo done",
+        ],
+    );
+    assert_eq!(echoed.status, 1, "stdout={}", echoed.stdout);
+
+    // 真实命令仍然被接受——下限不是把未建模生态一律拒之门外。
+    let accepted = run(
+        root,
+        &[
+            "goal",
+            "validate",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "shipped",
+            "--changed",
+            "main.go",
+            "--command",
+            "rustc --print sysroot",
+        ],
+    );
+    assert_eq!(accepted.status, 0, "stderr={}", accepted.stderr);
+}
+
+#[test]
+fn a_success_closure_cannot_be_downgraded_to_reopen_evidence_writes() {
+    // 「已关闭 success 不能再追加人工证据」这条守卫只看当前 status，所以
+    // close --status partial 降级一次就能绕过它：降级 → 追加伪造 evidence →
+    // 重新关闭为 success。success 因此必须是终态。
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+    let goal = run_json(root, &["goal", "start", "terminal", "--must", "validate"]);
+    let id = goal["id"].as_str().unwrap();
+    validate_goal(root, id, "req_1", "executed receipt", &[]);
+    assert_eq!(run(root, &["goal", "close", id]).status, 0);
+
+    let downgraded = run(root, &["goal", "close", id, "--status", "partial"]);
+    assert_eq!(
+        downgraded.status, 1,
+        "success 必须是终态\nstdout={}",
+        downgraded.stdout
+    );
+    assert!(
+        downgraded.stderr.contains("不能降级"),
+        "stderr={}",
+        downgraded.stderr
+    );
+
+    // 守卫仍然拦住直接追加，且目标状态未被改动。
+    assert_eq!(
+        run(
+            root,
+            &["goal", "evidence", id, "--req", "req_1", "-m", "fabricated"]
+        )
+        .status,
+        1
+    );
+    let shown = run_json(root, &["goal", "show", id]);
+    assert_eq!(shown["status"], "success");
 }
 
 #[test]

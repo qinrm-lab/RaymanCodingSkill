@@ -296,6 +296,187 @@ fn restore_rollback_removes_new_file_and_new_parent_directory() {
     assert_eq!(fs::read_to_string(root.join("z.txt")).unwrap(), "live-z");
 }
 
+/// 恢复被删除的文件必须还原**原始大小写**的文件名。
+///
+/// manifest 路径曾经存的是大小写折叠后的比较键，而 restore 又拿它当真实落盘路径，
+/// 于是 Windows 上恢复 `README.md` 会造出 `readme.md`。本地 git 有 core.ignorecase
+/// 兜着看不出来，跨平台克隆/CI 才会炸。测试文件名必须含大写字母——现有恢复测试全用
+/// 小写文件名，测不出这个缺陷。
+#[cfg(windows)]
+#[test]
+fn restore_recreates_deleted_files_with_their_original_name_case() {
+    fn entry_names(dir: &Path) -> Vec<String> {
+        let mut names: Vec<String> = fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().to_string())
+            .collect();
+        names.sort();
+        names
+    }
+
+    let ws = tempfile::tempdir().unwrap();
+    let store = tempfile::tempdir().unwrap();
+    let root = ws.path();
+    write(&root.join("README.md"), "docs");
+    write(&root.join("Cargo.toml"), "[package]");
+    write(&root.join("Docs/Guide.md"), "guide");
+    let saved = save(root, Some(store.path()), DEFAULT_KEEP).unwrap();
+
+    let manifest = verify_snapshot(&saved.path).unwrap();
+    let recorded: Vec<String> = manifest.files.iter().map(|f| f.path.clone()).collect();
+    assert!(recorded.contains(&"README.md".to_string()), "{recorded:?}");
+    assert!(recorded.contains(&"Cargo.toml".to_string()), "{recorded:?}");
+    assert!(
+        recorded.contains(&"Docs/Guide.md".to_string()),
+        "{recorded:?}"
+    );
+
+    fs::remove_file(root.join("README.md")).unwrap();
+    fs::remove_file(root.join("Cargo.toml")).unwrap();
+    fs::remove_dir_all(root.join("Docs")).unwrap();
+    restore(root, Some(store.path()), Some(&saved.id)).unwrap();
+
+    assert_eq!(
+        entry_names(root),
+        vec![
+            "Cargo.toml".to_string(),
+            "Docs".to_string(),
+            "README.md".to_string()
+        ],
+        "恢复必须重建原始大小写的文件名和父目录名"
+    );
+    assert_eq!(
+        entry_names(&root.join("Docs")),
+        vec!["Guide.md".to_string()]
+    );
+    assert_eq!(fs::read_to_string(root.join("README.md")).unwrap(), "docs");
+}
+
+/// committed 孤儿 = 恢复已经发布完成、只是清理目录没删掉（AV/索引器持句柄很常见）。
+///
+/// 这种孤儿曾会让下一次 save/restore 对整个工作区重跑发布后校验：恢复之后的任何
+/// 正常编辑都会让校验失败并 bail，于是 `checkpoint save`（含每 30 分钟的 autosave
+/// tick）和 `restore` 全部永久失败，只能手工删目录。
+#[test]
+fn committed_orphan_transaction_is_cleanable_after_ordinary_edits() {
+    let ws = tempfile::tempdir().unwrap();
+    let store = tempfile::tempdir().unwrap();
+    let root = ws.path();
+    write(&root.join("a.txt"), "checkpoint-a");
+    let saved = save(root, Some(store.path()), DEFAULT_KEEP).unwrap();
+    let manifest = verify_snapshot(&saved.path).unwrap();
+
+    let ws_dir = workspace_dir(root, Some(store.path())).unwrap();
+    let transaction = committed_orphan(root, &ws_dir, &manifest, RestorePhase::Committed);
+
+    // 恢复发布完成之后用户继续编辑，是完全正常的事。
+    write(&root.join("a.txt"), "edited-after-a-successful-restore");
+
+    let after = save(root, Some(store.path()), DEFAULT_KEEP).unwrap();
+    assert!(after.path.exists(), "committed 孤儿不得阻塞后续保存");
+    assert!(
+        !transaction.exists(),
+        "committed 孤儿必须能被清理，否则没有自愈路径"
+    );
+    restore(root, Some(store.path()), Some(&saved.id)).unwrap();
+}
+
+/// 发布中途的孤儿仍必须 fail-closed：那时工作区状态未知，只有回滚能证明安全。
+#[test]
+fn publishing_orphan_transaction_still_fails_closed_on_third_party_drift() {
+    let ws = tempfile::tempdir().unwrap();
+    let store = tempfile::tempdir().unwrap();
+    let root = ws.path();
+    write(&root.join("a.txt"), "checkpoint-a");
+    let saved = save(root, Some(store.path()), DEFAULT_KEEP).unwrap();
+    let manifest = verify_snapshot(&saved.path).unwrap();
+
+    let ws_dir = workspace_dir(root, Some(store.path())).unwrap();
+    let transaction = committed_orphan(root, &ws_dir, &manifest, RestorePhase::Publishing);
+    write(&root.join("a.txt"), "written-by-someone-else");
+
+    assert!(save(root, Some(store.path()), DEFAULT_KEEP).is_err());
+    assert!(
+        transaction.exists(),
+        "发布中途的孤儿回滚失败时必须保留供人工恢复"
+    );
+}
+
+/// 造一个孤儿 restore transaction：所有条目都已发布、原本不存在于工作区。
+fn committed_orphan(
+    root: &Path,
+    ws_dir: &Path,
+    manifest: &Manifest,
+    phase: RestorePhase,
+) -> PathBuf {
+    let transaction = ws_dir.join(format!(
+        "{RESTORE_TRANSACTION_PREFIX}{}-orphan-{:?}",
+        std::process::id(),
+        phase
+    ));
+    fs::create_dir(&transaction).unwrap();
+    fs::create_dir(transaction.join("staged")).unwrap();
+    fs::create_dir(transaction.join("backups")).unwrap();
+    let journal = RestoreJournal {
+        schema: RESTORE_JOURNAL_SCHEMA.to_string(),
+        version: RESTORE_JOURNAL_VERSION,
+        workspace_root: display_path(&root.canonicalize().unwrap()),
+        phase,
+        entries: manifest
+            .files
+            .iter()
+            .map(|expected| RestoreTransactionEntry {
+                expected: expected.clone(),
+                original: None,
+                destination_prepared: true,
+                publish_attempted: true,
+                rollback_complete: false,
+            })
+            .collect(),
+        created_directories: Vec::new(),
+    };
+    crate::file_io::write_json(&transaction.join(RESTORE_JOURNAL_NAME), &journal).unwrap();
+    transaction
+}
+
+/// partial 快照是取证证据，但不能无界增长：autosave 的计划任务每 N 分钟重试一次
+/// 失败的保存，无上限时一天就能堆出约 48 份，而 prune 从不删它们、失败路径也从不
+/// 调 prune。轮换只针对 partial，最近的完整恢复点绝不受影响。
+#[test]
+fn partial_snapshots_are_capped_without_touching_the_last_complete_snapshot() {
+    let ws = tempfile::tempdir().unwrap();
+    let store = tempfile::tempdir().unwrap();
+    let root = ws.path();
+    write(&root.join("a.txt"), "a");
+    let complete = save(root, Some(store.path()), 1).unwrap();
+
+    // goals 应为目录；同名普通文件让此后每次保存都失败并提交一份 partial。
+    write(&root.join(".RaymanCodingSkill/goals"), "not a directory");
+    let attempts = MAX_PARTIAL_SNAPSHOTS + 3;
+    for _ in 0..attempts {
+        assert!(save(root, Some(store.path()), 1).is_err());
+    }
+
+    let checkpoints = list(root, Some(store.path())).unwrap();
+    let partials = checkpoints
+        .iter()
+        .filter(|checkpoint| checkpoint.status == SnapshotStatus::Partial)
+        .count();
+    assert!(
+        partials <= MAX_PARTIAL_SNAPSHOTS,
+        "partial 快照必须有上限（{attempts} 次失败后实得 {partials} 份）"
+    );
+    assert!(partials > 0, "仍必须保留最近的 partial 快照供取证");
+    assert!(
+        complete.path.exists(),
+        "轮换 partial 绝不能删掉最近的完整恢复点"
+    );
+    assert_eq!(
+        latest(root, Some(store.path())).unwrap().unwrap().id,
+        complete.id
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn save_and_restore_reject_symlink_traversal() {

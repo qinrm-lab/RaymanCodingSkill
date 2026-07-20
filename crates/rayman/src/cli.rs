@@ -312,7 +312,7 @@ pub enum GoalAction {
         id: String,
         /// Intended change paths.
         paths: Vec<String>,
-        /// Exit nonzero when the plan is blocked.
+        /// Accepted for symmetry with `map plan`; a blocked plan always exits nonzero.
         #[arg(long)]
         check: bool,
     },
@@ -324,8 +324,7 @@ pub enum GoalAction {
         #[arg(long = "message", short = 'm')]
         message: String,
     },
-    /// 记录某需求的证据并标记完成
-    /// 记录尚未被机器验证的进展说明（evidence-only completion，不能支撑门禁主张）
+    /// 记录尚未被机器验证的进展说明并标记需求完成（evidence-only completion，不能支撑门禁主张）
     Evidence {
         id: String,
         #[arg(long)]

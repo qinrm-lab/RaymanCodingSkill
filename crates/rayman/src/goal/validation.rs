@@ -365,7 +365,14 @@ pub fn validation_list_command(
     }))
 }
 
-fn pytest_collected_count(text: &str) -> Option<u64> {
+/// 从 `--collect-only -q` 的末行取"将要执行的用例数"。
+///
+/// 两种形式都要正确处理：`N tests collected in Xs`，以及取消选择时的
+/// `M/N tests collected (K deselected) in Xs`——后者 M 是选中数、N 是总数，
+/// 而运行期 summary 报的是 M。取 N 会让 `passed + ignored == listed` 恒不成立，
+/// 于是任何带 `-k` / `-m <marker>` / `--deselect` 的命令都永远写不出 receipt，
+/// 尽管 `-k` 正是文档建模并支持的用法。因此正向取第一个数字（即 M）。
+pub(super) fn pytest_collected_count(text: &str) -> Option<u64> {
     for line in text.lines().rev() {
         let tokens = line
             .split(|character: char| !character.is_ascii_alphanumeric())
@@ -374,7 +381,6 @@ fn pytest_collected_count(text: &str) -> Option<u64> {
         if let Some(index) = tokens.iter().position(|token| *token == "collected")
             && let Some(count) = tokens[..index]
                 .iter()
-                .rev()
                 .find_map(|token| token.parse::<u64>().ok())
         {
             return Some(count);
@@ -757,6 +763,33 @@ enum ValidationExpectation {
     RustBuildOrTest,
     CargoManifestValidation,
     PythonTest,
+    /// 未建模生态的下限：命令至少不能是自证无关的探针。
+    NonProbeCommand,
+}
+
+/// 命令是否自证与任何变更无关——本工具自身、纯 version/help 查询、空操作。
+///
+/// 未建模生态此前完全 fail-open：一条 `rayman --version` 就能当作 `main.go`
+/// 变更的交付证据并让 `check --goal` 报 ready=true。这里不假装能判断任意生态的
+/// "这条命令是否真的验证了这个文件"——那需要逐语言建模——但至少要拒掉自证
+/// 无关的探针。真实的 `go test ./...`、`make test`、`npm test` 都不受影响。
+fn command_is_inert_probe(command: &ParsedValidationCommand) -> bool {
+    const INERT_PROGRAMS: &[&str] = &[
+        "rayman", "echo", "true", "cd", "pwd", "ver", "hostname", "whoami", "date",
+    ];
+    const PROBE_FLAGS: &[&str] = &["--version", "-V", "--help", "-h", "version", "help"];
+
+    let executable = executable_name(command);
+    if INERT_PROGRAMS.contains(&executable.as_str()) {
+        return true;
+    }
+    // 只有当**全部**参数都是查询标志时才算探针：`go test -v ./...` 里的
+    // "test"/"./..." 不是探针标志，因此照常通过。
+    !command.args.is_empty()
+        && command
+            .args
+            .iter()
+            .all(|argument| PROBE_FLAGS.iter().any(|flag| argument == flag))
 }
 
 fn validation_expectation_for_path(path: &str) -> Option<ValidationExpectation> {
@@ -770,7 +803,8 @@ fn validation_expectation_for_path(path: &str) -> Option<ValidationExpectation> 
     if path.ends_with(".py") || path.ends_with("pyproject.toml") {
         return Some(ValidationExpectation::PythonTest);
     }
-    None
+    // 未建模的生态仍有一条下限，不再无条件放行。
+    Some(ValidationExpectation::NonProbeCommand)
 }
 
 fn validation_expectation_for_policy(
@@ -778,8 +812,13 @@ fn validation_expectation_for_policy(
     policy: ReceiptValidationPolicy,
 ) -> Option<ValidationExpectation> {
     let expectation = validation_expectation_for_path(path)?;
+    // 历史策略下不追加新要求：给旧记录套上后来才有的判定会让本来有效的
+    // 历史证明凭空失效。NonProbeCommand 与 PythonTest 都属于后加的。
     if policy == ReceiptValidationPolicy::LegacyV1
-        && expectation == ValidationExpectation::PythonTest
+        && matches!(
+            expectation,
+            ValidationExpectation::PythonTest | ValidationExpectation::NonProbeCommand
+        )
     {
         None
     } else {
@@ -797,6 +836,9 @@ fn validation_expectation_label(expectation: ValidationExpectation) -> &'static 
         }
         ValidationExpectation::PythonTest => {
             "Python test validation via direct `python -m pytest` or `pytest`"
+        }
+        ValidationExpectation::NonProbeCommand => {
+            "一条真正验证该变更的命令；rayman 自身与 --version/--help 之类的查询不是证据"
         }
     }
 }
@@ -821,6 +863,9 @@ fn validation_matches_expectation(
     command: &ParsedValidationCommand,
     expectation: ValidationExpectation,
 ) -> bool {
+    if expectation == ValidationExpectation::NonProbeCommand {
+        return !command_is_inert_probe(command);
+    }
     if pytest_invocation(command) {
         return matches!(expectation, ValidationExpectation::PythonTest);
     }
@@ -861,6 +906,8 @@ fn validation_matches_expectation(
                 || (subcommand == "deny" && next == Some("check"))
         }
         ValidationExpectation::PythonTest => false,
+        // 已在函数开头短路，不会走到这里。
+        ValidationExpectation::NonProbeCommand => true,
     }
 }
 
@@ -975,6 +1022,11 @@ fn validation_matches_impact(
     };
     if !validation_matches_expectation(command, expectation) {
         return false;
+    }
+    // 未建模生态只做"非探针"这一条下限判断，不再往下走 Rust/pytest/cargo 的
+    // 作用域匹配——那些规则对未知生态没有意义，硬套只会误拒。
+    if expectation == ValidationExpectation::NonProbeCommand {
+        return true;
     }
     if command_is_workspace_wide(root, command) {
         return true;

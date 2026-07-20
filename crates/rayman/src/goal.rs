@@ -974,6 +974,15 @@ impl GoalStore {
             }
             goal = candidate;
         } else {
+            // success 是终态。允许降级会抹掉一次已完成的记录，而且是绕过"已关闭
+            // success 不能再追加人工证据"那条守卫的现成路径：降级 → 追加伪造
+            // evidence → 重新关闭为 success，证据链被污染而门禁读不出来。
+            // 要继续做就 supersede，要保留历史就 archive。
+            if goal.status == GoalStatus::Success {
+                bail!(
+                    "目标 {id} 已关闭为 success，不能降级为 {status}；请用新的 baseline-bound goal supersede，或将该记录 archive"
+                );
+            }
             goal.status = status;
         }
         goal.updated_at = now_iso();

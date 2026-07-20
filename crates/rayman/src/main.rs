@@ -726,10 +726,15 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
             }
         }
         GoalAction::Show { id } => {
-            let goal = store.get(&id)?;
+            // 未知 id 必须非零退出。此前 show 静默 exit 0 且 JSON 输出裸 `null`，
+            // 而 evidence/validate/close 对同一个 id 都 exit 1——脚本用
+            // `goal show $ID && ...` 判断存在性时会把不存在当成查到了。
+            let Some(goal) = store.get(&id)? else {
+                bail!("目标不存在: {id}");
+            };
             if json {
                 print(&serde_json::to_value(&goal)?);
-            } else if let Some(goal) = goal {
+            } else {
                 println!(
                     "{} [{}/{}] {}",
                     goal.id, goal.lifecycle, goal.status, goal.title
@@ -759,8 +764,6 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                         );
                     }
                 }
-            } else {
-                println!("目标不存在: {id}");
             }
         }
         GoalAction::Plan { id, paths, check } => {
@@ -1033,18 +1036,15 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 }
             }
             PendingAction::Resolve { id } => {
-                let removed = pending.resolve(&id)?;
+                // 与 goal show 同理：解决一个不存在的待完成项必须非零退出，
+                // 否则调用方会把"没找到"当成"已解决"。
+                if !pending.resolve(&id)? {
+                    bail!("待完成项不存在: {id}");
+                }
                 if json {
-                    print(&json!({ "resolved": removed, "id": id }));
+                    print(&json!({ "resolved": true, "id": id }));
                 } else {
-                    println!(
-                        "{}",
-                        if removed {
-                            "已解决待完成项。"
-                        } else {
-                            "未找到该待完成项。"
-                        }
-                    );
+                    println!("已解决待完成项。");
                 }
             }
         },
@@ -1248,7 +1248,10 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
         }
     }
 
-    if task_goal_id.is_some() && cmd.profile == CheckProfile::Quick {
+    // quick 档不解析目标绑定，所以 `--require-current-goal` 下 task_goal_id 恒为
+    // None。只按 task_goal_id 判断会让这条路径以空 blocker 列表退出，用户拿不到
+    // 任何原因——门禁本身是对的，缺的是诊断。
+    if (task_goal_id.is_some() || cmd.require_current_goal) && cmd.profile == CheckProfile::Quick {
         task_blockers
             .push("goal-bound completion gate requires standard or release profile".into());
     }

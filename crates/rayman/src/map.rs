@@ -335,15 +335,28 @@ pub fn topology_report(map: &ProjectMap) -> TopologyReport {
     }
 }
 
-/// A Cargo workspace is authoritative only when its package topology came from
-/// Cargo metadata.  Heuristic fallback remains useful for interactive map
-/// output, but standard/release readiness must not rely on it.
+/// A Cargo topology is authoritative only when it came from Cargo metadata.
+/// Heuristic fallback remains useful for interactive map output, but
+/// standard/release readiness must not rely on it.
 pub fn topology_is_authoritative(root: &Path, map: &ProjectMap) -> bool {
     topology_provenance_is_authoritative(root, &map.topology_provenance)
+        && discovered_cargo_topology_is_authoritative(&map.topology_provenance, &map.packages)
 }
 
 fn topology_provenance_is_authoritative(root: &Path, provenance: &str) -> bool {
     !root.join("Cargo.toml").is_file() || provenance == "cargo_metadata"
+}
+
+/// A missing root `Cargo.toml` only proves Cargo authority was never attempted, not that the
+/// resulting topology is trustworthy: workspaces whose crates all live in subdirectories
+/// (`crates/foo/Cargo.toml`, polyglot monorepos) still yield Cargo packages, and those came
+/// from line-by-line string heuristics. Repositories with no Cargo package at all (pure
+/// JS/Go/Python trees) have nothing for Cargo to be authoritative about, so they stay ready.
+fn discovered_cargo_topology_is_authoritative(provenance: &str, packages: &[PackageEntry]) -> bool {
+    provenance == "cargo_metadata"
+        || !packages
+            .iter()
+            .any(|package| package.manifest_path.ends_with("Cargo.toml"))
 }
 
 pub fn impact_report(map: &ProjectMap, path: &str) -> Result<ImpactReport> {
@@ -486,12 +499,16 @@ pub fn change_plan(map: &ProjectMap, paths: &[String]) -> Result<ChangePlan> {
     let mut recommended_checks = BTreeSet::new();
     let mut warnings = Vec::new();
     let mut source_changed_count = 0usize;
+    let mut supported_source_changed_count = 0usize;
     let mut has_package_test_anchor = false;
 
     for path in &changed_paths {
         let module = module_by_path.get(path.as_str());
         if module.is_some_and(|module| module.kind == "source") || is_source_path(path) {
             source_changed_count += 1;
+            if path_has_supported_package(map, path) {
+                supported_source_changed_count += 1;
+            }
         }
         if module.is_none() {
             warnings.push(format!(
@@ -567,20 +584,21 @@ pub fn change_plan(map: &ProjectMap, paths: &[String]) -> Result<ChangePlan> {
     }
 
     let has_validation_anchor = !tests_by_path.is_empty() || has_package_test_anchor;
-    // Cargo and pyproject packages have language-aware test anchors. Other ecosystems remain
-    // advisory until their dependency and test conventions are modeled explicitly.
-    let has_supported_package = !map.packages.is_empty();
 
     let mut blockers = Vec::new();
     if source_changed_count >= 3 && !has_validation_anchor {
         let message = format!(
             "{source_changed_count} source files are in scope but no same-package candidate test target or indexed package test anchor was inferred"
         );
-        if has_supported_package {
+        // The blocking threshold applies to the files the modeled ecosystems actually collect.
+        // An unrelated manifest elsewhere in the tree (a `fixtures/tiny/Cargo.toml` inside a
+        // JavaScript repository) is not evidence that these changed files have a package-level
+        // test anchor, so it must not promote them from advisory to blocking.
+        if supported_source_changed_count >= 3 {
             blockers.push(message);
         } else {
             warnings.push(format!(
-                "{message}; no Cargo or pyproject package detected, so this is advisory only — verify test coverage manually"
+                "{message}; no Cargo or pyproject package detected for the changed source files, so this is advisory only — verify test coverage manually"
             ));
         }
     }
@@ -678,6 +696,26 @@ fn impact_has_package_test_anchor(map: &ProjectMap, report: &ImpactReport) -> bo
             .find(|package| package.root_path == dependent.from_root_path)
             .is_some_and(|package| package_has_test_anchor(map, package))
     })
+}
+
+/// Only Cargo and pyproject packages have language-aware test conventions, and only for the
+/// files their own tooling collects. A `.js` file that merely sits in a repository containing
+/// some unrelated `Cargo.toml` has no modeled test anchor, so its missing-test conclusion must
+/// stay advisory exactly like any other unsupported ecosystem.
+fn path_has_supported_package(map: &ProjectMap, path: &str) -> bool {
+    map.packages.iter().any(|package| {
+        path_is_under_package(path, &package.root_path) && package_collects_path(package, path)
+    })
+}
+
+fn package_collects_path(package: &PackageEntry, path: &str) -> bool {
+    if package.manifest_path.ends_with("Cargo.toml") {
+        path.ends_with(".rs")
+    } else if package.manifest_path.ends_with("pyproject.toml") {
+        path.ends_with(".py")
+    } else {
+        false
+    }
 }
 
 fn package_has_test_anchor(map: &ProjectMap, package: &PackageEntry) -> bool {
@@ -990,8 +1028,10 @@ fn read_workspace_info(root: &Path, index: &ContextIndex) -> Result<WorkspaceInf
     let Some(entry) = index.files.iter().find(|file| file.path == "Cargo.toml") else {
         return Ok(WorkspaceInfo::default());
     };
-    let text = String::from_utf8(context::read_verified_file(root, entry)?)
-        .context("Cargo workspace manifest 不是 UTF-8")?;
+    // Manifests decode exactly like indexed source files: one non-UTF-8 manifest anywhere in
+    // the tree (a fixture with a GBK comment, even one the workspace excludes) must not bail
+    // the whole map/check/prepare/finish pipeline and leave the workspace unable to be READY.
+    let text = String::from_utf8_lossy(&context::read_verified_file(root, entry)?).into_owned();
     let mut info = WorkspaceInfo {
         member_patterns: parse_workspace_array(&text, "members"),
         exclude_patterns: parse_workspace_array(&text, "exclude"),
@@ -1100,8 +1140,7 @@ fn discover_packages(
         if !file.path.ends_with("Cargo.toml") {
             continue;
         }
-        let text = String::from_utf8(context::read_verified_file(root, file)?)
-            .with_context(|| format!("Cargo manifest 不是 UTF-8: {}", file.path))?;
+        let text = String::from_utf8_lossy(&context::read_verified_file(root, file)?).into_owned();
         let Some(name) = parse_package_name(&text) else {
             continue;
         };
@@ -1156,8 +1195,7 @@ fn infer_package_dependencies(
                     package.manifest_path
                 )
             })?;
-        let text = String::from_utf8(context::read_verified_file(root, entry)?)
-            .with_context(|| format!("Cargo manifest 不是 UTF-8: {}", package.manifest_path))?;
+        let text = String::from_utf8_lossy(&context::read_verified_file(root, entry)?).into_owned();
         let mut section = String::new();
         let mut nested_dependency: Option<String> = None;
         for (line_index, raw) in text.lines().enumerate() {
@@ -1536,6 +1574,14 @@ fn symbol_visibility(text: &str, line: usize) -> &'static str {
 
 fn count_tests(file: &FileEntry, text: &str) -> usize {
     if file.path.ends_with(".py") {
+        // Python has no Rust-style inline test module. pytest only collects modules it
+        // recognises as tests, so a production module that happens to define `TestResult`,
+        // `Testimonial`, or a `test_` helper method is never executed by the test run. Counting
+        // those names here used to mint a self-covering `inline_test_in_source_file` anchor and
+        // silently unblock broad changes that have no test coverage at all.
+        if file.kind != "test" {
+            return 0;
+        }
         return text
             .lines()
             .filter(|line| {
@@ -1564,7 +1610,10 @@ fn infer_candidate_paths(file: &FileEntry, text: &str, index: &ContextIndex) -> 
     if file.path.ends_with(".py") && file.kind == "test" {
         return python::infer_test_candidates(file, text, index);
     }
-    if file.kind == "source" {
+    // Self-coverage is only real for Rust's `#[test]` modules, which the production file
+    // compiles and `cargo test` runs. No other modeled language collects tests out of a
+    // production file, so none of them may claim to cover themselves.
+    if file.kind == "source" && file.path.ends_with(".rs") {
         return TestInference {
             paths: vec![file.path.clone()],
             basis: "inline_test_in_source_file".into(),

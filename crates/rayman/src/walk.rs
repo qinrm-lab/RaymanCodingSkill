@@ -4,6 +4,7 @@
 //! 所有调用方都必须使用 [`workspace_files_checked`] 或 [`workspace_walk`]：遍历
 //! 错误是安全边界，不能被当作"扫描完整"吞掉。
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use crate::file_io::is_link_or_reparse;
@@ -13,13 +14,15 @@ use ignore::WalkBuilder;
 /// 运行时状态目录：任何工作区里都不参与索引。
 const STATE_IGNORE: &[&str] = &[".git", ".RaymanCodingSkill"];
 
-/// 仅在 .gitignore 不可用时兜底跳过的重目录。
+/// 按名字兜底跳过的重目录——**仅当其中没有任何被 git 跟踪的内容时**。
 ///
-/// 这些名字**不能**在 git 工作区里无条件剪枝：能走到 filter_entry 的目录说明它
-/// 没有被 .gitignore 忽略，也就是被跟踪的第一方内容。真正的产物目录本就会被
-/// gitignore 拦在前面，所以按名字剪枝只在它错的时候才起作用——被跟踪的
-/// `build/deploy.ps1` 会同时从 context 索引、goal 基线差量门禁和 checkpoint 快照
-/// 里消失，正是本模块声称要防的"谎称遍历完整"。
+/// 两个方向都会出错，判据必须是"是否含被跟踪内容"，不能是别的：
+/// 无条件剪枝会让被跟踪的 `build/deploy.ps1` 同时从 context 索引、goal 基线差量
+/// 门禁和 checkpoint 快照里消失，即本模块声称要防的"谎称遍历完整"；而反过来只看
+/// `.git` 是否存在就整体放行，会把未被 .gitignore 覆盖的 target/node_modules
+/// 拖进 baseline，使产物每次构建都产生无法声明的 unplanned 差量，goal 门禁
+/// 变为不可满足。"没被 .gitignore 匹配"并不等于"被跟踪"——untracked 且
+/// unignored 是 git 的常规状态。
 const VENDOR_FALLBACK_IGNORE: &[&str] = &[
     "target",
     "node_modules",
@@ -81,18 +84,34 @@ pub fn workspace_walk(root: &Path) -> WorkspaceWalk {
         .git_exclude(true)
         .require_git(false) // 即使工作区还不是 git 仓库，也尊重 .gitignore
         .parents(false);
-    // git 工作区里 .gitignore 是唯一权威的忽略来源，兜底清单只在没有 git 时生效。
-    let vendor_fallback = std::fs::symlink_metadata(root.join(".git")).is_err();
+    let tracked = tracked_directories(root);
+    let owned_root = root.to_path_buf();
     builder.filter_entry(move |entry| {
         // 只剪枝目录：名为 build/dist 的普通源码文件不应从索引里无声消失。
         if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            return true;
+        }
+        // 工作区根本身永远保留，哪怕它恰好叫 build。
+        if entry.depth() == 0 {
             return true;
         }
         let name = entry.file_name().to_string_lossy();
         if STATE_IGNORE.contains(&name.as_ref()) {
             return false;
         }
-        !(vendor_fallback && VENDOR_FALLBACK_IGNORE.contains(&name.as_ref()))
+        if !VENDOR_FALLBACK_IGNORE.contains(&name.as_ref()) {
+            return true;
+        }
+        match &tracked {
+            // git 可用：只保留确实含被跟踪内容的 vendor 名目录。
+            Some(tracked) => entry
+                .path()
+                .strip_prefix(&owned_root)
+                .ok()
+                .is_some_and(|rel| tracked.contains(&rel.to_string_lossy().replace('\\', "/"))),
+            // 非 git 工作区或 git 不可用：无从判断跟踪状态，按名字兜底剪枝。
+            None => false,
+        }
     });
 
     let mut report = WorkspaceWalk::default();
@@ -131,6 +150,41 @@ pub fn workspace_walk(root: &Path) -> WorkspaceWalk {
     report.files.sort();
     report.files.dedup();
     report
+}
+
+/// 含被 git 跟踪内容的目录集合（工作区相对、正斜杠分隔）。
+///
+/// 返回 `None` 表示无从判断——不是 git 仓库、git 不可用、或命令失败。调用方在
+/// 那种情况下必须回退到按名字剪枝，而不是当作"没有跟踪内容"，否则一次 git 故障
+/// 就会静默改变索引范围。
+fn tracked_directories(root: &Path) -> Option<BTreeSet<String>> {
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["ls-files", "-z"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let mut directories = BTreeSet::new();
+    for entry in output.stdout.split(|byte| *byte == 0) {
+        if entry.is_empty() {
+            continue;
+        }
+        let path = String::from_utf8_lossy(entry);
+        let mut components: Vec<&str> = path.split('/').collect();
+        components.pop(); // 去掉文件名，只累积祖先目录
+        let mut prefix = String::new();
+        for component in components {
+            if !prefix.is_empty() {
+                prefix.push('/');
+            }
+            prefix.push_str(component);
+            directories.insert(prefix.clone());
+        }
+    }
+    Some(directories)
 }
 
 fn append_indexed_state_policy(root: &Path, report: &mut WorkspaceWalk) {
@@ -254,20 +308,32 @@ mod tests {
         assert!(!keys.contains(&"ignored.txt".to_string()));
     }
 
+    fn git(root: &Path, args: &[&str]) {
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(args)
+            .status()
+            .expect("git must be available");
+        assert!(status.success(), "git {args:?} failed");
+    }
+
+    /// vendor 名目录的去留取决于**是否含被跟踪内容**，两个方向都必须成立：
+    /// 被跟踪的 `build/deploy.ps1` 不能从索引里消失；未跟踪的 `node_modules/`
+    /// 也不能被拖进索引，否则产物每次构建都会产生无法声明的 goal 差量。
     #[test]
-    fn walk_indexes_git_tracked_files_inside_vendor_named_directories() {
+    fn vendor_pruning_follows_git_tracking_in_both_directions() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
-        // 有 .git 时 .gitignore 是权威来源；能走到这里的 build/ 就是被跟踪的
-        // 第一方内容，按名字剪枝会让它对索引、goal 差量门禁和 checkpoint 隐形。
-        fs::create_dir_all(root.join(".git")).unwrap();
         fs::create_dir_all(root.join("build")).unwrap();
         fs::write(root.join("build/deploy.ps1"), "Write-Host x").unwrap();
-        fs::create_dir_all(root.join("dist")).unwrap();
-        fs::write(root.join("dist/bundle.js"), "x").unwrap();
-        fs::write(root.join(".gitignore"), "target/\n").unwrap();
-        fs::create_dir_all(root.join("target")).unwrap();
-        fs::write(root.join("target/artifact.bin"), "x").unwrap();
+        fs::write(root.join("README.md"), "# x").unwrap();
+        // 未跟踪且未被 .gitignore 覆盖——这正是回归发生的形态。
+        fs::create_dir_all(root.join("node_modules/pkg")).unwrap();
+        fs::write(root.join("node_modules/pkg/index.js"), "x").unwrap();
+
+        git(root, &["init", "--quiet"]);
+        git(root, &["add", "build/deploy.ps1", "README.md"]);
 
         let keys: Vec<String> = workspace_files_checked(root)
             .unwrap()
@@ -277,19 +343,36 @@ mod tests {
 
         assert!(
             keys.contains(&"build/deploy.ps1".to_string()),
-            "keys={keys:?}"
+            "tracked build/ content must be indexed: {keys:?}"
         );
         assert!(
-            keys.contains(&"dist/bundle.js".to_string()),
-            "keys={keys:?}"
-        );
-        // gitignore 仍然权威：真正的产物目录照常被排除。
-        assert!(
-            !keys.iter().any(|key| key.starts_with("target")),
-            "keys={keys:?}"
+            !keys.iter().any(|key| key.starts_with("node_modules")),
+            "untracked artifact dir must stay pruned: {keys:?}"
         );
         assert!(
             !keys.iter().any(|key| key.starts_with(".git/")),
+            "keys={keys:?}"
+        );
+    }
+
+    /// 非 git 工作区无从判断跟踪状态，回退到按名字剪枝。
+    #[test]
+    fn vendor_pruning_falls_back_to_names_without_git() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::write(root.join("README.md"), "# x").unwrap();
+        fs::create_dir_all(root.join("node_modules/pkg")).unwrap();
+        fs::write(root.join("node_modules/pkg/index.js"), "x").unwrap();
+
+        let keys: Vec<String> = workspace_files_checked(root)
+            .unwrap()
+            .iter()
+            .map(|path| relative_key(root, path))
+            .collect();
+
+        assert!(keys.contains(&"README.md".to_string()), "keys={keys:?}");
+        assert!(
+            !keys.iter().any(|key| key.starts_with("node_modules")),
             "keys={keys:?}"
         );
     }

@@ -21,6 +21,305 @@ fn cargo_workspace_requires_metadata_provenance_for_authoritative_topology() {
 }
 
 #[test]
+fn subdirectory_only_cargo_workspace_is_not_authoritative_topology() {
+    // No root Cargo.toml means cargo metadata was never even attempted, so the packages below
+    // came from line-by-line string heuristics. Treating that as authority let crates-in-
+    // subdirectories workspaces reach standard/release READY on guessed topology.
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        root.join("crates/foo/Cargo.toml").as_path(),
+        "[package]\nname = \"foo\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    );
+    write(
+        root.join("crates/foo/src/lib.rs").as_path(),
+        "pub fn foo() {}\n",
+    );
+    context::refresh(root).unwrap();
+
+    let map = build_readonly(root).unwrap();
+    assert_eq!(map.topology_provenance, "no_cargo_manifest");
+    assert!(map.packages.iter().any(|package| package.name == "foo"));
+    assert!(!topology_is_authoritative(root, &map));
+}
+
+#[test]
+fn workspaces_without_cargo_packages_stay_authoritative() {
+    // The fix above must not start blocking ecosystems Cargo has no opinion about.
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        root.join("src/app.js").as_path(),
+        "export function app() { return 1; }\n",
+    );
+    write(
+        root.join("pyproject.toml").as_path(),
+        "[project]\nname = \"svc\"\n",
+    );
+    write(
+        root.join("svc/core.py").as_path(),
+        "def value():\n    return 1\n",
+    );
+    context::refresh(root).unwrap();
+
+    let map = build_readonly(root).unwrap();
+    assert!(
+        map.packages
+            .iter()
+            .any(|package| package.manifest_path == "pyproject.toml")
+    );
+    assert!(topology_is_authoritative(root, &map));
+}
+
+#[test]
+fn unrelated_cargo_fixture_does_not_block_javascript_conclusions() {
+    // Reproduces the reported repro: a small JavaScript repository that also carries one
+    // unrelated Rust fixture crate. Every JavaScript file used to jump from advisory to hard
+    // blocker just because some `Cargo.toml` existed somewhere in the tree.
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    for name in ["app", "router", "store", "view"] {
+        write(
+            root.join(format!("src/{name}.js")).as_path(),
+            &format!("export function {name}() {{ return 1; }}\n"),
+        );
+    }
+    write(
+        root.join("fixtures/tiny/Cargo.toml").as_path(),
+        "[package]\nname = \"tiny\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    );
+    write(
+        root.join("fixtures/tiny/src/lib.rs").as_path(),
+        "pub fn tiny() {}\n",
+    );
+    context::refresh(root).unwrap();
+
+    let map = build_readonly(root).unwrap();
+    assert!(map.packages.iter().any(|package| package.name == "tiny"));
+
+    let plan = change_plan(
+        &map,
+        &[
+            "src/app.js".to_string(),
+            "src/router.js".to_string(),
+            "src/store.js".to_string(),
+        ],
+    )
+    .unwrap();
+    assert!(plan.ready, "blockers={:?}", plan.blockers);
+    assert!(
+        plan.warnings
+            .iter()
+            .any(|warning| warning.contains("no Cargo or pyproject package detected"))
+    );
+
+    let quality = quality_report(&map);
+    assert!(quality.ready, "findings={:?}", quality.findings);
+    assert!(quality.findings.iter().any(|finding| {
+        finding.kind == "multi_source_project_without_tests" && finding.severity == "warning"
+    }));
+}
+
+#[test]
+fn cargo_package_sources_still_block_next_to_unsupported_ecosystem_files() {
+    // Fail-safe direction check for the scoping above: once the changed set really is Cargo
+    // source files in a Cargo package with no test anchor, it must still block.
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        root.join("web/app.js").as_path(),
+        "export function app() {}\n",
+    );
+    write(
+        root.join("crates/core/Cargo.toml").as_path(),
+        "[package]\nname = \"core\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    );
+    write(
+        root.join("crates/core/src/lib.rs").as_path(),
+        "pub mod a;\npub mod b;\n",
+    );
+    write(
+        root.join("crates/core/src/a.rs").as_path(),
+        "pub fn a() {}\n",
+    );
+    write(
+        root.join("crates/core/src/b.rs").as_path(),
+        "pub fn b() {}\n",
+    );
+    context::refresh(root).unwrap();
+
+    let map = build_readonly(root).unwrap();
+    let plan = change_plan(
+        &map,
+        &[
+            "crates/core/src/lib.rs".to_string(),
+            "crates/core/src/a.rs".to_string(),
+            "crates/core/src/b.rs".to_string(),
+        ],
+    )
+    .unwrap();
+
+    assert!(!plan.ready);
+    assert!(
+        plan.blockers
+            .iter()
+            .any(|blocker| blocker.contains("3 source files"))
+    );
+}
+
+#[test]
+fn python_production_file_does_not_mint_a_self_covering_test_anchor() {
+    // pytest never collects a production module, so pytest-shaped names inside one are not a
+    // validation anchor. Counting them used to produce a `inline_test_in_source_file`
+    // TestTarget covering the very file that defined them and unblock uncovered changes.
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        root.join("pyproject.toml").as_path(),
+        "[project]\nname = \"svc\"\n",
+    );
+    write(
+        root.join("svc/models.py").as_path(),
+        "class TestResult:\n    def test_passed(self):\n        return True\n\n\ndef test_matrix():\n    return []\n",
+    );
+    write(
+        root.join("svc/api.py").as_path(),
+        "def handle():\n    return 1\n",
+    );
+    write(
+        root.join("svc/worker.py").as_path(),
+        "def work():\n    return 2\n",
+    );
+    context::refresh(root).unwrap();
+
+    let map = build_readonly(root).unwrap();
+    assert!(
+        !map.tests.iter().any(|test| test.path == "svc/models.py"),
+        "tests={:?}",
+        map.tests
+    );
+
+    let plan = change_plan(
+        &map,
+        &[
+            "svc/models.py".to_string(),
+            "svc/api.py".to_string(),
+            "svc/worker.py".to_string(),
+        ],
+    )
+    .unwrap();
+    assert!(!plan.ready, "warnings={:?}", plan.warnings);
+    assert!(
+        plan.blockers
+            .iter()
+            .any(|blocker| blocker.contains("3 source files"))
+    );
+}
+
+#[test]
+fn real_pytest_files_keep_their_test_anchor() {
+    // The Python fix must only remove the fake anchors, not pytest's real ones.
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        root.join("pyproject.toml").as_path(),
+        "[project]\nname = \"svc\"\n",
+    );
+    write(
+        root.join("svc/api.py").as_path(),
+        "def handle():\n    return 1\n",
+    );
+    write(
+        root.join("tests/test_api.py").as_path(),
+        "from svc.api import handle\n\n\nclass TestApi:\n    def test_handle(self):\n        assert handle() == 1\n",
+    );
+    context::refresh(root).unwrap();
+
+    let map = build_readonly(root).unwrap();
+    let test = map
+        .tests
+        .iter()
+        .find(|test| test.path == "tests/test_api.py")
+        .unwrap();
+    assert!(test.test_count > 0);
+    assert!(
+        test.candidate_paths
+            .iter()
+            .any(|candidate| candidate == "svc/api.py")
+    );
+}
+
+#[test]
+fn map_build_tolerates_non_utf8_cargo_and_pyproject_manifests() {
+    // A manifest with a GBK comment anywhere in the tree — even a workspace-excluded fixture —
+    // used to make `build_from_index` bail, which failed map/check/prepare/finish outright and
+    // left the workspace unable to reach READY under any profile.
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(root.join("src/lib.rs").as_path(), "pub fn ok() {}\n");
+    fs::create_dir_all(root.join("fixtures/legacy")).unwrap();
+    fs::write(
+        root.join("fixtures/legacy/Cargo.toml"),
+        gbk_comment_manifest(
+            b"[package]\nname = \"legacy\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        ),
+    )
+    .unwrap();
+    write(
+        root.join("fixtures/legacy/src/lib.rs").as_path(),
+        "pub fn legacy() {}\n",
+    );
+    fs::create_dir_all(root.join("fixtures/pylegacy")).unwrap();
+    fs::write(
+        root.join("fixtures/pylegacy/pyproject.toml"),
+        gbk_comment_manifest(b"[project]\nname = \"legacy-python\"\n"),
+    )
+    .unwrap();
+    context::refresh(root).unwrap();
+
+    let map = build_readonly(root).unwrap();
+    assert!(map.packages.iter().any(|package| package.name == "legacy"));
+    assert!(
+        map.packages
+            .iter()
+            .any(|package| package.name == "legacy-python")
+    );
+}
+
+#[test]
+fn map_build_tolerates_a_non_utf8_root_workspace_manifest() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    fs::write(
+        root.join("Cargo.toml"),
+        gbk_comment_manifest(
+            b"[package]\nname = \"sample\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        ),
+    )
+    .unwrap();
+    write(root.join("src/lib.rs").as_path(), "pub fn ok() {}\n");
+    context::refresh(root).unwrap();
+
+    // cargo metadata cannot read a non-UTF-8 manifest either, so the heuristic fallback has to
+    // carry the map instead of the whole pipeline failing.
+    let map = build_readonly(root).unwrap();
+    assert!(
+        map.topology_provenance.starts_with("heuristic_fallback"),
+        "provenance={}",
+        map.topology_provenance
+    );
+    assert!(map.packages.iter().any(|package| package.name == "sample"));
+    assert!(!topology_is_authoritative(root, &map));
+}
+
+/// `# 中文` in GBK followed by `body`: valid TOML apart from a comment that is not UTF-8.
+fn gbk_comment_manifest(body: &[u8]) -> Vec<u8> {
+    let mut bytes = vec![b'#', b' ', 0xD6, 0xD0, 0xCE, 0xC4, b'\n'];
+    bytes.extend_from_slice(body);
+    bytes
+}
+
+#[test]
 fn map_builds_dependencies_and_impact_from_current_context() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();

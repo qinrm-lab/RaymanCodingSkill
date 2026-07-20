@@ -35,13 +35,16 @@ pub(crate) fn is_link_or_reparse(metadata: &std::fs::Metadata) -> bool {
 /// `label` 只影响诊断文案。各模块保留一行同名委托以维持各自的措辞，但判定逻辑
 /// 全仓只有这一份——它曾在 3 个模块里各写了一遍。
 pub(crate) fn ensure_real_directory_labeled(path: &Path, label: &str) -> Result<()> {
-    let metadata = fs::symlink_metadata(path)
-        .with_context(|| format!("无法读取{label}元数据: {}", path.display()))?;
+    // display_path 而非 Path::display：Windows 上后者会漏出 `\\?\` 扩展长度前缀，
+    // 收敛这三份实现时曾把 checkpoint 的诊断退化成裸路径。
+    let shown = crate::pathfmt::display_path(path);
+    let metadata =
+        fs::symlink_metadata(path).with_context(|| format!("无法读取{label}元数据: {shown}"))?;
     if is_link_or_reparse(&metadata) {
-        bail!("拒绝链接/reparse {label}: {}", path.display());
+        bail!("拒绝链接/reparse {label}: {shown}");
     }
     if !metadata.file_type().is_dir() {
-        bail!("{label}不是目录: {}", path.display());
+        bail!("{label}不是目录: {shown}");
     }
     Ok(())
 }

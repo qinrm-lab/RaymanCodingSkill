@@ -2,7 +2,8 @@
 //! 便于断电/切换 AI 工具后恢复。
 //!
 //! 快照不是尽力而为的日志：复制、遍历或校验失败会产生标记为 `partial` 的取证快照并
-//! 返回错误，绝不会把它当作可恢复的最新快照；只有完成的 v2 manifest 才能恢复或参与轮换。
+//! 返回错误，绝不会把它当作可恢复的最新快照；只有完整 manifest 能恢复或参与 `keep` 轮换。
+//! partial 快照按 [`MAX_PARTIAL_SNAPSHOTS`] 单独轮换——保留取证证据，但不许无界增长。
 
 use std::collections::HashSet;
 use std::fs;
@@ -22,6 +23,12 @@ use crate::{hash, walk};
 
 /// 默认保留的完整快照数（滚动，多留几个以防某次保存中途损坏）。
 pub const DEFAULT_KEEP: usize = 3;
+/// partial 快照是故障取证证据，所以不参与 `keep` 轮换——但它不能无界增长。
+///
+/// autosave 的计划任务每 N 分钟重跑一次 `save`，而一个持续失败的工作区每次都会
+/// 提交一份新的 partial；30 分钟一次即约 48 份/天，且计划任务的输出无人可见。
+/// 保留最近这么多份足够诊断反复出现的同一个故障，再旧的按时间轮换掉。
+pub const MAX_PARTIAL_SNAPSHOTS: usize = 5;
 pub const MANIFEST_SCHEMA: &str = "rayman.checkpoint.v3";
 pub const MANIFEST_VERSION: u32 = 3;
 const LEGACY_MANIFEST_SCHEMA: &str = "rayman.checkpoint.v2";
@@ -430,6 +437,7 @@ pub fn save(root: &Path, override_dir: Option<&Path>, keep: usize) -> Result<Sav
         Ok(files) => files,
         Err(error) => {
             return finish_partial(
+                &ws_dir,
                 &staging,
                 &final_dir,
                 partial_manifest(&timestamp, &root, Vec::new(), vec![error.to_string()]),
@@ -478,14 +486,14 @@ pub fn save(root: &Path, override_dir: Option<&Path>, keep: usize) -> Result<Sav
         partial.status = SnapshotStatus::Partial;
         partial.skipped_count = errors.len();
         partial.errors = errors;
-        return finish_partial(&staging, &final_dir, partial);
+        return finish_partial(&ws_dir, &staging, &final_dir, partial);
     }
     if let Err(error) = verify_manifest_tree(&tree, &manifest) {
         let mut partial = manifest;
         partial.status = SnapshotStatus::Partial;
         partial.skipped_count = 1;
         partial.errors = vec![format!("保存后完整性验证失败: {error}")];
-        return finish_partial(&staging, &final_dir, partial);
+        return finish_partial(&ws_dir, &staging, &final_dir, partial);
     }
 
     commit_snapshot(&staging, &final_dir, &manifest)?;
@@ -521,17 +529,31 @@ fn partial_manifest(
     }
 }
 
-fn finish_partial(staging: &Path, final_dir: &Path, manifest: Manifest) -> Result<SaveOutcome> {
+fn finish_partial(
+    ws_dir: &Path,
+    staging: &Path,
+    final_dir: &Path,
+    manifest: Manifest,
+) -> Result<SaveOutcome> {
     let id = final_dir
         .file_name()
         .map(|name| name.to_string_lossy().to_string())
         .unwrap_or_else(|| "unknown".to_string());
     let failure_count = manifest.errors.len();
     commit_snapshot(staging, final_dir, &manifest)?;
+    // The freshly committed partial sorts last, so rotation only ever discards
+    // strictly older forensic copies of what is almost always the same repeated
+    // failure.  No complete snapshot is touched on this path.
+    let rotation = match prune_partial_only(ws_dir) {
+        Ok(0) => String::new(),
+        Ok(rotated) => format!("；已轮换掉 {rotated} 份更旧的 partial 快照"),
+        Err(error) => format!("；partial 快照轮换失败: {error:#}"),
+    };
     bail!(
-        "checkpoint 保存不完整（{} 个错误）；已保留 partial 快照 {} 供取证，不会替代最近完整快照",
+        "checkpoint 保存不完整（{} 个错误）；已保留 partial 快照 {} 供取证，不会替代最近完整快照{}",
         failure_count,
-        id
+        id,
+        rotation
     )
 }
 
@@ -589,10 +611,22 @@ fn fs_safe_id(timestamp: &str) -> String {
     timestamp.replace(':', "-")
 }
 
-/// 仅轮换完整快照；partial/corrupt 快照是故障取证，不会被自动删掉。
+/// 轮换完整快照（按 `keep`）并把 partial 快照压到 [`MAX_PARTIAL_SNAPSHOTS`] 以内。
+/// corrupt 快照仍然永不自动删除：它们的 manifest 不可信，无从判断该保留哪一份。
 fn prune(ws_dir: &Path, keep: usize) -> Result<usize> {
+    prune_inner(ws_dir, Some(keep))
+}
+
+/// 只轮换 partial 快照。保存失败路径专用：一次失败的保存绝不能连带删掉任何完整
+/// 恢复点，否则失败本身就会吃掉用户最后的安全网。
+fn prune_partial_only(ws_dir: &Path) -> Result<usize> {
+    prune_inner(ws_dir, None)
+}
+
+fn prune_inner(ws_dir: &Path, keep: Option<usize>) -> Result<usize> {
     ensure_real_directory(ws_dir)?;
     let mut complete = Vec::new();
+    let mut partial = Vec::new();
     let entries = fs::read_dir(ws_dir)
         .with_context(|| format!("无法列出 checkpoint 目录: {}", display_path(ws_dir)))?;
     for entry in entries {
@@ -617,14 +651,27 @@ fn prune(ws_dir: &Path, keep: usize) -> Result<usize> {
         if name.starts_with('.') {
             continue;
         }
-        if inspect_snapshot(&path).1 == SnapshotStatus::Complete {
-            complete.push(path);
+        match inspect_snapshot(&path).1 {
+            SnapshotStatus::Complete => complete.push(path),
+            SnapshotStatus::Partial => partial.push(path),
+            SnapshotStatus::Corrupt => {}
         }
     }
     complete.sort(); // 时间戳目录名字典序 = 时间序
+    partial.sort();
     let mut pruned = 0;
-    if complete.len() > keep {
-        for path in complete.iter().take(complete.len() - keep) {
+    if let Some(keep) = keep {
+        pruned += rotate_oldest(&complete, keep)?;
+    }
+    pruned += rotate_oldest(&partial, MAX_PARTIAL_SNAPSHOTS)?;
+    Ok(pruned)
+}
+
+/// 删除按名字（= 时间）排序后最旧的那些，只留最近 `keep` 份。
+fn rotate_oldest(sorted: &[PathBuf], keep: usize) -> Result<usize> {
+    let mut pruned = 0;
+    if sorted.len() > keep {
+        for path in sorted.iter().take(sorted.len() - keep) {
             fs::remove_dir_all(path)
                 .with_context(|| format!("无法清理旧 checkpoint: {}", display_path(path)))?;
             pruned += 1;

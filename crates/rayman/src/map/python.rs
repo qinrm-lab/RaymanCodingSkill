@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use crate::context::{self, ContextIndex, FileEntry};
 
@@ -16,8 +16,9 @@ pub(super) fn discover_packages(root: &Path, index: &ContextIndex) -> Result<Vec
         .iter()
         .filter(|file| file.path == "pyproject.toml" || file.path.ends_with("/pyproject.toml"))
     {
-        let text = String::from_utf8(context::read_verified_file(root, entry)?)
-            .with_context(|| format!("pyproject manifest 不是 UTF-8: {}", entry.path))?;
+        // Same tolerance as indexed source files and Cargo manifests: a non-UTF-8 pyproject
+        // must not bail the whole project map.
+        let text = String::from_utf8_lossy(&context::read_verified_file(root, entry)?).into_owned();
         let root_path = manifest_root_path(&entry.path);
         let name = parse_pyproject_name(&text).unwrap_or_else(|| {
             if root_path == "." {

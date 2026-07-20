@@ -133,6 +133,16 @@ pub struct AutosaveState {
     pub stopped_at: Option<String>,
     #[serde(default)]
     pub stop_status: Option<String>,
+    /// 连续失败的 tick 数（成功一次即归零）。
+    ///
+    /// 计划任务的 stdout/stderr 没有人看：没有这个计数器，一个每 30 分钟失败一次
+    /// 的自动保存看起来和正常运行一模一样，用户会一直以为快照在生成。
+    #[serde(default)]
+    pub consecutive_failures: u64,
+    #[serde(default)]
+    pub last_error: Option<String>,
+    #[serde(default)]
+    pub last_error_at: Option<String>,
 }
 
 fn state_path(root: &Path, create_parents: bool) -> Result<PathBuf> {
@@ -243,6 +253,9 @@ fn start_with_scheduler(
         last_tick_at: None,
         stopped_at: None,
         stop_status: None,
+        consecutive_failures: 0,
+        last_error: None,
+        last_error_at: None,
     };
     activate_state_with(
         root,
@@ -314,8 +327,30 @@ fn tick_with_scheduler(root: &Path, scheduler: &dyn TaskScheduler) -> Result<Act
         });
     }
 
-    let saved = checkpoint::save(root, dir_override(&state.dir).as_deref(), state.keep)?;
+    // A tick runs from Task Scheduler, so its exit code and stderr go nowhere a
+    // person will ever look.  Every outcome — success or failure — must therefore
+    // be persisted into the state file that `autosave status` reads; otherwise a
+    // workspace whose saves have failed for a week is indistinguishable from a
+    // healthy one.
+    let saved = match checkpoint::save(root, dir_override(&state.dir).as_deref(), state.keep) {
+        Ok(saved) => saved,
+        Err(error) => {
+            let now = crate::timefmt::now_iso();
+            state.consecutive_failures = state.consecutive_failures.saturating_add(1);
+            state.last_error = Some(format!("{error:#}"));
+            state.last_error_at = Some(now.clone());
+            state.last_tick_at = Some(now);
+            if let Err(persist_error) = save_state(root, &state) {
+                return Err(error)
+                    .context(format!("自动保存失败状态也未能写入: {persist_error:#}"));
+            }
+            return Err(error);
+        }
+    };
     state.last_tick_at = Some(crate::timefmt::now_iso());
+    state.consecutive_failures = 0;
+    state.last_error = None;
+    state.last_error_at = None;
     save_state(root, &state)?;
 
     Ok(ActionOutcome {
@@ -348,6 +383,9 @@ fn stop_with_scheduler(
             last_tick_at: None,
             stopped_at: None,
             stop_status: None,
+            consecutive_failures: 0,
+            last_error: None,
+            last_error_at: None,
         },
     };
     finalize_with_scheduler(root, &mut state, status, scheduler)?;
@@ -450,6 +488,11 @@ where
     stopped.active = false;
     stopped.stopped_at = Some(crate::timefmt::now_iso());
     stopped.stop_status = Some(status.to_string());
+    // `finalize_with` only reaches here after a checkpoint save succeeded, so a
+    // stale failure streak from earlier ticks would now be misreporting.
+    stopped.consecutive_failures = 0;
+    stopped.last_error = None;
+    stopped.last_error_at = None;
     if let Err(state_error) = persist(&stopped) {
         if was_active {
             if let Err(register_error) = reregister() {
@@ -509,9 +552,21 @@ fn status_with_scheduler(root: &Path, scheduler: &dyn TaskScheduler) -> Result<A
                 .last_tick_at
                 .clone()
                 .unwrap_or_else(|| "（尚无）".into());
+            // 失败必须出现在这里：计划任务的失败输出无人可见，`status` 是用户
+            // 唯一能发现"自动保存其实一直没成功"的地方。
+            let failures = if state.consecutive_failures == 0 {
+                String::new()
+            } else {
+                format!(
+                    "\n  连续失败：{} 次（最近一次：{}）\n  最近错误：{}",
+                    state.consecutive_failures,
+                    state.last_error_at.as_deref().unwrap_or("（未知时间）"),
+                    state.last_error.as_deref().unwrap_or("（未记录）")
+                )
+            };
             Ok(ActionOutcome {
                 message: format!(
-                    "自动保存：{}（每 {} 分钟，keep={}，auto_stop={}）\n  计划任务 '{}'：{}\n  最近一次触发：{}",
+                    "自动保存：{}（每 {} 分钟，keep={}，auto_stop={}）\n  计划任务 '{}'：{}\n  最近一次触发：{}{}",
                     if state.active {
                         "运行中"
                     } else {
@@ -526,7 +581,8 @@ fn status_with_scheduler(root: &Path, scheduler: &dyn TaskScheduler) -> Result<A
                     } else {
                         "未注册"
                     },
-                    last
+                    last,
+                    failures
                 ),
                 state: Some(state),
             })
@@ -544,14 +600,77 @@ pub fn resolve_workspace(explicit: Option<&Path>) -> Result<PathBuf> {
 
 // ---------------- Windows 计划任务（schtasks + 任务 XML） ----------------
 
+/// 把计划任务 XML 独占创建在受管临时目录里，并在交给 `schtasks` 之前复查落盘结果。
+///
+/// 原实现是 `fs::write(temp_dir().join(format!("rayman-task-{pid}.xml")), ..)`。
+/// 那条路径完全可预测、写入会跟随符号链接、会截断既有文件，而 `schtasks` 读取它
+/// 之前还有一个 TOCTOU 窗口——同用户攻击者可以把它换成自己的 XML，让计划任务以
+/// 用户身份注册任意命令。全仓其余写路径都走 `create_new` + 父目录校验，这里也照办：
+/// 目录经 `state_paths` 验证过且在工作区内，`create_new` 既不跟随链接也不截断。
+#[cfg(any(windows, test))]
+fn write_task_xml_exclusive(root: &Path, bytes: &[u8]) -> Result<PathBuf> {
+    use std::io::Write;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    const MAX_NAME_ATTEMPTS: usize = 32;
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    let scratch = crate::temp::scratch_dir(root, "autosave")?;
+    state_paths::ensure_real_directory(&scratch)?;
+    for _ in 0..MAX_NAME_ATTEMPTS {
+        let path = scratch.join(format!(
+            "task-{}-{}.xml",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        let mut file = match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(file) => file,
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("无法独占创建计划任务 XML: {}", display_path(&path)));
+            }
+        };
+        let written = file
+            .write_all(bytes)
+            .and_then(|()| file.sync_all())
+            .with_context(|| format!("无法写入计划任务 XML: {}", display_path(&path)));
+        drop(file);
+        if let Err(error) = written {
+            let _ = fs::remove_file(&path);
+            return Err(error);
+        }
+        let metadata = match fs::symlink_metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                let _ = fs::remove_file(&path);
+                return Err(error)
+                    .with_context(|| format!("无法复查计划任务 XML: {}", display_path(&path)));
+            }
+        };
+        if is_link_or_reparse(&metadata)
+            || !metadata.file_type().is_file()
+            || metadata.len() != bytes.len() as u64
+        {
+            let _ = fs::remove_file(&path);
+            bail!("计划任务 XML 写入后被替换或截断: {}", display_path(&path));
+        }
+        return Ok(path);
+    }
+    bail!("无法为计划任务 XML 创建独占临时文件（连续 {MAX_NAME_ATTEMPTS} 个名称已存在）")
+}
+
 #[cfg(windows)]
 fn register_task(root: &Path, name: &str, interval_min: u64) -> Result<()> {
     let exe = std::env::current_exe()?;
     let xml = build_task_xml(&exe, root, name, interval_min);
 
     // schtasks /XML 期望 UTF-16LE 文件；用带 BOM 的 UTF-16LE 写出，兼容非 ASCII 路径。
-    let xml_path = std::env::temp_dir().join(format!("rayman-task-{}.xml", std::process::id()));
-    std::fs::write(&xml_path, utf16le_bom(&xml))?;
+    let xml_path = write_task_xml_exclusive(root, &utf16le_bom(&xml))?;
 
     let user = current_user();
     let output = std::process::Command::new("schtasks")
@@ -899,6 +1018,9 @@ mod tests {
             last_tick_at: None,
             stopped_at: None,
             stop_status: None,
+            consecutive_failures: 0,
+            last_error: None,
+            last_error_at: None,
         };
         save_state(root, &state).unwrap();
         assert!(load_state(root).unwrap().unwrap().active);
@@ -964,7 +1086,9 @@ mod tests {
             .unwrap();
 
         std::fs::write(root.join("a.txt"), "a1").unwrap();
-        let command = "echo validation-ok";
+        // 未建模生态的验证命令不能是自证无关的探针（`echo`/`--version` 之类），
+        // 所以这里用一条真实的测试命令；本测试关心的是门禁判定而非命令本身。
+        let command = "make test";
         let impacts = vec![crate::goal::ImpactEvidence {
             changed_path: "a.txt".into(),
             package: None,
@@ -1147,6 +1271,9 @@ mod tests {
             last_tick_at: None,
             stopped_at: None,
             stop_status: None,
+            consecutive_failures: 0,
+            last_error: None,
+            last_error_at: None,
         };
 
         let result = activate_state_with(
@@ -1176,6 +1303,9 @@ mod tests {
             last_tick_at: None,
             stopped_at: None,
             stop_status: None,
+            consecutive_failures: 0,
+            last_error: None,
+            last_error_at: None,
         };
         save_state(root, &state).unwrap();
 
@@ -1211,6 +1341,9 @@ mod tests {
             last_tick_at: None,
             stopped_at: None,
             stop_status: None,
+            consecutive_failures: 0,
+            last_error: None,
+            last_error_at: None,
         };
         save_state(root, &state).unwrap();
         let reregistered = Cell::new(false);
@@ -1229,6 +1362,141 @@ mod tests {
         assert!(reregistered.get());
         assert!(state.active);
         assert!(load_state(root).unwrap().unwrap().active);
+    }
+
+    fn active_state(root: &Path, store: Option<&Path>) -> AutosaveState {
+        AutosaveState {
+            active: true,
+            interval_min: 30,
+            keep: 2,
+            dir: store.map(display_path),
+            auto_stop: false,
+            task_name: task_name(root),
+            started_at: crate::timefmt::now_iso(),
+            last_tick_at: None,
+            stopped_at: None,
+            stop_status: None,
+            consecutive_failures: 0,
+            last_error: None,
+            last_error_at: None,
+        }
+    }
+
+    /// 一个反复失败的 autosave 曾经完全静默：tick 的输出无人可见，partial 快照又
+    /// 无上限累积（约 48 份/天），而 `status` 依旧显示"运行中"。失败必须计数、
+    /// 必须出现在 status 里，partial 也必须有上限。
+    #[test]
+    fn repeated_tick_failures_are_counted_capped_and_surfaced_in_status() {
+        let ws = tempfile::tempdir().unwrap();
+        let store = tempfile::tempdir().unwrap();
+        let root = ws.path();
+        touch(&root.join("src/main.rs"), "fn main() {}");
+        save_state(root, &active_state(root, Some(store.path()))).unwrap();
+
+        // goals 应为目录；同名普通文件让此后每次 checkpoint::save 都失败。
+        touch(&root.join(".RaymanCodingSkill/goals"), "not a directory");
+
+        let attempts = checkpoint::MAX_PARTIAL_SNAPSHOTS + 2;
+        for _ in 0..attempts {
+            assert!(tick_with_scheduler(root, &AbsentScheduler).is_err());
+        }
+
+        let persisted = load_state(root).unwrap().unwrap();
+        assert_eq!(persisted.consecutive_failures as usize, attempts);
+        assert!(persisted.last_error.is_some());
+        assert!(persisted.last_error_at.is_some());
+
+        let partials = checkpoint::list(root, Some(store.path()))
+            .unwrap()
+            .iter()
+            .filter(|snapshot| snapshot.status == checkpoint::SnapshotStatus::Partial)
+            .count();
+        assert!(
+            partials <= checkpoint::MAX_PARTIAL_SNAPSHOTS,
+            "失败的 autosave 循环不得无界堆积 partial 快照（{attempts} 次后实得 {partials} 份）"
+        );
+
+        let message = status_with_scheduler(root, &AbsentScheduler)
+            .unwrap()
+            .message;
+        assert!(
+            message.contains(&format!("连续失败：{attempts} 次")),
+            "status 必须让用户看见自动保存其实一直没成功: {message}"
+        );
+    }
+
+    #[test]
+    fn a_successful_tick_clears_a_previous_failure_streak() {
+        let ws = tempfile::tempdir().unwrap();
+        let store = tempfile::tempdir().unwrap();
+        let root = ws.path();
+        touch(&root.join("src/main.rs"), "fn main() {}");
+        let mut state = active_state(root, Some(store.path()));
+        state.consecutive_failures = 7;
+        state.last_error = Some("previous failure".into());
+        state.last_error_at = Some(crate::timefmt::now_iso());
+        save_state(root, &state).unwrap();
+
+        tick_with_scheduler(root, &AbsentScheduler).unwrap();
+
+        let persisted = load_state(root).unwrap().unwrap();
+        assert_eq!(persisted.consecutive_failures, 0);
+        assert!(persisted.last_error.is_none());
+        assert!(persisted.last_error_at.is_none());
+        let message = status_with_scheduler(root, &AbsentScheduler)
+            .unwrap()
+            .message;
+        assert!(!message.contains("连续失败"), "{message}");
+    }
+
+    /// 计划任务 XML 必须独占创建在受管临时目录里，而不是 PID 可预测的 `%TEMP%`
+    /// 裸写——那条路径会跟随符号链接、可截断，且与 schtasks 读取之间有 TOCTOU 窗口。
+    #[test]
+    fn task_xml_is_created_exclusively_under_the_managed_temp_root() {
+        let ws = tempfile::tempdir().unwrap();
+        let root = ws.path();
+        let bytes = utf16le_bom("<Task/>");
+
+        let first = write_task_xml_exclusive(root, &bytes).unwrap();
+        let expected_parent = root
+            .canonicalize()
+            .unwrap()
+            .join(".RaymanCodingSkill")
+            .join("tmp")
+            .join("autosave");
+        assert_eq!(first.parent().unwrap(), expected_parent);
+        assert_eq!(fs::read(&first).unwrap(), bytes);
+        assert!(
+            !fs::symlink_metadata(&first)
+                .unwrap()
+                .file_type()
+                .is_symlink(),
+            "写入不得落在链接上"
+        );
+
+        // 独占创建：绝不复用/截断一个已经存在的名字。
+        let second = write_task_xml_exclusive(root, &bytes).unwrap();
+        assert_ne!(second, first);
+        assert_eq!(fs::read(&first).unwrap(), bytes);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn task_xml_refuses_a_symlinked_managed_temp_root() {
+        use std::os::unix::fs::symlink;
+
+        let ws = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let root = ws.path();
+        fs::create_dir_all(root.join(".RaymanCodingSkill")).unwrap();
+        symlink(outside.path(), root.join(".RaymanCodingSkill/tmp")).unwrap();
+
+        assert!(write_task_xml_exclusive(root, b"payload").is_err());
+        assert_eq!(
+            fs::read_dir(outside.path()).unwrap().count(),
+            0,
+            "绝不把计划任务 XML 写到链接目标里"
+        );
     }
 
     #[test]

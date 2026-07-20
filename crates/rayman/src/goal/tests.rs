@@ -838,12 +838,12 @@ fn plan_receipt_precedes_changes_and_high_review_is_source_fresh() {
             "req_1",
             ValidationReceiptSubmission {
                 evidence: "validated planned change".into(),
-                command: "echo validation-ok".into(),
+                command: "git status".into(),
                 receipt: successful_receipt(
                     root,
                     &reviewed,
                     "req_1",
-                    "echo validation-ok",
+                    "git status",
                     &impacts,
                     false,
                 ),
@@ -907,12 +907,12 @@ fn plan_cannot_be_backfilled_and_unplanned_delta_blocks_validation() {
                 "req_1",
                 ValidationReceiptSubmission {
                     evidence: "attempted broad validation".into(),
-                    command: "echo validation-ok".into(),
+                    command: "git status".into(),
                     receipt: successful_receipt(
                         root,
                         &current,
                         "req_1",
-                        "echo validation-ok",
+                        "git status",
                         &impacts,
                         false,
                     ),
@@ -958,15 +958,8 @@ fn high_priority_review_becomes_stale_after_source_change() {
             "req_1",
             ValidationReceiptSubmission {
                 evidence: "validated after late edit".into(),
-                command: "echo validation-ok".into(),
-                receipt: successful_receipt(
-                    root,
-                    &current,
-                    "req_1",
-                    "echo validation-ok",
-                    &impacts,
-                    false,
-                ),
+                command: "git status".into(),
+                receipt: successful_receipt(root, &current, "req_1", "git status", &impacts, false),
                 impacts,
                 non_code: false,
             },
@@ -1473,6 +1466,44 @@ fn pytest_selectors_are_scoped_and_terminal_summary_is_not_double_counted() {
 }
 
 #[test]
+fn pytest_collect_proof_counts_selected_tests_not_the_deselected_total() {
+    // `-k` / `-m <marker>` / `--deselect` 时 pytest 报 `M/N tests collected (K deselected)`，
+    // 而运行期 summary 报的是 M。取 N 会让 passed+ignored==listed 恒不成立，
+    // 于是这些命令永远写不出 receipt——而 `-k` 是文档明确建模的用法。
+    assert_eq!(
+        pytest_collected_count("2/5 tests collected (3 deselected) in 0.01s"),
+        Some(2)
+    );
+    assert_eq!(
+        pytest_collected_count("3/9 tests collected (6 deselected) in 0.02s"),
+        Some(3)
+    );
+    // 未取消选择时的常规形式不受影响。
+    assert_eq!(
+        pytest_collected_count("5 tests collected in 0.01s"),
+        Some(5)
+    );
+    assert_eq!(pytest_collected_count("1 test collected in 0.01s"), Some(1));
+
+    // 端到端：选中 2 个、跑过 2 个，一致性检查必须放行。
+    let proof = validation_execution_proof(
+        &parse_validation_command("python -m pytest -k alpha tests").unwrap(),
+        b"2 passed, 3 deselected in 0.05s\n",
+        b"",
+        Some(2),
+    )
+    .unwrap();
+    assert_eq!(
+        proof,
+        Some(TestExecutionProof {
+            listed: 2,
+            passed: 2,
+            ignored: 0,
+        })
+    );
+}
+
+#[test]
 fn python_arbitrary_code_hosts_are_not_accepted_as_a_pytest_proof() {
     // `python -c CODE -m pytest`：Python 吃掉 `-c CODE`，`-m pytest` 退化成惰性的
     // sys.argv 内容，pytest 从不运行。若把它当 pytest 调用，攻击者代码就同时
@@ -1542,12 +1573,12 @@ fn current_success_can_refresh_review_after_source_drift() {
             "req_1",
             ValidationReceiptSubmission {
                 evidence: "validated".into(),
-                command: "echo validation-ok".into(),
+                command: "git status".into(),
                 receipt: successful_receipt(
                     dir.path(),
                     &reviewed,
                     "req_1",
-                    "echo validation-ok",
+                    "git status",
                     &impacts,
                     false,
                 ),
