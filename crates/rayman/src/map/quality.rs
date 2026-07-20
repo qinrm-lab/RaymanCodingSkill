@@ -5,10 +5,11 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::context::ContextIndex;
-use crate::project_store::read_json;
+use crate::file_io::read_json;
 use crate::state_paths;
 
 use super::{Dependency, MapRisk, MapSymbol, ProjectMap, TestTarget};
+use crate::file_io::is_link_or_reparse;
 
 const QUALITY_CONFIG_RELATIVE_PATH: &str = ".RaymanCodingSkill/quality.json";
 const QUALITY_CONFIG_STATE_RELATIVE: &str = "quality.json";
@@ -275,20 +276,6 @@ fn validate_quality_exemption_target(root: &Path, exemption: &QualityExemption) 
         );
     }
     Ok(())
-}
-
-fn is_link_or_reparse(metadata: &std::fs::Metadata) -> bool {
-    if metadata.file_type().is_symlink() {
-        return true;
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
-        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-    }
-    #[cfg(not(windows))]
-    false
 }
 
 pub fn quality_report(map: &ProjectMap) -> QualityReport {

@@ -2694,6 +2694,303 @@ fn goal_plan_and_review_receipts_close_a_real_two_file_delta() {
     let closed = run_json(root, &["goal", "close", id]);
     assert_eq!(closed["status"], "success");
 }
+
+#[test]
+fn autosave_is_reachable_as_a_top_level_command() {
+    // 发布校验器不再从 --help 文本里断言命令面，所以 autosave 的 CLI 可达性
+    // 需要在这里覆盖：此前它只有 in-crate 单元测试，没走过 CLI dispatch。
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let status = run_json(root, &["autosave", "status"]);
+    assert!(status["message"].is_string(), "status={status}");
+    // 未注册的工作区没有持久化状态。
+    assert!(status["state"].is_null(), "status={status}");
+}
+
+#[test]
+fn goal_evidence_is_refused_after_a_success_closure() {
+    // evidence-only completion 是文档化的一层，但它写出的 validation 没有 receipt；
+    // 允许它改写已关闭的 success 目标会让一条人工声明污染已完成的证据链。
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+    let goal = run_json(root, &["goal", "start", "closed", "--must", "validate"]);
+    let id = goal["id"].as_str().unwrap();
+    validate_goal(root, id, "req_1", "executed receipt", &[]);
+    assert_eq!(run(root, &["goal", "close", id]).status, 0);
+
+    let late = run(
+        root,
+        &[
+            "goal",
+            "evidence",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "late hand-written attestation",
+        ],
+    );
+    assert_eq!(late.status, 1, "stdout={}", late.stdout);
+    assert!(
+        late.stderr.contains("已关闭为 success"),
+        "stderr={}",
+        late.stderr
+    );
+}
+
+#[test]
+fn check_rejects_undeclared_drift_that_close_would_also_reject() {
+    // 交付门禁曾经只做逐需求的 receipt 新鲜度检查，整目标级的差量门禁只在
+    // `goal close` 里跑；而 close 不会重置 status，已关闭的 success 目标可以
+    // 原地反复重新验证，于是"receipts 必须共同声明真实 delta"在 check/finish
+    // 上彻底失效——同一状态下 close 拒绝、check 却报 ready。
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "a.txt", "a0");
+    write(root, "b.txt", "b0");
+    run_json(root, &["context", "refresh"]);
+    let started = run_json(
+        root,
+        &["goal", "start", "drift", "--must", "ship planned delta"],
+    );
+    let id = started["id"].as_str().unwrap();
+    run_json(root, &["goal", "plan", id, "a.txt", "b.txt", "--check"]);
+
+    write(root, "a.txt", "a1");
+    run_json(root, &["context", "refresh"]);
+    validate_goal(root, id, "req_1", "validated a.txt", &["a.txt"]);
+    assert_eq!(run(root, &["goal", "close", id]).status, 0);
+    assert_eq!(
+        run(root, &["check", "--profile", "standard", "--goal", id]).status,
+        0
+    );
+
+    // b.txt 在 immutable plan 之内，所以重新 validate 会被接受，但它的实际改动
+    // 从未被任何 receipt 声明过。
+    write(root, "b.txt", "b1-undeclared");
+    run_json(root, &["context", "refresh"]);
+    validate_goal(root, id, "req_1", "revalidated only a.txt", &["a.txt"]);
+
+    let checked = run(root, &["check", "--profile", "standard", "--goal", id]);
+    assert_eq!(
+        checked.status, 1,
+        "check must not report ready while b.txt is undeclared\nstdout={}",
+        checked.stdout
+    );
+    assert!(
+        checked
+            .stdout
+            .contains("实际变更未被当前 validation receipt 声明")
+            && checked.stdout.contains("b.txt"),
+        "stdout={}",
+        checked.stdout
+    );
+
+    let finished = run(root, &["finish", "--goal", id]);
+    assert_eq!(finished.status, 1, "stdout={}", finished.stdout);
+
+    // 对照：close 在同一状态下本来就拒绝，证明两条路径现在一致。
+    assert_eq!(run(root, &["goal", "close", id]).status, 1);
+}
+
+/// `goal_planning_gaps` 的分支在 check 侧此前只有 1 个有端到端证明，其余只被
+/// helper 级单元测试覆盖——正是今天那三条 high 的形态（helper 全绿、调用方没接线）。
+/// 这三个用例证明这些分支会真的让 `check` 拦下来。
+#[test]
+fn check_blocks_a_multi_file_delta_that_has_no_plan_receipt() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "a.txt", "a0");
+    write(root, "b.txt", "b0");
+    run_json(root, &["context", "refresh"]);
+    let started = run_json(root, &["goal", "start", "unplanned", "--must", "ship"]);
+    let id = started["id"].as_str().unwrap();
+
+    write(root, "a.txt", "a1");
+    run_json(root, &["context", "refresh"]);
+    validate_goal(root, id, "req_1", "validated a.txt", &["a.txt"]);
+    assert_eq!(run(root, &["goal", "close", id]).status, 0);
+
+    // 第二个文件让实际变更达到 2 个，而全程没有 plan receipt。
+    write(root, "b.txt", "b1");
+    run_json(root, &["context", "refresh"]);
+    let checked = run(root, &["check", "--profile", "standard", "--goal", id]);
+    assert_eq!(checked.status, 1, "stdout={}", checked.stdout);
+    assert!(
+        checked
+            .stdout
+            .contains("缺少首次修改前的 goal plan receipt"),
+        "stdout={}",
+        checked.stdout
+    );
+}
+
+#[test]
+fn check_blocks_a_change_outside_the_immutable_plan() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "a.txt", "a0");
+    write(root, "c.txt", "c0");
+    run_json(root, &["context", "refresh"]);
+    let started = run_json(root, &["goal", "start", "scoped", "--must", "ship"]);
+    let id = started["id"].as_str().unwrap();
+    run_json(root, &["goal", "plan", id, "a.txt", "--check"]);
+
+    write(root, "a.txt", "a1");
+    run_json(root, &["context", "refresh"]);
+    validate_goal(root, id, "req_1", "validated a.txt", &["a.txt"]);
+    assert_eq!(run(root, &["goal", "close", id]).status, 0);
+
+    // c.txt 从不在 plan 里。
+    write(root, "c.txt", "c1");
+    run_json(root, &["context", "refresh"]);
+    let checked = run(root, &["check", "--profile", "standard", "--goal", id]);
+    assert_eq!(checked.status, 1, "stdout={}", checked.stdout);
+    assert!(
+        checked.stdout.contains("实际变更超出 plan") && checked.stdout.contains("c.txt"),
+        "stdout={}",
+        checked.stdout
+    );
+}
+
+#[test]
+fn check_blocks_a_baseline_less_goal_instead_of_reporting_ready() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "a.txt", "a0");
+    run_json(root, &["context", "refresh"]);
+    let started = run_json(root, &["goal", "start", "no-baseline", "--must", "ship"]);
+    let id = started["id"].as_str().unwrap();
+    write(root, "a.txt", "a1");
+    run_json(root, &["context", "refresh"]);
+    validate_goal(root, id, "req_1", "validated a.txt", &["a.txt"]);
+    assert_eq!(run(root, &["goal", "close", id]).status, 0);
+    assert_eq!(
+        run(root, &["check", "--profile", "standard", "--goal", id]).status,
+        0
+    );
+
+    // 旧版本写下的 v2 记录就是这个形态：加 baseline 字段时没有升 schema 版本，
+    // 且字段是 #[serde(default)] Option，所以纯升级路径即可产生它。
+    let goal_path = root
+        .join(".RaymanCodingSkill/goals")
+        .join(format!("{id}.json"));
+    let mut stored: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&goal_path).unwrap()).unwrap();
+    stored.as_object_mut().unwrap().remove("baseline");
+    std::fs::write(&goal_path, serde_json::to_string_pretty(&stored).unwrap()).unwrap();
+
+    let checked = run(root, &["check", "--profile", "standard", "--goal", id]);
+    assert_eq!(checked.status, 1, "stdout={}", checked.stdout);
+    assert!(
+        checked.stdout.contains("缺少开工 baseline"),
+        "stdout={}",
+        checked.stdout
+    );
+}
+
+#[test]
+fn check_blocks_a_goal_whose_baseline_manifest_was_tampered_with() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "a.txt", "a0");
+    write(root, "keep.txt", "k0");
+    run_json(root, &["context", "refresh"]);
+    let started = run_json(root, &["goal", "start", "tampered", "--must", "ship"]);
+    let id = started["id"].as_str().unwrap();
+    write(root, "a.txt", "a1");
+    run_json(root, &["context", "refresh"]);
+    validate_goal(root, id, "req_1", "validated a.txt", &["a.txt"]);
+    assert_eq!(run(root, &["goal", "close", id]).status, 0);
+
+    // baseline.files 与 baseline.workspace_fingerprint 必须自洽；手改文件清单
+    // 就能伪造"什么都没变"，所以门禁要先验证这一对是否匹配。
+    let goal_path = root
+        .join(".RaymanCodingSkill/goals")
+        .join(format!("{id}.json"));
+    let mut stored: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&goal_path).unwrap()).unwrap();
+    stored["baseline"]["files"]
+        .as_object_mut()
+        .unwrap()
+        .remove("keep.txt")
+        .expect("baseline must have recorded keep.txt");
+    std::fs::write(&goal_path, serde_json::to_string_pretty(&stored).unwrap()).unwrap();
+
+    // 实际由更靠前的 schema 重校验拦下（goal_planning_gaps 里同义的那个分支因此
+    // 是够不到的兜底）。这里断言真实生效的那一层，不去断言被遮住的文案。
+    let checked = run(root, &["check", "--profile", "standard", "--goal", id]);
+    assert_eq!(checked.status, 1, "stdout={}", checked.stdout);
+    assert!(
+        checked
+            .stdout
+            .contains("baseline fingerprint 与文件清单不匹配"),
+        "stdout={}",
+        checked.stdout
+    );
+}
+
+#[test]
+fn check_blocks_a_high_priority_plan_whose_review_went_stale() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let planned: Vec<String> = (0..8).map(|i| format!("f{i}.txt")).collect();
+    for path in &planned {
+        write(root, path, "v0");
+    }
+    run_json(root, &["context", "refresh"]);
+    let started = run_json(root, &["goal", "start", "wide", "--must", "ship"]);
+    let id = started["id"].as_str().unwrap();
+
+    let mut plan_args = vec!["goal", "plan", id];
+    plan_args.extend(planned.iter().map(String::as_str));
+    plan_args.push("--check");
+    let plan = run_json(root, &plan_args);
+    assert_eq!(
+        plan["plan_receipts"][0]["review_priority"], "high",
+        "8 个受影响路径必须落到 high 档，否则这个用例测不到 review 绑定"
+    );
+
+    for path in &planned {
+        write(root, path, "v1");
+    }
+    run_json(root, &["context", "refresh"]);
+    run_json(
+        root,
+        &[
+            "goal",
+            "review",
+            id,
+            "--reviewer",
+            "integration",
+            "-m",
+            "reviewed the wide change",
+        ],
+    );
+    let changed: Vec<&str> = planned.iter().map(String::as_str).collect();
+    validate_goal(root, id, "req_1", "validated the wide change", &changed);
+    assert_eq!(run(root, &["goal", "close", id]).status, 0);
+    assert_eq!(
+        run(root, &["check", "--profile", "standard", "--goal", id]).status,
+        0
+    );
+
+    // 源码再动一次，之前那份 review receipt 就不再绑定当前 fingerprint。
+    write(root, "f0.txt", "v2");
+    run_json(root, &["context", "refresh"]);
+    let checked = run(root, &["check", "--profile", "standard", "--goal", id]);
+    assert_eq!(checked.status, 1, "stdout={}", checked.stdout);
+    assert!(
+        checked
+            .stdout
+            .contains("high-priority plan 缺少绑定最终源码 fingerprint 的 review receipt"),
+        "stdout={}",
+        checked.stdout
+    );
+}
+
 #[test]
 fn workspace_activation_contract_rejects_duplicate_and_unknown_fields() {
     let temp = tempfile::tempdir().unwrap();

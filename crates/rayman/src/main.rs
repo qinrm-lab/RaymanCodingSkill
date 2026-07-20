@@ -566,7 +566,7 @@ fn run_checkpoint(root: &std::path::Path, json: bool, cmd: CheckpointCmd) -> Res
                     },
                     outcome.pruned
                 );
-                println!("  位置: {}", rayman::fsutil::display_path(&outcome.path));
+                println!("  位置: {}", rayman::pathfmt::display_path(&outcome.path));
             }
         }
         CheckpointAction::List => {
@@ -1108,7 +1108,7 @@ fn impact_evidence_from_report(report: &map::ImpactReport) -> goal::ImpactEviden
             .collect(),
         recommended_checks: report.recommended_checks.clone(),
         recommendation_basis: report.recommendation_basis.clone(),
-        recorded_at: rayman::fsutil::now_iso(),
+        recorded_at: rayman::timefmt::now_iso(),
     }
 }
 
@@ -1239,163 +1239,12 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
             }
         };
         for checked_goal in &goals {
-            let blocker_start = standard_blockers.len();
-            if let Some(error) = checked_goal.current_schema_error() {
-                standard_blockers.push(format!("goal {} 合约无效: {error}", checked_goal.id));
-                goal_blockers.insert(
-                    checked_goal.id.clone(),
-                    standard_blockers[blocker_start..].to_vec(),
-                );
-                continue;
-            }
-            if let Some(error) = checked_goal.lifecycle_proof_error(root) {
-                standard_blockers.push(format!(
-                    "goal {} lifecycle proof 无效: {error}",
-                    checked_goal.id
-                ));
-                goal_blockers.insert(
-                    checked_goal.id.clone(),
-                    standard_blockers[blocker_start..].to_vec(),
-                );
-                continue;
-            }
-            if let Some(fingerprint) = current_fingerprint.as_deref()
-                && let Some(error) =
-                    goal::supersession_error(checked_goal, &goals, root, fingerprint)
-            {
-                standard_blockers.push(format!(
-                    "goal {} supersession 合约无效: {error}",
-                    checked_goal.id
-                ));
-                goal_blockers.insert(
-                    checked_goal.id.clone(),
-                    standard_blockers[blocker_start..].to_vec(),
-                );
-                continue;
-            }
-            if checked_goal.lifecycle != goal::GoalLifecycle::Current {
-                standard_warnings.push(format!(
-                    "historical goal {} lifecycle={} 已保留但不参与当前 readiness{}",
-                    checked_goal.id,
-                    checked_goal.lifecycle,
-                    checked_goal
-                        .superseded_by
-                        .as_deref()
-                        .map(|id| format!("（superseded_by={id}）"))
-                        .unwrap_or_default()
-                ));
-                goal_blockers.insert(
-                    checked_goal.id.clone(),
-                    standard_blockers[blocker_start..].to_vec(),
-                );
-                continue;
-            }
-            if checked_goal.loaded_from_legacy {
-                standard_blockers.push(format!(
-                    "legacy goal {} 仍为 current（status={}）；legacy 记录不能生成当前 receipt，请显式 archive 历史 success，或新建 current-schema replacement 后 supersede",
-                    checked_goal.id, checked_goal.status
-                ));
-                goal_blockers.insert(
-                    checked_goal.id.clone(),
-                    standard_blockers[blocker_start..].to_vec(),
-                );
-                continue;
-            }
-            let requires_receipt = checked_goal.is_current_schema();
-            match checked_goal.status {
-                goal::GoalStatus::Success => {}
-                goal::GoalStatus::Active => standard_blockers.push(format!(
-                    "goal {} 仍为 active；用 goal validate 记录实际验证后必须 goal close",
-                    checked_goal.id
-                )),
-                goal::GoalStatus::Partial | goal::GoalStatus::Blocked => {
-                    standard_blockers.push(format!(
-                        "goal {} 状态为 {}，不能作为 standard READY",
-                        checked_goal.id, checked_goal.status
-                    ))
-                }
-            }
-            for req in &checked_goal.requirements {
-                let is_must = req.kind == goal::RequirementKind::Must;
-                if checked_goal.status == goal::GoalStatus::Active
-                    && is_must
-                    && req.status != goal::RequirementStatus::Done
-                {
-                    standard_blockers.push(format!(
-                        "active goal {} 的 must 需求 {} 仍未完成",
-                        checked_goal.id, req.id
-                    ));
-                }
-                if checked_goal.status == goal::GoalStatus::Success
-                    && is_must
-                    && req.status != goal::RequirementStatus::Done
-                {
-                    standard_blockers.push(format!(
-                        "success goal {} 的 must 需求 {} 未处于 done 状态",
-                        checked_goal.id, req.id
-                    ));
-                }
-                if req.status == goal::RequirementStatus::Done
-                    && req
-                        .evidence
-                        .as_deref()
-                        .map(str::trim)
-                        .unwrap_or_default()
-                        .is_empty()
-                {
-                    standard_blockers.push(format!(
-                        "goal {} 需求 {} 缺少 evidence 文本",
-                        checked_goal.id, req.id
-                    ));
-                }
-                if req.status == goal::RequirementStatus::Done && req.validations.is_empty() {
-                    standard_blockers.push(format!(
-                        "goal {} 需求 {} 缺少验证 receipt",
-                        checked_goal.id, req.id
-                    ));
-                }
-                if !req.impacts.is_empty()
-                    && let Some(fingerprint) = current_fingerprint.as_deref()
-                {
-                    for gap in goal::validation_relevance_gaps(req, checked_goal, root, fingerprint)
-                    {
-                        standard_blockers
-                            .push(format!("goal {} 需求 {} {gap}", checked_goal.id, req.id));
-                    }
-                }
-                if requires_receipt && checked_goal.status == goal::GoalStatus::Success && is_must {
-                    let has_current_receipt = req.validations.iter().any(|validation| {
-                        current_fingerprint.as_deref().is_some_and(|fingerprint| {
-                            goal::validation_has_current_receipt(
-                                validation,
-                                checked_goal,
-                                req,
-                                root,
-                                fingerprint,
-                            )
-                        })
-                    });
-                    if !has_current_receipt {
-                        standard_blockers.push(format!(
-                            "success goal {} 的 must 需求 {} 没有绑定当前工作区的成功 validation receipt",
-                            checked_goal.id, req.id
-                        ));
-                    }
-                }
-                if req.status == goal::RequirementStatus::Done
-                    && req.impacts.is_empty()
-                    && !req.validations.is_empty()
-                {
-                    standard_warnings.push(format!(
-                        "goal {} 需求 {} 没有 impact 快照；非代码变更可忽略",
-                        checked_goal.id, req.id
-                    ));
-                }
-            }
-            goal_blockers.insert(
-                checked_goal.id.clone(),
-                standard_blockers[blocker_start..].to_vec(),
-            );
+            // 门禁判定只有这一份实现，autosave 的"工作是否已完成"共用它。
+            let verdict =
+                goal::goal_gate_verdict(checked_goal, &goals, root, current_fingerprint.as_deref());
+            goal_blockers.insert(checked_goal.id.clone(), verdict.blockers.clone());
+            standard_blockers.extend(verdict.blockers);
+            standard_warnings.extend(verdict.warnings);
         }
     }
 

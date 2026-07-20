@@ -10,10 +10,12 @@ use std::time::UNIX_EPOCH;
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
-use crate::project_store::{
-    display_path, now_iso, read_json, sha256_bytes, sha256_file, write_json,
-};
+use crate::file_io::is_link_or_reparse;
+use crate::file_io::{read_json, write_json};
+use crate::hash::{sha256_bytes, sha256_file};
+use crate::pathfmt::display_path;
 use crate::state_paths;
+use crate::timefmt::now_iso;
 use crate::walk::{relative_key, workspace_files_checked};
 
 #[cfg(test)]
@@ -370,20 +372,6 @@ pub(crate) fn read_verified_file(root: &Path, entry: &FileEntry) -> Result<Vec<u
         );
     }
     Ok(bytes)
-}
-
-fn is_link_or_reparse(metadata: &std::fs::Metadata) -> bool {
-    if metadata.file_type().is_symlink() {
-        return true;
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
-        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-    }
-    #[cfg(not(windows))]
-    false
 }
 
 /// 刷新索引：复用未变文件的指纹与符号，只重算变更文件。

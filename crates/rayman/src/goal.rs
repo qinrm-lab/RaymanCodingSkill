@@ -14,8 +14,9 @@ use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::file_io::{read_json, write_json};
 use crate::state_paths;
-use crate::state_store::{now_iso, read_json, write_json};
+use crate::timefmt::now_iso;
 
 const GOALS_DIR: &str = ".RaymanCodingSkill/goals";
 #[cfg(test)]
@@ -303,9 +304,11 @@ pub struct ParsedValidationCommand {
     pub args: Vec<String>,
 }
 
-include!("goal/validation.rs");
+mod lifecycle;
+mod validation;
 
-include!("goal/lifecycle.rs");
+pub use lifecycle::*;
+pub use validation::*;
 
 fn legacy_must_kind() -> String {
     "must".into()
@@ -752,12 +755,11 @@ impl GoalStore {
         }
     }
 
-    /// 记录某个需求的证据并标记完成。
-    pub fn record_evidence(&self, id: &str, req_id: &str, evidence: &str) -> Result<Goal> {
-        self.record_evidence_with_context(id, req_id, evidence, Vec::new(), Vec::new())
-    }
-
     /// 记录某个需求的证据、验证命令和变更影响快照，并标记完成。
+    ///
+    /// 这是 SKILL.md 描述的"evidence-only completion"那一层的输入路径：它写出的
+    /// validation 没有 receipt，因此**不能**支撑任何 standard/release 主张——门禁
+    /// 要的是 `goal validate` 产生的 receipt。它只用于记录尚未被机器验证的进展。
     pub fn record_evidence_with_context(
         &self,
         id: &str,
@@ -775,6 +777,13 @@ impl GoalStore {
             bail!(
                 "目标 {id} lifecycle={}，不能追加证据；先用 `goal current {id}` 恢复为 current",
                 goal.lifecycle
+            );
+        }
+        // 已关闭为 success 的目标不接受无 receipt 的补记：否则一条人工声明就能把
+        // 需求翻成 done 并追加 receipt-less validation，污染已完成的证据链。
+        if goal.status == GoalStatus::Success {
+            bail!(
+                "目标 {id} 已关闭为 success，不能再追加人工证据；请用 `goal validate` 写入带 receipt 的验证，或先 supersede/archive"
             );
         }
         let Some(req) = goal.requirements.iter_mut().find(|req| req.id == req_id) else {
@@ -850,47 +859,53 @@ impl GoalStore {
                 goal.lifecycle
             );
         }
-        if let Some(baseline) = goal.baseline.as_ref() {
-            let current = workspace_baseline(&self.root)?;
-            let actual = workspace_delta(baseline, &current);
-            let valid_plans = goal
-                .plan_receipts
+        // baseline 缺失时整个 plan/差量门禁曾被静默跳过（无 else 分支），于是这类
+        // 目标可以吸收任意未声明变更并仍写出 receipt。文档承诺此类目标"永远不
+        // gate-ready"，写入侧同样必须 fail-closed。
+        let Some(baseline) = goal.baseline.as_ref() else {
+            bail!(
+                "目标 {id} 缺少开工 baseline，无法核对实际变更；请用新的 baseline-bound goal supersede，或将已完成记录显式 archive"
+            );
+        };
+        let current = workspace_baseline(&self.root)?;
+        let actual = workspace_delta(baseline, &current);
+        let valid_plans = goal
+            .plan_receipts
+            .iter()
+            .filter(|plan| {
+                plan.baseline_fingerprint == baseline.workspace_fingerprint
+                    && plan.plan_sha256 == plan_receipt_sha256(plan)
+            })
+            .collect::<Vec<_>>();
+        if actual.len() >= 2 && valid_plans.is_empty() {
+            bail!(
+                "实际变更 {} 个文件但缺少首次修改前的 goal plan receipt",
+                actual.len()
+            );
+        }
+        let planned = valid_plans
+            .iter()
+            .flat_map(|plan| plan.changed_paths.iter().cloned())
+            .collect::<BTreeSet<_>>();
+        let unplanned = actual
+            .iter()
+            .filter(|changed| !planned.contains(*changed))
+            .cloned()
+            .collect::<Vec<_>>();
+        if !valid_plans.is_empty() && !unplanned.is_empty() {
+            bail!("validation 拒绝未计划的实际变更: {}", unplanned.join(", "));
+        }
+        if !valid_plans.is_empty() {
+            let undeclared_plan = impact_paths
                 .iter()
-                .filter(|plan| {
-                    plan.baseline_fingerprint == baseline.workspace_fingerprint
-                        && plan.plan_sha256 == plan_receipt_sha256(plan)
-                })
+                .map(|path| path.replace('\\', "/"))
+                .filter(|changed| !planned.contains(changed))
                 .collect::<Vec<_>>();
-            if actual.len() >= 2 && valid_plans.is_empty() {
+            if !undeclared_plan.is_empty() {
                 bail!(
-                    "实际变更 {} 个文件但缺少首次修改前的 goal plan receipt",
-                    actual.len()
+                    "validation --changed 超出 goal plan: {}",
+                    undeclared_plan.join(", ")
                 );
-            }
-            let planned = valid_plans
-                .iter()
-                .flat_map(|plan| plan.changed_paths.iter().cloned())
-                .collect::<BTreeSet<_>>();
-            let unplanned = actual
-                .iter()
-                .filter(|changed| !planned.contains(*changed))
-                .cloned()
-                .collect::<Vec<_>>();
-            if !valid_plans.is_empty() && !unplanned.is_empty() {
-                bail!("validation 拒绝未计划的实际变更: {}", unplanned.join(", "));
-            }
-            if !valid_plans.is_empty() {
-                let undeclared_plan = impact_paths
-                    .iter()
-                    .map(|path| path.replace('\\', "/"))
-                    .filter(|changed| !planned.contains(changed))
-                    .collect::<Vec<_>>();
-                if !undeclared_plan.is_empty() {
-                    bail!(
-                        "validation --changed 超出 goal plan: {}",
-                        undeclared_plan.join(", ")
-                    );
-                }
             }
         }
         let expected_contract = validation_contract_sha256(&goal, req_id)?;

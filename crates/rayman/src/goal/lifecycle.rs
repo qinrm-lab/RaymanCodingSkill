@@ -1,3 +1,5 @@
+use super::*;
+
 fn lifecycle_hash_bytes(hasher: &mut Sha256, value: &[u8]) {
     hasher.update((value.len() as u64).to_le_bytes());
     hasher.update(value);
@@ -25,14 +27,18 @@ fn lifecycle_hash_optional_u64(hasher: &mut Sha256, value: Option<u64>) {
 /// New serde-default fields therefore cannot silently invalidate archived
 /// proofs.  Adding a security-relevant field requires an intentional contract
 /// version bump and an explicit proof refresh.
-fn legacy_lifecycle_contract_sha256(goal: &Goal) -> String {
+pub(super) fn legacy_lifecycle_contract_sha256(goal: &Goal) -> String {
     let mut hasher = Sha256::new();
     let extended = goal.baseline.is_some()
         || !goal.plan_receipts.is_empty()
         || !goal.review_receipts.is_empty();
     lifecycle_hash_str(
         &mut hasher,
-        if extended { "rayman.lifecycle-contract.v2" } else { "rayman.lifecycle-contract.v1" },
+        if extended {
+            "rayman.lifecycle-contract.v2"
+        } else {
+            "rayman.lifecycle-contract.v1"
+        },
     );
     hasher.update(goal.schema_version.to_le_bytes());
     lifecycle_hash_str(&mut hasher, &goal.id);
@@ -152,7 +158,7 @@ fn lifecycle_contract_sha256(goal: &Goal, receipt_policy: Option<&str>) -> Strin
     format!("{:x}", hasher.finalize())
 }
 
-fn issue_lifecycle_proof(
+pub(super) fn issue_lifecycle_proof(
     goal: &Goal,
     fingerprint: String,
     migration: Option<String>,
@@ -207,17 +213,16 @@ fn goal_created_before(goal: &Goal, rollout_at: &str) -> bool {
     goal_created_before_timestamp(&goal.created_at, rollout_at)
 }
 
-fn pre_receipt_migration_eligible(goal: &Goal) -> bool {
-    completed_current_schema_history(goal)
-        && goal_created_before(goal, STRICT_RECEIPT_ROLLOUT_AT)
+pub(super) fn pre_receipt_migration_eligible(goal: &Goal) -> bool {
+    completed_current_schema_history(goal) && goal_created_before(goal, STRICT_RECEIPT_ROLLOUT_AT)
 }
 
-fn receipt_policy_v1_migration_eligible(goal: &Goal) -> bool {
+pub(super) fn receipt_policy_v1_migration_eligible(goal: &Goal) -> bool {
     completed_current_schema_history(goal)
         && goal_created_before(goal, RECEIPT_POLICY_V2_ROLLOUT_AT)
 }
 
-fn historical_success_fingerprint(
+pub(super) fn historical_success_fingerprint(
     goal: &Goal,
     root: &Path,
     policy: ReceiptValidationPolicy,
@@ -270,10 +275,7 @@ pub fn workspace_fingerprint(root: &Path) -> Result<String> {
     Ok(workspace_baseline(root)?.workspace_fingerprint)
 }
 
-pub fn workspace_delta(
-    baseline: &WorkspaceBaseline,
-    current: &WorkspaceBaseline,
-) -> Vec<String> {
+pub fn workspace_delta(baseline: &WorkspaceBaseline, current: &WorkspaceBaseline) -> Vec<String> {
     let mut paths = baseline
         .files
         .keys()
@@ -286,11 +288,7 @@ pub fn workspace_delta(
     paths
 }
 
-pub fn goal_planning_gaps(
-    goal: &Goal,
-    root: &Path,
-    current_fingerprint: &str,
-) -> Vec<String> {
+pub fn goal_planning_gaps(goal: &Goal, root: &Path, current_fingerprint: &str) -> Vec<String> {
     let Some(baseline) = goal.baseline.as_ref() else {
         return if goal.is_current_schema() && goal.lifecycle == GoalLifecycle::Current {
             vec![
@@ -391,6 +389,149 @@ pub fn goal_planning_gaps(
         gaps.push("high-priority plan 缺少绑定最终源码 fingerprint 的 review receipt".into());
     }
     gaps
+}
+
+/// 单个目标在 standard 门禁下的判定。
+pub struct GoalGateVerdict {
+    pub blockers: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
+/// standard 档对单个目标的完整门禁判定。
+///
+/// `check`/`finish` 与 autosave 的"工作是否已完成"必须共用这一份：此前 autosave
+/// 手工复刻了同一套语义，两边因此可以独立漂移——整目标差量门禁只加到了 check
+/// 一侧，autosave 就会在 check 判定未就绪的状态下认为工作已完成并自停快照。
+pub fn goal_gate_verdict(
+    goal: &Goal,
+    all_goals: &[Goal],
+    root: &Path,
+    current_fingerprint: Option<&str>,
+) -> GoalGateVerdict {
+    let mut blockers = Vec::new();
+    let mut warnings = Vec::new();
+
+    if let Some(error) = goal.current_schema_error() {
+        blockers.push(format!("goal {} 合约无效: {error}", goal.id));
+        return GoalGateVerdict { blockers, warnings };
+    }
+    if let Some(error) = goal.lifecycle_proof_error(root) {
+        blockers.push(format!("goal {} lifecycle proof 无效: {error}", goal.id));
+        return GoalGateVerdict { blockers, warnings };
+    }
+    if let Some(fingerprint) = current_fingerprint
+        && let Some(error) = supersession_error(goal, all_goals, root, fingerprint)
+    {
+        blockers.push(format!("goal {} supersession 合约无效: {error}", goal.id));
+        return GoalGateVerdict { blockers, warnings };
+    }
+    if goal.lifecycle != GoalLifecycle::Current {
+        warnings.push(format!(
+            "historical goal {} lifecycle={} 已保留但不参与当前 readiness{}",
+            goal.id,
+            goal.lifecycle,
+            goal.superseded_by
+                .as_deref()
+                .map(|id| format!("（superseded_by={id}）"))
+                .unwrap_or_default()
+        ));
+        return GoalGateVerdict { blockers, warnings };
+    }
+    if goal.loaded_from_legacy {
+        blockers.push(format!(
+            "legacy goal {} 仍为 current（status={}）；legacy 记录不能生成当前 receipt，请显式 archive 历史 success，或新建 current-schema replacement 后 supersede",
+            goal.id, goal.status
+        ));
+        return GoalGateVerdict { blockers, warnings };
+    }
+
+    let requires_receipt = goal.is_current_schema();
+    match goal.status {
+        GoalStatus::Success => {}
+        GoalStatus::Active => blockers.push(format!(
+            "goal {} 仍为 active；用 goal validate 记录实际验证后必须 goal close",
+            goal.id
+        )),
+        GoalStatus::Partial | GoalStatus::Blocked => blockers.push(format!(
+            "goal {} 状态为 {}，不能作为 standard READY",
+            goal.id, goal.status
+        )),
+    }
+    for req in &goal.requirements {
+        let is_must = req.kind == RequirementKind::Must;
+        if goal.status == GoalStatus::Active && is_must && req.status != RequirementStatus::Done {
+            blockers.push(format!(
+                "active goal {} 的 must 需求 {} 仍未完成",
+                goal.id, req.id
+            ));
+        }
+        if goal.status == GoalStatus::Success && is_must && req.status != RequirementStatus::Done {
+            blockers.push(format!(
+                "success goal {} 的 must 需求 {} 未处于 done 状态",
+                goal.id, req.id
+            ));
+        }
+        if req.status == RequirementStatus::Done
+            && req
+                .evidence
+                .as_deref()
+                .map(str::trim)
+                .unwrap_or_default()
+                .is_empty()
+        {
+            blockers.push(format!(
+                "goal {} 需求 {} 缺少 evidence 文本",
+                goal.id, req.id
+            ));
+        }
+        if req.status == RequirementStatus::Done && req.validations.is_empty() {
+            blockers.push(format!("goal {} 需求 {} 缺少验证 receipt", goal.id, req.id));
+        }
+        if !req.impacts.is_empty()
+            && let Some(fingerprint) = current_fingerprint
+        {
+            for gap in validation_relevance_gaps(req, goal, root, fingerprint) {
+                blockers.push(format!("goal {} 需求 {} {gap}", goal.id, req.id));
+            }
+        }
+        if requires_receipt && goal.status == GoalStatus::Success && is_must {
+            let has_current_receipt = req.validations.iter().any(|validation| {
+                current_fingerprint.is_some_and(|fingerprint| {
+                    validation_has_current_receipt(validation, goal, req, root, fingerprint)
+                })
+            });
+            if !has_current_receipt {
+                blockers.push(format!(
+                    "success goal {} 的 must 需求 {} 没有绑定当前工作区的成功 validation receipt",
+                    goal.id, req.id
+                ));
+            }
+        }
+        if req.status == RequirementStatus::Done
+            && req.impacts.is_empty()
+            && !req.validations.is_empty()
+        {
+            warnings.push(format!(
+                "goal {} 需求 {} 没有 impact 快照；非代码变更可忽略",
+                goal.id, req.id
+            ));
+        }
+    }
+
+    // 整目标级的规划/差量门禁：baseline 缺失、超出 plan 的实际变更、未被任何当前
+    // receipt 声明的变更、high-priority plan 的 review 绑定。这些规则曾只在
+    // `goal close` 内生效，而 close 不会重置 status，已关闭的 success 目标可以
+    // 原地反复重新验证，于是它们全部逃过了交付门禁。
+    if requires_receipt
+        && goal.status == GoalStatus::Success
+        && let Some(fingerprint) = current_fingerprint
+    {
+        for gap in goal_planning_gaps(goal, root, fingerprint) {
+            blockers.push(format!("goal {} {gap}", goal.id));
+        }
+    }
+
+    GoalGateVerdict { blockers, warnings }
 }
 
 impl Goal {
@@ -513,7 +654,10 @@ impl Goal {
                     || changed != receipt.changed_paths
                     || impacted != receipt.impacted_paths
                     || receipt.baseline_fingerprint != baseline.workspace_fingerprint
-                    || !matches!(receipt.review_priority.as_str(), "normal" | "broad" | "high")
+                    || !matches!(
+                        receipt.review_priority.as_str(),
+                        "normal" | "broad" | "high"
+                    )
                     || receipt.plan_sha256 != plan_receipt_sha256(receipt)
                 {
                     return Some("goal plan receipt 无效、未规范化或未绑定 baseline".into());
@@ -681,37 +825,37 @@ pub fn supersession_error(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct LegacyGoal {
-    id: String,
-    status: String,
+pub(super) struct LegacyGoal {
+    pub(super) id: String,
+    pub(super) status: String,
     #[serde(default)]
-    created_at: Option<String>,
+    pub(super) created_at: Option<String>,
     #[serde(default)]
-    updated_at: Option<String>,
-    contract: LegacyContract,
+    pub(super) updated_at: Option<String>,
+    pub(super) contract: LegacyContract,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct LegacyContract {
-    goal: String,
+pub(super) struct LegacyContract {
+    pub(super) goal: String,
     #[serde(default)]
-    requirements: Vec<LegacyRequirement>,
+    pub(super) requirements: Vec<LegacyRequirement>,
     #[serde(default)]
-    verification: Vec<String>,
+    pub(super) verification: Vec<String>,
     #[serde(default)]
-    created_at: Option<String>,
+    pub(super) created_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct LegacyRequirement {
-    id: String,
-    text: String,
+pub(super) struct LegacyRequirement {
+    pub(super) id: String,
+    pub(super) text: String,
     #[serde(default = "legacy_must_kind")]
-    priority: String,
+    pub(super) priority: String,
     #[serde(default = "legacy_open_status")]
-    status: String,
+    pub(super) status: String,
     #[serde(default)]
-    evidence: Option<String>,
+    pub(super) evidence: Option<String>,
     #[serde(default)]
-    validation_commands: Vec<String>,
+    pub(super) validation_commands: Vec<String>,
 }

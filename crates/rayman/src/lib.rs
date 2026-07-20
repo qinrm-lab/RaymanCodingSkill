@@ -8,7 +8,6 @@ pub const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub mod autosave;
 pub mod checkpoint;
 pub mod context;
-pub mod fsutil;
 pub mod goal;
 pub mod hash;
 pub mod map;
@@ -19,11 +18,8 @@ pub mod walk;
 pub mod workspace;
 
 mod file_io;
-mod pathfmt;
-mod project_store;
-mod state_store;
-mod timefmt;
-mod ui_paths;
+pub mod pathfmt;
+pub mod timefmt;
 
 use std::path::{Path, PathBuf};
 

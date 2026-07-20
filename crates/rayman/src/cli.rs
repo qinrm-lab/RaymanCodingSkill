@@ -325,6 +325,7 @@ pub enum GoalAction {
         message: String,
     },
     /// 记录某需求的证据并标记完成
+    /// 记录尚未被机器验证的进展说明（evidence-only completion，不能支撑门禁主张）
     Evidence {
         id: String,
         #[arg(long)]
@@ -334,7 +335,7 @@ pub enum GoalAction {
         /// 本次证据涉及的变更文件；会记录 map impact 快照（可重复）
         #[arg(long = "changed")]
         changed: Vec<String>,
-        /// 已实际运行且通过的验证命令；standard profile 会检查它是否覆盖变更类型（可重复）
+        /// 声称已运行并通过的验证命令；无 receipt，不能支撑 standard/release 主张（可重复）
         #[arg(long = "validated")]
         validated: Vec<String>,
     },

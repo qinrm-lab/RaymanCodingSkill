@@ -6,8 +6,9 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::context::{self, ContextIndex, FileEntry};
-use crate::project_store::{now_iso, write_json};
+use crate::file_io::write_json;
 use crate::state_paths;
+use crate::timefmt::now_iso;
 
 mod python;
 mod quality;

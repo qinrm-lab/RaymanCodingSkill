@@ -4,10 +4,11 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 
+use crate::file_io::is_link_or_reparse;
+use crate::pathfmt::display_path;
 use crate::state_paths;
-use crate::ui_paths::display_path;
 
 const TEMP_ROOT: &str = ".RaymanCodingSkill/tmp";
 const MAX_REPORTED_ERRORS: usize = 64;
@@ -149,29 +150,7 @@ fn record_error(status: &mut TempStatus, error: String) {
 }
 
 fn ensure_real_directory(path: &Path) -> Result<()> {
-    let metadata = fs::symlink_metadata(path)
-        .with_context(|| format!("无法读取临时目录元数据: {}", path.display()))?;
-    if is_link_or_reparse(&metadata) {
-        bail!("拒绝链接/reparse 临时目录: {}", path.display());
-    }
-    if !metadata.file_type().is_dir() {
-        bail!("临时目录不是目录: {}", path.display());
-    }
-    Ok(())
-}
-
-fn is_link_or_reparse(metadata: &fs::Metadata) -> bool {
-    if metadata.file_type().is_symlink() {
-        return true;
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
-        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-    }
-    #[cfg(not(windows))]
-    false
+    crate::file_io::ensure_real_directory_labeled(path, "临时目录")
 }
 
 /// 清理整个托管临时根。只删 `.RaymanCodingSkill/tmp`，绝不触碰其它用户数据。

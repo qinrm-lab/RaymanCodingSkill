@@ -112,11 +112,26 @@ jobs:
           # CI provisions the same binding an installation must have; it does not install anything.
           New-Item -ItemType Directory -Force ".RaymanCodingSkill" | Out-Null
           $skillHash = (Get-FileHash "SKILL.md" -Algorithm SHA256).Hash.ToLowerInvariant()
+
+          # Derive contract/version from the artifact itself, exactly as
+          # install-rayman.ps1 does. Hardcoding them here is what let this job
+          # drift into writing a binding the CLI rejects.
+          $identityText = & $artifact '--format' 'json' 'doctor'
+          if ($LASTEXITCODE -ne 0) { throw "artifact could not report its identity: $LASTEXITCODE" }
+          $identity = $identityText | ConvertFrom-Json -ErrorAction Stop
+          $artifactContract = [string]$identity.contract
+          $artifactVersion = [string]$identity.version
+          if ([string]::IsNullOrWhiteSpace($artifactContract) -or
+              [string]::IsNullOrWhiteSpace($artifactVersion)) {
+            throw 'artifact doctor output is missing contract or version.'
+          }
           @(
             "skill: raymancodingskill"
             "enabled: true"
             "skill_file: SKILL.md"
             "skill_sha256: $skillHash"
+            "cli_contract: $artifactContract"
+            "cli_version: $artifactVersion"
           ) | Set-Content -Path ".RaymanCodingSkill/workspace_skill.yaml" -Encoding utf8
 
           # Exercise the current artifact as its own managed workspace. The tracked

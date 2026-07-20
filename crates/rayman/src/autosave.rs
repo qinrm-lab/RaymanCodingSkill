@@ -16,11 +16,10 @@ use anyhow::{Context, Result, bail};
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 
-use crate::goal::{
-    GoalLifecycle, GoalStatus, GoalStore, PendingStore, RequirementKind, RequirementStatus,
-};
+use crate::file_io::is_link_or_reparse;
+use crate::goal::{GoalLifecycle, GoalStore, PendingStore};
+use crate::pathfmt::display_path;
 use crate::state_paths;
-use crate::state_store::{self, display_path};
 use crate::{checkpoint, workspace_root};
 
 const DEFAULT_INTERVAL_MIN: u64 = 30;
@@ -89,20 +88,6 @@ fn is_lock_busy(error: &io::Error) -> bool {
     error.kind() == io::ErrorKind::WouldBlock || matches!(error.raw_os_error(), Some(32) | Some(33))
 }
 
-fn is_link_or_reparse(metadata: &fs::Metadata) -> bool {
-    if metadata.file_type().is_symlink() {
-        return true;
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
-        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-    }
-    #[cfg(not(windows))]
-    false
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TaskRegistration {
     Present,
@@ -157,11 +142,11 @@ fn state_path(root: &Path, create_parents: bool) -> Result<PathBuf> {
 /// 状态损坏不能被当成“未启用”：那会使 start/stop 覆写唯一的故障证据，或让 tick
 /// 错误注销仍可能需要恢复的计划任务。
 fn load_state(root: &Path) -> Result<Option<AutosaveState>> {
-    state_store::read_json(&state_path(root, false)?)
+    crate::file_io::read_json(&state_path(root, false)?)
 }
 
 fn save_state(root: &Path, state: &AutosaveState) -> Result<()> {
-    state_store::write_json(&state_path(root, true)?, state)
+    crate::file_io::write_json(&state_path(root, true)?, state)
 }
 
 /// 计划任务名：每个工作区一个，稳定且唯一。
@@ -185,67 +170,21 @@ pub fn work_is_complete(root: &Path) -> bool {
     let Ok(fingerprint) = crate::goal::workspace_fingerprint(root) else {
         return false;
     };
+    if !goals
+        .iter()
+        .any(|goal| goal.lifecycle == GoalLifecycle::Current)
+    {
+        return false;
+    }
+    // 与 `rayman check --profile standard` 共用同一份判定。这里曾经手工复刻同一套
+    // 语义，结果两边独立漂移：整目标差量门禁只加到了 check 一侧，autosave 就会在
+    // check 判定未就绪的状态下认定工作已完成并自停快照。
     if goals.iter().any(|goal| {
-        goal.current_schema_error().is_some()
-            || goal.lifecycle_proof_error(root).is_some()
-            || crate::goal::supersession_error(goal, &goals, root, &fingerprint).is_some()
+        !crate::goal::goal_gate_verdict(goal, &goals, root, Some(&fingerprint))
+            .blockers
+            .is_empty()
     }) {
         return false;
-    }
-    let current = goals
-        .iter()
-        .filter(|goal| goal.lifecycle == GoalLifecycle::Current)
-        .collect::<Vec<_>>();
-    if current.is_empty() {
-        return false;
-    }
-    for goal in current {
-        if goal.loaded_from_legacy
-            || goal.current_schema_error().is_some()
-            || goal.status != GoalStatus::Success
-        {
-            return false;
-        }
-        for requirement in &goal.requirements {
-            let is_must = requirement.kind == RequirementKind::Must;
-            if is_must
-                && (requirement.status != RequirementStatus::Done
-                    || requirement
-                        .evidence
-                        .as_deref()
-                        .map(str::trim)
-                        .unwrap_or_default()
-                        .is_empty())
-            {
-                return false;
-            }
-            if requirement.status == RequirementStatus::Done
-                && (requirement.validations.is_empty()
-                    || (!requirement.impacts.is_empty()
-                        && !crate::goal::validation_relevance_gaps(
-                            requirement,
-                            goal,
-                            root,
-                            &fingerprint,
-                        )
-                        .is_empty()))
-            {
-                return false;
-            }
-            if is_must
-                && !requirement.validations.iter().any(|validation| {
-                    crate::goal::validation_has_current_receipt(
-                        validation,
-                        goal,
-                        requirement,
-                        root,
-                        &fingerprint,
-                    )
-                })
-            {
-                return false;
-            }
-        }
     }
     matches!(PendingStore::new(root).list(), Ok(items) if items.is_empty())
 }
@@ -300,7 +239,7 @@ fn start_with_scheduler(
         dir: dir.map(display_path),
         auto_stop,
         task_name: name.clone(),
-        started_at: state_store::now_iso(),
+        started_at: crate::timefmt::now_iso(),
         last_tick_at: None,
         stopped_at: None,
         stop_status: None,
@@ -376,7 +315,7 @@ fn tick_with_scheduler(root: &Path, scheduler: &dyn TaskScheduler) -> Result<Act
     }
 
     let saved = checkpoint::save(root, dir_override(&state.dir).as_deref(), state.keep)?;
-    state.last_tick_at = Some(state_store::now_iso());
+    state.last_tick_at = Some(crate::timefmt::now_iso());
     save_state(root, &state)?;
 
     Ok(ActionOutcome {
@@ -405,7 +344,7 @@ fn stop_with_scheduler(
             dir: None,
             auto_stop: true,
             task_name: task_name(root),
-            started_at: state_store::now_iso(),
+            started_at: crate::timefmt::now_iso(),
             last_tick_at: None,
             stopped_at: None,
             stop_status: None,
@@ -509,7 +448,7 @@ where
     let was_active = state.active;
     let mut stopped = state.clone();
     stopped.active = false;
-    stopped.stopped_at = Some(state_store::now_iso());
+    stopped.stopped_at = Some(crate::timefmt::now_iso());
     stopped.stop_status = Some(status.to_string());
     if let Err(state_error) = persist(&stopped) {
         if was_active {
@@ -956,7 +895,7 @@ mod tests {
             dir: Some(display_path(store.path())),
             auto_stop: true,
             task_name: task_name(root),
-            started_at: state_store::now_iso(),
+            started_at: crate::timefmt::now_iso(),
             last_tick_at: None,
             stopped_at: None,
             stop_status: None,
@@ -999,6 +938,95 @@ mod tests {
         assert!(!load_state(root).unwrap().unwrap().active);
     }
 
+    /// autosave 的"工作已完成"与 `check --profile standard` 必须永远同判。
+    ///
+    /// 这两处曾各有一份手写的门禁语义，往其中一处加规则就会产生漂移——真实发生过：
+    /// 整目标差量门禁只加到了 check 一侧，autosave 于是会在 check 判定未就绪时
+    /// 自停快照。此测试锁死二者共用同一份判定，任何一侧单独演进都会失败。
+    #[test]
+    fn work_is_complete_agrees_with_the_standard_gate_on_undeclared_drift() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::write(root.join("a.txt"), "a0").unwrap();
+        std::fs::write(root.join("b.txt"), "b0").unwrap();
+        let goals = GoalStore::new(root);
+        let goal = goals.start("drift", &[("ship".into(), true)]).unwrap();
+        goals
+            .record_plan(
+                &goal.id,
+                crate::goal::PlanReceiptSubmission {
+                    changed_paths: vec!["a.txt".into(), "b.txt".into()],
+                    review_priority: "normal".into(),
+                    impacted_paths: vec!["a.txt".into(), "b.txt".into()],
+                    recommended_checks: Vec::new(),
+                },
+            )
+            .unwrap();
+
+        std::fs::write(root.join("a.txt"), "a1").unwrap();
+        let command = "echo validation-ok";
+        let impacts = vec![crate::goal::ImpactEvidence {
+            changed_path: "a.txt".into(),
+            package: None,
+            manifest_path: None,
+            direct_dependencies: Vec::new(),
+            direct_dependents: Vec::new(),
+            candidate_tests: Vec::new(),
+            recommended_checks: Vec::new(),
+            recommendation_basis: "test".into(),
+            recorded_at: crate::timefmt::now_iso(),
+        }];
+        let scopes = crate::goal::validation_scopes_for_impacts(&impacts);
+        let fingerprint = crate::goal::workspace_fingerprint(root).unwrap();
+        goals
+            .record_validation_receipt(
+                &goal.id,
+                "req_1",
+                crate::goal::ValidationReceiptSubmission {
+                    evidence: "validated a.txt".into(),
+                    command: command.into(),
+                    receipt: crate::goal::ValidationReceipt {
+                        exit_code: 0,
+                        cwd: root.display().to_string(),
+                        workspace_fingerprint_before: fingerprint.clone(),
+                        workspace_fingerprint_after: fingerprint,
+                        stdout_sha256: "a".repeat(64),
+                        stderr_sha256: "b".repeat(64),
+                        invocation_sha256: crate::goal::validation_invocation_sha256_scoped(
+                            command, &scopes, false,
+                        ),
+                        passed_tests: None,
+                        listed_tests: None,
+                        ignored_tests: None,
+                        list_stdout_sha256: None,
+                        list_stderr_sha256: None,
+                        contract_sha256: crate::goal::validation_contract_sha256(&goal, "req_1")
+                            .unwrap(),
+                    },
+                    impacts,
+                    non_code: false,
+                },
+            )
+            .unwrap();
+        goals.close(&goal.id, "success").unwrap();
+        assert!(work_is_complete(root), "closed success must be complete");
+
+        // b.txt 在 plan 之内但其实际改动从未被任何 receipt 声明。
+        std::fs::write(root.join("b.txt"), "b1-undeclared").unwrap();
+        let (all, _) = goals.list_with_issues().unwrap();
+        let drifted = crate::goal::workspace_fingerprint(root).unwrap();
+        let gate_blocked = all.iter().any(|g| {
+            !crate::goal::goal_gate_verdict(g, &all, root, Some(&drifted))
+                .blockers
+                .is_empty()
+        });
+        assert!(gate_blocked, "standard gate must block undeclared drift");
+        assert!(
+            !work_is_complete(root),
+            "autosave must not call it complete while the standard gate blocks"
+        );
+    }
+
     #[test]
     fn work_is_complete_rejects_partial_blocked_and_unknown_statuses() {
         for status in ["partial", "blocked"] {
@@ -1006,9 +1034,6 @@ mod tests {
             let root = dir.path();
             let goals = GoalStore::new(root);
             let goal = goals.start("t", &[("do".into(), true)]).unwrap();
-            goals
-                .record_evidence(&goal.id, "req_1", "src/x + test passed")
-                .unwrap();
             goals.close(&goal.id, status).unwrap();
             assert!(!work_is_complete(root), "{status} must not auto-stop");
         }
@@ -1118,7 +1143,7 @@ mod tests {
             dir: None,
             auto_stop: true,
             task_name: task_name(root),
-            started_at: state_store::now_iso(),
+            started_at: crate::timefmt::now_iso(),
             last_tick_at: None,
             stopped_at: None,
             stop_status: None,
@@ -1147,7 +1172,7 @@ mod tests {
             dir: Some(display_path(snapshots.path())),
             auto_stop: true,
             task_name: task_name(root),
-            started_at: state_store::now_iso(),
+            started_at: crate::timefmt::now_iso(),
             last_tick_at: None,
             stopped_at: None,
             stop_status: None,
@@ -1182,7 +1207,7 @@ mod tests {
             dir: None,
             auto_stop: true,
             task_name: task_name(root),
-            started_at: state_store::now_iso(),
+            started_at: crate::timefmt::now_iso(),
             last_tick_at: None,
             stopped_at: None,
             stop_status: None,

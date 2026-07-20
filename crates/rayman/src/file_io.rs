@@ -11,8 +11,39 @@ use anyhow::{Context, Result, bail};
 
 static ATOMIC_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-pub fn read_text(path: &Path) -> Result<String> {
-    fs::read_to_string(path).with_context(|| format!("无法读取文件: {}", path.display()))
+/// 该 metadata 是否指向符号链接或 Windows reparse point。
+///
+/// 路径安全检查的共同前提：凡是"必须是工作区内真实文件/目录"的判定都要先排除
+/// 链接，否则校验的是链接本身、写入的却是链接目标。全仓只允许这一份实现——
+/// 它曾在 7 个模块里各有一份拷贝，可以互相独立漂移。
+pub(crate) fn is_link_or_reparse(metadata: &std::fs::Metadata) -> bool {
+    if metadata.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+    }
+    #[cfg(not(windows))]
+    false
+}
+
+/// 校验 `path` 是一个真实目录（不是链接/reparse point）。
+///
+/// `label` 只影响诊断文案。各模块保留一行同名委托以维持各自的措辞，但判定逻辑
+/// 全仓只有这一份——它曾在 3 个模块里各写了一遍。
+pub(crate) fn ensure_real_directory_labeled(path: &Path, label: &str) -> Result<()> {
+    let metadata = fs::symlink_metadata(path)
+        .with_context(|| format!("无法读取{label}元数据: {}", path.display()))?;
+    if is_link_or_reparse(&metadata) {
+        bail!("拒绝链接/reparse {label}: {}", path.display());
+    }
+    if !metadata.file_type().is_dir() {
+        bail!("{label}不是目录: {}", path.display());
+    }
+    Ok(())
 }
 
 pub fn write_atomic(target: &Path, text: &str) -> Result<()> {
@@ -254,7 +285,7 @@ mod tests {
         let target = dir.path().join("state.json");
         write_atomic(&target, "one").unwrap();
         write_atomic(&target, "two").unwrap();
-        assert_eq!(read_text(&target).unwrap(), "two");
+        assert_eq!(fs::read_to_string(&target).unwrap(), "two");
         let leftovers: Vec<_> = fs::read_dir(dir.path())
             .unwrap()
             .filter_map(|entry| entry.ok())

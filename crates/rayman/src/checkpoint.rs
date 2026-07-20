@@ -16,7 +16,8 @@ use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::state_store::{self, display_path};
+use crate::file_io::is_link_or_reparse;
+use crate::pathfmt::display_path;
 use crate::{hash, walk};
 
 /// 默认保留的完整快照数（滚动，多留几个以防某次保存中途损坏）。
@@ -407,7 +408,7 @@ pub fn save(root: &Path, override_dir: Option<&Path>, keep: usize) -> Result<Sav
     // restore.  Recovery runs under the same per-workspace lock as restore.
     recover_orphaned_restore_transactions(&root, &ws_dir)?;
 
-    let timestamp = state_store::now_iso();
+    let timestamp = crate::timefmt::now_iso();
     let id = fs_safe_id(&timestamp);
     let staging = ws_dir.join(format!("{STAGING_PREFIX}{}-{id}", std::process::id()));
     if staging.exists() {
@@ -542,7 +543,7 @@ fn commit_snapshot(staging: &Path, final_dir: &Path, manifest: &Manifest) -> Res
             display_path(final_dir)
         );
     }
-    state_store::write_json(&staging.join(MANIFEST_NAME), manifest)?;
+    crate::file_io::write_json(&staging.join(MANIFEST_NAME), manifest)?;
     ensure_safe_file_under(staging, Path::new(MANIFEST_NAME))?;
     fs::rename(staging, final_dir).with_context(|| {
         format!(
@@ -685,7 +686,7 @@ pub fn latest(root: &Path, override_dir: Option<&Path>) -> Result<Option<Checkpo
 pub fn verify_snapshot(snapshot: &Path) -> Result<Manifest> {
     ensure_real_directory(snapshot)?;
     ensure_safe_file_under(snapshot, Path::new(MANIFEST_NAME))?;
-    let manifest = state_store::read_json::<Manifest>(&snapshot.join(MANIFEST_NAME))?
+    let manifest = crate::file_io::read_json::<Manifest>(&snapshot.join(MANIFEST_NAME))?
         .ok_or_else(|| anyhow::anyhow!("checkpoint 缺少 manifest: {}", display_path(snapshot)))?;
     if manifest.schema == LEGACY_MANIFEST_SCHEMA && manifest.version == LEGACY_MANIFEST_VERSION {
         bail!(
@@ -731,7 +732,7 @@ fn inspect_snapshot(snapshot: &Path) -> (Option<Manifest>, SnapshotStatus) {
 fn load_manifest_untrusted(snapshot: &Path) -> Result<Manifest> {
     ensure_real_directory(snapshot)?;
     ensure_safe_file_under(snapshot, Path::new(MANIFEST_NAME))?;
-    state_store::read_json::<Manifest>(&snapshot.join(MANIFEST_NAME))?
+    crate::file_io::read_json::<Manifest>(&snapshot.join(MANIFEST_NAME))?
         .ok_or_else(|| anyhow::anyhow!("checkpoint 缺少 manifest"))
 }
 
@@ -774,6 +775,9 @@ fn verify_manifest_tree(tree: &Path, manifest: &Manifest) -> Result<()> {
     Ok(())
 }
 
-include!("checkpoint/restore.rs");
+mod restore;
 
-include!("checkpoint/tests.rs");
+pub use restore::*;
+
+#[cfg(test)]
+mod tests;

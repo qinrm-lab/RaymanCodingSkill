@@ -1,3 +1,5 @@
+use super::*;
+
 /// Parse a validation command into one executable plus an argv vector.  It is
 /// intentionally not a shell grammar: control operators and nested shell
 /// hosts are rejected, so a later successful command cannot hide an earlier
@@ -129,16 +131,61 @@ fn cargo_test_invocation(command: &ParsedValidationCommand) -> bool {
     matches!(cargo_subcommand(command), Some(("test", _)))
         || matches!(cargo_subcommand(command), Some(("nextest", Some("run"))))
 }
-fn pytest_invocation(command: &ParsedValidationCommand) -> bool {
+/// 不带值的 Python 解释器短标志字母（可组合，如 `-Es`、`-OO`）。
+const PYTHON_VALUELESS_FLAGS: &str = "bBdEiIOPqsSuvx";
+
+/// `python ... -m pytest` 中 `pytest` 之后第一个参数的下标。
+///
+/// `-m` 只有出现在**解释器选项位**才算数。Python 遇到 `-c`、`-` 或脚本路径后就
+/// 停止解析自己的选项，把余下参数原样交给用户代码，此时 `-m pytest` 只是惰性的
+/// `sys.argv` 内容，pytest 根本不会运行。把那种形式当成测试证明，等于让任意
+/// 代码冒充测试结果——`parse_validation_command` 已经为此拒绝了 cmd/sh/pwsh，
+/// `python -c` 属于同一类宿主。无法确定的形式一律返回 None（fail-closed）：
+/// 命令只是不被当作测试证明，不会被误判为通过。
+fn python_pytest_module_index(command: &ParsedValidationCommand) -> Option<usize> {
+    let executable = executable_name(command);
+    let mut index = 0;
+    // Windows 的 py 启动器版本选择符，如 `py -3 -m pytest`、`py -3.12-64 -m pytest`。
+    if executable == "py"
+        && command.args.first().is_some_and(|arg| {
+            arg.starts_with('-') && arg[1..].starts_with(|c: char| c.is_ascii_digit())
+        })
+    {
+        index = 1;
+    }
+    while let Some(argument) = command.args.get(index) {
+        if argument == "-m" {
+            return match command.args.get(index + 1) {
+                Some(module) if module == "pytest" => Some(index + 2),
+                _ => None,
+            };
+        }
+        let flags = argument.strip_prefix('-')?;
+        if flags.is_empty() {
+            return None; // `-`：从 stdin 读取代码
+        }
+        if let Some(rest) = flags.strip_prefix('W').or_else(|| flags.strip_prefix('X')) {
+            index += if rest.is_empty() { 2 } else { 1 };
+            continue;
+        }
+        if !flags
+            .chars()
+            .all(|flag| PYTHON_VALUELESS_FLAGS.contains(flag))
+        {
+            return None; // 含 `-c` 或未知带值选项
+        }
+        index += 1;
+    }
+    None
+}
+
+pub(super) fn pytest_invocation(command: &ParsedValidationCommand) -> bool {
     let executable = executable_name(command);
     if matches!(executable.as_str(), "pytest" | "py.test") {
         return true;
     }
     if executable == "py" || executable.starts_with("python") {
-        return command
-            .args
-            .windows(2)
-            .any(|window| window[0] == "-m" && window[1] == "pytest");
+        return python_pytest_module_index(command).is_some();
     }
     false
 }
@@ -150,12 +197,9 @@ fn test_invocation(command: &ParsedValidationCommand) -> bool {
 fn pytest_arguments(command: &ParsedValidationCommand) -> &[String] {
     let executable = executable_name(command);
     if (executable == "py" || executable.starts_with("python"))
-        && let Some(index) = command
-            .args
-            .windows(2)
-            .position(|window| window[0] == "-m" && window[1] == "pytest")
+        && let Some(index) = python_pytest_module_index(command)
     {
-        return &command.args[index + 2..];
+        return &command.args[index..];
     }
     &command.args
 }
@@ -163,8 +207,7 @@ fn pytest_arguments(command: &ParsedValidationCommand) -> &[String] {
 fn pytest_option_takes_value(argument: &str) -> bool {
     matches!(
         argument,
-        "-k"
-            | "-m"
+        "-k" | "-m"
             | "-o"
             | "--override-ini"
             | "--rootdir"
@@ -198,7 +241,7 @@ fn pytest_option_takes_value(argument: &str) -> bool {
     )
 }
 
-fn pytest_path_arguments(command: &ParsedValidationCommand) -> Vec<&str> {
+pub(super) fn pytest_path_arguments(command: &ParsedValidationCommand) -> Vec<&str> {
     if !pytest_invocation(command) {
         return Vec::new();
     }
@@ -232,7 +275,15 @@ fn validate_test_execution_mode(command: &ParsedValidationCommand) -> Result<()>
     if !test_invocation(command) {
         return Ok(());
     }
-    const NON_EXECUTING: &[&str] = &["--no-run", "--list", "--collect-only", "--help", "-h", "--version", "-V"];
+    const NON_EXECUTING: &[&str] = &[
+        "--no-run",
+        "--list",
+        "--collect-only",
+        "--help",
+        "-h",
+        "--version",
+        "-V",
+    ];
     if let Some(flag) = command
         .args
         .iter()
@@ -299,7 +350,10 @@ pub fn validation_list_command(
         args.extend(["--".into(), "--list".into()]);
     } else if pytest_invocation(command) {
         args.push("--collect-only".into());
-        if !args.iter().any(|argument| argument == "-q" || argument == "--quiet") {
+        if !args
+            .iter()
+            .any(|argument| argument == "-q" || argument == "--quiet")
+        {
             args.push("-q".into());
         }
     } else {
@@ -591,7 +645,7 @@ pub fn validation_contract_sha256(goal: &Goal, requirement_id: &str) -> Result<S
     Ok(format!("{:x}", hasher.finalize()))
 }
 
-fn is_sha256(value: &str) -> bool {
+pub(super) fn is_sha256(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
@@ -630,7 +684,7 @@ fn validation_scope_is_well_formed(validation: &ValidationEvidence) -> bool {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ReceiptValidationPolicy {
+pub(super) enum ReceiptValidationPolicy {
     /// Policy used before Python/pytest receipts gained mandatory collect proof
     /// and Python impact relevance checks.
     LegacyV1,
@@ -658,7 +712,7 @@ pub fn validation_has_current_receipt(
     )
 }
 
-fn validation_has_receipt_for_fingerprint(
+pub(super) fn validation_has_receipt_for_fingerprint(
     validation: &ValidationEvidence,
     root: &Path,
     fingerprint: &str,
@@ -857,7 +911,9 @@ fn pytest_selector_covers(root: &Path, selector: &str, expected: &str) -> bool {
             selector == expected
         };
     }
-    let selector = normalized_path_text(selector).trim_end_matches('/').to_string();
+    let selector = normalized_path_text(selector)
+        .trim_end_matches('/')
+        .to_string();
     let expected = normalized_path_text(expected);
     expected == selector
         || expected
@@ -890,7 +946,7 @@ fn cargo_option_values<'a>(
     values
 }
 
-fn command_is_workspace_wide(_root: &Path, command: &ParsedValidationCommand) -> bool {
+pub(super) fn command_is_workspace_wide(_root: &Path, command: &ParsedValidationCommand) -> bool {
     powershell_script(command).is_some_and(|script| {
         Path::new(script)
             .file_name()
@@ -1053,8 +1109,7 @@ fn validation_relevance_gaps_for_fingerprint(
     };
     let mut gaps = Vec::new();
     for impact in &requirement.impacts {
-        let Some(expectation) =
-            validation_expectation_for_policy(&impact.changed_path, policy)
+        let Some(expectation) = validation_expectation_for_policy(&impact.changed_path, policy)
         else {
             continue;
         };
@@ -1104,7 +1159,7 @@ fn goal_success_receipt_gaps_for_fingerprint(
     )
 }
 
-fn goal_success_receipt_gaps_for_policy(
+pub(super) fn goal_success_receipt_gaps_for_policy(
     goal: &Goal,
     root: &Path,
     fingerprint: &str,

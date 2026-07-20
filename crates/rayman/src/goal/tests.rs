@@ -29,6 +29,47 @@ fn successful_receipt(
     }
 }
 
+/// 直接写入"仅人工声明、无 receipt"的需求状态。
+///
+/// 生产侧的 `goal evidence` 旁路已删除（文档明言它不能支撑任何门禁），但门禁
+/// 仍必须正确处理这种历史形态，所以测试改为直接构造它。
+fn set_legacy_evidence(root: &Path, id: &str, req_id: &str, evidence: &str) -> Goal {
+    set_legacy_evidence_with_commands(root, id, req_id, evidence, Vec::new())
+}
+
+fn set_legacy_evidence_with_commands(
+    root: &Path,
+    id: &str,
+    req_id: &str,
+    evidence: &str,
+    validation_commands: Vec<String>,
+) -> Goal {
+    let path = root.join(GOALS_DIR).join(format!("{id}.json"));
+    let _lock = acquire_state_lock(&path).unwrap();
+    let mut goal = GoalStore::load_goal_file(&path).unwrap().unwrap();
+    let now = now_iso();
+    let req = goal
+        .requirements
+        .iter_mut()
+        .find(|req| req.id == req_id)
+        .expect("requirement exists");
+    req.evidence = Some(evidence.into());
+    req.status = RequirementStatus::Done;
+    for command in validation_commands {
+        req.validations.push(ValidationEvidence {
+            command,
+            recorded_at: now.clone(),
+            impact_paths: Vec::new(),
+            impact_scopes: Vec::new(),
+            non_code: true,
+            receipt: None,
+        });
+    }
+    goal.updated_at = now;
+    write_json(&path, &goal).unwrap();
+    goal
+}
+
 fn impact(path: &str) -> ImpactEvidence {
     ImpactEvidence {
         changed_path: path.into(),
@@ -118,9 +159,12 @@ fn close_success_requires_evidence_for_must_requirements() {
     );
 
     // Typed evidence cannot close success without a current receipt.
-    store
-        .record_evidence(&goal.id, "req_1", "src/parser.rs + cargo test passed")
-        .unwrap();
+    set_legacy_evidence(
+        dir.path(),
+        &goal.id,
+        "req_1",
+        "src/parser.rs + cargo test passed",
+    );
     assert!(store.close(&goal.id, "success").is_err());
     store
         .record_validation_receipt(
@@ -397,9 +441,7 @@ fn lifecycle_transitions_preserve_history_and_block_mutation_until_current() {
             .archive(&old.id, "hide active blocker", false)
             .is_err()
     );
-    store
-        .record_evidence(&old.id, "req_1", "historical evidence")
-        .unwrap();
+    set_legacy_evidence(dir.path(), &old.id, "req_1", "historical evidence");
     store
         .record_validation_receipt(
             &old.id,
@@ -424,9 +466,27 @@ fn lifecycle_transitions_preserve_history_and_block_mutation_until_current() {
     let archived = store.archive(&old.id, "historical task", false).unwrap();
     assert_eq!(archived.lifecycle, GoalLifecycle::Archived);
     assert!(old_path.is_file());
+    // 归档后不接受任何进一步的写入。
     assert!(
         store
-            .record_evidence(&old.id, "req_1", "late edit")
+            .record_validation_receipt(
+                &old.id,
+                "req_1",
+                ValidationReceiptSubmission {
+                    evidence: "late edit".into(),
+                    command: "echo validation-ok".into(),
+                    receipt: successful_receipt(
+                        dir.path(),
+                        &old,
+                        "req_1",
+                        "echo validation-ok",
+                        &[],
+                        true,
+                    ),
+                    impacts: Vec::new(),
+                    non_code: true,
+                },
+            )
             .is_err()
     );
 
@@ -565,15 +625,13 @@ fn historical_lifecycle_requires_a_bound_proof_and_explicit_old_schema_migration
     assert!(tampered.lifecycle_proof_error(dir.path()).is_some());
 
     let weak = store.start("weak", &[("typed only".into(), true)]).unwrap();
-    store
-        .record_evidence_with_context(
-            &weak.id,
-            "req_1",
-            "old typed evidence",
-            vec!["cargo check".into()],
-            Vec::new(),
-        )
-        .unwrap();
+    set_legacy_evidence_with_commands(
+        dir.path(),
+        &weak.id,
+        "req_1",
+        "old typed evidence",
+        vec!["cargo check".into()],
+    );
     assert!(store.close(&weak.id, "success").is_err());
     let weak_path = dir.path().join(GOALS_DIR).join(format!("{}.json", weak.id));
     let mut old_success = GoalStore::load_goal_file(&weak_path).unwrap().unwrap();
@@ -993,13 +1051,13 @@ fn concurrent_pending_and_goal_writes_do_not_lose_records() {
             let barrier = Arc::clone(&goal_barrier);
             std::thread::spawn(move || {
                 barrier.wait();
-                GoalStore::new(root)
-                    .record_evidence(
-                        &id,
-                        &format!("req_{}", index + 1),
-                        &format!("parallel evidence {index}"),
-                    )
-                    .unwrap();
+                // 走 acquire_state_lock 的读-改-写路径，与生产写入同一把锁。
+                set_legacy_evidence(
+                    &root,
+                    &id,
+                    &format!("req_{}", index + 1),
+                    &format!("parallel evidence {index}"),
+                );
             })
         })
         .collect();
@@ -1051,9 +1109,7 @@ fn close_success_rejects_a_hand_tampered_goal_with_duplicate_requirement_ids() {
     let dir = tempfile::tempdir().unwrap();
     let store = GoalStore::new(dir.path());
     let goal = store.start("task", &[("req".into(), true)]).unwrap();
-    store
-        .record_evidence(&goal.id, "req_1", "did the work")
-        .unwrap();
+    set_legacy_evidence(dir.path(), &goal.id, "req_1", "did the work");
 
     // Simulate a hand-edited state file: clone req_1's evidence onto a
     // second requirement sharing the same id. The naive "every must has
@@ -1244,6 +1300,42 @@ fn baseline_less_current_goal_is_not_gate_ready_but_can_be_historicized() {
 }
 
 #[test]
+fn baseline_less_goal_cannot_absorb_receipts_at_all() {
+    // 此前整个 plan/差量门禁被包在 `if let Some(baseline)` 里且没有 else 分支，
+    // 于是缺 baseline 的目标（旧版本写下的 v2 记录即为此形态）可以吸收任意
+    // 未声明变更并照常写出 receipt。写入侧必须与"永不 gate-ready"一致地 fail-closed。
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("a.txt"), "a0").unwrap();
+    let store = GoalStore::new(dir.path());
+    let goal = store
+        .start("no-baseline", &[("ship".into(), true)])
+        .unwrap();
+
+    let path = dir.path().join(GOALS_DIR).join(format!("{}.json", goal.id));
+    let mut stripped = GoalStore::load_goal_file(&path).unwrap().unwrap();
+    stripped.baseline = None;
+    write_json(&path, &stripped).unwrap();
+
+    fs::write(dir.path().join("undeclared.txt"), "sneaked in").unwrap();
+    let command = "echo validation-ok";
+    let error = store
+        .record_validation_receipt(
+            &goal.id,
+            "req_1",
+            ValidationReceiptSubmission {
+                evidence: "non-code validation passed".into(),
+                command: command.into(),
+                receipt: successful_receipt(dir.path(), &goal, "req_1", command, &[], true),
+                impacts: Vec::new(),
+                non_code: true,
+            },
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("缺少开工 baseline"), "error={error}");
+}
+
+#[test]
 fn goal_plan_is_one_immutable_aggregate_receipt() {
     let dir = tempfile::tempdir().unwrap();
     fs::write(dir.path().join("a.txt"), "a0").unwrap();
@@ -1379,6 +1471,47 @@ fn pytest_selectors_are_scoped_and_terminal_summary_is_not_double_counted() {
         })
     );
 }
+
+#[test]
+fn python_arbitrary_code_hosts_are_not_accepted_as_a_pytest_proof() {
+    // `python -c CODE -m pytest`：Python 吃掉 `-c CODE`，`-m pytest` 退化成惰性的
+    // sys.argv 内容，pytest 从不运行。若把它当 pytest 调用，攻击者代码就同时
+    // 产出 collect proof 与终局摘要，且空参数尾部让它"覆盖"全部 .py 路径。
+    for forged in [
+        "python -c print('3 passed in 0.02s') -m pytest",
+        "python -cprint(1) -m pytest",
+        "python script.py -m pytest",
+        "python - -m pytest",
+        "python -Ec print(1) -m pytest",
+    ] {
+        let command = parse_validation_command(forged).unwrap();
+        assert!(
+            !pytest_invocation(&command),
+            "must not be classified as pytest: {forged}"
+        );
+    }
+
+    // 真正的解释器选项位仍然照常识别，包括可组合的无值标志与 py 启动器版本选择符。
+    for genuine in [
+        "python -m pytest",
+        "python -q -m pytest tests",
+        "python -Es -m pytest",
+        "python -W ignore -m pytest",
+        "python -Wignore::DeprecationWarning -m pytest",
+        "py -3.12 -m pytest",
+    ] {
+        let command = parse_validation_command(genuine).unwrap();
+        assert!(
+            pytest_invocation(&command),
+            "must stay a pytest invocation: {genuine}"
+        );
+    }
+
+    // 参数尾部必须从模块名之后开始，否则选择器作用域会被算错。
+    let scoped = parse_validation_command("python -q -m pytest tests -q").unwrap();
+    assert_eq!(pytest_path_arguments(&scoped), ["tests"]);
+}
+
 #[test]
 fn current_success_can_refresh_review_after_source_drift() {
     let dir = tempfile::tempdir().unwrap();

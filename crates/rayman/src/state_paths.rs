@@ -11,6 +11,7 @@ use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
 
+use crate::file_io::is_link_or_reparse;
 use anyhow::{Context, Result, bail};
 
 pub const STATE_DIR_NAME: &str = ".RaymanCodingSkill";
@@ -113,9 +114,7 @@ pub fn managed_state_file(root: &Path, relative: &Path, create_parents: bool) ->
 
 /// Check an already-created directory immediately before a state transaction.
 pub fn ensure_real_directory(path: &Path) -> Result<()> {
-    let metadata = fs::symlink_metadata(path)
-        .with_context(|| format!("无法读取受管状态目录元数据: {}", path.display()))?;
-    ensure_real_directory_metadata(path, &metadata)
+    crate::file_io::ensure_real_directory_labeled(path, "受管状态目录")
 }
 
 fn canonical_workspace_root(root: &Path) -> Result<PathBuf> {
@@ -177,20 +176,6 @@ fn ensure_real_directory_metadata(path: &Path, metadata: &fs::Metadata) -> Resul
         bail!("受管状态路径不是目录: {}", path.display());
     }
     Ok(())
-}
-
-fn is_link_or_reparse(metadata: &fs::Metadata) -> bool {
-    if metadata.file_type().is_symlink() {
-        return true;
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
-        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-    }
-    #[cfg(not(windows))]
-    false
 }
 
 #[cfg(test)]

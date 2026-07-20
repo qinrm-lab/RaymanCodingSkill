@@ -1,3 +1,6 @@
+use super::*;
+use crate::file_io::is_link_or_reparse;
+
 /// 把某个完整快照（默认最近完整快照）叠加恢复到工作区。
 /// 覆盖同名文件，但不删除工作区里多出来的文件。恢复使用两阶段事务：全部源文件先
 /// 复制进受锁保护的 staging 并校验，所有既有目标再备份，最后才逐个发布。任一发布或
@@ -11,7 +14,7 @@ pub fn restore(
     restore_impl(root, override_dir, which, None)
 }
 
-fn restore_impl(
+pub(super) fn restore_impl(
     root: &Path,
     override_dir: Option<&Path>,
     which: Option<&str>,
@@ -90,7 +93,7 @@ fn create_restore_transaction(
     files: &[FileIntegrity],
 ) -> Result<RestoreTransaction> {
     ensure_real_directory(ws_dir)?;
-    let id = fs_safe_id(&state_store::now_iso());
+    let id = fs_safe_id(&crate::timefmt::now_iso());
     let path = ws_dir.join(format!(
         "{RESTORE_TRANSACTION_PREFIX}{}-{id}",
         std::process::id()
@@ -489,7 +492,7 @@ fn set_restore_phase(transaction: &mut RestoreTransaction, phase: RestorePhase) 
 fn persist_restore_journal(transaction: &RestoreTransaction) -> Result<()> {
     ensure_real_directory(&transaction.path)?;
     let journal_path = transaction.path.join(RESTORE_JOURNAL_NAME);
-    state_store::write_json(&journal_path, &transaction.journal).with_context(|| {
+    crate::file_io::write_json(&journal_path, &transaction.journal).with_context(|| {
         format!(
             "无法持久化 restore journal: {}",
             display_path(&journal_path)
@@ -499,7 +502,7 @@ fn persist_restore_journal(transaction: &RestoreTransaction) -> Result<()> {
     sync_directory(&transaction.path)
 }
 
-fn recover_orphaned_restore_transactions(root: &Path, ws_dir: &Path) -> Result<()> {
+pub(super) fn recover_orphaned_restore_transactions(root: &Path, ws_dir: &Path) -> Result<()> {
     ensure_real_directory(root)?;
     ensure_real_directory(ws_dir)?;
     let mut orphans = Vec::new();
@@ -567,7 +570,7 @@ fn load_restore_transaction(root: &Path, path: &Path) -> Result<RestoreTransacti
     ensure_real_directory(path)?;
     ensure_safe_file_under(path, Path::new(RESTORE_JOURNAL_NAME))?;
     let journal_path = path.join(RESTORE_JOURNAL_NAME);
-    let journal = state_store::read_json::<RestoreJournal>(&journal_path)?
+    let journal = crate::file_io::read_json::<RestoreJournal>(&journal_path)?
         .ok_or_else(|| anyhow::anyhow!("restore transaction 缺少 journal.json"))?;
     validate_restore_journal(root, &journal)?;
     let staged = path.join("staged");
@@ -694,7 +697,7 @@ fn remove_restore_transaction(ws_dir: &Path, transaction: &Path) -> Result<()> {
     sync_directory(ws_dir)
 }
 
-fn manifest_relative_path(text: &str) -> Result<PathBuf> {
+pub(super) fn manifest_relative_path(text: &str) -> Result<PathBuf> {
     let relative = PathBuf::from(text);
     if relative.as_os_str().is_empty()
         || relative
@@ -706,7 +709,7 @@ fn manifest_relative_path(text: &str) -> Result<PathBuf> {
     Ok(relative)
 }
 
-fn normalized_path_key(relative: &Path) -> Result<String> {
+pub(super) fn normalized_path_key(relative: &Path) -> Result<String> {
     let text = relative
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("checkpoint 路径不是有效 UTF-8: {}", relative.display()))?
@@ -721,7 +724,7 @@ fn normalized_path_key(relative: &Path) -> Result<String> {
     }
 }
 
-fn integrity_for_file(root: &Path, relative: &Path) -> Result<FileIntegrity> {
+pub(super) fn integrity_for_file(root: &Path, relative: &Path) -> Result<FileIntegrity> {
     ensure_safe_file_under(root, relative)?;
     let path = root.join(relative);
     let before = fs::symlink_metadata(&path)
@@ -763,7 +766,7 @@ fn permission_integrity(metadata: &fs::Metadata) -> (bool, Option<u32>) {
     }
 }
 
-fn validate_integrity_record(record: &FileIntegrity) -> Result<()> {
+pub(super) fn validate_integrity_record(record: &FileIntegrity) -> Result<()> {
     if !is_valid_sha256(&record.sha256) {
         bail!("完整性记录含无效 SHA-256: {}", record.path);
     }
@@ -880,7 +883,7 @@ fn prepare_restore_destination_file(
     Ok(current)
 }
 
-fn prepare_destination_file(root: &Path, relative: &Path) -> Result<PathBuf> {
+pub(super) fn prepare_destination_file(root: &Path, relative: &Path) -> Result<PathBuf> {
     prepare_destination_file_inner(root, relative)
 }
 
@@ -977,7 +980,7 @@ fn ensure_or_create_real_directory(path: &Path) -> Result<bool> {
     }
 }
 
-fn ensure_safe_file_under(root: &Path, relative: &Path) -> Result<()> {
+pub(super) fn ensure_safe_file_under(root: &Path, relative: &Path) -> Result<()> {
     ensure_real_directory(root)?;
     let components: Vec<_> = relative.components().collect();
     if components.is_empty()
@@ -1009,16 +1012,8 @@ fn ensure_safe_file_under(root: &Path, relative: &Path) -> Result<()> {
     Ok(())
 }
 
-fn ensure_real_directory(path: &Path) -> Result<()> {
-    let metadata = fs::symlink_metadata(path)
-        .with_context(|| format!("无法读取目录元数据: {}", display_path(path)))?;
-    if is_link_or_reparse(&metadata) {
-        bail!("拒绝链接/reparse 目录: {}", display_path(path));
-    }
-    if !metadata.file_type().is_dir() {
-        bail!("路径不是目录: {}", display_path(path));
-    }
-    Ok(())
+pub(super) fn ensure_real_directory(path: &Path) -> Result<()> {
+    crate::file_io::ensure_real_directory_labeled(path, "目录")
 }
 
 #[cfg(unix)]
@@ -1036,7 +1031,7 @@ fn sync_directory(_path: &Path) -> Result<()> {
 /// Reject symlink/reparse components in a checkpoint root's existing ancestor
 /// chain.  The final directory check alone would still allow a symlinked parent
 /// to redirect checkpoint writes outside the requested root.
-fn ensure_real_directory_chain(path: &Path) -> Result<()> {
+pub(super) fn ensure_real_directory_chain(path: &Path) -> Result<()> {
     let mut current = Some(path);
     while let Some(candidate) = current {
         match fs::symlink_metadata(candidate) {
@@ -1059,20 +1054,6 @@ fn ensure_real_directory_chain(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn is_link_or_reparse(metadata: &fs::Metadata) -> bool {
-    if metadata.file_type().is_symlink() {
-        return true;
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
-        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-    }
-    #[cfg(not(windows))]
-    false
-}
-
-fn is_valid_sha256(value: &str) -> bool {
+pub(super) fn is_valid_sha256(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
