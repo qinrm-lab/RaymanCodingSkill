@@ -1,5 +1,13 @@
 # Release-contract verification compares Windows artifacts byte-for-byte.  MSVC
 # link timestamps and CodeView identifiers are otherwise nondeterministic across
 # isolated target directories, so make every normal MSVC build reproducible too.
+#
+# Every `-pc-windows-msvc` host must be covered here.  The source-fresh verifier
+# forces this exact flag for the isolated rebuild on any MSVC host, so a target
+# missing from this file would compile the reference build under different
+# conditions and make byte identity structurally unsatisfiable on that platform.
 [target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/Brepro"]
+
+[target.aarch64-pc-windows-msvc]
 rustflags = ["-C", "link-arg=/Brepro"]

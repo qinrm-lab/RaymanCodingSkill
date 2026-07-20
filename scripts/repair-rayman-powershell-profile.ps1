@@ -61,7 +61,10 @@ function Get-ProfileEncoding {
     param([byte[]]$Bytes)
 
     if ($Bytes.Length -ge 3 -and $Bytes[0] -eq 0xef -and $Bytes[1] -eq 0xbb -and $Bytes[2] -eq 0xbf) {
-        return [Text.UTF8Encoding]::new($true)
+        # throwOnInvalidBytes here too. A valid BOM says nothing about the bytes
+        # that follow it: a BOM-prefixed file later appended to by a legacy
+        # code-page tool decodes lossily and gets rewritten as mojibake.
+        return [Text.UTF8Encoding]::new($true, $true)
     }
     if ($Bytes.Length -ge 2 -and $Bytes[0] -eq 0xff -and $Bytes[1] -eq 0xfe) {
         return [Text.UnicodeEncoding]::new($false, $true)
@@ -202,6 +205,24 @@ function Invoke-SelfTest {
         }
         if (-not [Linq.Enumerable]::SequenceEqual($originalBytes, [IO.File]::ReadAllBytes($legacyCodePage))) {
             throw 'Profile migration self-test modified a non-UTF-8 profile instead of leaving it untouched.'
+        }
+
+        # A valid BOM says nothing about the bytes after it. Covering only the
+        # BOM-less case is how the same fail-open survived one round of fixing.
+        $bomCodePage = Join-Path $testRoot 'bom-codepage.ps1'
+        $bomBytes = [byte[]](@(0xef, 0xbb, 0xbf) + $gbk.GetBytes($nonAscii + $legacyFunction))
+        [IO.File]::WriteAllBytes($bomCodePage, $bomBytes)
+        $bomRejected = $false
+        try {
+            Invoke-LegacyProfileMigration -Path $bomCodePage -ConfirmWrite
+        } catch {
+            $bomRejected = $_.Exception.Message -match 'not valid UTF-8 or UTF-16'
+        }
+        if (-not $bomRejected) {
+            throw 'Profile migration self-test did not refuse a BOM-prefixed profile with invalid UTF-8 bytes.'
+        }
+        if (-not [Linq.Enumerable]::SequenceEqual($bomBytes, [IO.File]::ReadAllBytes($bomCodePage))) {
+            throw 'Profile migration self-test modified a BOM-prefixed non-UTF-8 profile instead of leaving it untouched.'
         }
     } finally {
         if (Test-Path -LiteralPath $testRoot) {

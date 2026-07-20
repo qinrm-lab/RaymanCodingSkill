@@ -118,6 +118,165 @@ function Get-ProjectedPersistentPath {
     )
 }
 
+function Publish-EnvironmentChangeBroadcast {
+    # [Environment]::SetEnvironmentVariable(...,'User') broadcasts WM_SETTINGCHANGE
+    # for the caller. The registry writes below deliberately bypass that API to
+    # preserve REG_EXPAND_SZ, so the notification has to be reissued here.
+    # It is advisory only: a failed broadcast must not fail or unwind an install.
+    if (-not $IsWindows) {
+        return
+    }
+    try {
+        if (-not ('RaymanInstaller.EnvironmentBroadcast' -as [type])) {
+            Add-Type -Namespace 'RaymanInstaller' -Name 'EnvironmentBroadcast' -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+public static extern System.IntPtr SendMessageTimeoutW(
+    System.IntPtr hWnd,
+    uint Msg,
+    System.IntPtr wParam,
+    string lParam,
+    uint fuFlags,
+    uint uTimeout,
+    out System.UIntPtr lpdwResult);
+'@
+        }
+        $result = [UIntPtr]::Zero
+        $null = [RaymanInstaller.EnvironmentBroadcast]::SendMessageTimeoutW(
+            [IntPtr]0xffff, # HWND_BROADCAST
+            0x1A,           # WM_SETTINGCHANGE
+            [IntPtr]::Zero,
+            'Environment',
+            0x0002,         # SMTO_ABORTIFHUNG
+            5000,
+            [ref]$result
+        )
+    } catch {
+        Write-Warning "Persistent environment change could not be broadcast to running processes: $($_.Exception.Message)"
+    }
+}
+
+function Get-PersistentUserEnvironmentRecord {
+    param([Parameter(Mandatory = $true)][string]$Name)
+
+    # [Environment]::GetEnvironmentVariable(...,'User') expands %VAR% references,
+    # and its setter always writes REG_SZ. Reading and writing HKCU\Environment
+    # directly is the only way to round-trip a user PATH without baking every
+    # %JAVA_HOME%-style entry into a literal and downgrading the value type.
+    $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $false)
+    if ($null -eq $key) {
+        return [pscustomobject]@{
+            Name = $Name
+            Exists = $false
+            Value = $null
+            Kind = [Microsoft.Win32.RegistryValueKind]::ExpandString
+        }
+    }
+    try {
+        $value = $key.GetValue(
+            $Name,
+            $null,
+            [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames
+        )
+        if ($null -eq $value) {
+            return [pscustomobject]@{
+                Name = $Name
+                Exists = $false
+                Value = $null
+                Kind = [Microsoft.Win32.RegistryValueKind]::ExpandString
+            }
+        }
+        $kind = $key.GetValueKind($Name)
+        if ($kind -ne [Microsoft.Win32.RegistryValueKind]::String -and
+            $kind -ne [Microsoft.Win32.RegistryValueKind]::ExpandString) {
+            throw "HKCU\Environment\$Name has unsupported registry value kind '$kind'; refusing to rewrite it."
+        }
+        return [pscustomobject]@{
+            Name = $Name
+            Exists = $true
+            Value = [string]$value
+            Kind = $kind
+        }
+    } finally {
+        $key.Dispose()
+    }
+}
+
+function Set-PersistentUserEnvironmentRecord {
+    param(
+        [Parameter(Mandatory = $true)]$Record,
+        [switch]$Broadcast
+    )
+
+    $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+    if ($null -eq $key) {
+        $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
+    }
+    if ($null -eq $key) {
+        throw 'Unable to open HKCU\Environment for the persistent user environment update.'
+    }
+    try {
+        if ($Record.Exists) {
+            if ($Record.Kind -ne [Microsoft.Win32.RegistryValueKind]::String -and
+                $Record.Kind -ne [Microsoft.Win32.RegistryValueKind]::ExpandString) {
+                throw "Refusing to write HKCU\Environment\$($Record.Name) with registry value kind '$($Record.Kind)'."
+            }
+            $key.SetValue($Record.Name, $Record.Value, $Record.Kind)
+        } else {
+            $key.DeleteValue($Record.Name, $false)
+        }
+    } finally {
+        $key.Dispose()
+    }
+    if ($Broadcast) {
+        Publish-EnvironmentChangeBroadcast
+    }
+}
+
+function Test-PersistentUserEnvironmentRecord {
+    param([Parameter(Mandatory = $true)]$Expected, [Parameter(Mandatory = $true)]$Actual)
+
+    if ($Expected.Exists -ne $Actual.Exists) {
+        return $false
+    }
+    if (-not $Expected.Exists) {
+        return $true
+    }
+    return $Expected.Kind -eq $Actual.Kind -and
+        [string]::Equals($Expected.Value, $Actual.Value, [StringComparison]::Ordinal)
+}
+
+function Backup-WorkspaceBinding {
+    param([string]$Path)
+
+    if (Test-Path -LiteralPath $Path) {
+        Assert-ReplaceableFile -Path $Path -Label 'Workspace activation binding'
+        return [pscustomobject]@{
+            Path = $Path
+            Existed = $true
+            Content = [IO.File]::ReadAllBytes($Path)
+        }
+    }
+    return [pscustomobject]@{
+        Path = $Path
+        Existed = $false
+        Content = $null
+    }
+}
+
+function Restore-WorkspaceBinding {
+    param($Record)
+
+    if ($Record.Existed) {
+        Assert-ReplaceableFile -Path $Record.Path -Label 'Workspace activation binding'
+        [IO.File]::WriteAllBytes($Record.Path, $Record.Content)
+        return
+    }
+    if (Test-Path -LiteralPath $Record.Path) {
+        Assert-ReplaceableFile -Path $Record.Path -Label 'Workspace activation binding'
+        Remove-Item -LiteralPath $Record.Path -Force
+    }
+}
+
 function Resolve-ManagedDirectory {
     param([string]$Path, [string]$Label)
 
@@ -446,6 +605,77 @@ function Invoke-InstallPathSelfTest {
             throw 'Install self-test failed: committed backup cleanup failure affected installed data.'
         }
 
+        $bindingProbe = Join-Path $testRoot 'workspace_skill.yaml'
+        Set-Content -LiteralPath $bindingProbe -Value 'cli_version: old' -NoNewline -Encoding utf8
+        $bindingProbeBackup = Backup-WorkspaceBinding -Path $bindingProbe
+        Set-Content -LiteralPath $bindingProbe -Value 'cli_version: new' -NoNewline -Encoding utf8
+        Restore-WorkspaceBinding -Record $bindingProbeBackup
+        if ((Get-Content -Raw -LiteralPath $bindingProbe) -ne 'cli_version: old') {
+            throw 'Install self-test failed: an aborted activation-binding rewrite was not restored.'
+        }
+        $absentBindingProbe = Join-Path $testRoot 'absent-workspace_skill.yaml'
+        $absentBindingBackup = Backup-WorkspaceBinding -Path $absentBindingProbe
+        if ($absentBindingBackup.Existed) {
+            throw 'Install self-test failed: a missing activation binding was recorded as pre-existing.'
+        }
+        Set-Content -LiteralPath $absentBindingProbe -Value 'cli_version: new' -NoNewline -Encoding utf8
+        Restore-WorkspaceBinding -Record $absentBindingBackup
+        if (Test-Path -LiteralPath $absentBindingProbe) {
+            throw 'Install self-test failed: an activation binding created by an aborted run was not removed.'
+        }
+
+        if ($IsWindows) {
+            # Prove the persistent user environment round-trip on a scratch value.
+            # The real Path value is never read-modify-written by this self-test.
+            $probeName = 'RaymanInstallSelfTestPathProbe'
+            $existingProbe = Get-PersistentUserEnvironmentRecord -Name $probeName
+            if ($existingProbe.Exists) {
+                throw "Install self-test failed: HKCU\Environment\$probeName already exists; remove it before retrying."
+            }
+            $absentProbeRecord = [pscustomobject]@{
+                Name = $probeName
+                Exists = $false
+                Value = $null
+                Kind = [Microsoft.Win32.RegistryValueKind]::ExpandString
+            }
+            try {
+                $probeValue = '%RAYMAN_SELFTEST_ROOT%\bin;C:\literal\bin'
+                foreach ($kind in @(
+                    [Microsoft.Win32.RegistryValueKind]::ExpandString,
+                    [Microsoft.Win32.RegistryValueKind]::String
+                )) {
+                    Set-PersistentUserEnvironmentRecord -Record ([pscustomobject]@{
+                        Name = $probeName
+                        Exists = $true
+                        Value = $probeValue
+                        Kind = $kind
+                    })
+                    $probeReadBack = Get-PersistentUserEnvironmentRecord -Name $probeName
+                    if (-not $probeReadBack.Exists -or
+                        $probeReadBack.Kind -ne $kind -or
+                        -not [string]::Equals($probeReadBack.Value, $probeValue, [StringComparison]::Ordinal)) {
+                        throw "Install self-test failed: the persistent user environment round-trip did not preserve $kind or the unexpanded %VAR% entries."
+                    }
+                    $probeProposed = Get-ProposedUserPath `
+                        -ExistingUserPath $probeReadBack.Value `
+                        -CliDirectory 'C:\literal\bin'
+                    if (-not [string]::Equals(
+                            $probeProposed,
+                            'C:\literal\bin;%RAYMAN_SELFTEST_ROOT%\bin',
+                            [StringComparison]::Ordinal)) {
+                        throw 'Install self-test failed: the proposed user PATH did not keep unexpanded %VAR% entries verbatim.'
+                    }
+                }
+                Set-PersistentUserEnvironmentRecord -Record $absentProbeRecord
+                $removedProbe = Get-PersistentUserEnvironmentRecord -Name $probeName
+                if ($removedProbe.Exists) {
+                    throw 'Install self-test failed: restoring an originally absent user environment value did not remove it.'
+                }
+            } finally {
+                Set-PersistentUserEnvironmentRecord -Record $absentProbeRecord
+            }
+        }
+
         $linkType = if ($IsWindows) { 'Junction' } else { 'SymbolicLink' }
         New-Item -ItemType $linkType -Path $link -Target $outside | Out-Null
         $rejected = $false
@@ -473,7 +703,7 @@ function Invoke-InstallPathSelfTest {
         }
         Remove-Item -LiteralPath $testRoot -Recurse -Force
     }
-    Write-Host 'Install self-test passed: path/hash drift rejection, full staging rollback, persistent PATH ordering, aggregate rollback, and post-commit backup cleanup isolation.'
+    Write-Host 'Install self-test passed: path/hash drift rejection, full staging rollback, persistent PATH ordering and registry value-kind/%VAR% preservation, activation-binding rollback, aggregate rollback, and post-commit backup cleanup isolation.'
 }
 
 if ($SelfTest) {
@@ -524,129 +754,164 @@ try {
     }
 
     # doctor verifies the current workspace binding. Installation is the one
-    # operation authorized to refresh this ignored operational state.
-    New-Item -ItemType Directory -Path '.RaymanCodingSkill' -Force | Out-Null
-    $skillHash = (Get-FileHash -LiteralPath $canonicalSkill -Algorithm SHA256).Hash.ToLowerInvariant()
-    @(
-        'skill: raymancodingskill'
-        'enabled: true'
-        'skill_file: SKILL.md'
-        "skill_sha256: $skillHash"
-        "cli_contract: $artifactContract"
-        "cli_version: $artifactVersion"
-    ) | Set-Content -LiteralPath '.RaymanCodingSkill/workspace_skill.yaml' -Encoding utf8
-
-    $originalPath = $env:PATH
+    # operation authorized to refresh this ignored operational state, and only
+    # when the whole installation commits: this rewrite happens before the
+    # source-fresh verification that enforces a clean worktree, so an aborted
+    # run must not leave the repository bound to a version that was never
+    # installed. Use the same reparse-point-checked directory resolution as
+    # every other managed directory instead of an unchecked New-Item -Force.
+    $bindingDirectory = Resolve-ManagedDirectory `
+        -Path (Join-Path $repoRoot '.RaymanCodingSkill') `
+        -Label 'Workspace activation directory'
+    $bindingPath = Join-Path $bindingDirectory 'workspace_skill.yaml'
+    $bindingBackup = Backup-WorkspaceBinding -Path $bindingPath
     try {
-        # Pre-install proof: clean source, locked isolated rebuild, canonical skill,
-        # and the exact artifact that will be copied.
-        $artifactHashBeforeVerification = (Get-FileHash -LiteralPath $artifact -Algorithm SHA256).Hash.ToLowerInvariant()
-        $skillHashBeforeVerification = (Get-FileHash -LiteralPath $canonicalSkill -Algorithm SHA256).Hash.ToLowerInvariant()
-        $env:PATH = "$(Split-Path -Parent $artifact)$([IO.Path]::PathSeparator)$originalPath"
-        & './scripts/verify-release-contract.ps1' `
-            -CliPath $artifact `
-            -ReferenceCliPath $artifact `
-            -SkillPath $canonicalSkill `
-            -RequireSourceFresh
+        $skillHash = (Get-FileHash -LiteralPath $canonicalSkill -Algorithm SHA256).Hash.ToLowerInvariant()
+        @(
+            'skill: raymancodingskill'
+            'enabled: true'
+            'skill_file: SKILL.md'
+            "skill_sha256: $skillHash"
+            "cli_contract: $artifactContract"
+            "cli_version: $artifactVersion"
+        ) | Set-Content -LiteralPath $bindingPath -Encoding utf8
 
-        Assert-ExpectedFileHash -Path $artifact -ExpectedHash $artifactHashBeforeVerification -Label 'Source-fresh verified artifact'
-        Assert-ExpectedFileHash -Path $canonicalSkill -ExpectedHash $skillHashBeforeVerification -Label 'Source-fresh verified canonical skill'
-        $verifiedArtifactHash = $artifactHashBeforeVerification
-        $verifiedSkillHash = $skillHashBeforeVerification
-
-        $nonce = [Guid]::NewGuid().ToString('N')
-        $installed = @()
-        $oldUserPath = $null
-        $proposedUserPath = $null
-        $pathMutationAttempted = $false
+        $originalPath = $env:PATH
         try {
-            $installed += Install-FileWithRollback -Source $artifact -Destination $destinationCli -Nonce $nonce -ExpectedHash $verifiedArtifactHash
-            $installed += Install-FileWithRollback -Source $canonicalSkill -Destination $destinationSkill -Nonce $nonce -ExpectedHash $verifiedSkillHash
-
-            Assert-ExpectedFileHash -Path $artifact -ExpectedHash $verifiedArtifactHash -Label 'Verified artifact before post-install check'
-            Assert-ExpectedFileHash -Path $canonicalSkill -ExpectedHash $verifiedSkillHash -Label 'Verified skill before post-install check'
-            Assert-ExpectedFileHash -Path $destinationCli -ExpectedHash $verifiedArtifactHash -Label 'Installed CLI'
-            Assert-ExpectedFileHash -Path $destinationSkill -ExpectedHash $verifiedSkillHash -Label 'Installed skill'
-
-            if ($AddToUserPath) {
-                $oldUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-                $proposedUserPath = Get-ProposedUserPath `
-                    -ExistingUserPath $oldUserPath `
-                    -CliDirectory $resolvedBinDirectory
-                $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
-                $projectedPersistentPath = Get-ProjectedPersistentPath `
-                    -MachinePath $machinePath `
-                    -UserPath $proposedUserPath
-
-                # Persist inside the transaction, then verify the exact ordering a
-                # future Windows process receives: Machine PATH + proposed User PATH.
-                # Do not prepend the destination to the process PATH here; doing so
-                # would make -RequirePath tautological and miss an older machine CLI.
-                $pathMutationAttempted = $true
-                [Environment]::SetEnvironmentVariable('Path', $proposedUserPath, 'User')
-                $persistedUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-                if (-not [string]::Equals($persistedUserPath, $proposedUserPath, [StringComparison]::Ordinal)) {
-                    throw 'The persisted Windows user PATH differs from the proposed transactional value.'
-                }
-                $env:PATH = $projectedPersistentPath
-            } else {
-                # Without an authorized persistent PATH change, installation is valid
-                # only when this shell already resolves the destination first.
-                $env:PATH = $originalPath
-            }
-
+            # Pre-install proof: clean source, locked isolated rebuild, canonical skill,
+            # and the exact artifact that will be copied.
+            $artifactHashBeforeVerification = (Get-FileHash -LiteralPath $artifact -Algorithm SHA256).Hash.ToLowerInvariant()
+            $skillHashBeforeVerification = (Get-FileHash -LiteralPath $canonicalSkill -Algorithm SHA256).Hash.ToLowerInvariant()
+            $env:PATH = "$(Split-Path -Parent $artifact)$([IO.Path]::PathSeparator)$originalPath"
             & './scripts/verify-release-contract.ps1' `
-                -CliPath $destinationCli `
+                -CliPath $artifact `
                 -ReferenceCliPath $artifact `
-                -SkillPath $destinationSkill `
-                -RequirePath
+                -SkillPath $canonicalSkill `
+                -RequireSourceFresh
 
-            Assert-ExpectedFileHash -Path $artifact -ExpectedHash $verifiedArtifactHash -Label 'Verified artifact after post-install check'
-            Assert-ExpectedFileHash -Path $canonicalSkill -ExpectedHash $verifiedSkillHash -Label 'Verified skill after post-install check'
-            Assert-ExpectedFileHash -Path $destinationCli -ExpectedHash $verifiedArtifactHash -Label 'Installed CLI after post-install check'
-            Assert-ExpectedFileHash -Path $destinationSkill -ExpectedHash $verifiedSkillHash -Label 'Installed skill after post-install check'
-            if ((Get-FileHash -LiteralPath $cargoApplication -Algorithm SHA256).Hash.ToLowerInvariant() -ne
-                $cargoApplicationHash) {
-                throw 'Cargo executable identity changed during installation.'
-            }
-            if ($AddToUserPath) {
-                $persistedUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-                if (-not [string]::Equals($persistedUserPath, $proposedUserPath, [StringComparison]::Ordinal)) {
-                    throw 'The persisted Windows user PATH changed during post-install verification.'
-                }
-            }
-        } catch {
-            $installFailure = $_.Exception.Message
-            $recoveryErrors = @()
-            if ($pathMutationAttempted) {
-                try {
-                    [Environment]::SetEnvironmentVariable('Path', $oldUserPath, 'User')
-                    $restoredUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-                    if (-not [string]::Equals($restoredUserPath, $oldUserPath, [StringComparison]::Ordinal)) {
-                        throw 'restored user PATH does not equal its pre-install value'
+            Assert-ExpectedFileHash -Path $artifact -ExpectedHash $artifactHashBeforeVerification -Label 'Source-fresh verified artifact'
+            Assert-ExpectedFileHash -Path $canonicalSkill -ExpectedHash $skillHashBeforeVerification -Label 'Source-fresh verified canonical skill'
+            $verifiedArtifactHash = $artifactHashBeforeVerification
+            $verifiedSkillHash = $skillHashBeforeVerification
+
+            $nonce = [Guid]::NewGuid().ToString('N')
+            $installed = @()
+            $oldUserPathRecord = $null
+            $proposedUserPathRecord = $null
+            $pathMutationAttempted = $false
+            try {
+                $installed += Install-FileWithRollback -Source $artifact -Destination $destinationCli -Nonce $nonce -ExpectedHash $verifiedArtifactHash
+                $installed += Install-FileWithRollback -Source $canonicalSkill -Destination $destinationSkill -Nonce $nonce -ExpectedHash $verifiedSkillHash
+
+                Assert-ExpectedFileHash -Path $artifact -ExpectedHash $verifiedArtifactHash -Label 'Verified artifact before post-install check'
+                Assert-ExpectedFileHash -Path $canonicalSkill -ExpectedHash $verifiedSkillHash -Label 'Verified skill before post-install check'
+                Assert-ExpectedFileHash -Path $destinationCli -ExpectedHash $verifiedArtifactHash -Label 'Installed CLI'
+                Assert-ExpectedFileHash -Path $destinationSkill -ExpectedHash $verifiedSkillHash -Label 'Installed skill'
+
+                if ($AddToUserPath) {
+                    # Read and write the raw HKCU\Environment value. The
+                    # [Environment] user-scope accessors expand %VAR% on read and
+                    # always write REG_SZ, which would bake entries such as
+                    # %JAVA_HOME%\bin into literals and permanently downgrade the
+                    # value type on the success path as well as during rollback.
+                    $oldUserPathRecord = Get-PersistentUserEnvironmentRecord -Name 'Path'
+                    $proposedUserPath = Get-ProposedUserPath `
+                        -ExistingUserPath $oldUserPathRecord.Value `
+                        -CliDirectory $resolvedBinDirectory
+                    $proposedUserPathRecord = [pscustomobject]@{
+                        Name = 'Path'
+                        Exists = $true
+                        Value = $proposedUserPath
+                        Kind = $oldUserPathRecord.Kind
                     }
-                } catch {
-                    $recoveryErrors += "unable to restore Windows user PATH: $($_.Exception.Message)"
+                    $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+                    $projectedPersistentPath = Get-ProjectedPersistentPath `
+                        -MachinePath $machinePath `
+                        -UserPath $proposedUserPath
+
+                    # Persist inside the transaction, then verify the exact ordering a
+                    # future Windows process receives: Machine PATH + proposed User PATH.
+                    # Do not prepend the destination to the process PATH here; doing so
+                    # would make -RequirePath tautological and miss an older machine CLI.
+                    $pathMutationAttempted = $true
+                    Set-PersistentUserEnvironmentRecord -Record $proposedUserPathRecord -Broadcast
+                    $persistedUserPathRecord = Get-PersistentUserEnvironmentRecord -Name 'Path'
+                    if (-not (Test-PersistentUserEnvironmentRecord -Expected $proposedUserPathRecord -Actual $persistedUserPathRecord)) {
+                        throw 'The persisted Windows user PATH differs from the proposed transactional value or its original registry value kind.'
+                    }
+                    $env:PATH = $projectedPersistentPath
+                } else {
+                    # Without an authorized persistent PATH change, installation is valid
+                    # only when this shell already resolves the destination first.
+                    $env:PATH = $originalPath
+                }
+
+                & './scripts/verify-release-contract.ps1' `
+                    -CliPath $destinationCli `
+                    -ReferenceCliPath $artifact `
+                    -SkillPath $destinationSkill `
+                    -RequirePath
+
+                Assert-ExpectedFileHash -Path $artifact -ExpectedHash $verifiedArtifactHash -Label 'Verified artifact after post-install check'
+                Assert-ExpectedFileHash -Path $canonicalSkill -ExpectedHash $verifiedSkillHash -Label 'Verified skill after post-install check'
+                Assert-ExpectedFileHash -Path $destinationCli -ExpectedHash $verifiedArtifactHash -Label 'Installed CLI after post-install check'
+                Assert-ExpectedFileHash -Path $destinationSkill -ExpectedHash $verifiedSkillHash -Label 'Installed skill after post-install check'
+                if ((Get-FileHash -LiteralPath $cargoApplication -Algorithm SHA256).Hash.ToLowerInvariant() -ne
+                    $cargoApplicationHash) {
+                    throw 'Cargo executable identity changed during installation.'
+                }
+                if ($AddToUserPath) {
+                    $persistedUserPathRecord = Get-PersistentUserEnvironmentRecord -Name 'Path'
+                    if (-not (Test-PersistentUserEnvironmentRecord -Expected $proposedUserPathRecord -Actual $persistedUserPathRecord)) {
+                        throw 'The persisted Windows user PATH changed during post-install verification.'
+                    }
+                }
+            } catch {
+                $installFailure = $_.Exception.Message
+                $recoveryErrors = @()
+                if ($pathMutationAttempted) {
+                    try {
+                        Set-PersistentUserEnvironmentRecord -Record $oldUserPathRecord -Broadcast
+                        $restoredUserPathRecord = Get-PersistentUserEnvironmentRecord -Name 'Path'
+                        if (-not (Test-PersistentUserEnvironmentRecord -Expected $oldUserPathRecord -Actual $restoredUserPathRecord)) {
+                            throw 'restored user PATH does not equal its pre-install value and value kind'
+                        }
+                    } catch {
+                        $recoveryErrors += "unable to restore Windows user PATH: $($_.Exception.Message)"
+                    }
+                }
+                $recoveryErrors += @(Invoke-InstallRollback -InstallRecords $installed)
+                if ($recoveryErrors.Count -gt 0) {
+                    throw "Installation failed: $installFailure`nRollback was incomplete; retained backup/current/PATH state requires review:`n$($recoveryErrors -join "`n")"
+                }
+                throw $installFailure
+            }
+
+            # Verification success is the commit point. Backup cleanup is deliberately
+            # outside the rollback catch: once any old backup has been destroyed, a
+            # later cleanup failure must never delete the committed new installation.
+            foreach ($record in $installed) {
+                $cleanupWarning = Remove-CommittedBackup -InstallRecord $record
+                if (-not [string]::IsNullOrWhiteSpace($cleanupWarning)) {
+                    Write-Warning $cleanupWarning
                 }
             }
-            $recoveryErrors += @(Invoke-InstallRollback -InstallRecords $installed)
-            if ($recoveryErrors.Count -gt 0) {
-                throw "Installation failed: $installFailure`nRollback was incomplete; retained backup/current/PATH state requires review:`n$($recoveryErrors -join "`n")"
-            }
-            throw $installFailure
+        } finally {
+            $env:PATH = $originalPath
         }
-
-        # Verification success is the commit point. Backup cleanup is deliberately
-        # outside the rollback catch: once any old backup has been destroyed, a
-        # later cleanup failure must never delete the committed new installation.
-        foreach ($record in $installed) {
-            $cleanupWarning = Remove-CommittedBackup -InstallRecord $record
-            if (-not [string]::IsNullOrWhiteSpace($cleanupWarning)) {
-                Write-Warning $cleanupWarning
-            }
+    } catch {
+        # The activation binding was rewritten before the source-fresh gate that
+        # enforces a clean worktree, so every abort below that point has to put
+        # the repository back on the binding it had. Leaving the new version
+        # recorded would make an already-installed older CLI report the workspace
+        # as invalid with no trace of this aborted run.
+        $bindingFailure = $_.Exception.Message
+        try {
+            Restore-WorkspaceBinding -Record $bindingBackup
+        } catch {
+            throw "Installation failed: $bindingFailure`nRollback was incomplete; the workspace activation binding requires review: $($bindingPath): $($_.Exception.Message)"
         }
-    } finally {
-        $env:PATH = $originalPath
+        throw $bindingFailure
     }
 } finally {
     Pop-Location
