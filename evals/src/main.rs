@@ -557,15 +557,23 @@ fn run_trial(
     result.rayman_invocations = log.rayman_invocations;
     result.finished = log.finished;
     result.error = log.error;
-    // A wrapper can be created after the initial preflight. `run_shell` latches every observed
-    // collision; the post-agent scan also catches a wrapper written without a later shell call.
-    // Do not run the grade after either condition: the control arm's availability is ambiguous.
+    // A wrapper can be created after the initial preflight. `run_shell` latches every rayman
+    // command/wrapper it observes inside the trial workspace; the post-agent scan also catches a
+    // wrapper written without a later shell call. Either way the control arm's availability is
+    // ambiguous, so do not grade the trial.
+    //
+    // A shell command that was *refused* is deliberately not part of this condition: it never
+    // reached `cmd`, so isolation still holds. Failing the whole trial on a refusal would make
+    // errors accrue only to the control arm — which has this guard — and bias the comparison.
     if condition == CONTROL {
         let postflight = grade::ensure_no_top_level_rayman_command(&workspace);
-        if cfg.env.control_workspace_violation() || postflight.is_err() {
+        let latched = cfg.env.control_isolation_loss();
+        if latched.is_some() || postflight.is_err() {
             let collision = match postflight {
                 Err(error) => error,
-                Ok(()) => "控制组 shell 启动前检测到当前目录 rayman 命令/包装器".into(),
+                Ok(()) => latched.unwrap_or_else(|| {
+                    "控制组 shell 启动前检测到当前目录 rayman 命令/包装器".into()
+                }),
             };
             result.error = Some(match result.error.take() {
                 Some(existing) => format!("{existing}\n控制组当前目录命令冲突: {collision}"),
@@ -1279,6 +1287,39 @@ mod tests {
             classify_trial_outcome(GradeOutcome::Passed, true),
             Outcome::Pass
         );
+    }
+
+    /// 回归：控制组模型跑普通 `cmd` 语法时，该命令曾被误判为“提及 rayman”，整轮 trial 被
+    /// 记为 Error 并跳过评分。受测组没有这条拦截，Error 因此系统性偏向控制组，直接污染 A/B。
+    /// 现在这类命令正常执行，trial 照常评分。
+    #[cfg(windows)]
+    #[test]
+    fn control_trial_with_benign_percent_command_is_still_graded() {
+        let temp = tempfile::tempdir().unwrap();
+        let task = sample_task(temp.path());
+        let run_dir = temp.path().join("run");
+        fs::create_dir_all(run_dir.join("workspaces")).unwrap();
+        let model = MockModel::new(
+            "mock",
+            vec![vec![(
+                "run".into(),
+                json!({"command": "echo %CD% & if %ERRORLEVEL% neq 0 exit /b 1"}),
+            )]],
+        );
+        let ctx = RunContext {
+            model: &model,
+            skill_text: "",
+            rayman_bin_dir: temp.path(),
+            run_dir: &run_dir,
+            max_steps: 3,
+        };
+
+        let manifest = task.provenance().unwrap();
+        let result = run_trial(&ctx, &task, &manifest, CONTROL, 0, 0);
+
+        assert_eq!(result.error, None, "{result:?}");
+        assert_ne!(result.outcome, Outcome::Error, "{result:?}");
+        assert_ne!(result.grade_outcome, GradeOutcome::NotRun, "{result:?}");
     }
 
     #[cfg(windows)]

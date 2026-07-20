@@ -15,10 +15,7 @@ use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
+use std::sync::{Arc, OnceLock};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -66,9 +63,14 @@ pub struct EnvPolicy {
     pub extra_path: Option<PathBuf>,
     /// 从 PATH 剔除暴露 rayman 命令的目录（control 组的 best-effort PATH hygiene）。
     pub exclude_rayman: bool,
-    /// 控制组若在 trial 工作区顶层发现可由 Windows 当前目录解析到的 rayman wrapper，
-    /// 记录本次 trial 已失去组别隔离。Arc 让 agent 工具循环和 run_trial 共享同一事实。
-    control_workspace_violation: Option<Arc<AtomicBool>>,
+    /// 控制组若在 trial 工作区顶层观察到可由 Windows 当前目录解析到的 rayman wrapper，
+    /// 记录本次 trial 的组别隔离已不可判定：wrapper 已经落盘，评测器无法证明它没有被
+    /// 用到。只有这一类**已经发生的事实**会作废整轮 trial。
+    ///
+    /// 被拒绝的单条命令不在此登记：它根本没有交给 `cmd`，隔离并未丢失，作废整轮只会
+    /// 让 Error 系统性偏向控制组并污染 A/B 比较。Arc 让 agent 工具循环和 run_trial
+    /// 共享同一事实；OnceLock 记住首个原因，供报告如实描述。
+    control_isolation_loss: Option<Arc<OnceLock<String>>>,
 }
 
 impl EnvPolicy {
@@ -76,7 +78,7 @@ impl EnvPolicy {
         Self {
             extra_path: Some(dir),
             exclude_rayman: false,
-            control_workspace_violation: None,
+            control_isolation_loss: None,
         }
     }
 
@@ -84,7 +86,7 @@ impl EnvPolicy {
         Self {
             extra_path: None,
             exclude_rayman: true,
-            control_workspace_violation: Some(Arc::new(AtomicBool::new(false))),
+            control_isolation_loss: Some(Arc::new(OnceLock::new())),
         }
     }
 
@@ -93,8 +95,8 @@ impl EnvPolicy {
             return Ok(());
         }
         if let Err(error) = ensure_no_top_level_rayman_command(workspace) {
-            if let Some(violation) = &self.control_workspace_violation {
-                violation.store(true, Ordering::Relaxed);
+            if let Some(slot) = &self.control_isolation_loss {
+                let _ = slot.set(error.clone());
             }
             return Err(error);
         }
@@ -102,24 +104,37 @@ impl EnvPolicy {
     }
 
     /// `cmd` permits a single compound command to create, invoke, and remove a CWD
-    /// wrapper before the postflight scan sees it. For the control arm, reject every
-    /// command text that names a rayman executable/wrapper at all. This deliberately
-    /// favors a false-negative trial over silently restoring the treated capability;
-    /// it remains a narrow integrity guard, not a shell sandbox.
-    fn check_control_command(&self, command: &str) -> Result<(), String> {
-        if !self.exclude_rayman || !control_command_mentions_rayman(command) {
+    /// wrapper before the postflight scan sees it, and it rewrites the command text
+    /// (percent expansion, caret escapes) before tokenizing. The control arm therefore
+    /// classifies the command text and refuses anything it cannot prove stays away from
+    /// a rayman executable. It remains a narrow integrity guard, not a shell sandbox.
+    ///
+    /// A refused command never reaches `cmd`, so the arm is still isolated afterwards.
+    /// The refusal is reported to the agent as a failed tool call and deliberately does
+    /// **not** mark the trial as having lost isolation: only a rayman wrapper actually
+    /// observed inside the control workspace does that.
+    fn check_control_command(&self, command: &str, workspace: &Path) -> Result<(), String> {
+        if !self.exclude_rayman {
             return Ok(());
         }
-        if let Some(violation) = &self.control_workspace_violation {
-            violation.store(true, Ordering::Relaxed);
+        match classify_control_command(command, self, workspace) {
+            ControlCommandVerdict::Allowed => Ok(()),
+            ControlCommandVerdict::NamesRayman { evidence } => Err(format!(
+                "控制组拒绝执行该命令：cmd 解析后会出现 rayman 命令/包装器名称（{evidence}）。\
+                 命令未执行，本 trial 的组别隔离未受影响"
+            )),
+            ControlCommandVerdict::UnresolvableExpansion { evidence } => Err(format!(
+                "控制组拒绝执行该命令：命令使用了评测器无法解析为字面量的 cmd 变量替换语法\
+                 （{evidence}），因此无法证明它不会展开出 rayman。命令未执行，本 trial 的组别隔离未受影响"
+            )),
         }
-        Err("控制组拒绝包含 rayman 命令/包装器名称的 shell 命令".into())
     }
 
-    pub fn control_workspace_violation(&self) -> bool {
-        self.control_workspace_violation
+    /// 本 trial 是否已观察到组别隔离丢失，附带首个原因文本。
+    pub fn control_isolation_loss(&self) -> Option<String> {
+        self.control_isolation_loss
             .as_ref()
-            .is_some_and(|violation| violation.load(Ordering::Relaxed))
+            .and_then(|slot| slot.get().cloned())
     }
 }
 
@@ -198,7 +213,7 @@ fn run_shell_with_capture_factory(
     // `cmd /C rayman` searches the current directory before PATH. PATH filtering alone
     // cannot protect the control arm from a fixture/agent-provided rayman.cmd/.bat/.exe.
     // This is a narrow experiment-integrity preflight, not a sandbox claim.
-    if let Err(error) = env.check_control_command(command) {
+    if let Err(error) = env.check_control_command(command, workspace) {
         return exec_error(command, &error);
     }
     if let Err(error) = env.check_control_workspace(workspace) {
@@ -686,6 +701,15 @@ fn read_bounded(mut reader: impl Read) -> io::Result<BoundedBytes> {
 /// 清空继承环境，只透传白名单变量；PATH 单独按策略重组后写入。
 fn apply_env(cmd: &mut Command, policy: &EnvPolicy) {
     cmd.env_clear();
+    for (key, value) in child_env(policy) {
+        cmd.env(key, value);
+    }
+}
+
+/// 子进程实际会收到的完整环境块。控制组的命令文本检查用同一份数据解析 `%VAR%`，
+/// 这样“命令展开后会不会指向 rayman”与子进程真实行为基于同一事实，而不是猜测。
+fn child_env(policy: &EnvPolicy) -> Vec<(OsString, OsString)> {
+    let mut vars = Vec::new();
     let mut parent_path = OsString::new();
     for (key, value) in std::env::vars_os() {
         let Some(name) = key.to_str() else { continue };
@@ -694,10 +718,11 @@ fn apply_env(cmd: &mut Command, policy: &EnvPolicy) {
             continue;
         }
         if env_allowed(name) {
-            cmd.env(&key, &value);
+            vars.push((key, value));
         }
     }
-    cmd.env("PATH", compose_path(&parent_path, policy));
+    vars.push((OsString::from("PATH"), compose_path(&parent_path, policy)));
+    vars
 }
 
 /// 白名单：cmd/sh 与 cargo/rustc 正常工作所需的最小集合；其余（尤其 *_API_KEY）一律不透传。
@@ -838,39 +863,178 @@ fn is_rayman_command_name(name: &OsStr) -> bool {
             .is_some_and(|prefix| prefix.eq_ignore_ascii_case("rayman."))
 }
 
-/// Windows command syntax is too rich for a complete portable parser. The control
-/// arm therefore uses a deliberately conservative lexical check: any shell token
-/// that names `rayman` or `rayman.*` is rejected before `cmd` receives it. It catches
-/// the create→invoke→delete wrapper sequence while leaving the host-shell warning in
-/// force for everything a textual guard cannot prove.
-fn control_command_mentions_rayman(command: &str) -> bool {
-    #[cfg(windows)]
-    {
-        // `cmd` expands variables and caret escapes before tokenization.  A command
-        // such as `set x=rayman & %x%` or `^r^a^y^m^a^n` can therefore hide a wrapper
-        // from the lexical token check below.  Reject these metacharacters in the
-        // control arm: this is intentionally conservative (false negatives are
-        // preferable to silently restoring the treated capability), and is not a
-        // claim that the host shell is sandboxed.
-        if command.contains('%') || command.contains('^') {
-            return true;
+/// 控制组对一条命令文本的判定。
+///
+/// 三分而不是二分，是因为“命令确实指向 rayman”与“命令只是用了评测器读不懂的展开语法”
+/// 是不同的事实，错误文案必须如实区分；两者都只拒绝该条命令，都不作废整轮 trial。
+#[cfg_attr(not(windows), allow(dead_code))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ControlCommandVerdict {
+    /// 没有任何 token 能命名 rayman 可执行文件/包装器。
+    Allowed,
+    /// 原文、去插入符文本或按子进程环境展开后的文本里出现了命名 rayman 的 token。
+    NamesRayman { evidence: String },
+    /// 命令使用了评测器无法归约为字面量的 cmd 变量替换语法，无法证明它不触达 rayman。
+    UnresolvableExpansion { evidence: String },
+}
+
+/// Windows command syntax is too rich for a complete portable parser, and `cmd` rewrites
+/// the command line (percent expansion, then caret escapes) before tokenizing it. The
+/// control arm therefore normalizes the text the way `cmd` would and applies the same
+/// conservative token check to every reachable spelling.
+///
+/// Earlier revisions rejected any command containing `%` or `^` at all. That made ordinary
+/// `cmd` syntax (`echo %CD%`, `if %ERRORLEVEL% neq 0 …`, `for /f %i in (…)`) unusable for the
+/// control arm only, which is a measurement bug: those refusals used to invalidate the whole
+/// trial and biased errors toward one arm. Expansion is now resolved against the exact
+/// environment the child would receive, so a benign percent sign is no longer evidence of
+/// anything, while a reference that names rayman — or whose value does — is still refused.
+///
+/// Residual, deliberately accepted gap: a lone `%` (a `for` loop variable, a literal percent)
+/// cannot be reduced to a literal because its value comes from runtime data. Those commands
+/// are allowed; the control arm still has rayman removed from `PATH`, still fails closed on
+/// any rayman-named command in the trial CWD before every spawn, and is still rescanned after
+/// the agent finishes. This is an integrity guard, not a shell sandbox.
+#[cfg(windows)]
+fn classify_control_command(
+    command: &str,
+    policy: &EnvPolicy,
+    workspace: &Path,
+) -> ControlCommandVerdict {
+    let env = child_env(policy);
+    let decaretted = strip_caret_escapes(command);
+    let mut variants = vec![command.to_string(), decaretted.clone()];
+    for source in [command, decaretted.as_str()] {
+        match expand_percent_references(source, &env, workspace) {
+            Ok(expanded) => {
+                variants.push(strip_caret_escapes(&expanded));
+                variants.push(expanded);
+            }
+            Err(verdict) => return verdict,
         }
-        command
-            .split(|ch: char| {
-                ch.is_whitespace() || matches!(ch, '&' | '|' | ';' | '<' | '>' | '(' | ')' | '=')
-            })
-            .map(|token| token.trim_matches(|ch| matches!(ch, '\'' | '"' | '`')))
-            .filter(|token| !token.is_empty())
-            .any(|token| {
-                let base = token.rsplit(['/', '\\']).next().unwrap_or(token);
-                is_rayman_command_name(OsStr::new(base))
-            })
     }
-    #[cfg(not(windows))]
-    {
-        let _ = command;
-        false
+    for variant in &variants {
+        if let Some(token) = rayman_naming_token(variant) {
+            return ControlCommandVerdict::NamesRayman {
+                evidence: format!("token `{token}`"),
+            };
+        }
     }
+    ControlCommandVerdict::Allowed
+}
+
+#[cfg(not(windows))]
+fn classify_control_command(
+    _command: &str,
+    _policy: &EnvPolicy,
+    _workspace: &Path,
+) -> ControlCommandVerdict {
+    // Non-Windows shells do not search CWD for a bare command and this platform refuses
+    // shell execution before the guard runs; there is nothing to normalize here.
+    ControlCommandVerdict::Allowed
+}
+
+/// 命令里第一个能命名 rayman 可执行文件/包装器的 token（按 `cmd` 的分隔符切分）。
+#[cfg(windows)]
+fn rayman_naming_token(command: &str) -> Option<&str> {
+    command
+        .split(|ch: char| {
+            ch.is_whitespace() || matches!(ch, '&' | '|' | ';' | '<' | '>' | '(' | ')' | '=')
+        })
+        .map(|token| token.trim_matches(|ch| matches!(ch, '\'' | '"' | '`')))
+        .filter(|token| !token.is_empty())
+        .find(|token| {
+            let base = token.rsplit(['/', '\\']).next().unwrap_or(token);
+            is_rayman_command_name(OsStr::new(base))
+        })
+}
+
+/// `cmd` 会吃掉未被引号保护的 `^` 并原样保留其后一个字符，因此 `^r^a^y^m^a^n` 会执行到
+/// `rayman`。检测时对整段文本无条件去插入符：这只会多产生一个候选拼写，不会掩盖任何写法，
+/// 因为原文同样参与扫描。
+#[cfg(windows)]
+fn strip_caret_escapes(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars();
+    while let Some(ch) = chars.next() {
+        if ch == '^' {
+            if let Some(escaped) = chars.next() {
+                out.push(escaped);
+            }
+            continue;
+        }
+        out.push(ch);
+    }
+    out
+}
+
+/// 把 `%VAR%` 引用替换成子进程真实会看到的取值，让 token 扫描看到 `cmd` 实际执行的文本。
+///
+/// - 引用名本身命名 rayman（`%RAYMAN%`、`%rayman.exe%`）→ 直接判为指向 rayman。
+/// - `%VAR:...%`（子串/替换语法）能从任意变量值里拼出任意字符串，评测器不归约它 → 判为不可解析。
+/// - 已定义变量 → 代入真实取值（控制组的 PATH 已剔除 rayman 目录）。
+/// - 未定义变量 → 代入空串。`cmd` 实际会原样保留 `%FOO%`，而原文变体已经覆盖了那种拼写；
+///   折叠成空串只会多命中（更保守），不会漏掉任何拼写。
+/// - 落单的 `%`（`for /f %i`、字面百分号）→ 原样保留，不视为可疑。
+#[cfg(windows)]
+fn expand_percent_references(
+    text: &str,
+    env: &[(OsString, OsString)],
+    workspace: &Path,
+) -> Result<String, ControlCommandVerdict> {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    let mut index = 0;
+    while index < chars.len() {
+        if chars[index] != '%' {
+            out.push(chars[index]);
+            index += 1;
+            continue;
+        }
+        let closing = chars[index + 1..]
+            .iter()
+            .position(|&ch| ch == '%')
+            .map(|offset| index + 1 + offset);
+        let Some(end) = closing else {
+            // 落单的 `%`：`cmd` 不会把它当环境变量引用，原样保留供 token 扫描。
+            out.push('%');
+            index += 1;
+            continue;
+        };
+        let name: String = chars[index + 1..end].iter().collect();
+        if name.is_empty() {
+            // `%%` 在命令行上就是一个字面百分号。
+            out.push('%');
+            index = end + 1;
+            continue;
+        }
+        if is_rayman_command_name(OsStr::new(name.trim())) {
+            return Err(ControlCommandVerdict::NamesRayman {
+                evidence: format!("变量引用 `%{name}%`"),
+            });
+        }
+        if name.contains(':') {
+            return Err(ControlCommandVerdict::UnresolvableExpansion {
+                evidence: format!("`%{name}%`"),
+            });
+        }
+        if let Some(value) = child_env_value(&name, env, workspace) {
+            out.push_str(&value);
+        }
+        index = end + 1;
+    }
+    Ok(out)
+}
+
+/// 子进程里 `%NAME%` 的取值：白名单环境块，外加 `cmd` 自行解析、评测器已知的动态变量。
+#[cfg(windows)]
+fn child_env_value(name: &str, env: &[(OsString, OsString)], workspace: &Path) -> Option<String> {
+    if name.eq_ignore_ascii_case("CD") {
+        return Some(workspace.display().to_string());
+    }
+    env.iter()
+        .find(|(key, _)| key.to_string_lossy().eq_ignore_ascii_case(name))
+        .map(|(_, value)| value.to_string_lossy().into_owned())
 }
 
 #[cfg(windows)]
@@ -1012,9 +1176,26 @@ mod tests {
         let result = run_shell(dir.path(), "rayman", &policy, RUN_TIMEOUT);
 
         assert_eq!(result.outcome, GradeOutcome::InfrastructureError);
-        assert!(policy.control_workspace_violation());
         assert!(result.stderr.contains("控制组拒绝"), "{}", result.stderr);
         assert!(!dir.path().join("invoked.txt").exists());
+    }
+
+    /// 工作区里真的落了一个 rayman wrapper：这是**已经发生**的隔离事实，必须 latch 到
+    /// 整轮，即使触发它的那条命令同时被拒绝。
+    #[cfg(windows)]
+    #[test]
+    fn control_latches_isolation_loss_only_for_a_wrapper_present_in_the_workspace() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("rayman.cmd"), "@echo off\r\n").unwrap();
+        let policy = EnvPolicy::without_rayman();
+
+        let result = run_shell(dir.path(), "dir", &policy, RUN_TIMEOUT);
+
+        assert_eq!(result.outcome, GradeOutcome::InfrastructureError);
+        let loss = policy
+            .control_isolation_loss()
+            .expect("落盘的 wrapper 必须记入本轮隔离丢失");
+        assert!(loss.contains("rayman"), "{loss}");
     }
 
     #[cfg(windows)]
@@ -1027,7 +1208,6 @@ mod tests {
         let result = run_shell(dir.path(), command, &policy, RUN_TIMEOUT);
 
         assert_eq!(result.outcome, GradeOutcome::InfrastructureError);
-        assert!(policy.control_workspace_violation());
         assert!(
             result.stderr.contains("rayman 命令/包装器"),
             "{}",
@@ -1037,23 +1217,98 @@ mod tests {
             !dir.path().join("rayman.cmd").exists(),
             "command must be rejected before cmd can create the wrapper"
         );
+        // 命令没有执行过，隔离没有丢，因此不作废整轮 trial。
+        assert_eq!(policy.control_isolation_loss(), None);
     }
 
     #[cfg(windows)]
     #[test]
     fn control_rejects_variable_and_caret_hidden_rayman_commands() {
-        for command in ["set x=rayman & %x%", "^r^a^y^m^a^n"] {
+        for command in [
+            "set x=rayman & %x%",
+            "^r^a^y^m^a^n",
+            "%RAYMAN%",
+            "%rayman.exe% --version",
+            "ray^man.cmd",
+            // 子串/替换语法能从任意变量值里拼出任意字符串，评测器不归约它。
+            "%COMSPEC:~0,6%",
+            "%COMSPEC:cmd=rayman%",
+        ] {
             let dir = tempfile::tempdir().unwrap();
             let policy = EnvPolicy::without_rayman();
             let result = run_shell(dir.path(), command, &policy, RUN_TIMEOUT);
-            assert_eq!(result.outcome, GradeOutcome::InfrastructureError);
-            assert!(policy.control_workspace_violation());
+            assert_eq!(
+                result.outcome,
+                GradeOutcome::InfrastructureError,
+                "`{command}` 必须被拒绝"
+            );
             assert!(
-                result.stderr.contains("rayman 命令/包装器"),
-                "{}",
+                result.stderr.contains("控制组拒绝执行该命令"),
+                "`{command}`: {}",
                 result.stderr
             );
+            // 拒绝单条命令不等于整轮作废。
+            assert_eq!(policy.control_isolation_loss(), None, "`{command}`");
         }
+    }
+
+    /// 变量取值（而不是命令文本）指向 rayman 时也必须拒绝：展开按子进程真实环境解析。
+    #[cfg(windows)]
+    #[test]
+    fn control_rejects_expansion_whose_environment_value_names_rayman() {
+        let dir = tempfile::tempdir().unwrap();
+        let env = [(
+            OsString::from("USERPROFILE"),
+            OsString::from("C:\\tools\\rayman.cmd"),
+        )];
+
+        let expanded = expand_percent_references("%USERPROFILE% --help", &env, dir.path()).unwrap();
+
+        assert_eq!(expanded, "C:\\tools\\rayman.cmd --help");
+        assert_eq!(
+            rayman_naming_token(&expanded),
+            Some("C:\\tools\\rayman.cmd")
+        );
+    }
+
+    /// 回归：常见 cmd 语法只是含 `%`/`^`，既不该被拒绝，更不该作废整轮 trial。
+    #[cfg(windows)]
+    #[test]
+    fn control_allows_ordinary_cmd_percent_and_caret_syntax() {
+        for command in [
+            "echo %CD%",
+            "echo building & if %ERRORLEVEL% neq 0 exit /b 1",
+            "for /f %i in ('echo ok') do @echo %i",
+            "echo 50%% done",
+            "echo %UNDEFINED_EVAL_VARIABLE%",
+            "echo a^&b",
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let policy = EnvPolicy::without_rayman();
+            assert_eq!(
+                classify_control_command(command, &policy, dir.path()),
+                ControlCommandVerdict::Allowed,
+                "`{command}` 是普通 cmd 语法，不该被判为提及 rayman"
+            );
+
+            let result = run_shell(dir.path(), command, &policy, RUN_TIMEOUT);
+
+            assert_ne!(
+                result.outcome,
+                GradeOutcome::InfrastructureError,
+                "`{command}`: {}",
+                result.stderr
+            );
+            assert_eq!(policy.control_isolation_loss(), None, "`{command}`");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn caret_escapes_are_removed_the_way_cmd_removes_them() {
+        assert_eq!(strip_caret_escapes("^r^a^y^m^a^n"), "rayman");
+        assert_eq!(strip_caret_escapes("echo a^&b"), "echo a&b");
+        assert_eq!(strip_caret_escapes("trailing^"), "trailing");
     }
 
     #[test]
