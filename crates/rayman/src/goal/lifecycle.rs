@@ -213,8 +213,21 @@ fn goal_created_before(goal: &Goal, rollout_at: &str) -> bool {
     goal_created_before_timestamp(&goal.created_at, rollout_at)
 }
 
+/// `--migrate-unreceipted` 的资格。
+///
+/// 文档承诺它"只适用于从来没有 receipt 的 pre-rollout 记录"，所以这里必须真的
+/// 要求一条 receipt 都没有。缺了这条判定时，一个**有** receipt、且 receipt 完整性
+/// 复核失败（或存在未验证 drift）的目标同样能被洗成合法归档证明——即这个 flag
+/// 会把"证明失效"降级成"从来没有证明"，而后者是被无条件接受的。
 pub(super) fn pre_receipt_migration_eligible(goal: &Goal) -> bool {
-    completed_current_schema_history(goal) && goal_created_before(goal, STRICT_RECEIPT_ROLLOUT_AT)
+    completed_current_schema_history(goal)
+        && goal_created_before(goal, STRICT_RECEIPT_ROLLOUT_AT)
+        && goal.requirements.iter().all(|requirement| {
+            requirement
+                .validations
+                .iter()
+                .all(|validation| validation.receipt.is_none())
+        })
 }
 
 pub(super) fn receipt_policy_v1_migration_eligible(goal: &Goal) -> bool {

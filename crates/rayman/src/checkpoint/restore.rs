@@ -56,6 +56,7 @@ pub(super) fn restore_impl(
     }
     let manifest = verify_snapshot(&target.path)?;
     let tree = target.path.join(TREE_SUBDIR);
+    ensure_manifest_paths_preserve_case(&target.id, &tree, &manifest)?;
 
     let mut files = manifest.files.clone();
     files.sort_by(|a, b| a.path.cmp(&b.path));
@@ -85,6 +86,120 @@ pub(super) fn restore_impl(
         restored: files.len(),
         failed: 0,
     })
+}
+
+/// Refuse a snapshot whose manifest recorded **case-folded** path keys.
+///
+/// Snapshots written before [`manifest_path_string`] existed stored the
+/// comparison key — lowercased on Windows — as the manifest path, while the same
+/// save always wrote the snapshot's own `tree/` through the real, case-preserving
+/// relative path.  Restore joins the manifest string onto the workspace root, so
+/// such a snapshot silently recreates `README.md` as `readme.md`: invisible
+/// locally under `core.ignorecase`, a corrupted tree for every cross-platform
+/// clone.  Preserving case in new saves fixed nothing for the snapshots users
+/// already hold, and nothing told them their restores were unsafe.
+///
+/// The tree is the ground truth for what the file was really called, so each
+/// manifest path is compared against the actual on-disk name inside the tree.
+/// That is what distinguishes a folded key from a file whose name simply is
+/// lowercase: the latter matches the tree exactly and passes untouched.  Entries
+/// with no tree match at all are left to [`verify_manifest_tree`], whose missing
+/// file/integrity errors are the accurate diagnosis there.
+fn ensure_manifest_paths_preserve_case(id: &str, tree: &Path, manifest: &Manifest) -> Result<()> {
+    let mut names = TreeNameIndex::default();
+    let mut folded = Vec::new();
+    for expected in &manifest.files {
+        let relative = manifest_relative_path(&expected.path)?;
+        if let Some(actual) = names.resolve(tree, &relative)?
+            && actual != expected.path
+        {
+            folded.push(format!("{} 实为 {}", expected.path, actual));
+        }
+    }
+    if !folded.is_empty() {
+        bail!(
+            "拒绝恢复 checkpoint {}：它由旧版本 Rayman 生成，manifest 记录的是大小写折叠后的比较键而非真实文件名，\
+             按它恢复出的文件名大小写不可信（{}）；请用当前版本重新 `rayman checkpoint save` 后再恢复",
+            id,
+            folded.join("；")
+        );
+    }
+    Ok(())
+}
+
+/// Real on-disk names inside a snapshot tree, cached per directory.
+///
+/// Resolution is per path component, so a single folded component anywhere in
+/// the path is detected.  The cache keeps the scan linear in the tree size
+/// rather than re-listing a directory once per manifest entry it contains.
+#[derive(Default)]
+struct TreeNameIndex {
+    directories: std::collections::HashMap<PathBuf, std::collections::HashMap<String, Vec<String>>>,
+}
+
+impl TreeNameIndex {
+    /// The tree's own spelling of `relative`, or `None` when no entry matches
+    /// even case-insensitively.
+    fn resolve(&mut self, tree: &Path, relative: &Path) -> Result<Option<String>> {
+        let mut current = tree.to_path_buf();
+        let mut parts: Vec<String> = Vec::new();
+        for component in relative.components() {
+            let Component::Normal(name) = component else {
+                bail!("checkpoint 路径含不安全组件: {}", relative.display());
+            };
+            let wanted = name.to_str().ok_or_else(|| {
+                anyhow::anyhow!("checkpoint 路径不是有效 UTF-8: {}", relative.display())
+            })?;
+            let Some(actual) = self.entry_name(&current, wanted)? else {
+                return Ok(None);
+            };
+            current.push(&actual);
+            parts.push(actual);
+        }
+        if parts.is_empty() {
+            bail!("checkpoint 路径为空");
+        }
+        Ok(Some(parts.join("/")))
+    }
+
+    fn entry_name(&mut self, directory: &Path, wanted: &str) -> Result<Option<String>> {
+        if !self.directories.contains_key(directory) {
+            let mut listing: std::collections::HashMap<String, Vec<String>> =
+                std::collections::HashMap::new();
+            match fs::read_dir(directory) {
+                Ok(entries) => {
+                    for entry in entries {
+                        let entry = entry.with_context(|| {
+                            format!("无法读取 checkpoint 树条目: {}", display_path(directory))
+                        })?;
+                        if let Some(name) = entry.file_name().to_str() {
+                            listing
+                                .entry(name.to_ascii_lowercase())
+                                .or_default()
+                                .push(name.to_string());
+                        }
+                    }
+                }
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => {
+                    return Err(error).with_context(|| {
+                        format!("无法列出 checkpoint 树目录: {}", display_path(directory))
+                    });
+                }
+            }
+            self.directories.insert(directory.to_path_buf(), listing);
+        }
+        let candidates = match self.directories[directory].get(&wanted.to_ascii_lowercase()) {
+            Some(candidates) => candidates,
+            None => return Ok(None),
+        };
+        // An exact hit wins: a case-sensitive filesystem may legitimately hold
+        // both `README.md` and `readme.md` side by side.
+        if let Some(exact) = candidates.iter().find(|name| name.as_str() == wanted) {
+            return Ok(Some(exact.clone()));
+        }
+        Ok(candidates.first().cloned())
+    }
 }
 
 fn create_restore_transaction(
@@ -537,6 +652,9 @@ pub(super) fn recover_orphaned_restore_transactions(root: &Path, ws_dir: &Path) 
     orphans.sort();
 
     for path in orphans {
+        if reap_journalless_restore_transaction(ws_dir, &path)? {
+            continue;
+        }
         let mut transaction = load_restore_transaction(root, &path).with_context(|| {
             format!(
                 "orphan restore transaction 无法安全加载，已保留并拒绝继续: {}",
@@ -571,6 +689,80 @@ pub(super) fn recover_orphaned_restore_transactions(root: &Path, ws_dir: &Path) 
         remove_restore_transaction(ws_dir, &path)?;
     }
     Ok(())
+}
+
+/// Reap a transaction directory that has no journal at all.  Returns whether the
+/// directory was removed; `false` means a journal is present and normal orphan
+/// recovery must run.
+///
+/// [`create_restore_transaction`] persists `journal.json` *before* the
+/// transaction touches anything: the directory and its two empty subdirectories
+/// are created, the journal lands (write + fsync + rename), and only then do
+/// staging, backup and publish run.  A directory without a journal is therefore
+/// either a transaction that died before it began, or one whose `remove_dir_all`
+/// cleanup was interrupted after the journal had already been unlinked.  Neither
+/// owns any workspace state.
+///
+/// Leaving those to `load_restore_transaction` made them fatal, and because both
+/// `save` and `restore` run this recovery under the workspace lock, a single
+/// half-created directory permanently broke every manual save/restore and every
+/// autosave tick with no self-healing path short of deleting it by hand.
+///
+/// A journal that exists is never torn — `write_json` renames a fsynced temp —
+/// so an unreadable or invalid one means corruption or tampering and still fails
+/// closed below.  `backups/` is likewise still decisive: it can hold the only
+/// copy of contents a publish already overwrote, and without a journal there is
+/// no way to know which entries those are, so a non-empty one refuses to guess.
+fn reap_journalless_restore_transaction(ws_dir: &Path, path: &Path) -> Result<bool> {
+    let journal = path.join(RESTORE_JOURNAL_NAME);
+    match fs::symlink_metadata(&journal) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(error)
+                .with_context(|| format!("无法检查 restore journal: {}", display_path(&journal)));
+        }
+        Ok(_) => return Ok(false),
+    }
+    if directory_contains_file(&path.join("backups"))? {
+        bail!(
+            "orphan restore transaction 没有 journal 却仍存有备份文件，无从判断该回滚哪些目标；已保留供人工恢复: {}",
+            display_path(path)
+        );
+    }
+    remove_restore_transaction(ws_dir, path).with_context(|| {
+        format!(
+            "无法清理没有 journal 的 orphan restore transaction: {}",
+            display_path(path)
+        )
+    })?;
+    Ok(true)
+}
+
+/// Whether `path` holds any entry that is not a real, empty-or-recursively-empty
+/// directory.  A link/reparse point counts as content: it is never ours to
+/// discard silently.
+fn directory_contains_file(path: &Path) -> Result<bool> {
+    let entries = match fs::read_dir(path) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => {
+            return Err(error).with_context(|| format!("无法扫描目录: {}", display_path(path)));
+        }
+    };
+    for entry in entries {
+        let entry = entry.with_context(|| format!("无法读取目录条目: {}", display_path(path)))?;
+        let child = entry.path();
+        let metadata = fs::symlink_metadata(&child)
+            .with_context(|| format!("无法检查目录条目: {}", display_path(&child)))?;
+        if metadata.file_type().is_dir() && !is_link_or_reparse(&metadata) {
+            if directory_contains_file(&child)? {
+                return Ok(true);
+            }
+        } else {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn load_restore_transaction(root: &Path, path: &Path) -> Result<RestoreTransaction> {

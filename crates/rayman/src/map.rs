@@ -340,23 +340,19 @@ pub fn topology_report(map: &ProjectMap) -> TopologyReport {
 /// standard/release readiness must not rely on it.
 pub fn topology_is_authoritative(root: &Path, map: &ProjectMap) -> bool {
     topology_provenance_is_authoritative(root, &map.topology_provenance)
-        && discovered_cargo_topology_is_authoritative(&map.topology_provenance, &map.packages)
 }
 
+/// 权威性只由 provenance 决定，不看"发现了哪些包"。
+///
+/// 按发现的包判断会两头出错：一个损坏到解析不出任何包的 Cargo.toml 会让仓库
+/// 看起来"根本没有 Cargo 包"从而被判为权威；而根目录没有 manifest 只说明在根上
+/// 跑 cargo metadata 会失败，不说明拓扑不可信。构建侧现在会对子目录 manifest
+/// 逐个尝试 metadata，因此 provenance 已经能如实区分三种情形：真的没有 Cargo
+/// 包（no_cargo_manifest）、拿到了权威（cargo_metadata）、以及尝试过但失败
+/// （heuristic_fallback: …，必须 fail-closed）。
 fn topology_provenance_is_authoritative(root: &Path, provenance: &str) -> bool {
-    !root.join("Cargo.toml").is_file() || provenance == "cargo_metadata"
-}
-
-/// A missing root `Cargo.toml` only proves Cargo authority was never attempted, not that the
-/// resulting topology is trustworthy: workspaces whose crates all live in subdirectories
-/// (`crates/foo/Cargo.toml`, polyglot monorepos) still yield Cargo packages, and those came
-/// from line-by-line string heuristics. Repositories with no Cargo package at all (pure
-/// JS/Go/Python trees) have nothing for Cargo to be authoritative about, so they stay ready.
-fn discovered_cargo_topology_is_authoritative(provenance: &str, packages: &[PackageEntry]) -> bool {
-    provenance == "cargo_metadata"
-        || !packages
-            .iter()
-            .any(|package| package.manifest_path.ends_with("Cargo.toml"))
+    let _ = root;
+    matches!(provenance, "cargo_metadata" | "no_cargo_manifest")
 }
 
 pub fn impact_report(map: &ProjectMap, path: &str) -> Result<ImpactReport> {
@@ -708,6 +704,12 @@ fn path_has_supported_package(map: &ProjectMap, path: &str) -> bool {
     })
 }
 
+/// 该包的工具链是否能收集自己的源文件（即它是受支持生态）。
+fn package_collects_own_sources(package: &PackageEntry) -> bool {
+    package.manifest_path.ends_with("Cargo.toml")
+        || package.manifest_path.ends_with("pyproject.toml")
+}
+
 fn package_collects_path(package: &PackageEntry, path: &str) -> bool {
     if package.manifest_path.ends_with("Cargo.toml") {
         path.ends_with(".rs")
@@ -738,15 +740,94 @@ fn project_map_path(root: &Path, create_parents: bool) -> Result<PathBuf> {
 
 /// Cargo 本身是 manifest 的权威解释器。能运行时绝不从逐行字符串启发式推断
 /// workspace/package/path-dependency；只在非 Cargo 或 metadata 不可用时降级并标记来源。
+/// 每个仓库最多尝试多少个子目录 manifest，避免 fixture 众多的仓库触发子进程风暴。
+const MAX_NESTED_METADATA_MANIFESTS: usize = 8;
+
+/// 根目录没有 Cargo.toml 时，对索引到的 Cargo manifest 逐个尝试 `cargo metadata`。
+///
+/// "根上没有 manifest" 只说明在根上跑 cargo metadata 一定失败，不说明这个仓库没有
+/// Cargo 包。crate 全在子目录的多语言 monorepo 此前因此永远拿不到权威拓扑，而权威性
+/// 又是 standard/release 的硬前提——结果是整类仓库被永久阻塞且没有任何解除路径。
+/// 只有当每个被发现的 manifest 都成功解析时才算权威；任何一个失败就退回启发式，
+/// 因为部分权威的拓扑仍然会漏掉包与依赖边。
+fn nested_cargo_metadata_topology(
+    root: &Path,
+    index: &ContextIndex,
+) -> Option<(Vec<PackageEntry>, Vec<PackageDependency>)> {
+    let mut manifests: Vec<&str> = index
+        .files
+        .iter()
+        .map(|file| file.path.as_str())
+        .filter(|path| path.ends_with("Cargo.toml"))
+        .collect();
+    manifests.sort_unstable();
+    if manifests.is_empty() || manifests.len() > MAX_NESTED_METADATA_MANIFESTS {
+        return None;
+    }
+
+    let mut packages: Vec<PackageEntry> = Vec::new();
+    let mut dependencies: Vec<PackageDependency> = Vec::new();
+    for manifest in manifests {
+        let (found, deps) = cargo_metadata_at(root, index, Some(manifest)).ok()?;
+        packages.extend(found);
+        dependencies.extend(deps);
+    }
+    packages.sort_by(|left, right| left.manifest_path.cmp(&right.manifest_path));
+    packages.dedup_by(|left, right| left.manifest_path == right.manifest_path);
+    dependencies.sort_by(|left, right| {
+        (
+            &left.from_package,
+            &left.to_package,
+            &left.kind,
+            &left.manifest_path,
+        )
+            .cmp(&(
+                &right.from_package,
+                &right.to_package,
+                &right.kind,
+                &right.manifest_path,
+            ))
+    });
+    dependencies.dedup_by(|left, right| {
+        (
+            &left.from_package,
+            &left.to_package,
+            &left.kind,
+            &left.manifest_path,
+        ) == (
+            &right.from_package,
+            &right.to_package,
+            &right.kind,
+            &right.manifest_path,
+        )
+    });
+    Some((packages, dependencies))
+}
+
 fn cargo_metadata_topology(
     root: &Path,
     index: &ContextIndex,
 ) -> Result<(Vec<PackageEntry>, Vec<PackageDependency>)> {
-    let output = Command::new("cargo")
-        .args(["metadata", "--no-deps", "--format-version", "1"])
+    cargo_metadata_at(root, index, None)
+}
+
+fn cargo_metadata_at(
+    root: &Path,
+    index: &ContextIndex,
+    manifest: Option<&str>,
+) -> Result<(Vec<PackageEntry>, Vec<PackageDependency>)> {
+    let mut command = Command::new("cargo");
+    command.args(["metadata", "--no-deps", "--format-version", "1"]);
+    if let Some(manifest) = manifest {
+        command.args(["--manifest-path", manifest]);
+    }
+    // "cargo 跑不起来"与"拓扑不可信"会产出同一个 BLOCKED，但含义完全不同：前者
+    // 装上 cargo 就能解除，后者要修 manifest。诊断里必须分得开，否则用户看到的是
+    // 一条无从下手的"拓扑未获权威确认"。
+    let output = command
         .current_dir(root)
         .output()
-        .context("无法执行 cargo metadata")?;
+        .context("无法执行 cargo metadata（cargo 是否在 PATH 中？）")?;
     if !output.status.success() {
         bail!(
             "cargo metadata 失败: {}",
@@ -966,6 +1047,24 @@ fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
                 )
             }
         }
+    } else if let Some((packages, dependencies)) = nested_cargo_metadata_topology(root, index) {
+        (packages, dependencies, "cargo_metadata".to_string())
+    } else if index
+        .files
+        .iter()
+        .any(|file| file.path.ends_with("Cargo.toml"))
+    {
+        // 索引里有 Cargo manifest 但没能从中取得权威拓扑。必须与"这个仓库根本
+        // 没有 Cargo 包"区分开：后者可以照常 ready，前者只能 fail-closed，否则
+        // 一个损坏到解析不出任何包的 Cargo.toml 会让仓库看起来无 Cargo 包而蒙混过关。
+        let workspace = read_workspace_info(root, index)?;
+        let packages = discover_packages(root, index, &workspace)?;
+        let dependencies = infer_package_dependencies(root, index, &packages, &workspace)?;
+        (
+            packages,
+            dependencies,
+            "heuristic_fallback: nested cargo metadata unavailable".to_string(),
+        )
     } else {
         let workspace = read_workspace_info(root, index)?;
         let packages = discover_packages(root, index, &workspace)?;

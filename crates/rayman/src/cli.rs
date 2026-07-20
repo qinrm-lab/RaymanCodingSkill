@@ -355,7 +355,7 @@ pub enum GoalAction {
         #[arg(long)]
         command: String,
     },
-    /// 关闭目标（success 要求所有 must 需求带证据）
+    /// 关闭目标（success 要求每个 must 需求带 `goal validate` 写入的当前 receipt；仅有证据只能关成 partial/blocked）
     Close {
         id: String,
         #[arg(long, default_value = "success")]

@@ -21,10 +21,11 @@ fn cargo_workspace_requires_metadata_provenance_for_authoritative_topology() {
 }
 
 #[test]
-fn subdirectory_only_cargo_workspace_is_not_authoritative_topology() {
-    // No root Cargo.toml means cargo metadata was never even attempted, so the packages below
-    // came from line-by-line string heuristics. Treating that as authority let crates-in-
-    // subdirectories workspaces reach standard/release READY on guessed topology.
+fn subdirectory_only_cargo_workspace_obtains_authority_instead_of_being_blocked_forever() {
+    // 根目录没有 Cargo.toml 只说明"在根上跑 cargo metadata 会失败"，不说明拓扑不可信。
+    // 早先的判据把这种仓库判为非权威，而权威性是 standard/release 的硬前提，于是
+    // crate 全在子目录的多语言 monorepo 被永久阻塞、且没有任何可达的解除路径。
+    // 现在改为对索引到的每个 manifest 逐个跑 cargo metadata，真的把权威拿到手。
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     write(
@@ -38,8 +39,28 @@ fn subdirectory_only_cargo_workspace_is_not_authoritative_topology() {
     context::refresh(root).unwrap();
 
     let map = build_readonly(root).unwrap();
-    assert_eq!(map.topology_provenance, "no_cargo_manifest");
+    assert_eq!(map.topology_provenance, "cargo_metadata");
     assert!(map.packages.iter().any(|package| package.name == "foo"));
+    assert!(topology_is_authoritative(root, &map));
+}
+
+#[test]
+fn a_cargo_manifest_metadata_cannot_parse_stays_non_authoritative() {
+    // 拿不到权威时仍必须 fail-closed：启发式拓扑不得支撑 standard/release readiness。
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        root.join("crates/broken/Cargo.toml").as_path(),
+        "[package\nname = \"broken\"\n",
+    );
+    write(
+        root.join("crates/broken/src/lib.rs").as_path(),
+        "pub fn broken() {}\n",
+    );
+    context::refresh(root).unwrap();
+
+    let map = build_readonly(root).unwrap();
+    assert_ne!(map.topology_provenance, "cargo_metadata");
     assert!(!topology_is_authoritative(root, &map));
 }
 

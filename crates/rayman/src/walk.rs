@@ -84,8 +84,10 @@ pub fn workspace_walk(root: &Path) -> WorkspaceWalk {
         .git_exclude(true)
         .require_git(false) // 即使工作区还不是 git 仓库，也尊重 .gitignore
         .parents(false);
-    let tracked = tracked_directories(root);
+    let tracked = tracked_paths(root);
     let owned_root = root.to_path_buf();
+    let filter_root = owned_root.clone();
+    let filter_tracked = tracked.as_ref().map(|tracked| tracked.directories.clone());
     builder.filter_entry(move |entry| {
         // 只剪枝目录：名为 build/dist 的普通源码文件不应从索引里无声消失。
         if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
@@ -102,13 +104,13 @@ pub fn workspace_walk(root: &Path) -> WorkspaceWalk {
         if !VENDOR_FALLBACK_IGNORE.contains(&name.as_ref()) {
             return true;
         }
-        match &tracked {
+        match &filter_tracked {
             // git 可用：只保留确实含被跟踪内容的 vendor 名目录。
-            Some(tracked) => entry
+            Some(directories) => entry
                 .path()
-                .strip_prefix(&owned_root)
+                .strip_prefix(&filter_root)
                 .ok()
-                .is_some_and(|rel| tracked.contains(&rel.to_string_lossy().replace('\\', "/"))),
+                .is_some_and(|rel| directories.contains(&rel.to_string_lossy().replace('\\', "/"))),
             // 非 git 工作区或 git 不可用：无从判断跟踪状态，按名字兜底剪枝。
             None => false,
         }
@@ -120,7 +122,23 @@ pub fn workspace_walk(root: &Path) -> WorkspaceWalk {
             Ok(entry) => match entry.file_type() {
                 Some(file_type) if file_type.is_dir() => {}
                 Some(file_type) if file_type.is_file() => {
-                    report.files.push(entry.into_path());
+                    // 目录层判定不够：一个 vendor 名目录只要含任何被跟踪内容就整体
+                    // 保留，会把它旁边的未跟踪构建产物一起拖进索引与 goal baseline，
+                    // 产物每次构建都变，差量门禁因此不可满足。所以 vendor 名目录**之内**
+                    // 还要逐文件看跟踪状态；未跟踪的构建产物与被 gitignore 忽略的文件
+                    // 属同一类，静默排除是一致的。
+                    let path = entry.into_path();
+                    let keep = match (&tracked, path.strip_prefix(&owned_root)) {
+                        (Some(tracked), Ok(relative)) => {
+                            let relative = relative.to_string_lossy().replace('\\', "/");
+                            !is_under_vendor_directory(&relative)
+                                || tracked.files.contains(&relative)
+                        }
+                        _ => true,
+                    };
+                    if keep {
+                        report.files.push(path);
+                    }
                 }
                 // `follow_links(false)` means a symlink (or other special
                 // entry) is neither a dir nor a file here. Silently skipping
@@ -152,29 +170,34 @@ pub fn workspace_walk(root: &Path) -> WorkspaceWalk {
     report
 }
 
-/// 含被 git 跟踪内容的目录集合（工作区相对、正斜杠分隔）。
+/// git 跟踪的路径集合与其祖先目录集合。
 ///
 /// 返回 `None` 表示无从判断——不是 git 仓库、git 不可用、或命令失败。调用方在
 /// 那种情况下必须回退到按名字剪枝，而不是当作"没有跟踪内容"，否则一次 git 故障
 /// 就会静默改变索引范围。
-fn tracked_directories(root: &Path) -> Option<BTreeSet<String>> {
-    let output = std::process::Command::new("git")
-        .arg("-C")
-        .arg(root)
-        .args(["ls-files", "-z"])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
+///
+/// 优先用 `--recurse-submodules`：子模块在普通 `ls-files` 里只是一条不带尾斜杠的
+/// 裸目录记录，其内容一条都不出现，于是挂在 vendor 名路径下的子模块会被整棵剪掉。
+struct TrackedPaths {
+    files: BTreeSet<String>,
+    directories: BTreeSet<String>,
+}
+
+fn tracked_paths(root: &Path) -> Option<TrackedPaths> {
+    let listing = git_ls_files(root, &["ls-files", "-z", "--recurse-submodules"])
+        .or_else(|| git_ls_files(root, &["ls-files", "-z"]))?;
+
+    let mut files = BTreeSet::new();
     let mut directories = BTreeSet::new();
-    for entry in output.stdout.split(|byte| *byte == 0) {
+    for entry in listing.split(|byte| *byte == 0) {
         if entry.is_empty() {
             continue;
         }
-        let path = String::from_utf8_lossy(entry);
+        let path = String::from_utf8_lossy(entry).into_owned();
+        // gitlink 条目本身就是一个被跟踪的目录，所以整条路径也要进目录集合。
+        directories.insert(path.clone());
         let mut components: Vec<&str> = path.split('/').collect();
-        components.pop(); // 去掉文件名，只累积祖先目录
+        components.pop();
         let mut prefix = String::new();
         for component in components {
             if !prefix.is_empty() {
@@ -183,8 +206,28 @@ fn tracked_directories(root: &Path) -> Option<BTreeSet<String>> {
             prefix.push_str(component);
             directories.insert(prefix.clone());
         }
+        files.insert(path);
     }
-    Some(directories)
+    Some(TrackedPaths { files, directories })
+}
+
+fn git_ls_files(root: &Path, args: &[&str]) -> Option<Vec<u8>> {
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .output()
+        .ok()?;
+    output.status.success().then_some(output.stdout)
+}
+
+/// 该工作区相对路径是否位于某个 vendor 名目录之下。
+fn is_under_vendor_directory(relative: &str) -> bool {
+    let mut components: Vec<&str> = relative.split('/').collect();
+    components.pop(); // 只看祖先目录，不看文件名本身
+    components
+        .iter()
+        .any(|component| VENDOR_FALLBACK_IGNORE.contains(component))
 }
 
 fn append_indexed_state_policy(root: &Path, report: &mut WorkspaceWalk) {
@@ -352,6 +395,107 @@ mod tests {
         assert!(
             !keys.iter().any(|key| key.starts_with(".git/")),
             "keys={keys:?}"
+        );
+    }
+
+    /// 目录层判定不够：vendor 名目录只要含任何被跟踪内容就整体保留，会把旁边的
+    /// 未跟踪构建产物一起拖进索引与 goal baseline，产物每次构建都变，差量门禁
+    /// 因此不可满足。跟踪判据必须落到文件层。
+    #[test]
+    fn vendor_pruning_keeps_tracked_files_and_drops_untracked_artifacts_in_the_same_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::create_dir_all(root.join("build")).unwrap();
+        fs::write(root.join("build/deploy.ps1"), "Write-Host x").unwrap();
+        fs::write(root.join("README.md"), "# x").unwrap();
+
+        git(root, &["init", "--quiet"]);
+        git(root, &["add", "build/deploy.ps1", "README.md"]);
+
+        // 构建产物：与被跟踪脚本同处一个 build/ 目录，但从未 git add。
+        fs::create_dir_all(root.join("build/out")).unwrap();
+        fs::write(root.join("build/out/bundle.bin"), "artifact").unwrap();
+        fs::write(root.join("build/cache.tmp"), "artifact").unwrap();
+
+        let keys: Vec<String> = workspace_files_checked(root)
+            .unwrap()
+            .iter()
+            .map(|path| relative_key(root, path))
+            .collect();
+
+        assert!(
+            keys.contains(&"build/deploy.ps1".to_string()),
+            "tracked content must stay indexed: {keys:?}"
+        );
+        assert!(
+            !keys.iter().any(|key| key.starts_with("build/out")),
+            "untracked artifacts beside it must not be indexed: {keys:?}"
+        );
+        assert!(
+            !keys.contains(&"build/cache.tmp".to_string()),
+            "untracked artifacts beside it must not be indexed: {keys:?}"
+        );
+    }
+
+    /// 子模块在普通 `git ls-files` 里只是一条裸目录记录、内容一条都不出现，
+    /// 于是挂在 vendor 名路径下的子模块会被整棵剪掉——正是本模块声称要防的
+    /// "谎称遍历完整"。
+    #[test]
+    fn a_submodule_under_a_vendor_named_path_is_not_pruned() {
+        let outer = tempfile::tempdir().unwrap();
+        let inner = tempfile::tempdir().unwrap();
+
+        let inner_root = inner.path();
+        fs::write(inner_root.join("lib.txt"), "vendored source").unwrap();
+        git(inner_root, &["init", "--quiet"]);
+        git(inner_root, &["add", "lib.txt"]);
+        git(
+            inner_root,
+            &[
+                "-c",
+                "user.email=t@example.com",
+                "-c",
+                "user.name=t",
+                "commit",
+                "--quiet",
+                "-m",
+                "seed",
+            ],
+        );
+
+        let root = outer.path();
+        fs::write(root.join("README.md"), "# x").unwrap();
+        git(root, &["init", "--quiet"]);
+        git(root, &["add", "README.md"]);
+        let inner_url = inner_root.to_string_lossy().replace('\\', "/");
+        let added = std::process::Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args([
+                "-c",
+                "protocol.file.allow=always",
+                "submodule",
+                "add",
+                "--quiet",
+                &inner_url,
+                "dist",
+            ])
+            .status()
+            .expect("git must be available");
+        if !added.success() {
+            // 某些环境禁用 file 协议的 submodule；此时跳过而不是给出假绿。
+            return;
+        }
+
+        let keys: Vec<String> = workspace_files_checked(root)
+            .unwrap()
+            .iter()
+            .map(|path| relative_key(root, path))
+            .collect();
+
+        assert!(
+            keys.contains(&"dist/lib.txt".to_string()),
+            "submodule content under a vendor-named path must stay visible: {keys:?}"
         );
     }
 

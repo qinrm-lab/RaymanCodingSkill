@@ -579,6 +579,55 @@ fn supersession_accepts_a_proven_archived_success_and_rejects_forgery() {
     assert!(supersession_error(&superseded, &[forged], dir.path(), &fingerprint,).is_some());
 }
 
+/// `--migrate-unreceipted` 的文档承诺是"只适用于从来没有 receipt 的 pre-rollout
+/// 记录"。缺了这条判定时，一个**有** receipt 但复核失败的目标也能被它洗成合法
+/// 归档证明——即把"证明失效"降级成"从来没有证明"，而后者被无条件接受。
+#[test]
+fn pre_receipt_migration_refuses_a_record_that_actually_has_receipts() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("a.txt"), "a0").unwrap();
+    let store = GoalStore::new(dir.path());
+    let goal = store
+        .start("has-receipt", &[("ship".into(), true)])
+        .unwrap();
+    let command = "echo validation-ok";
+    store
+        .record_validation_receipt(
+            &goal.id,
+            "req_1",
+            ValidationReceiptSubmission {
+                evidence: "validated".into(),
+                command: command.into(),
+                receipt: successful_receipt(dir.path(), &goal, "req_1", command, &[], true),
+                impacts: Vec::new(),
+                non_code: true,
+            },
+        )
+        .unwrap();
+    store.close(&goal.id, "success").unwrap();
+
+    // 回填到 rollout 之前，使 created_at 这一半资格成立。
+    let path = dir.path().join(GOALS_DIR).join(format!("{}.json", goal.id));
+    let mut backdated = GoalStore::load_goal_file(&path).unwrap().unwrap();
+    backdated.created_at = "2026-07-10T00:00:00Z".into();
+    write_json(&path, &backdated).unwrap();
+
+    let reloaded = GoalStore::load_goal_file(&path).unwrap().unwrap();
+    assert!(
+        !pre_receipt_migration_eligible(&reloaded),
+        "带 receipt 的记录不能走 pre-receipt hatch"
+    );
+
+    // 对照：把 receipt 去掉后（真正的 pre-receipt 历史形态）资格才成立。
+    let mut unreceipted = reloaded;
+    for requirement in &mut unreceipted.requirements {
+        for validation in &mut requirement.validations {
+            validation.receipt = None;
+        }
+    }
+    assert!(pre_receipt_migration_eligible(&unreceipted));
+}
+
 #[test]
 fn historical_lifecycle_requires_a_bound_proof_and_explicit_old_schema_migration() {
     let dir = tempfile::tempdir().unwrap();

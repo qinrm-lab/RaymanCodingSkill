@@ -439,6 +439,120 @@ fn committed_orphan(
     transaction
 }
 
+/// 没有 journal 的孤儿 = 事务还没开始发布任何文件（journal 在任何落盘之前写入），
+/// 或者清理 `remove_dir_all` 只删到一半。
+///
+/// 这种孤儿曾直接 bail "无法安全加载"，而 save 与 restore 都在工作区锁下跑这段恢复：
+/// 一个半创建的空目录就能让 `checkpoint save`（含每次 autosave tick）和 `restore`
+/// 永久失败，只能手工删目录。
+#[test]
+fn journalless_orphan_transaction_is_reaped_instead_of_deadlocking() {
+    let ws = tempfile::tempdir().unwrap();
+    let store = tempfile::tempdir().unwrap();
+    let root = ws.path();
+    write(&root.join("a.txt"), "checkpoint-a");
+    let saved = save(root, Some(store.path()), DEFAULT_KEEP).unwrap();
+    let ws_dir = workspace_dir(root, Some(store.path())).unwrap();
+
+    // 创建到一半就断电：目录与两个空子目录已 mkdir，journal 尚未落盘。
+    let half_created = ws_dir.join(format!(
+        "{RESTORE_TRANSACTION_PREFIX}{}-half-created",
+        std::process::id()
+    ));
+    fs::create_dir(&half_created).unwrap();
+    fs::create_dir(half_created.join("staged")).unwrap();
+    fs::create_dir(half_created.join("backups")).unwrap();
+
+    // 删除到一半：journal 与 backups 已删，staged 的副本还在。
+    let half_deleted = ws_dir.join(format!(
+        "{RESTORE_TRANSACTION_PREFIX}{}-half-deleted",
+        std::process::id()
+    ));
+    fs::create_dir(&half_deleted).unwrap();
+    write(&half_deleted.join("staged/a.txt"), "checkpoint-a");
+
+    let after = save(root, Some(store.path()), DEFAULT_KEEP).unwrap();
+    assert!(after.path.exists(), "没有 journal 的孤儿不得阻塞保存");
+    assert!(
+        !half_created.exists() && !half_deleted.exists(),
+        "没有 journal 的孤儿必须能被清理，否则没有自愈路径"
+    );
+    restore(root, Some(store.path()), Some(&saved.id)).unwrap();
+}
+
+/// 但没有 journal **且**留有备份时仍必须 fail-closed：备份可能是被发布覆盖掉的原始
+/// 内容的唯一副本，而没有 journal 就无从判断该回滚哪些目标。
+#[test]
+fn journalless_orphan_transaction_with_backups_still_fails_closed() {
+    let ws = tempfile::tempdir().unwrap();
+    let store = tempfile::tempdir().unwrap();
+    let root = ws.path();
+    write(&root.join("a.txt"), "checkpoint-a");
+    save(root, Some(store.path()), DEFAULT_KEEP).unwrap();
+    let ws_dir = workspace_dir(root, Some(store.path())).unwrap();
+
+    let orphan = ws_dir.join(format!(
+        "{RESTORE_TRANSACTION_PREFIX}{}-backups-without-journal",
+        std::process::id()
+    ));
+    fs::create_dir(&orphan).unwrap();
+    fs::create_dir(orphan.join("staged")).unwrap();
+    write(&orphan.join("backups/a.txt"), "pre-restore-a");
+
+    assert!(save(root, Some(store.path()), DEFAULT_KEEP).is_err());
+    assert!(
+        orphan.join("backups/a.txt").exists(),
+        "无 journal 的备份是唯一副本，必须保留供人工恢复"
+    );
+}
+
+/// 升级前生成的快照：tree 里是真实大小写，manifest 里存的却是折叠后的小写键。
+///
+/// 上一轮只让**新**快照保留大小写，存量快照仍会把 `README.md` 恢复成 `readme.md`，
+/// 而且没有任何机制告诉用户。恢复必须明确拒绝，且不得把"文件名本来就是小写"误报。
+#[cfg(windows)]
+#[test]
+fn restore_refuses_legacy_snapshot_whose_manifest_folded_path_case() {
+    let ws = tempfile::tempdir().unwrap();
+    let store = tempfile::tempdir().unwrap();
+    let root = ws.path();
+    write(&root.join("README.md"), "docs");
+    write(&root.join("Docs/Guide.md"), "guide");
+    write(&root.join("lower.txt"), "lower");
+    let saved = save(root, Some(store.path()), DEFAULT_KEEP).unwrap();
+
+    // 旧版本的 manifest 记的是 normalized_path_key（Windows 上小写）；tree 一直是真实大小写。
+    let manifest_path = saved.path.join(MANIFEST_NAME);
+    let mut manifest = crate::file_io::read_json::<Manifest>(&manifest_path)
+        .unwrap()
+        .unwrap();
+    for file in &mut manifest.files {
+        file.path = file.path.to_ascii_lowercase();
+    }
+    crate::file_io::write_json(&manifest_path, &manifest).unwrap();
+    // 折叠后的 manifest 在 Windows 上仍能通过完整性校验——正是它静默生效的原因。
+    assert_eq!(
+        verify_snapshot(&saved.path).unwrap().status,
+        SnapshotStatus::Complete
+    );
+
+    fs::remove_file(root.join("README.md")).unwrap();
+    let error = restore(root, Some(store.path()), Some(&saved.id))
+        .err()
+        .expect("旧快照的折叠路径必须被检出，而不是静默恢复错误大小写")
+        .to_string();
+
+    assert!(error.contains("大小写"), "{error}");
+    assert!(error.contains("README.md"), "{error}");
+    assert!(error.contains("Docs/Guide.md"), "{error}");
+    // 本来就是小写的文件名不是折叠键，绝不能误报。
+    assert!(!error.contains("lower.txt"), "{error}");
+    assert!(
+        !root.join("README.md").exists(),
+        "拒绝恢复时不得落盘任何文件"
+    );
+}
+
 /// partial 快照是取证证据，但不能无界增长：autosave 的计划任务每 N 分钟重试一次
 /// 失败的保存，无上限时一天就能堆出约 48 份，而 prune 从不删它们、失败路径也从不
 /// 调 prune。轮换只针对 partial，最近的完整恢复点绝不受影响。

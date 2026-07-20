@@ -783,13 +783,14 @@ fn command_is_inert_probe(command: &ParsedValidationCommand) -> bool {
     if INERT_PROGRAMS.contains(&executable.as_str()) {
         return true;
     }
-    // 只有当**全部**参数都是查询标志时才算探针：`go test -v ./...` 里的
-    // "test"/"./..." 不是探针标志，因此照常通过。
-    !command.args.is_empty()
-        && command
-            .args
-            .iter()
-            .all(|argument| PROBE_FLAGS.iter().any(|flag| argument == flag))
+    // 只要**出现**查询标志就算探针，而不是要求全部参数都是。要求"全部"可以被一个
+    // 无意义参数击穿：`git --no-pager --version` 什么都没验证，却因为多了一个
+    // `--no-pager` 而不满足"全部是探针标志"，于是能当作 Go 源码变更的交付证据。
+    // 真实命令不会把 `--version`/`--help` 混进来——它们要么查询、要么干活。
+    command
+        .args
+        .iter()
+        .any(|argument| PROBE_FLAGS.iter().any(|flag| argument == flag))
 }
 
 fn validation_expectation_for_path(path: &str) -> Option<ValidationExpectation> {

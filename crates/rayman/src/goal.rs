@@ -932,7 +932,9 @@ impl GoalStore {
         Ok(goal)
     }
 
-    /// 关闭目标。status=success 时，每个 must 需求必须已带证据，否则拒绝。
+    /// 关闭目标。status=success 时，每个 must 需求必须带 `goal validate` 写入的
+    /// 当前 receipt（仅有人工证据不够，只能关成 partial/blocked），否则拒绝。
+    /// success 是终态：不能再降级，重开走 supersede。
     pub fn close(&self, id: &str, status: &str) -> Result<Goal> {
         let status = match status {
             "success" => GoalStatus::Success,

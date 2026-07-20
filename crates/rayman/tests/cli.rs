@@ -2924,7 +2924,8 @@ fn an_unmodelled_language_still_rejects_a_self_evidently_unrelated_command() {
     let goal = run_json(root, &["goal", "start", "go work", "--must", "ship"]);
     let id = goal["id"].as_str().unwrap();
 
-    for probe in ["--version", "--help"] {
+    // 多一个无意义参数不能把探针洗成"真实命令"。
+    for probe in ["--version", "--help", "--no-pager --version"] {
         let rejected = run(
             root,
             &[

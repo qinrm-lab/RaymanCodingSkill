@@ -310,19 +310,20 @@ pub fn quality_report_with_config(map: &ProjectMap, config: &QualityConfig) -> Q
         })
         .collect();
 
-    // Cargo and pyproject packages have language-aware test anchors, but only for the files
-    // their own tooling collects. Apply the same threshold to the source files that really
-    // belong to such a package instead of letting any manifest anywhere in the workspace
-    // promote an unmodeled ecosystem's files from advisory to blocking.
-    let supported_source_files = map
-        .modules
-        .iter()
-        .filter(|module| {
-            module.kind == "source" && super::path_has_supported_package(map, &module.path)
-        })
-        .count();
-    let has_supported_package = supported_source_files >= config.multi_source_no_test_min_sources;
-    if map.source_files >= config.multi_source_no_test_min_sources && map.test_files == 0 {
+    // 逐包判定，不用任何全仓计数——两种全仓口径都会出错，而且方向相反：
+    // "全仓存在任意包"会让一个无关的 fixture crate 把 JS 仓库判成硬失败；
+    // "全仓受支持源文件数达阈值"又会把真实 Cargo 项目降级（2 个 .rs + 1 个
+    // .js 就掉到阈值以下）。文档承诺的是"多源 Cargo/pyproject 包无测试则阻塞，
+    // 未建模生态保持 advisory"，那就按包看包自己的源文件数与测试锚。
+    let blocking_package = map.packages.iter().find(|package| {
+        super::package_collects_own_sources(package)
+            && package.source_files >= config.multi_source_no_test_min_sources
+            && !super::package_has_test_anchor(map, package)
+    });
+    let has_supported_package = blocking_package.is_some();
+    if has_supported_package
+        || (map.source_files >= config.multi_source_no_test_min_sources && map.test_files == 0)
+    {
         findings.push(QualityFinding {
             severity: if has_supported_package {
                 "error"
@@ -333,16 +334,15 @@ pub fn quality_report_with_config(map: &ProjectMap, config: &QualityConfig) -> Q
             kind: "multi_source_project_without_tests".into(),
             path: ".".into(),
             role: "workspace".into(),
-            detail: if has_supported_package {
-                format!(
-                    "{} source files ({supported_source_files} in Cargo or pyproject packages) but no indexed test files; large-project edits have no local validation anchor",
+            detail: match blocking_package {
+                Some(package) => format!(
+                    "package {} has {} source files but no indexed test files; large-project edits have no local validation anchor",
+                    package.name, package.source_files
+                ),
+                None => format!(
+                    "{} source files but no indexed test files; no Cargo or pyproject package detected with enough of its own sources, so this heuristic is advisory only — verify test coverage manually",
                     map.source_files
-                )
-            } else {
-                format!(
-                    "{} source files but no indexed test files; no Cargo or pyproject package detected for them, so this heuristic is advisory only — verify test coverage manually",
-                    map.source_files
-                )
+                ),
             },
             recommendation: "add at least one test target or record why this workspace has no executable tests".into(),
             blocking_policy_source: None,
