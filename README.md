@@ -98,11 +98,12 @@ rayman goal close <id> [--status success|partial|blocked] # only these three; st
 rayman goal archive <id> --reason "<historical reason>"
 rayman goal archive <id> --reason "<historical reason>" --migrate-receipt-policy receipt_integrity_v1
 rayman goal supersede <id> --by <current gate-ready replacement>
+rayman goal current [<id>]                                # list current goals; with an id, restore an archived/superseded goal to current
 rayman goal pending add "<title>" -m "<detail>" | list | resolve <id>
 
 rayman checkpoint save | list | status                    # list exposes complete/partial/corrupt status
-rayman checkpoint verify [id|latest]                      # read-only v2 manifest/path/per-file hash verification
-rayman checkpoint restore [id|latest] --yes               # only a verified complete snapshot; overlays matching files
+rayman checkpoint verify [id|latest]                      # read-only v3 manifest/path/per-file hash verification
+rayman checkpoint restore [id|latest] --yes               # only a verified complete snapshot; journaled all-or-nothing
 rayman autosave start | stop | status                     # scheduled auto-snapshots (see tools/README.md)
 rayman doctor [--check]                                   # installed binary/PATH/workspace-SKILL identity only
 ```
@@ -123,7 +124,7 @@ Archiving or superseding a completed goal revalidates its receipt integrity at t
 
 `rayman state audit` is a read-only hygiene report. It names the v2 state entries it accepts, any retired entries, and the recursive temp footprint. `--check` exits nonzero when retired state, an audit error, or a traversal error exists; it deliberately performs no migration or deletion. Review the report and obtain explicit approval before removing or migrating state.
 
-Checkpoint manifests are v3 integrity records; v2 manifests are rejected rather than reinterpreted. Saves take a cross-process workspace/store lock; a failed or crashed save keeps its staging/partial directory for forensics and automatic pruning never deletes staging. `checkpoint list` labels complete/partial/corrupt snapshots and `checkpoint status` selects only the newest verified complete one. `checkpoint verify` is read-only. Restore validates the complete manifest first, then durably replaces each destination file through same-directory staging (`flush`/`fsync` + atomic rename). It is a journaled all-or-nothing transaction: every source is staged and verified and every existing destination is backed up before the first file is published, and a failure during publication restores the backups in reverse order. A crash leaves a recorded transaction that the next `save`/`restore` resolves; it never deletes extra workspace files.
+Checkpoint manifests are v3 integrity records; v2 manifests are rejected rather than reinterpreted. Saves take a cross-process workspace/store lock; a failed or crashed save keeps its staging/partial directory for forensics and automatic pruning never deletes staging; partial snapshots are kept for forensics but rotate at a fixed cap so a repeatedly failing autosave cannot grow them without bound. `checkpoint list` labels complete/partial/corrupt snapshots and `checkpoint status` selects only the newest verified complete one. `checkpoint verify` is read-only. Restore validates the complete manifest first, then durably replaces each destination file through same-directory staging (`flush`/`fsync` + atomic rename). It is a journaled all-or-nothing transaction: every source is staged and verified and every existing destination is backed up before the first file is published, and a failure during publication restores the backups in reverse order. A crash leaves a recorded transaction that the next `save`/`restore` resolves; it never deletes extra workspace files.
 
 Cargo topology includes direct path dependencies and workspace-inherited path dependencies from `[workspace.dependencies]` plus `{ workspace = true }`, including common dotted TOML forms. Impact recommendations use `cargo test -p <name>` only for unique workspace member packages; excluded fixtures, non-workspace nested packages, and duplicate package names use `cargo test --manifest-path <path>` instead. Pyproject packages use `python -m pytest` (scoped to the package root when nested), and Python impact resolves local `import`/`from ... import ...` edges from the nearest nested pyproject root (including its `src/` layout) plus `test_*.py`/`*_test.py` naming. Mixed Cargo/Python workspaces choose checks by the changed file's package type. `map plan --check` treats package-level checks as broad-change anchors only when the package has an indexed test target.
 

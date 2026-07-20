@@ -127,6 +127,11 @@ impl EnvPolicy {
                 "控制组拒绝执行该命令：命令使用了评测器无法解析为字面量的 cmd 变量替换语法\
                  （{evidence}），因此无法证明它不会展开出 rayman。命令未执行，本 trial 的组别隔离未受影响"
             )),
+            ControlCommandVerdict::DelayedExpansion { evidence } => Err(format!(
+                "控制组拒绝执行该命令：命令显式启用了 cmd 延迟展开（{evidence}）并使用了 `!` 引用。\
+                 `!VAR!` 的取值到执行时才确定，可由同一行更早的 `set` 拼出 rayman，评测器不归约它。\
+                 命令未执行，本 trial 的组别隔离未受影响"
+            )),
         }
     }
 
@@ -385,24 +390,23 @@ fn with_cleanup_error(mut message: String, cleanup_error: Option<io::Error>) -> 
 #[cfg(windows)]
 fn reject_uncontained_launch(command: &str) -> Result<(), String> {
     let mut forbidden = None;
-    for token in command
-        .split(|ch: char| {
-            ch.is_whitespace() || matches!(ch, '&' | '|' | ';' | '<' | '>' | '(' | ')' | '=' | ',')
-        })
-        .map(|token| token.trim_matches(|ch| matches!(ch, '\'' | '"' | '`')))
-        .filter(|token| !token.is_empty())
-    {
-        let base = token
-            .rsplit(['/', '\\'])
-            .next()
-            .unwrap_or(token)
-            .to_ascii_lowercase();
-        if matches!(
-            base.as_str(),
-            "schtasks" | "schtasks.exe" | "wmic" | "wmic.exe" | "sc" | "sc.exe" | "at" | "at.exe"
-        ) {
-            forbidden = Some(base);
-            break;
+    'scan: for token in cmd_tokens(command) {
+        for candidate in command_name_candidates(token) {
+            let base = candidate.to_ascii_lowercase();
+            if matches!(
+                base.as_str(),
+                "schtasks"
+                    | "schtasks.exe"
+                    | "wmic"
+                    | "wmic.exe"
+                    | "sc"
+                    | "sc.exe"
+                    | "at"
+                    | "at.exe"
+            ) {
+                forbidden = Some(base);
+                break 'scan;
+            }
         }
     }
     match forbidden {
@@ -865,8 +869,9 @@ fn is_rayman_command_name(name: &OsStr) -> bool {
 
 /// 控制组对一条命令文本的判定。
 ///
-/// 三分而不是二分，是因为“命令确实指向 rayman”与“命令只是用了评测器读不懂的展开语法”
-/// 是不同的事实，错误文案必须如实区分；两者都只拒绝该条命令，都不作废整轮 trial。
+/// 分成四类而不是二分，是因为“命令确实指向 rayman”“命令用了评测器读不懂的展开语法”
+/// “命令显式打开了延迟展开”是不同的事实，错误文案必须如实区分；三者都只拒绝该条命令，
+/// 都不作废整轮 trial。
 #[cfg_attr(not(windows), allow(dead_code))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ControlCommandVerdict {
@@ -876,25 +881,53 @@ enum ControlCommandVerdict {
     NamesRayman { evidence: String },
     /// 命令使用了评测器无法归约为字面量的 cmd 变量替换语法，无法证明它不触达 rayman。
     UnresolvableExpansion { evidence: String },
+    /// 命令显式打开了 cmd 延迟展开且含 `!`。`!VAR!` 在执行那一刻才取值，可以由同一行更早的
+    /// `set` 拼出任意命令名，评测器不归约它。
+    DelayedExpansion { evidence: String },
 }
 
-/// Windows command syntax is too rich for a complete portable parser, and `cmd` rewrites
-/// the command line (percent expansion, then caret escapes) before tokenizing it. The
-/// control arm therefore normalizes the text the way `cmd` would and applies the same
-/// conservative token check to every reachable spelling.
+/// Classify one control-arm command by the text `cmd` would actually execute.
 ///
-/// Earlier revisions rejected any command containing `%` or `^` at all. That made ordinary
-/// `cmd` syntax (`echo %CD%`, `if %ERRORLEVEL% neq 0 …`, `for /f %i in (…)`) unusable for the
-/// control arm only, which is a measurement bug: those refusals used to invalidate the whole
-/// trial and biased errors toward one arm. Expansion is now resolved against the exact
-/// environment the child would receive, so a benign percent sign is no longer evidence of
-/// anything, while a reference that names rayman — or whose value does — is still refused.
+/// **This is not a complete model of `cmd`, and no such claim should be made for it.** An
+/// earlier revision of this comment asserted it covered "every reachable spelling" and named
+/// the only residual gap as "a lone `%`". That was false, and an audit counted the false
+/// completeness claim itself as the defect: `cmd /V:ON /C "set p=…&set q=…&!p!!q!"` was
+/// classified `Allowed` and really did execute the installed rayman. What follows is the
+/// honest inventory.
 ///
-/// Residual, deliberately accepted gap: a lone `%` (a `for` loop variable, a literal percent)
-/// cannot be reduced to a literal because its value comes from runtime data. Those commands
-/// are allowed; the control arm still has rayman removed from `PATH`, still fails closed on
-/// any rayman-named command in the trial CWD before every spawn, and is still rescanned after
-/// the agent finishes. This is an integrity guard, not a shell sandbox.
+/// Modeled, because `cmd` rewrites the command line before tokenizing it:
+/// - caret escapes are removed (`^r^a^y^m^a^n`);
+/// - `%VAR%` is resolved against the exact environment the child would receive, so a
+///   reference that names rayman, or whose *value* does, is refused;
+/// - `%VAR:…%` substring/replace syntax is refused as unresolvable, since it can synthesize
+///   an arbitrary string from an arbitrary value;
+/// - every resulting spelling is tokenized with the shared `cmd` delimiter set
+///   (`CMD_NAME_TERMINATORS` / `strip_cmd_token_prefixes` / `command_name_candidates`),
+///   each measured character-by-character against a real `cmd`;
+/// - delayed expansion is refused rather than modeled — see `delayed_expansion_switch`.
+///   Reducing `!VAR!` would mean simulating `set` assignments and `cmd`'s two-phase
+///   expansion order across a compound line, i.e. rebuilding an interpreter; that is exactly
+///   the unbounded modeling that produced the false completeness claim in the first place.
+///   Delayed expansion is off by default, so its only command-line-reachable form carries an
+///   explicit `/V` opt-in, which is cheap and exact to detect.
+///
+/// Known and deliberately accepted gaps — the guard allows these:
+/// - a lone `%` (a `for` loop variable, a literal percent) cannot be reduced to a literal,
+///   because its value only exists at runtime;
+/// - the *contents* of a script the agent writes and then invokes are never inspected. The
+///   guard sees `build.cmd`, not what is inside it, and a batch file may enable delayed
+///   expansion and assemble any name it likes;
+/// - any route that reaches rayman without naming it in the command text at all — for
+///   example a program that resolves it on its own.
+///
+/// Refusals are kept narrow on purpose. An earlier revision rejected any command containing
+/// `%` or `^`, which made ordinary syntax (`echo %CD%`, `if %ERRORLEVEL% neq 0 …`,
+/// `for /f %i in (…)`) unusable for the control arm only. That is a measurement bug: those
+/// refusals invalidated whole trials and biased errors toward one arm.
+///
+/// So this is one layer of an integrity guard, not a shell sandbox. It is combined with
+/// rayman removed from the control arm's `PATH`, a fail-closed scan for any rayman-named
+/// command in the trial CWD before every spawn, and a rescan after the agent finishes.
 #[cfg(windows)]
 fn classify_control_command(
     command: &str,
@@ -920,6 +953,18 @@ fn classify_control_command(
             };
         }
     }
+    // `!` 与开关都出现才算证据：单独的 `!` 在 `cmd /C` 下是字面量，单独的 `/V:ON` 没有可展开
+    // 的引用。两者都要求，良性的 `echo Done!` 与不含 `!` 的 `/V:ON` 才不会被误拒。
+    for variant in &variants {
+        if !variant.contains('!') {
+            continue;
+        }
+        if let Some(switch) = delayed_expansion_switch(variant) {
+            return ControlCommandVerdict::DelayedExpansion {
+                evidence: format!("开关 `{switch}` 与 `!` 引用同时出现"),
+            };
+        }
+    }
     ControlCommandVerdict::Allowed
 }
 
@@ -934,19 +979,105 @@ fn classify_control_command(
     ControlCommandVerdict::Allowed
 }
 
+/// `cmd` 会在这些字符处结束一个命令名 token。
+///
+/// 取值来自在本机 cmd 上对 ASCII 0x01–0x7F 逐字符实测（前导位置与终止位置各扫一轮），
+/// 不是凭印象：除空白外（`char::is_whitespace` 已覆盖 TAB/LF/VT/FF/CR/SPACE，实测四种控制
+/// 字符都确实分隔），`cmd` 在 `&` `|` `;` `<` `>` `(` `)` `=` `,` 处结束命令名。
+///
+/// `,` 曾只写进 `reject_uncontained_launch` 而漏在 `rayman_naming_token` 之外，于是
+/// `,rayman` 整体成为一个 token 并绕过检测。这正是本常量存在的理由：同一语义只允许有一份
+/// 定义，两处守卫必须切分得一模一样。
+#[cfg(windows)]
+const CMD_NAME_TERMINATORS: &[char] = &['&', '|', ';', '<', '>', '(', ')', '=', ','];
+
+/// `cmd` 在命令名之前会吃掉的字符：引号，以及 `@`。
+///
+/// 实测 `@rayman`、`@@rayman`、`@"rayman"` 都会执行 rayman，而 `rayman@x` **不会**——`@`
+/// 只是前缀，不是分隔符，所以只从头部剥离。`^` 不在此列：它由 `strip_caret_escapes` 生成的
+/// 候选变体覆盖。
+#[cfg(windows)]
+fn strip_cmd_token_prefixes(token: &str) -> &str {
+    let quotes = |ch: char| matches!(ch, '\'' | '"' | '`');
+    token
+        .trim_matches(quotes)
+        .trim_start_matches('@')
+        .trim_matches(quotes)
+}
+
+/// 按 `cmd` 的命令名切分规则把命令文本拆成 token。两处守卫共用这一份实现。
+#[cfg(windows)]
+fn cmd_tokens(command: &str) -> impl Iterator<Item = &str> {
+    command
+        .split(|ch: char| ch.is_whitespace() || CMD_NAME_TERMINATORS.contains(&ch))
+        .map(strip_cmd_token_prefixes)
+        .filter(|token| !token.is_empty())
+}
+
+/// 一个 token 可能解析成的命令名候选。
+///
+/// `/` 的行为依赖上下文，实测两种都存在：`sub/probe` 执行的是 `sub`（`/` 结束了命令名，
+/// 余下部分成为参数 `/probe`），而 `C:\dir/probe` 执行的是 `C:\dir\probe`（token 已经是
+/// 路径时整体解析）。因此两种读法都必须检查——只查 basename 会漏掉 `rayman/x`，只查第一个
+/// `/` 之前的部分会漏掉 `C:\dir/rayman`。
+///
+/// 把 `/` 直接并入 `CMD_NAME_TERMINATORS` 也能堵住 `rayman/x`，但那会让 `type
+/// crates/rayman/src/main.rs` 这类纯参数路径被误判为提及 rayman；控制组的误拒会系统性地
+/// 把错误偏向一侧，正是本守卫要避免的。
+#[cfg(windows)]
+fn command_name_candidates(token: &str) -> [&str; 2] {
+    let basename = token.rsplit(['/', '\\']).next().unwrap_or(token);
+    let before_first_slash = token.split('/').next().unwrap_or(token);
+    [basename, before_first_slash]
+}
+
 /// 命令里第一个能命名 rayman 可执行文件/包装器的 token（按 `cmd` 的分隔符切分）。
 #[cfg(windows)]
 fn rayman_naming_token(command: &str) -> Option<&str> {
-    command
-        .split(|ch: char| {
-            ch.is_whitespace() || matches!(ch, '&' | '|' | ';' | '<' | '>' | '(' | ')' | '=')
-        })
-        .map(|token| token.trim_matches(|ch| matches!(ch, '\'' | '"' | '`')))
-        .filter(|token| !token.is_empty())
-        .find(|token| {
-            let base = token.rsplit(['/', '\\']).next().unwrap_or(token);
-            is_rayman_command_name(OsStr::new(base))
-        })
+    cmd_tokens(command).find(|token| {
+        command_name_candidates(token)
+            .into_iter()
+            .any(|name| is_rayman_command_name(OsStr::new(name)))
+    })
+}
+
+/// 命令是否显式打开了 cmd 延迟展开，若是则返回作为证据的开关写法。
+///
+/// 实测事实：`cmd /C` 下延迟展开**默认关闭**，`!p!` 只是字面量；命令行上唯一能打开它的写法
+/// 是给嵌套 `cmd` 传 `/V` 或 `/V:ON`（`/v:on` 等价，`/V:OFF` 不打开，`-V:ON` 无效）。
+/// 命令行上的 `setlocal enabledelayedexpansion` 实测**不**生效（只在批处理脚本内部生效），
+/// 但仍一并识别：它出现在命令文本里时，意图明确且代价为零。
+///
+/// 这里不做边界扫描以外的解析：只要文本里出现 `/v` 开关且该 token 不是 `/v:off`，就算打开。
+/// 不去判断这个 `/v` 是否真的挂在某个 `cmd` 上——那需要再引入一层拼写建模（`%COMSPEC%`、
+/// `c^m^d`、`start cmd …`），只会重新制造本次审计要消灭的那种“看起来完备”的解析。
+/// 代价是一处已知误拒：既用 `/V` 当开关、又含字面 `!` 的命令（如 `find /v "x" & echo hi!`）
+/// 会被拒。调用方只在文本同时含 `!` 时才查开关，所以 `echo Done!` 这类命令不受影响；
+/// 且被拒的单条命令不作废整轮 trial。
+#[cfg(windows)]
+fn delayed_expansion_switch(text: &str) -> Option<String> {
+    let lowered = text.to_ascii_lowercase();
+    if lowered.contains("enabledelayedexpansion") {
+        return Some("setlocal enabledelayedexpansion".to_string());
+    }
+    let mut cursor = 0;
+    while let Some(offset) = lowered[cursor..].find("/v") {
+        let start = cursor + offset;
+        let rest = &lowered[start + "/v".len()..];
+        if let Some(tail) = rest.strip_prefix(':') {
+            let value: String = tail
+                .chars()
+                .take_while(|ch| ch.is_ascii_alphanumeric())
+                .collect();
+            if value != "off" {
+                return Some(format!("/v:{value}"));
+            }
+        } else if !rest.starts_with(|ch: char| ch.is_ascii_alphanumeric()) {
+            return Some("/v".to_string());
+        }
+        cursor = start + "/v".len();
+    }
+    None
 }
 
 /// `cmd` 会吃掉未被引号保护的 `^` 并原样保留其后一个字符，因此 `^r^a^y^m^a^n` 会执行到
@@ -1249,6 +1380,125 @@ mod tests {
             );
             // 拒绝单条命令不等于整轮作废。
             assert_eq!(policy.control_isolation_loss(), None, "`{command}`");
+        }
+    }
+
+    /// 回归：`cmd` 在 `,` 和 `/` 处结束命令名，并吃掉命令名之前的 `@`（三者都在本机 cmd 上
+    /// 逐字符实测确认，见 `CMD_NAME_TERMINATORS` / `CMD_NAME_PREFIXES` 的注释）。
+    ///
+    /// 曾经 `rayman_naming_token` 的切分集漏了 `,`，于是 `,rayman` 整体成为一个 token、
+    /// basename 仍是 `,rayman`，命令被判 Allowed 并真的执行了当前目录里的 wrapper。创建—
+    /// 调用—删除发生在同一条复合命令里：spawn 前扫描时文件还不存在，postflight 扫描时它已被
+    /// 删除，因此这次逃逸从不 latch `control_isolation_loss`，该 trial 照常作为合法 control
+    /// 观测计入 pass/fail 与 observed_delta。
+    #[cfg(windows)]
+    #[test]
+    fn control_rejects_rayman_after_every_cmd_command_name_delimiter() {
+        for command in [
+            // 实测可逃逸的完整“创建—调用—删除”复合命令。
+            "echo @echo off > rayman.cmd &,rayman & del rayman.cmd",
+            "echo @echo off > rayman.cmd & @rayman & del rayman.cmd",
+            "echo @echo off > rayman.cmd & rayman/x & del rayman.cmd",
+            ",rayman",
+            ";rayman",
+            "=rayman",
+            "@rayman",
+            "@@rayman",
+            "@,rayman",
+            "@\"rayman\"",
+            "rayman/?",
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let policy = EnvPolicy::without_rayman();
+
+            let result = run_shell(dir.path(), command, &policy, RUN_TIMEOUT);
+
+            assert_eq!(
+                result.outcome,
+                GradeOutcome::InfrastructureError,
+                "`{command}` 必须被拒绝"
+            );
+            assert!(
+                result.stderr.contains("rayman 命令/包装器"),
+                "`{command}`: {}",
+                result.stderr
+            );
+            assert!(
+                !dir.path().join("rayman.cmd").exists(),
+                "`{command}`: 必须在 cmd 能创建 wrapper 之前就拒绝"
+            );
+            // 拒绝单条命令不等于整轮作废。
+            assert_eq!(policy.control_isolation_loss(), None, "`{command}`");
+        }
+    }
+
+    /// 切分语义曾在两处各写一遍，只有 `reject_uncontained_launch` 那份含 `,`。现在两处共用
+    /// 同一份定义，因此调度器守卫必须认出与 rayman token 扫描完全相同的写法。
+    #[cfg(windows)]
+    #[test]
+    fn uncontained_launch_guard_shares_the_delimiter_set_with_the_rayman_token_scan() {
+        for command in [
+            ",schtasks /create /tn x",
+            "@schtasks /create /tn x",
+            "echo x&,wmic process call create calc",
+            "@sc start something",
+            "echo x & at 10:00 calc",
+        ] {
+            assert!(
+                reject_uncontained_launch(command).is_err(),
+                "`{command}` 必须被拒绝"
+            );
+        }
+        assert!(reject_uncontained_launch("echo scheduled backup").is_ok());
+    }
+
+    /// 回归：`!VAR!` 延迟展开在 `cmd /C` 下默认关闭，命令行上唯一能打开它的写法是对嵌套
+    /// `cmd` 显式传 `/V` 或 `/V:ON`（`/v:on` 等价、`-V:ON` 无效，均已实测）。此前该守卫完全
+    /// 没有建模延迟展开，`cmd /V:ON /C "set p=…\ray&set q=man.exe&!p!!q! --version"` 被判
+    /// Allowed 并真的执行到了本机安装的 rayman。
+    #[cfg(windows)]
+    #[test]
+    fn control_rejects_delayed_expansion_that_can_assemble_a_rayman_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let policy = EnvPolicy::without_rayman();
+        for command in [
+            r#"cmd /V:ON /C "set p=ray&set q=man.exe&!p!!q! --version""#,
+            r#"cmd /v:on /C "set p=ray&set q=man.exe&!p!!q!""#,
+            r#"cmd /V /C "set p=ray&set q=man.exe&!p!!q!""#,
+            r#"cmd/V:ON /C "set p=ray&set q=man.exe&!p!!q!""#,
+            // 审计里实测打到本机真实 rayman 2.2.0 的原始 repro。
+            r#"cmd /V:ON /C "set p=%LOCALAPPDATA%\Rayman\bin\ray&set q=man.exe&!p!!q! --version""#,
+        ] {
+            assert!(
+                matches!(
+                    classify_control_command(command, &policy, dir.path()),
+                    ControlCommandVerdict::DelayedExpansion { .. }
+                ),
+                "`{command}` 必须被拒绝，实得 {:?}",
+                classify_control_command(command, &policy, dir.path())
+            );
+        }
+    }
+
+    /// 延迟展开的拒绝必须窄：没有显式开关的 `!`、以及没有 `!` 的 `/V:ON`，都不是证据。
+    /// 否则良性命令会被作废，正是上一轮修掉的那类测量偏差。
+    #[cfg(windows)]
+    #[test]
+    fn control_allows_bangs_without_the_switch_and_the_switch_without_bangs() {
+        let dir = tempfile::tempdir().unwrap();
+        let policy = EnvPolicy::without_rayman();
+        for command in [
+            "echo Done!",
+            "echo hello! & echo bye!",
+            "echo !not_expanded! stays literal",
+            r#"cmd /V:ON /C "echo no bang here""#,
+            r#"cmd /V:OFF /C "echo literal !p!""#,
+        ] {
+            assert_eq!(
+                classify_control_command(command, &policy, dir.path()),
+                ControlCommandVerdict::Allowed,
+                "`{command}` 是良性命令，不该被拒绝"
+            );
         }
     }
 

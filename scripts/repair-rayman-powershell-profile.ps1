@@ -80,6 +80,32 @@ function Get-ProfileEncoding {
     return [Text.UTF8Encoding]::new($false, $true)
 }
 
+function Assert-LosslessDecode {
+    param(
+        [byte[]]$Bytes,
+        [Text.Encoding]$Encoding,
+        [string]$Text,
+        [string]$Path
+    )
+
+    # ReadAllText consumes the byte-order mark, so compare against the body only.
+    $preamble = $Encoding.GetPreamble()
+    $body = $Bytes
+    if ($preamble.Length -gt 0 -and $Bytes.Length -ge $preamble.Length) {
+        $hasPreamble = $true
+        for ($i = 0; $i -lt $preamble.Length; $i++) {
+            if ($Bytes[$i] -ne $preamble[$i]) { $hasPreamble = $false; break }
+        }
+        if ($hasPreamble) {
+            $body = [byte[]]@($Bytes | Select-Object -Skip $preamble.Length)
+        }
+    }
+    $roundTrip = $Encoding.GetBytes($Text)
+    if (-not [Linq.Enumerable]::SequenceEqual([byte[]]$body, [byte[]]$roundTrip)) {
+        throw "PowerShell profile is not valid UTF-8 or UTF-16 and cannot be rewritten without corrupting it; remove the legacy rayman function by hand, or re-save the profile as UTF-8 first: $Path"
+    }
+}
+
 function Get-LegacyProfileMigration {
     param([string]$Path)
 
@@ -98,6 +124,11 @@ function Get-LegacyProfileMigration {
     } catch {
         throw "PowerShell profile is not valid UTF-8 or UTF-16 and cannot be rewritten without corrupting it; remove the legacy rayman function by hand, or re-save the profile as UTF-8 first: $resolved"
     }
+    # throwOnInvalidBytes is not sufficient on its own: UnicodeEncoding accepts an odd
+    # byte count and lone surrogates without throwing, so the UTF-16 branches would still
+    # decode lossily. Re-encoding and comparing is the only check that covers every branch
+    # — if the bytes do not round-trip, rewriting this file would silently destroy content.
+    Assert-LosslessDecode -Bytes $bytes -Encoding $encoding -Text $text -Path $resolved
     $extent = Get-RaymanFunctionExtent -Text $text -Label $resolved
     if ($null -eq $extent) {
         return [pscustomobject]@{ Needed = $false; Path = $resolved }
@@ -223,6 +254,32 @@ function Invoke-SelfTest {
         }
         if (-not [Linq.Enumerable]::SequenceEqual($bomBytes, [IO.File]::ReadAllBytes($bomCodePage))) {
             throw 'Profile migration self-test modified a BOM-prefixed non-UTF-8 profile instead of leaving it untouched.'
+        }
+
+        # UnicodeEncoding does not throw on an odd byte count or a lone surrogate, so the
+        # UTF-16 branches were fail-open until the round-trip check. Covering only UTF-8 is
+        # how the same hole survived a round of fixing.
+        $utf16 = [Text.UnicodeEncoding]::new($false, $true)
+        foreach ($case in @(
+                @{ Name = 'odd-length'; Tail = [byte[]]@(0x41) },
+                @{ Name = 'lone-surrogate'; Tail = [byte[]]@(0x00, 0xd8) }
+            )) {
+            $broken = Join-Path $testRoot ("utf16-" + $case.Name + ".ps1")
+            $brokenBytes = [byte[]](@(0xff, 0xfe) +
+                $utf16.GetBytes($nonAscii + $legacyFunction) + $case.Tail)
+            [IO.File]::WriteAllBytes($broken, $brokenBytes)
+            $utf16Rejected = $false
+            try {
+                Invoke-LegacyProfileMigration -Path $broken -ConfirmWrite
+            } catch {
+                $utf16Rejected = $_.Exception.Message -match 'not valid UTF-8 or UTF-16'
+            }
+            if (-not $utf16Rejected) {
+                throw "Profile migration self-test did not refuse a malformed UTF-16 profile ($($case.Name))."
+            }
+            if (-not [Linq.Enumerable]::SequenceEqual($brokenBytes, [IO.File]::ReadAllBytes($broken))) {
+                throw "Profile migration self-test modified a malformed UTF-16 profile ($($case.Name))."
+            }
         }
     } finally {
         if (Test-Path -LiteralPath $testRoot) {
