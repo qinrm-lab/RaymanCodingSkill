@@ -24,8 +24,16 @@ const BUILTIN_TASK_HASHES: &[(&str, &str)] = &[
         "54bf916baa83c8e9411414340d2205c671ebfa6798b2ec3375c71843697efebe",
     ),
     (
+        "audit-to-closure",
+        "c3ae923abfd23d3cc9663685105bf52e79dafc80147cb4e5fd152b46f1d3c6f2",
+    ),
+    (
         "edge-case-split",
         "45c4f17c9c6310d25ca5cd603b43ed59c9cb9d6e920e0d2487ef9da1f4fa2fa0",
+    ),
+    (
+        "emergent-risk-plan-extension",
+        "7418e16e5a49c1fa135491539efd54cbf32dee3681a940bf8103bcc9a5caa5a4",
     ),
     (
         "evidence-first-overflow",
@@ -36,12 +44,20 @@ const BUILTIN_TASK_HASHES: &[(&str, &str)] = &[
         "beaac5e4337ee279eeb40163c2b46f1f9e7e9562bd5ab5742a120a09f3fac58f",
     ),
     (
+        "human-boundary-solution-pack",
+        "19cdaab1d180ccdbbd1acaeb2905d85ef5341cd26ed354e0b827ecfb31fb46a2",
+    ),
+    (
         "large-repo-nav",
         "dfb278083b50b11c415bf8e852db82c57087019ec6b22878db8380622219b49d",
     ),
     (
         "remove-dead-code",
         "a087adbdd867d39d193bc2daedad993febb88e94fa0b3cdb5c51499fbc3bb141",
+    ),
+    (
+        "self-invalidating-gate",
+        "08b3a2cbb452a38770cdb7ad9d2e5552667a6a468ab5ba6ee874f8e289d70662",
     ),
 ];
 
@@ -488,8 +504,8 @@ mod tests {
             .collect::<Result<Vec<_>>>()
             .unwrap();
 
-        let authorization =
-            authorize_grade_execution(&tasks_root, None, &manifests, false).unwrap();
+        let authorization = authorize_grade_execution(&tasks_root, None, &manifests, false)
+            .unwrap_or_else(|error| panic!("{error}\nactual manifests: {manifests:#?}"));
 
         assert_eq!(authorization.mode, "trusted_builtin_manifest");
         assert_eq!(

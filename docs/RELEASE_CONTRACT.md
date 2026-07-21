@@ -7,7 +7,7 @@ The reported `rayman --version` value is necessary but insufficient. A valid rel
 1. The package version and MSRV in the root `Cargo.toml`. `crates/rayman/Cargo.toml` inherits those fields, so it cannot silently publish a different version.
 2. A clean `cargo build --locked --release` artifact for the target platform: `target/release/rayman` on Unix-like platforms and `target/release/rayman.exe` on Windows.
 3. The canonical repository `SKILL.md` and the SHA-256 recorded as `skill_sha256` in the target workspace's `.RaymanCodingSkill/workspace_skill.yaml`.
-4. The public command surface `workspace` (including path-safe Git-aware `workspace inspect`), `context`, `goal` (including receipt-producing `goal validate`), workspace-health and goal-bound `check`, locked `prepare` plus `finish`, `map`, `assets`, `temp`, read-only `state audit --check`, `checkpoint` (including integrity-verifying `checkpoint verify`), `autosave`, and `doctor`; the v2.2 workflow surface uses runtime report label `rayman-cli-contract-v6` and records both contract and version in activation. This surface is proven by the crate's behavioral tests (`crates/rayman/tests/cli.rs` plus in-crate unit tests) on every CI platform, not by scraping `--help` text in the release verifier.
+4. The public command surface `workspace` (including path-safe Git-aware `workspace inspect`), `context`, `goal` (including structured frontier/pending contracts, monotonic plan extension, and repeated-stable authority validation), workspace-health and goal-bound `check`, locked `prepare` plus `finish`, `map`, `assets`, `temp`, read-only `state audit --check`, `checkpoint` (including integrity-verifying `checkpoint verify`), `autosave`, and `doctor`; the v2.3 workflow surface uses runtime report label `rayman-cli-contract-v7` and records both contract and version in activation. This surface is proven by the crate's behavioral tests (`crates/rayman/tests/cli.rs` plus in-crate unit tests) on every CI platform, not by scraping `--help` text in the release verifier.
 5. For a tagged release, the exact Git tag `v<package-version>` on the release commit.
 
 The Rust manifest and the command parser are the implementation sources of truth. There are deliberately three different claims:
@@ -85,7 +85,7 @@ An intentionally different bootstrap wrapper is not the canonical skill and must
 
 ## Release tags
 
-After every source-fresh local smoke test and the normal test suite pass, create an exact tag matching the manifest, for example `v2.2.0`. CI always runs the source-fresh verifier; tag-triggered builds additionally run `-VerifyGitTag`, read the exact tag from Git, and cross-check GitHub's ref type, ref name, full ref, and SHA against that checked-out `HEAD`. Forged or inconsistent `GITHUB_REF_*` values never substitute for repository evidence. Existing historical non-semver tags are not retroactively claimed as releases under this contract.
+After every source-fresh local smoke test and the normal test suite pass, create an exact tag matching the manifest, for example `v2.3.0`. CI always runs the source-fresh verifier; tag-triggered builds additionally run `-VerifyGitTag`, read the exact tag from Git, and cross-check GitHub's ref type, ref name, full ref, and SHA against that checked-out `HEAD`. Forged or inconsistent `GITHUB_REF_*` values never substitute for repository evidence. Existing historical non-semver tags are not retroactively claimed as releases under this contract.
 
 ## One complete audit
 

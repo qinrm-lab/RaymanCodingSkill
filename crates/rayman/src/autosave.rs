@@ -1158,6 +1158,25 @@ mod tests {
             let root = dir.path();
             let goals = GoalStore::new(root);
             let goal = goals.start("t", &[("do".into(), true)]).unwrap();
+            if status == "blocked" {
+                PendingStore::new(root)
+                    .add_structured(crate::goal::PendingSubmission {
+                        title: "human boundary".into(),
+                        detail: "test boundary".into(),
+                        goal_id: Some(goal.id.clone()),
+                        owner: crate::goal::PendingOwner::Human,
+                        kind: crate::goal::PendingKind::HumanInput,
+                        attempts: vec!["attempted local path".into()],
+                        evidence_paths: vec!["evidence.txt".into()],
+                        minimum_input: Some("choose".into()),
+                        recommended_action: Some("choose A".into()),
+                        alternatives: vec!["choose B".into()],
+                        risk: Some("tradeoff".into()),
+                        resume_command: Some("rayman prepare --goal test".into()),
+                        auto_resume_condition: Some("choice recorded".into()),
+                    })
+                    .unwrap();
+            }
             goals.close(&goal.id, status).unwrap();
             assert!(!work_is_complete(root), "{status} must not auto-stop");
         }

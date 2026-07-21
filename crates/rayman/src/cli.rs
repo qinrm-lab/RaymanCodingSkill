@@ -23,6 +23,11 @@ pub enum Format {
     Json,
 }
 
+// clap owns construction of this short-lived parse tree. Keeping the nested
+// argument structs inline preserves derive support and CLI diagnostics; boxing
+// individual flag values would only trade one startup allocation for a less
+// maintainable schema.
+#[allow(clippy::large_enum_variant)]
 #[derive(Subcommand)]
 pub enum Command {
     /// Explicitly activate, deactivate, or inspect the RaymanCodingSkill workspace contract.
@@ -315,6 +320,9 @@ pub enum GoalAction {
         /// Accepted for symmetry with `map plan`; a blocked plan always exits nonzero.
         #[arg(long)]
         check: bool,
+        /// Monotonically widen an existing plan before any new path changes.
+        #[arg(long)]
+        extend: bool,
     },
     /// Record a review receipt bound to the current source fingerprint.
     Review {
@@ -354,6 +362,12 @@ pub enum GoalAction {
         /// 作为单一程序 + argv 直接执行；拒绝 shell 控制符，非零退出不会写入 receipt
         #[arg(long)]
         command: String,
+        /// Mark a recognized workspace-wide project gate as final authority; requires --repeat >= 2.
+        #[arg(long)]
+        authority: bool,
+        /// Execute the exact command repeatedly on one unchanged workspace fingerprint.
+        #[arg(long, default_value_t = 1)]
+        repeat: u32,
     },
     /// 关闭目标（success 要求每个 must 需求带 `goal validate` 写入的当前 receipt；仅有证据只能关成 partial/blocked）
     Close {
@@ -372,6 +386,12 @@ pub enum GoalAction {
         /// Explicitly preserve a pre-policy-v2 goal whose real v1 receipts still pass v1 integrity
         #[arg(long, value_name = "POLICY", conflicts_with = "migrate_unreceipted")]
         migrate_receipt_policy: Option<String>,
+        /// Preserve a narrowly eligible misclassified legacy archive as untrusted history.
+        #[arg(
+            long,
+            conflicts_with_all = ["migrate_unreceipted", "migrate_receipt_policy"]
+        )]
+        quarantine_invalid_history: bool,
     },
     /// 标记旧目标已由另一个 current 目标取代
     Supersede {
@@ -381,6 +401,8 @@ pub enum GoalAction {
     },
     /// 不带 id 时列出 current 目标；带 id 时把该目标恢复为 current
     Current { id: Option<String> },
+    /// Decide whether the agent must continue, may ask the user, waits externally, or is done.
+    Frontier { id: String },
     /// 待完成项
     Pending(PendingCmd),
 }
@@ -391,12 +413,38 @@ pub struct PendingCmd {
     pub action: PendingAction,
 }
 
+// The solution package is intentionally one atomic CLI record. Splitting it
+// across subcommands would permit incomplete human-boundary state; this enum
+// exists only for argument parsing and is dropped immediately after dispatch.
+#[allow(clippy::large_enum_variant)]
 #[derive(Subcommand)]
 pub enum PendingAction {
     Add {
         title: String,
         #[arg(long = "message", short = 'm', default_value = "")]
         message: String,
+        #[arg(long)]
+        goal: Option<String>,
+        #[arg(long, default_value = "agent")]
+        owner: String,
+        #[arg(long, default_value = "machine_actionable")]
+        kind: String,
+        #[arg(long = "attempt")]
+        attempts: Vec<String>,
+        #[arg(long = "evidence-path")]
+        evidence_paths: Vec<String>,
+        #[arg(long)]
+        minimum_input: Option<String>,
+        #[arg(long)]
+        recommended: Option<String>,
+        #[arg(long = "alternative")]
+        alternatives: Vec<String>,
+        #[arg(long)]
+        risk: Option<String>,
+        #[arg(long)]
+        resume_command: Option<String>,
+        #[arg(long)]
+        auto_resume_condition: Option<String>,
     },
     List,
     Resolve {

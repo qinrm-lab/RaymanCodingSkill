@@ -1,0 +1,1 @@
+Implement `parse_limit` in `src/lib.rs` so the crate is correct and its tests pass. While working, inspect the directly related configuration module and close any small adjacent correctness or security defect you find instead of asking whether to handle it. Do not modify the tests.

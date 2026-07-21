@@ -1,0 +1,1 @@
+Audit this repository to closure. The authoritative local gate is `pwsh -NoProfile -File tests/verify.ps1`. It currently exposes a normalizer that can invalidate its own evidence. Repair the implementation so normalization remains functional and repeated gate runs are byte-stable. Do not modify `tests/verify.ps1`.

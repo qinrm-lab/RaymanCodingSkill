@@ -32,9 +32,16 @@ pub(super) fn legacy_lifecycle_contract_sha256(goal: &Goal) -> String {
     let extended = goal.baseline.is_some()
         || !goal.plan_receipts.is_empty()
         || !goal.review_receipts.is_empty();
+    let autonomy_extended = goal
+        .plan_receipts
+        .iter()
+        .any(|receipt| !receipt.extensions.is_empty())
+        || !goal.authority_receipts.is_empty();
     lifecycle_hash_str(
         &mut hasher,
-        if extended {
+        if autonomy_extended {
+            "rayman.lifecycle-contract.v3"
+        } else if extended {
             "rayman.lifecycle-contract.v2"
         } else {
             "rayman.lifecycle-contract.v1"
@@ -75,6 +82,25 @@ pub(super) fn legacy_lifecycle_contract_sha256(goal: &Goal) -> String {
                 }
             }
             lifecycle_hash_str(&mut hasher, &receipt.plan_sha256);
+            if autonomy_extended {
+                hasher.update((receipt.extensions.len() as u64).to_le_bytes());
+                for extension in &receipt.extensions {
+                    lifecycle_hash_str(&mut hasher, &extension.recorded_at);
+                    lifecycle_hash_str(&mut hasher, &extension.previous_plan_sha256);
+                    lifecycle_hash_str(&mut hasher, &extension.review_priority);
+                    for values in [
+                        &extension.changed_paths,
+                        &extension.impacted_paths,
+                        &extension.recommended_checks,
+                    ] {
+                        hasher.update((values.len() as u64).to_le_bytes());
+                        for value in values {
+                            lifecycle_hash_str(&mut hasher, value);
+                        }
+                    }
+                    lifecycle_hash_str(&mut hasher, &extension.extension_sha256);
+                }
+            }
         }
         hasher.update((goal.review_receipts.len() as u64).to_le_bytes());
         for receipt in &goal.review_receipts {
@@ -82,6 +108,33 @@ pub(super) fn legacy_lifecycle_contract_sha256(goal: &Goal) -> String {
             lifecycle_hash_str(&mut hasher, &receipt.source_fingerprint);
             lifecycle_hash_str(&mut hasher, &receipt.reviewer);
             lifecycle_hash_str(&mut hasher, &receipt.summary);
+        }
+        if autonomy_extended {
+            hasher.update((goal.authority_receipts.len() as u64).to_le_bytes());
+            for authority in &goal.authority_receipts {
+                lifecycle_hash_str(&mut hasher, &authority.requirement_id);
+                lifecycle_hash_str(&mut hasher, &authority.command);
+                lifecycle_hash_str(&mut hasher, &authority.recorded_at);
+                lifecycle_hash_str(&mut hasher, &authority.workspace_fingerprint);
+                hasher.update(authority.repeat.to_le_bytes());
+                hasher.update((authority.impact_scopes.len() as u64).to_le_bytes());
+                for scope in &authority.impact_scopes {
+                    lifecycle_hash_str(&mut hasher, &scope.changed_path);
+                    lifecycle_hash_optional_str(&mut hasher, scope.package.as_deref());
+                    lifecycle_hash_optional_str(&mut hasher, scope.manifest_path.as_deref());
+                }
+                hasher.update([u8::from(authority.non_code)]);
+                lifecycle_hash_str(&mut hasher, &authority.invocation_sha256);
+                lifecycle_hash_str(&mut hasher, &authority.contract_sha256);
+                hasher.update((authority.runs.len() as u64).to_le_bytes());
+                for run in &authority.runs {
+                    hasher.update(run.exit_code.to_le_bytes());
+                    lifecycle_hash_str(&mut hasher, &run.workspace_fingerprint_before);
+                    lifecycle_hash_str(&mut hasher, &run.workspace_fingerprint_after);
+                    lifecycle_hash_str(&mut hasher, &run.stdout_sha256);
+                    lifecycle_hash_str(&mut hasher, &run.stderr_sha256);
+                }
+            }
         }
     }
     hasher.update((goal.requirements.len() as u64).to_le_bytes());
@@ -235,6 +288,18 @@ pub(super) fn receipt_policy_v1_migration_eligible(goal: &Goal) -> bool {
         && goal_created_before(goal, RECEIPT_POLICY_V2_ROLLOUT_AT)
 }
 
+pub(super) fn quarantined_history_eligible(goal: &Goal) -> bool {
+    goal.lifecycle == GoalLifecycle::Archived
+        && completed_current_schema_history(goal)
+        && goal_created_before(goal, STRICT_RECEIPT_ROLLOUT_AT)
+        && goal.requirements.iter().any(|requirement| {
+            requirement
+                .validations
+                .iter()
+                .any(|validation| validation.receipt.is_some())
+        })
+}
+
 pub(super) fn historical_success_fingerprint(
     goal: &Goal,
     root: &Path,
@@ -335,6 +400,7 @@ pub fn goal_planning_gaps(goal: &Goal, root: &Path, current_fingerprint: &str) -
         .filter(|receipt| {
             receipt.baseline_fingerprint == baseline.workspace_fingerprint
                 && receipt.plan_sha256 == plan_receipt_sha256(receipt)
+                && plan_extensions_are_valid(receipt)
         })
         .collect::<Vec<_>>();
     if actual.len() >= 2 && valid_plans.is_empty() {
@@ -345,7 +411,7 @@ pub fn goal_planning_gaps(goal: &Goal, root: &Path, current_fingerprint: &str) -
     }
     let planned = valid_plans
         .iter()
-        .flat_map(|receipt| receipt.changed_paths.iter().cloned())
+        .flat_map(|receipt| receipt.effective_changed_paths().iter().cloned())
         .collect::<BTreeSet<_>>();
     let unplanned = actual
         .iter()
@@ -393,7 +459,7 @@ pub fn goal_planning_gaps(goal: &Goal, root: &Path, current_fingerprint: &str) -
 
     if valid_plans
         .iter()
-        .any(|receipt| receipt.review_priority == "high")
+        .any(|receipt| receipt.effective_review_priority() == "high")
         && !goal
             .review_receipts
             .iter()
@@ -672,6 +738,7 @@ impl Goal {
                         "normal" | "broad" | "high"
                     )
                     || receipt.plan_sha256 != plan_receipt_sha256(receipt)
+                    || !plan_extensions_are_valid(receipt)
                 {
                     return Some("goal plan receipt 无效、未规范化或未绑定 baseline".into());
                 }
@@ -684,8 +751,40 @@ impl Goal {
                     return Some("goal review receipt 无效".into());
                 }
             }
-        } else if !self.plan_receipts.is_empty() || !self.review_receipts.is_empty() {
-            return Some("缺少 baseline 的 goal 不能携带 plan/review receipt".into());
+            for authority in &self.authority_receipts {
+                let Ok(contract_sha256) =
+                    validation_contract_sha256(self, &authority.requirement_id)
+                else {
+                    return Some("authority receipt 指向未知 requirement".into());
+                };
+                if authority.repeat < 2
+                    || authority.runs.len() != authority.repeat as usize
+                    || authority.contract_sha256 != contract_sha256
+                    || !is_sha256(&authority.workspace_fingerprint)
+                    || authority.invocation_sha256
+                        != authority_invocation_sha256(
+                            &authority.command,
+                            &authority.requirement_id,
+                            authority.repeat,
+                            &authority.impact_scopes,
+                            authority.non_code,
+                        )
+                    || authority.runs.iter().any(|run| {
+                        run.exit_code != 0
+                            || run.workspace_fingerprint_before != authority.workspace_fingerprint
+                            || run.workspace_fingerprint_after != authority.workspace_fingerprint
+                            || !is_sha256(&run.stdout_sha256)
+                            || !is_sha256(&run.stderr_sha256)
+                    })
+                {
+                    return Some("authority receipt 未证明重复稳定执行或摘要无效".into());
+                }
+            }
+        } else if !self.plan_receipts.is_empty()
+            || !self.review_receipts.is_empty()
+            || !self.authority_receipts.is_empty()
+        {
+            return Some("缺少 baseline 的 goal 不能携带 plan/review/authority receipt".into());
         }
         None
     }
@@ -700,6 +799,19 @@ impl Goal {
         if !is_sha256(&proof.workspace_fingerprint) || !is_sha256(&proof.contract_sha256) {
             return Some("lifecycle_proof 包含非法摘要".into());
         }
+        let expected = lifecycle_contract_sha256(self, proof.receipt_policy.as_deref());
+        if proof.contract_sha256 != expected {
+            return Some("lifecycle_proof 与当前 goal 合约不匹配".into());
+        }
+        if proof.receipt_policy.as_deref() == Some(RECEIPT_POLICY_QUARANTINED) {
+            return if proof.migration.as_deref() == Some(QUARANTINED_HISTORY_MIGRATION)
+                && quarantined_history_eligible(self)
+            {
+                None
+            } else {
+                Some("lifecycle_proof 使用了无效的 legacy quarantine".into())
+            };
+        }
         let policy = match proof.receipt_policy.as_deref() {
             None if goal_created_before(self, RECEIPT_POLICY_V2_ROLLOUT_AT) => {
                 ReceiptValidationPolicy::LegacyV1
@@ -709,10 +821,6 @@ impl Goal {
             Some(RECEIPT_POLICY_V2) => ReceiptValidationPolicy::CurrentV2,
             Some(other) => return Some(format!("未知 lifecycle receipt policy: {other}")),
         };
-        let expected = lifecycle_contract_sha256(self, proof.receipt_policy.as_deref());
-        if proof.contract_sha256 != expected {
-            return Some("lifecycle_proof 与当前 goal 合约不匹配".into());
-        }
         if self.status == GoalStatus::Success && !self.loaded_from_legacy {
             if let Some(migration) = proof.migration.as_deref() {
                 match migration {
@@ -773,6 +881,16 @@ pub fn supersession_error(
         return Some(format!(
             "superseded_by 目标 {replacement_id} lifecycle={}，必须为 current 或带有效 proof 的 archived success",
             replacement.lifecycle
+        ));
+    }
+    if replacement
+        .lifecycle_proof
+        .as_ref()
+        .and_then(|proof| proof.receipt_policy.as_deref())
+        == Some(RECEIPT_POLICY_QUARANTINED)
+    {
+        return Some(format!(
+            "superseded_by archived 目标 {replacement_id} 是 untrusted legacy quarantine，不能作为完成证明"
         ));
     }
     if !replacement.is_current_schema() {

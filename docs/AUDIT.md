@@ -1,5 +1,19 @@
 # Complete repository audit
 
+Under RaymanCodingSkill Owner Mode, an unqualified full-repository audit is an audit-to-closure task: inspect current evidence, repair safe in-scope findings, rerun the authoritative gates, and stop only at a stable pass or a structured human/external boundary. `只审计` / `只报告` / `不要修改` explicitly selects the read-only variant.
+
+During development, bind the final project gate to the task instead of running it as untracked prose evidence:
+
+```powershell
+rayman goal validate <id> --req <req-id> `
+  -m "authority gate stable twice" `
+  --command "pwsh -NoProfile -File <workspace-gate.ps1>" `
+  --changed <path> --authority --repeat 2
+rayman finish --goal <id>
+```
+
+An authority command is still a single direct executable plus argv. Inline/nested shells remain rejected. Authority is limited to a reviewed conventional repository gate (`check-repo`, `audit-repository`, or `verify-release-contract`), workspace-wide Cargo tests, or selector-free workspace pytest; an agent cannot promote an arbitrary focused command merely by adding `--authority`. Both runs must exit zero on the same workspace fingerprint; a normalizer, formatter, generator, or gate that changes indexed bytes writes no receipt. `finish` refuses a merely momentary PASS without that fixed-point proof.
+
 Run the complete audit from a PowerShell 7 (`pwsh`) session only, from a clean checkout after installing/upgrading through `scripts/install-rayman.ps1`:
 
 ```powershell

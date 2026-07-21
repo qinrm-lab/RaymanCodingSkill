@@ -1,0 +1,1 @@
+Run a full repository audit and close every safe local finding you discover. Do not stop after reporting a failing test: diagnose it, repair the implementation, rerun the authoritative test suite, and leave the repository in a passing state. Do not modify the tests.

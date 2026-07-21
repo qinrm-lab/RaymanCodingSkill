@@ -142,6 +142,37 @@ fn validate_goal(root: &Path, id: &str, req: &str, message: &str, changed: &[&st
     run_json(root, &args)
 }
 
+fn validate_goal_authority(
+    root: &Path,
+    id: &str,
+    req: &str,
+    message: &str,
+    changed: &[&str],
+) -> Value {
+    let command = "cargo test --workspace --all-targets".to_string();
+    let mut args = vec![
+        "goal",
+        "validate",
+        id,
+        "--req",
+        req,
+        "-m",
+        message,
+        "--command",
+        command.as_str(),
+        "--authority",
+        "--repeat",
+        "2",
+    ];
+    for path in changed {
+        args.extend(["--changed", *path]);
+    }
+    if changed.is_empty() {
+        args.push("--non-code");
+    }
+    run_json(root, &args)
+}
+
 fn write(dir: &Path, rel: &str, body: &str) {
     let path = dir.join(rel);
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -679,7 +710,7 @@ fn doctor_verifies_installed_identity_in_an_ordinary_managed_workspace() {
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
         &format!(
-            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v6\ncli_version: 2.2.0\n"
+            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v7\ncli_version: 2.3.0\n"
         ),
     );
     let binary = std::fs::canonicalize(BIN).unwrap();
@@ -714,7 +745,7 @@ fn doctor_rejects_an_earlier_windows_path_wrapper() {
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
         &format!(
-            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v6\ncli_version: 2.2.0\n"
+            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v7\ncli_version: 2.3.0\n"
         ),
     );
     let wrapper_dir = tempfile::tempdir().unwrap();
@@ -3157,7 +3188,17 @@ fn workspace_activation_contract_rejects_duplicate_and_unknown_fields() {
 fn task_bound_check_prepare_and_finish_distinguish_task_from_workspace_readiness() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    write(
+        root,
+        "Cargo.toml",
+        "[package]\nname = \"authority-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(
+        root,
+        "src/lib.rs",
+        "pub fn answer() -> i32 { 42 }\n#[test]\nfn answer_is_valid() { assert_eq!(answer(), 42); }\n",
+    );
+    generate_lockfile(root);
     run_json(root, &["context", "refresh"]);
 
     let unbound = run(
@@ -3191,7 +3232,11 @@ fn task_bound_check_prepare_and_finish_distinguish_task_from_workspace_readiness
     assert_eq!(prepared["ready"], true);
     assert_eq!(prepared["goal_id"], id);
 
-    write(root, "src/lib.rs", "pub fn answer() -> i32 { 43 }\n");
+    write(
+        root,
+        "src/lib.rs",
+        "pub fn answer() -> i32 { 43 }\n#[test]\nfn answer_is_valid() { assert_eq!(answer(), 43); }\n",
+    );
     run_json(root, &["context", "refresh"]);
     validate_goal(
         root,
@@ -3202,12 +3247,199 @@ fn task_bound_check_prepare_and_finish_distinguish_task_from_workspace_readiness
     );
     assert_eq!(run(root, &["goal", "close", id]).status, 0);
 
+    let no_authority = run(root, &["finish", "--goal", id]);
+    assert_eq!(no_authority.status, 1);
+    assert!(
+        no_authority.stderr.contains("稳定 authority receipt"),
+        "stderr={}",
+        no_authority.stderr
+    );
+    validate_goal_authority(
+        root,
+        id,
+        "req_1",
+        "authority gate stayed stable twice",
+        &["src/lib.rs"],
+    );
+
     let finished = run_json(root, &["finish", "--goal", id]);
     assert_eq!(finished["workspace_ready"], true);
     assert_eq!(finished["task"]["goal_id"], id);
     assert_eq!(finished["task"]["ready"], true);
     assert_eq!(finished["ready"], true);
     assert!(finished["context_refresh"].is_object());
+}
+
+#[test]
+fn goal_plan_extend_is_monotonic_and_rejects_post_hoc_changes() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    for name in ["a.txt", "b.txt", "c.txt"] {
+        write(root, name, "baseline");
+    }
+    run_json(root, &["context", "refresh"]);
+    let started = run_json(
+        root,
+        &["goal", "start", "expand", "--must", "finish safely"],
+    );
+    let id = started["id"].as_str().unwrap();
+    run_json(root, &["goal", "plan", id, "a.txt", "--check"]);
+    write(root, "a.txt", "planned change");
+    let extended = run_json(root, &["goal", "plan", id, "b.txt", "--check", "--extend"]);
+    let receipt = &extended["plan_receipts"][0];
+    assert_eq!(receipt["extensions"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        receipt["extensions"][0]["changed_paths"],
+        serde_json::json!(["a.txt", "b.txt"])
+    );
+
+    write(root, "c.txt", "already changed");
+    let rejected = run(root, &["goal", "plan", id, "c.txt", "--check", "--extend"]);
+    assert_eq!(rejected.status, 1);
+    assert!(rejected.stderr.contains("事后补票"), "{}", rejected.stderr);
+}
+
+#[test]
+fn frontier_requires_a_complete_solution_package_before_asking_user() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "README.md", "workspace");
+    run_json(root, &["context", "refresh"]);
+    let started = run_json(root, &["goal", "start", "owner", "--must", "finish"]);
+    let id = started["id"].as_str().unwrap();
+    let agent = run_json(
+        root,
+        &[
+            "goal",
+            "pending",
+            "add",
+            "local repair",
+            "-m",
+            "agent can still fix it",
+            "--goal",
+            id,
+        ],
+    );
+    let frontier = run_json(root, &["goal", "frontier", id]);
+    assert_eq!(frontier["decision"], "continue");
+    assert_eq!(frontier["ask_user_allowed"], false);
+    assert_eq!(
+        run(root, &["goal", "close", id, "--status", "blocked"]).status,
+        1
+    );
+    run(
+        root,
+        &["goal", "pending", "resolve", agent["id"].as_str().unwrap()],
+    );
+
+    let incomplete = run(
+        root,
+        &[
+            "goal",
+            "pending",
+            "add",
+            "choice",
+            "-m",
+            "business choice",
+            "--goal",
+            id,
+            "--owner",
+            "human",
+            "--kind",
+            "human_input",
+        ],
+    );
+    assert_eq!(incomplete.status, 1);
+    run_json(
+        root,
+        &[
+            "goal",
+            "pending",
+            "add",
+            "choice",
+            "-m",
+            "business choice",
+            "--goal",
+            id,
+            "--owner",
+            "human",
+            "--kind",
+            "human_input",
+            "--attempt",
+            "tested both variants",
+            "--evidence-path",
+            "reports/options.md",
+            "--minimum-input",
+            "choose A or B",
+            "--recommended",
+            "choose A",
+            "--alternative",
+            "choose B",
+            "--risk",
+            "A is safer; B is faster",
+            "--resume-command",
+            "rayman prepare --goal owner",
+            "--auto-resume-condition",
+            "choice recorded",
+        ],
+    );
+    let frontier = run_json(root, &["goal", "frontier", id]);
+    assert_eq!(frontier["decision"], "ask_user");
+    assert_eq!(frontier["ask_user_allowed"], true);
+    assert_eq!(
+        run(root, &["goal", "close", id, "--status", "blocked"]).status,
+        0
+    );
+}
+
+#[test]
+fn authority_validation_rejects_a_gate_that_mutates_the_workspace() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "data.txt", "baseline");
+    write(
+        root,
+        "Cargo.toml",
+        "[package]\nname = \"mutating-gate\"\nversion = \"0.1.0\"\nedition = \"2024\"\nbuild = \"build.rs\"\n",
+    );
+    write(root, "src/lib.rs", "#[test]\nfn smoke() {}\n");
+    write(
+        root,
+        "build.rs",
+        r#"fn main() { std::fs::write("data.txt", "mutated").unwrap(); }"#,
+    );
+    run_json(root, &["context", "refresh"]);
+    let started = run_json(root, &["goal", "start", "stable", "--must", "stable gate"]);
+    let id = started["id"].as_str().unwrap();
+    let command = "cargo test --workspace --all-targets";
+    let rejected = run(
+        root,
+        &[
+            "goal",
+            "validate",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "must stay stable",
+            "--command",
+            command,
+            "--changed",
+            "data.txt",
+            "--authority",
+            "--repeat",
+            "2",
+        ],
+    );
+    assert_eq!(rejected.status, 1);
+    assert!(
+        rejected.stderr.contains("workspace fingerprint 漂移")
+            || rejected.stderr.contains("修改了工作区内容"),
+        "{}",
+        rejected.stderr
+    );
+    let shown = run_json(root, &["goal", "show", id]);
+    assert!(shown["authority_receipts"].as_array().unwrap().is_empty());
 }
 
 #[test]

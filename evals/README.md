@@ -9,6 +9,8 @@
 
 A refused command is never handed to `cmd`, so the arm is still isolated afterwards: the refusal is returned to the agent as a failed tool call and the trial keeps running and is still graded. Only an actual `rayman`-named command observed inside the control trial workspace — before a spawn or by the post-agent scan — marks the trial as having lost isolation and excludes it from grading. Refusals used to invalidate the whole trial, which made errors accrue only to the arm that has this guard and biased the comparison.
 
+The built-in suite includes behavior-level Owner Mode scenarios in addition to narrow coding tasks: audit-to-closure, adjacent-risk expansion, a self-invalidating authority gate, and a genuine missing-token boundary that requires a structured solution package. Their deterministic grades test the resulting workspace/state, not the agent's narrative claim.
+
 Each task has a fixture, prompt, and grade command. Every task × condition × trial gets a fresh copy of the fixture, then the grade command decides pass/fail. Before either the model or grade can run, the evaluator hashes the completed trial copy with the same tree algorithm as the authorized task manifest and requires an exact `fixture_sha256` match. This closes the source verify→copy race for execution: a task changed before or during copying cannot be executed as the previously authorized input. `grade.txt` is hidden from the model prompt and file tools; it is **not** confidential from an unrestricted host shell. The repository's built-in task inputs are bound to a compiled SHA-256 manifest; an edited or copied task tree is not implicitly trusted.
 
 ## Safety boundary

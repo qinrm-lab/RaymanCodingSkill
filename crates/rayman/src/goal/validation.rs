@@ -606,6 +606,60 @@ pub fn validation_invocation_sha256_scoped(
     format!("{:x}", hasher.finalize())
 }
 
+pub fn authority_invocation_sha256(
+    command: &str,
+    requirement_id: &str,
+    repeat: u32,
+    impact_scopes: &[ValidationImpactScope],
+    non_code: bool,
+) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"rayman.authority-validation.v1");
+    hasher.update(validation_invocation_sha256_scoped(
+        command,
+        impact_scopes,
+        non_code,
+    ));
+    hasher.update([0]);
+    hasher.update(requirement_id.as_bytes());
+    hasher.update([0]);
+    hasher.update(repeat.to_le_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+pub fn has_current_stable_authority_receipt(
+    goal: &Goal,
+    root: &Path,
+    current_fingerprint: &str,
+) -> bool {
+    goal.authority_receipts.iter().any(|authority| {
+        let Ok(contract_sha256) = validation_contract_sha256(goal, &authority.requirement_id)
+        else {
+            return false;
+        };
+        authority.repeat >= 2
+            && authority.runs.len() == authority.repeat as usize
+            && authority.workspace_fingerprint == current_fingerprint
+            && authority.contract_sha256 == contract_sha256
+            && authority.invocation_sha256
+                == authority_invocation_sha256(
+                    &authority.command,
+                    &authority.requirement_id,
+                    authority.repeat,
+                    &authority.impact_scopes,
+                    authority.non_code,
+                )
+            && validate_authority_command(root, &authority.command).is_ok()
+            && authority.runs.iter().all(|run| {
+                run.exit_code == 0
+                    && run.workspace_fingerprint_before == current_fingerprint
+                    && run.workspace_fingerprint_after == current_fingerprint
+                    && is_sha256(&run.stdout_sha256)
+                    && is_sha256(&run.stderr_sha256)
+            })
+    })
+}
+
 #[derive(Serialize)]
 struct ImmutableRequirementContract<'a> {
     id: &'a str,
@@ -877,7 +931,7 @@ fn validation_matches_expectation(
             .is_some_and(|name| {
                 matches!(
                     name.to_ascii_lowercase().as_str(),
-                    "check-repo.ps1" | "verify-release-contract.ps1"
+                    "check-repo.ps1" | "audit-repository.ps1" | "verify-release-contract.ps1"
                 )
             })
     }) {
@@ -1002,7 +1056,7 @@ pub(super) fn command_is_workspace_wide(_root: &Path, command: &ParsedValidation
             .is_some_and(|name| {
                 matches!(
                     name.to_ascii_lowercase().as_str(),
-                    "check-repo.ps1" | "verify-release-contract.ps1"
+                    "check-repo.ps1" | "audit-repository.ps1" | "verify-release-contract.ps1"
                 )
             })
     }) || (cargo_subcommand(command).is_some()
@@ -1011,6 +1065,54 @@ pub(super) fn command_is_workspace_wide(_root: &Path, command: &ParsedValidation
             .iter()
             .any(|argument| matches!(argument.as_str(), "--workspace" | "--all")))
         || (pytest_invocation(command) && pytest_path_arguments(command).is_empty())
+}
+
+/// Authority receipts are stronger than ordinary validation receipts: the
+/// command must be an explicit repository gate, not merely a locally relevant
+/// build. Unknown ecosystems can opt in by exposing a reviewed workspace-local
+/// gate at one of the conventional script paths below.
+pub fn validate_authority_command(root: &Path, command: &str) -> Result<()> {
+    let parsed = parse_validation_command(command)?;
+    validate_command_security(root, &parsed)?;
+
+    let trusted_script = powershell_script(&parsed).is_some_and(|script| {
+        let lexical = if Path::new(script).is_absolute() {
+            PathBuf::from(script)
+        } else {
+            root.join(script)
+        };
+        let Ok(canonical_root) = root.canonicalize() else {
+            return false;
+        };
+        let Ok(canonical_script) = lexical.canonicalize() else {
+            return false;
+        };
+        let Ok(relative) = canonical_script.strip_prefix(canonical_root) else {
+            return false;
+        };
+        matches!(
+            normalized_path_text(&relative.to_string_lossy()).as_str(),
+            "check-repo.ps1"
+                | "audit-repository.ps1"
+                | "verify-release-contract.ps1"
+                | "scripts/check-repo.ps1"
+                | "scripts/audit-repository.ps1"
+                | "scripts/verify-release-contract.ps1"
+        )
+    });
+    let workspace_cargo_test = matches!(cargo_subcommand(&parsed), Some(("test", _)))
+        && parsed
+            .args
+            .iter()
+            .any(|argument| matches!(argument.as_str(), "--workspace" | "--all"));
+    let workspace_pytest = pytest_invocation(&parsed) && pytest_path_arguments(&parsed).is_empty();
+
+    if !trusted_script && !workspace_cargo_test && !workspace_pytest {
+        bail!(
+            "authority gate 必须是受检的 check-repo/audit-repository/verify-release-contract 脚本、`cargo test --workspace|--all`，或无路径选择器的全工作区 pytest"
+        );
+    }
+    Ok(())
 }
 
 fn validation_matches_impact(

@@ -1,7 +1,9 @@
-//! 最小目标契约 + 待完成项续接。
+//! 最小目标契约 + 自主推进边界。
 //!
-//! 只保留真正有用的那一条门禁：**关闭为 success 时，每个 `must` 需求都必须带证据**。
-//! 砍掉 counterexample_challenges / search_effort / claim_ledger 等仪式化元数据。
+//! 除了 success evidence gate，这里还保留三类直接影响交付真实性的状态：可单调
+//! 扩展但不能事后补票的计划、可重复且不改变工作区的 authority receipt，以及能
+//! 区分 agent/human/external owner 的结构化 blocker。它们都是本地确定性合同，
+//! 不在 CLI 内恢复旧版 LLM/runtime 编排。
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -22,14 +24,15 @@ const GOALS_DIR: &str = ".RaymanCodingSkill/goals";
 #[cfg(test)]
 const PENDING_PATH: &str = ".RaymanCodingSkill/pending.json";
 const GOALS_RELATIVE: &str = "goals";
-const PENDING_RELATIVE: &str = "pending.json";
 pub const GOAL_SCHEMA_VERSION: u32 = 2;
 const STRICT_RECEIPT_ROLLOUT_AT: &str = "2026-07-14T00:00:00Z";
 const PRE_RECEIPT_MIGRATION: &str = "pre_receipt_schema_v2";
 const RECEIPT_POLICY_V1: &str = "receipt_integrity_v1";
 const RECEIPT_POLICY_V2: &str = "receipt_integrity_v2";
+const RECEIPT_POLICY_QUARANTINED: &str = "untrusted_legacy_history_v1";
 const RECEIPT_POLICY_V2_ROLLOUT_AT: &str = "2026-07-18T04:34:13Z";
 const RECEIPT_POLICY_V1_MIGRATION: &str = "pre_receipt_policy_v2";
+const QUARANTINED_HISTORY_MIGRATION: &str = "invalid_legacy_receipts_quarantined";
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -200,6 +203,11 @@ pub struct ValidationReceiptSubmission {
     pub non_code: bool,
 }
 
+pub struct AuthorityReceiptSubmission {
+    pub validation: ValidationReceiptSubmission,
+    pub authority: AuthorityReceipt,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WorkspaceBaseline {
     pub recorded_at: String,
@@ -223,6 +231,22 @@ pub struct PlanReceipt {
     pub impacted_paths: Vec<String>,
     pub recommended_checks: Vec<String>,
     pub plan_sha256: String,
+    /// Monotonic cumulative snapshots. The base receipt above never changes;
+    /// every extension binds the previous effective hash and can only widen
+    /// paths/checks or increase review priority.
+    #[serde(default)]
+    pub extensions: Vec<PlanExtensionReceipt>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PlanExtensionReceipt {
+    pub recorded_at: String,
+    pub previous_plan_sha256: String,
+    pub changed_paths: Vec<String>,
+    pub review_priority: String,
+    pub impacted_paths: Vec<String>,
+    pub recommended_checks: Vec<String>,
+    pub extension_sha256: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -231,6 +255,29 @@ pub struct ReviewReceipt {
     pub source_fingerprint: String,
     pub reviewer: String,
     pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AuthorityRunReceipt {
+    pub exit_code: i32,
+    pub workspace_fingerprint_before: String,
+    pub workspace_fingerprint_after: String,
+    pub stdout_sha256: String,
+    pub stderr_sha256: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AuthorityReceipt {
+    pub requirement_id: String,
+    pub command: String,
+    pub recorded_at: String,
+    pub workspace_fingerprint: String,
+    pub repeat: u32,
+    pub impact_scopes: Vec<ValidationImpactScope>,
+    pub non_code: bool,
+    pub invocation_sha256: String,
+    pub contract_sha256: String,
+    pub runs: Vec<AuthorityRunReceipt>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -293,6 +340,8 @@ pub struct Goal {
     pub plan_receipts: Vec<PlanReceipt>,
     #[serde(default)]
     pub review_receipts: Vec<ReviewReceipt>,
+    #[serde(default)]
+    pub authority_receipts: Vec<AuthorityReceipt>,
     pub requirements: Vec<Requirement>,
     #[serde(default, skip)]
     pub loaded_from_legacy: bool,
@@ -305,9 +354,11 @@ pub struct ParsedValidationCommand {
 }
 
 mod lifecycle;
+mod pending;
 mod validation;
 
 pub use lifecycle::*;
+pub use pending::*;
 pub use validation::*;
 
 fn legacy_must_kind() -> String {
@@ -322,19 +373,6 @@ fn legacy_open_status() -> String {
 pub struct GoalLoadIssue {
     pub path: String,
     pub error: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct PendingList {
-    pub items: Vec<PendingItem>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PendingItem {
-    pub id: String,
-    pub title: String,
-    pub detail: String,
-    pub created_at: String,
 }
 
 pub struct GoalStore {
@@ -453,6 +491,132 @@ pub fn plan_receipt_sha256(receipt: &PlanReceipt) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+pub fn plan_extension_sha256(
+    baseline_fingerprint: &str,
+    extension: &PlanExtensionReceipt,
+) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"rayman.goal-plan-extension.v1");
+    hasher.update(baseline_fingerprint.as_bytes());
+    hasher.update(extension.previous_plan_sha256.as_bytes());
+    hasher.update(extension.review_priority.as_bytes());
+    hash_string_sequence(&mut hasher, &extension.changed_paths);
+    hash_string_sequence(&mut hasher, &extension.impacted_paths);
+    hash_string_sequence(&mut hasher, &extension.recommended_checks);
+    format!("{:x}", hasher.finalize())
+}
+
+fn review_priority_rank(priority: &str) -> Option<u8> {
+    match priority {
+        "normal" => Some(0),
+        "broad" => Some(1),
+        "high" => Some(2),
+        _ => None,
+    }
+}
+
+fn max_review_priority(left: &str, right: &str) -> Result<String> {
+    let left_rank = review_priority_rank(left)
+        .ok_or_else(|| anyhow::anyhow!("未知 review_priority: {left}"))?;
+    let right_rank = review_priority_rank(right)
+        .ok_or_else(|| anyhow::anyhow!("未知 review_priority: {right}"))?;
+    Ok(if left_rank >= right_rank { left } else { right }.to_string())
+}
+
+impl PlanReceipt {
+    pub fn effective_changed_paths(&self) -> &[String] {
+        self.extensions
+            .last()
+            .map(|extension| extension.changed_paths.as_slice())
+            .unwrap_or(&self.changed_paths)
+    }
+
+    pub fn effective_impacted_paths(&self) -> &[String] {
+        self.extensions
+            .last()
+            .map(|extension| extension.impacted_paths.as_slice())
+            .unwrap_or(&self.impacted_paths)
+    }
+
+    pub fn effective_recommended_checks(&self) -> &[String] {
+        self.extensions
+            .last()
+            .map(|extension| extension.recommended_checks.as_slice())
+            .unwrap_or(&self.recommended_checks)
+    }
+
+    pub fn effective_review_priority(&self) -> &str {
+        self.extensions
+            .last()
+            .map(|extension| extension.review_priority.as_str())
+            .unwrap_or(&self.review_priority)
+    }
+
+    pub fn effective_plan_sha256(&self) -> &str {
+        self.extensions
+            .last()
+            .map(|extension| extension.extension_sha256.as_str())
+            .unwrap_or(&self.plan_sha256)
+    }
+}
+
+pub fn plan_extensions_are_valid(receipt: &PlanReceipt) -> bool {
+    let mut previous_sha256 = receipt.plan_sha256.clone();
+    let mut previous_changed = receipt
+        .changed_paths
+        .iter()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let mut previous_impacted = receipt
+        .impacted_paths
+        .iter()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let mut previous_checks = receipt
+        .recommended_checks
+        .iter()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let Some(mut previous_priority) = review_priority_rank(&receipt.review_priority) else {
+        return false;
+    };
+    for extension in &receipt.extensions {
+        let mut changed = extension.changed_paths.clone();
+        let mut impacted = extension.impacted_paths.clone();
+        let mut checks = extension.recommended_checks.clone();
+        normalize_path_list(&mut changed);
+        normalize_path_list(&mut impacted);
+        checks.sort();
+        checks.dedup();
+        let changed_set = changed.iter().cloned().collect::<BTreeSet<_>>();
+        let impacted_set = impacted.iter().cloned().collect::<BTreeSet<_>>();
+        let checks_set = checks.iter().cloned().collect::<BTreeSet<_>>();
+        let Some(priority) = review_priority_rank(&extension.review_priority) else {
+            return false;
+        };
+        if extension.previous_plan_sha256 != previous_sha256
+            || changed != extension.changed_paths
+            || impacted != extension.impacted_paths
+            || checks != extension.recommended_checks
+            || !changed_set.is_superset(&previous_changed)
+            || changed_set == previous_changed
+            || !impacted_set.is_superset(&previous_impacted)
+            || !checks_set.is_superset(&previous_checks)
+            || priority < previous_priority
+            || extension.extension_sha256
+                != plan_extension_sha256(&receipt.baseline_fingerprint, extension)
+        {
+            return false;
+        }
+        previous_sha256 = extension.extension_sha256.clone();
+        previous_changed = changed_set;
+        previous_impacted = impacted_set;
+        previous_checks = checks_set;
+        previous_priority = priority;
+    }
+    true
+}
+
 impl GoalStore {
     pub fn new(root: impl Into<PathBuf>) -> Self {
         Self { root: root.into() }
@@ -523,6 +687,7 @@ impl GoalStore {
             baseline,
             plan_receipts: Vec::new(),
             review_receipts: Vec::new(),
+            authority_receipts: Vec::new(),
             requirements,
             loaded_from_legacy: false,
         };
@@ -575,6 +740,7 @@ impl GoalStore {
             impacted_paths: submission.impacted_paths,
             recommended_checks: submission.recommended_checks,
             plan_sha256: String::new(),
+            extensions: Vec::new(),
         };
         receipt.plan_sha256 = plan_receipt_sha256(&receipt);
         if let Some(existing) = goal.plan_receipts.first() {
@@ -589,6 +755,107 @@ impl GoalStore {
             );
         }
         goal.plan_receipts.push(receipt);
+        goal.updated_at = now_iso();
+        write_json(&path, &goal)?;
+        Ok(goal)
+    }
+
+    /// Widen an existing aggregate plan without allowing post-hoc coverage.
+    /// Already changed paths must be covered by the previous effective plan,
+    /// and every newly added path must still match the goal baseline.
+    pub fn extend_plan(&self, id: &str, mut submission: PlanReceiptSubmission) -> Result<Goal> {
+        if review_priority_rank(&submission.review_priority).is_none() {
+            bail!("未知 review_priority: {}", submission.review_priority);
+        }
+        normalize_path_list(&mut submission.changed_paths);
+        normalize_path_list(&mut submission.impacted_paths);
+        submission.recommended_checks.sort();
+        submission.recommended_checks.dedup();
+        if submission.changed_paths.is_empty() {
+            bail!("goal plan --extend 至少需要一个变更路径");
+        }
+
+        let path = self.goal_path(id)?;
+        let _lock = acquire_state_lock(&path)?;
+        let Some(mut goal) = Self::load_goal_file(&path)? else {
+            bail!("目标不存在: {id}");
+        };
+        if !goal.is_current_schema()
+            || goal.lifecycle != GoalLifecycle::Current
+            || goal.status != GoalStatus::Active
+        {
+            bail!("只有 current-schema active/current 目标可以扩展 plan");
+        }
+        let Some(baseline) = goal.baseline.as_ref() else {
+            bail!("目标缺少开工 baseline，不能扩展 plan");
+        };
+        if goal.plan_receipts.len() != 1 {
+            bail!("goal plan --extend 要求恰好一个基础聚合 plan receipt");
+        }
+        let receipt = goal.plan_receipts.first_mut().expect("checked one plan");
+        let existing = receipt
+            .effective_changed_paths()
+            .iter()
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let additions = submission
+            .changed_paths
+            .iter()
+            .filter(|candidate| !existing.contains(*candidate))
+            .cloned()
+            .collect::<Vec<_>>();
+        if additions.is_empty() {
+            return Ok(goal);
+        }
+
+        let current = workspace_baseline(&self.root)?;
+        let actual = workspace_delta(baseline, &current);
+        let prior_unplanned = actual
+            .iter()
+            .filter(|changed| !existing.contains(*changed))
+            .cloned()
+            .collect::<Vec<_>>();
+        if !prior_unplanned.is_empty() {
+            bail!(
+                "goal plan --extend 拒绝事后补票；已有未计划变更: {}",
+                prior_unplanned.join(", ")
+            );
+        }
+        for added in &additions {
+            match (baseline.files.get(added), current.files.get(added)) {
+                (Some(expected), Some(actual)) if expected == actual => {}
+                (None, None) => {}
+                _ => bail!("goal plan --extend 拒绝已发生变化的新路径: {added}"),
+            }
+        }
+
+        let mut changed_paths = receipt.effective_changed_paths().to_vec();
+        changed_paths.extend(additions);
+        normalize_path_list(&mut changed_paths);
+        let mut impacted_paths = receipt.effective_impacted_paths().to_vec();
+        impacted_paths.extend(submission.impacted_paths);
+        normalize_path_list(&mut impacted_paths);
+        let mut recommended_checks = receipt.effective_recommended_checks().to_vec();
+        recommended_checks.extend(submission.recommended_checks);
+        recommended_checks.sort();
+        recommended_checks.dedup();
+        let review_priority = max_review_priority(
+            receipt.effective_review_priority(),
+            &submission.review_priority,
+        )?;
+        let previous_plan_sha256 = receipt.effective_plan_sha256().to_string();
+        let mut extension = PlanExtensionReceipt {
+            recorded_at: now_iso(),
+            previous_plan_sha256,
+            changed_paths,
+            review_priority,
+            impacted_paths,
+            recommended_checks,
+            extension_sha256: String::new(),
+        };
+        extension.extension_sha256 =
+            plan_extension_sha256(&baseline.workspace_fingerprint, &extension);
+        receipt.extensions.push(extension);
         goal.updated_at = now_iso();
         write_json(&path, &goal)?;
         Ok(goal)
@@ -824,6 +1091,30 @@ impl GoalStore {
         req_id: &str,
         submission: ValidationReceiptSubmission,
     ) -> Result<Goal> {
+        self.record_validation_receipt_inner(id, req_id, submission, None)
+    }
+
+    pub fn record_authority_validation_receipt(
+        &self,
+        id: &str,
+        req_id: &str,
+        submission: AuthorityReceiptSubmission,
+    ) -> Result<Goal> {
+        self.record_validation_receipt_inner(
+            id,
+            req_id,
+            submission.validation,
+            Some(submission.authority),
+        )
+    }
+
+    fn record_validation_receipt_inner(
+        &self,
+        id: &str,
+        req_id: &str,
+        submission: ValidationReceiptSubmission,
+        authority: Option<AuthorityReceipt>,
+    ) -> Result<Goal> {
         let ValidationReceiptSubmission {
             evidence,
             command,
@@ -875,6 +1166,7 @@ impl GoalStore {
             .filter(|plan| {
                 plan.baseline_fingerprint == baseline.workspace_fingerprint
                     && plan.plan_sha256 == plan_receipt_sha256(plan)
+                    && plan_extensions_are_valid(plan)
             })
             .collect::<Vec<_>>();
         if actual.len() >= 2 && valid_plans.is_empty() {
@@ -885,7 +1177,7 @@ impl GoalStore {
         }
         let planned = valid_plans
             .iter()
-            .flat_map(|plan| plan.changed_paths.iter().cloned())
+            .flat_map(|plan| plan.effective_changed_paths().iter().cloned())
             .collect::<BTreeSet<_>>();
         let unplanned = actual
             .iter()
@@ -912,6 +1204,41 @@ impl GoalStore {
         if receipt.contract_sha256 != expected_contract {
             bail!("validation receipt 与 immutable goal/requirement contract 不匹配");
         }
+        if let Some(authority) = authority.as_ref() {
+            if authority.requirement_id != req_id
+                || authority.command != command
+                || authority.contract_sha256 != expected_contract
+                || authority.impact_scopes != impact_scopes
+                || authority.non_code != non_code
+            {
+                bail!("authority receipt 与 requirement/command/scope 合同不匹配");
+            }
+            if authority.repeat < 2 || authority.runs.len() != authority.repeat as usize {
+                bail!("authority receipt 必须包含至少两次完整稳定执行");
+            }
+            if authority.invocation_sha256
+                != authority_invocation_sha256(
+                    &command,
+                    req_id,
+                    authority.repeat,
+                    &impact_scopes,
+                    non_code,
+                )
+            {
+                bail!("authority receipt invocation hash 无效");
+            }
+            if authority.workspace_fingerprint != current.workspace_fingerprint
+                || authority.runs.iter().any(|run| {
+                    run.exit_code != 0
+                        || run.workspace_fingerprint_before != authority.workspace_fingerprint
+                        || run.workspace_fingerprint_after != authority.workspace_fingerprint
+                        || !is_sha256(&run.stdout_sha256)
+                        || !is_sha256(&run.stderr_sha256)
+                })
+            {
+                bail!("authority receipt 未证明同一 workspace fingerprint 上的重复稳定 PASS");
+            }
+        }
         let Some(req) = goal.requirements.iter_mut().find(|req| req.id == req_id) else {
             bail!("需求不存在: {req_id}");
         };
@@ -927,6 +1254,9 @@ impl GoalStore {
         });
         req.impacts.extend(impacts);
         req.status = RequirementStatus::Done;
+        if let Some(authority) = authority {
+            goal.authority_receipts.push(authority);
+        }
         goal.updated_at = now;
         write_json(&path, &goal)?;
         Ok(goal)
@@ -953,6 +1283,13 @@ impl GoalStore {
             bail!(
                 "目标 {id} lifecycle={}，不能关闭；先用 `goal current {id}` 恢复为 current",
                 goal.lifecycle
+            );
+        }
+        if status == GoalStatus::Blocked
+            && !PendingStore::new(&self.root).proven_non_agent_boundary(id)?
+        {
+            bail!(
+                "拒绝关闭为 blocked：必须先记录至少一个带完整解决方案包的 human/external pending，且不能仍有 agent-owned pending"
             );
         }
         if status == GoalStatus::Success {
@@ -1138,6 +1475,55 @@ impl GoalStore {
         Ok(goal)
     }
 
+    /// Repair one narrowly identifiable historical bookkeeping mistake without
+    /// promoting its receipts to trusted evidence. Early schema-v2 archives
+    /// could be labelled `pre_receipt_schema_v2` even though they contained
+    /// receipts that later failed integrity policy. The bytes are preserved,
+    /// the record remains archived, and the quarantine proof can never serve
+    /// as a successful supersession target.
+    pub fn quarantine_invalid_history(&self, id: &str, reason: &str) -> Result<Goal> {
+        if reason.trim().is_empty() {
+            bail!("隔离原因不能为空");
+        }
+        let path = self.goal_path(id)?;
+        let _lock = acquire_state_lock(&path)?;
+        let Some(mut goal) = Self::load_goal_file(&path)? else {
+            bail!("目标不存在: {id}");
+        };
+        if goal.lifecycle != GoalLifecycle::Archived || goal.status != GoalStatus::Success {
+            bail!("只允许隔离已归档的 legacy success 历史；current/未完成目标不能隐藏");
+        }
+        if let Some(error) = goal.current_schema_error() {
+            bail!("目标合约无效，不能隔离 historical receipt: {error}");
+        }
+        let Some(old_proof) = goal.lifecycle_proof.clone() else {
+            bail!("历史目标缺少旧 lifecycle proof，不能使用窄隔离迁移");
+        };
+        if old_proof.migration.as_deref() != Some(PRE_RECEIPT_MIGRATION)
+            || old_proof.receipt_policy.is_some()
+            || old_proof.contract_sha256 != legacy_lifecycle_contract_sha256(&goal)
+            || !is_sha256(&old_proof.workspace_fingerprint)
+            || !quarantined_history_eligible(&goal)
+        {
+            bail!(
+                "只允许隔离 rollout 前被误标为 pre_receipt_schema_v2、且仍含不可信 receipt 的完整 archived success"
+            );
+        }
+
+        goal.lifecycle_reason = Some(reason.trim().to_string());
+        goal.superseded_by = None;
+        goal.lifecycle_proof = None;
+        goal.updated_at = now_iso();
+        goal.lifecycle_proof = Some(issue_lifecycle_proof(
+            &goal,
+            old_proof.workspace_fingerprint,
+            Some(QUARANTINED_HISTORY_MIGRATION.to_string()),
+            Some(RECEIPT_POLICY_QUARANTINED.to_string()),
+        ));
+        write_json(&path, &goal)?;
+        Ok(goal)
+    }
+
     /// Mark one goal as historical because another current goal replaced it.
     pub fn supersede(&self, id: &str, replacement_id: &str) -> Result<Goal> {
         if id == replacement_id {
@@ -1301,62 +1687,10 @@ fn goal_from_legacy(legacy: LegacyGoal) -> Goal {
         baseline: None,
         plan_receipts: Vec::new(),
         review_receipts: Vec::new(),
+        authority_receipts: Vec::new(),
         updated_at,
         requirements,
         loaded_from_legacy: true,
-    }
-}
-
-pub struct PendingStore {
-    root: PathBuf,
-}
-
-impl PendingStore {
-    pub fn new(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
-    }
-
-    fn path(&self, create_parents: bool) -> Result<PathBuf> {
-        state_paths::managed_state_file(&self.root, Path::new(PENDING_RELATIVE), create_parents)
-    }
-
-    /// 损坏的 pending.json 必须报错：静默当空列表会让 check 放行，
-    /// 且下一次 add/resolve 的写回会用空列表覆盖销毁原有数据。
-    fn load(&self) -> Result<PendingList> {
-        Ok(read_json(&self.path(false)?)?.unwrap_or_default())
-    }
-
-    pub fn list(&self) -> Result<Vec<PendingItem>> {
-        Ok(self.load()?.items)
-    }
-
-    pub fn add(&self, title: &str, detail: &str) -> Result<PendingItem> {
-        let path = self.path(true)?;
-        let _lock = acquire_state_lock(&path)?;
-        let mut list = self.load()?;
-        let now = now_iso();
-        let item = PendingItem {
-            id: short_id("pending", &format!("{title}{now}{}", list.items.len())),
-            title: title.into(),
-            detail: detail.into(),
-            created_at: now,
-        };
-        list.items.push(item.clone());
-        write_json(&path, &list)?;
-        Ok(item)
-    }
-
-    pub fn resolve(&self, id: &str) -> Result<bool> {
-        let path = self.path(true)?;
-        let _lock = acquire_state_lock(&path)?;
-        let mut list = self.load()?;
-        let before = list.items.len();
-        list.items.retain(|item| item.id != id);
-        let removed = list.items.len() != before;
-        if removed {
-            write_json(&path, &list)?;
-        }
-        Ok(removed)
     }
 }
 

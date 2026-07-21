@@ -114,6 +114,7 @@ fn run(cli: Cli) -> Result<()> {
         Command::Prepare(cmd) => return task_workflow::run_prepare(&root, json, cmd),
 
         Command::Finish(cmd) => {
+            task_workflow::require_stable_authority(&root, &cmd.goal)?;
             return run_check(
                 &root,
                 json,
@@ -766,36 +767,50 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 }
             }
         }
-        GoalAction::Plan { id, paths, check } => {
+        GoalAction::Plan {
+            id,
+            paths,
+            check,
+            extend,
+        } => {
+            if extend {
+                // A legitimate extension normally happens after already planned
+                // files changed, which makes the old index stale by design.
+                // Refresh in-process before computing the new path impact.
+                context::refresh(root)?;
+            }
             let project_map = map::build_readonly(root)?;
             let report = map::change_plan(&project_map, &paths)?;
             if !report.ready {
                 let mode = if check { " --check" } else { "" };
                 bail!("goal plan{mode} blocked: {}", report.blockers.join("; "));
             }
-            let goal = store.record_plan(
-                &id,
-                goal::PlanReceiptSubmission {
-                    changed_paths: report.changed_paths,
-                    review_priority: report.review_priority,
-                    impacted_paths: report
-                        .impacted_files
-                        .iter()
-                        .map(|file| file.path.clone())
-                        .collect(),
-                    recommended_checks: report.recommended_checks,
-                },
-            )?;
+            let submission = goal::PlanReceiptSubmission {
+                changed_paths: report.changed_paths,
+                review_priority: report.review_priority,
+                impacted_paths: report
+                    .impacted_files
+                    .iter()
+                    .map(|file| file.path.clone())
+                    .collect(),
+                recommended_checks: report.recommended_checks,
+            };
+            let goal = if extend {
+                store.extend_plan(&id, submission)?
+            } else {
+                store.record_plan(&id, submission)?
+            };
             if json {
                 print(&serde_json::to_value(&goal)?);
             } else {
                 let receipt = goal.plan_receipts.last().expect("recorded plan");
                 println!(
-                    "goal {} plan receipt recorded: priority={} changed={} sha256={}",
+                    "goal {} plan receipt recorded: priority={} changed={} sha256={} extensions={}",
                     goal.id,
-                    receipt.review_priority,
-                    receipt.changed_paths.len(),
-                    receipt.plan_sha256
+                    receipt.effective_review_priority(),
+                    receipt.effective_changed_paths().len(),
+                    receipt.effective_plan_sha256(),
+                    receipt.extensions.len()
                 );
             }
         }
@@ -865,12 +880,26 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
             changed,
             non_code,
             command,
+            authority,
+            repeat,
         } => {
             if message.trim().is_empty() || command.trim().is_empty() {
                 bail!("`--message` 与 `--command` 都不能为空");
             }
+            if repeat == 0 || repeat > 10 {
+                bail!("--repeat 必须在 1..=10 范围内");
+            }
+            if authority && repeat < 2 {
+                bail!("--authority 要求 --repeat >= 2，以证明稳定固定点");
+            }
+            if !authority && repeat != 1 {
+                bail!("重复执行只用于 authority gate；请同时传 --authority");
+            }
             let impacts = impact_evidence_for_changed_paths(root, &changed)?;
             goal::validate_command_for_impacts(root, &command, &impacts, non_code)?;
+            if authority {
+                goal::validate_authority_command(root, &command)?;
+            }
             let parsed = goal::parse_validation_command(&command)?;
             let contract_sha256 = store.validation_contract_hash(&id, &req)?;
             let before = goal::workspace_fingerprint(root)?;
@@ -895,34 +924,57 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 } else {
                     (None, None, None)
                 };
-            let output = run_validation_command(root, &parsed)?;
-            let after = goal::workspace_fingerprint(root)?;
-            if !output.status.success() {
-                bail!(
-                    "验证命令失败（exit={}）；不会写入 receipt。stdout_sha256={} stderr_sha256={}",
-                    output.status.code().unwrap_or(-1),
-                    sha256_hex(&output.stdout),
-                    sha256_hex(&output.stderr)
-                );
+            let mut stable_runs = Vec::new();
+            let mut final_output = None;
+            let mut final_test_proof = None;
+            for run_index in 1..=repeat {
+                let run_before = goal::workspace_fingerprint(root)?;
+                if run_before != before {
+                    bail!(
+                        "authority validation 第 {run_index} 次运行前 workspace fingerprint 漂移；不会写入 receipt"
+                    );
+                }
+                let output = run_validation_command(root, &parsed)?;
+                let run_after = goal::workspace_fingerprint(root)?;
+                if !output.status.success() {
+                    bail!(
+                        "验证命令第 {run_index}/{repeat} 次失败（exit={}）；不会写入 receipt。stdout_sha256={} stderr_sha256={}",
+                        output.status.code().unwrap_or(-1),
+                        sha256_hex(&output.stdout),
+                        sha256_hex(&output.stderr)
+                    );
+                }
+                let test_proof = goal::validation_execution_proof(
+                    &parsed,
+                    &output.stdout,
+                    &output.stderr,
+                    listed_tests,
+                )?;
+                if run_before != run_after || run_after != before {
+                    bail!(
+                        "验证命令第 {run_index}/{repeat} 次修改了工作区内容；不会写入 receipt。before={} after={}",
+                        run_before,
+                        run_after
+                    );
+                }
+                stable_runs.push(goal::AuthorityRunReceipt {
+                    exit_code: output.status.code().unwrap_or(0),
+                    workspace_fingerprint_before: run_before,
+                    workspace_fingerprint_after: run_after,
+                    stdout_sha256: sha256_hex(&output.stdout),
+                    stderr_sha256: sha256_hex(&output.stderr),
+                });
+                final_test_proof = test_proof;
+                final_output = Some(output);
             }
-            let test_proof = goal::validation_execution_proof(
-                &parsed,
-                &output.stdout,
-                &output.stderr,
-                listed_tests,
-            )?;
-            if before != after {
-                bail!(
-                    "验证命令修改了工作区内容；不会写入 receipt。before={} after={}",
-                    before,
-                    after
-                );
-            }
+            let output = final_output.expect("repeat is nonzero");
+            let after = before.clone();
+            let test_proof = final_test_proof;
             let impact_scopes = goal::validation_scopes_for_impacts(&impacts);
             let receipt = goal::ValidationReceipt {
                 exit_code: output.status.code().unwrap_or(0),
                 cwd: root.display().to_string(),
-                workspace_fingerprint_before: before,
+                workspace_fingerprint_before: before.clone(),
                 workspace_fingerprint_after: after,
                 stdout_sha256: sha256_hex(&output.stdout),
                 stderr_sha256: sha256_hex(&output.stderr),
@@ -936,19 +988,44 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 ignored_tests: test_proof.map(|proof| proof.ignored),
                 list_stdout_sha256,
                 list_stderr_sha256,
-                contract_sha256,
+                contract_sha256: contract_sha256.clone(),
             };
-            let goal = store.record_validation_receipt(
-                &id,
-                &req,
-                goal::ValidationReceiptSubmission {
-                    evidence: message,
-                    command,
-                    receipt,
-                    impacts,
-                    non_code,
-                },
-            )?;
+            let submission = goal::ValidationReceiptSubmission {
+                evidence: message,
+                command: command.clone(),
+                receipt,
+                impacts,
+                non_code,
+            };
+            let goal = if authority {
+                store.record_authority_validation_receipt(
+                    &id,
+                    &req,
+                    goal::AuthorityReceiptSubmission {
+                        authority: goal::AuthorityReceipt {
+                            requirement_id: req.clone(),
+                            command: command.clone(),
+                            recorded_at: rayman::timefmt::now_iso(),
+                            workspace_fingerprint: before,
+                            repeat,
+                            impact_scopes: impact_scopes.clone(),
+                            non_code,
+                            invocation_sha256: goal::authority_invocation_sha256(
+                                &command,
+                                &req,
+                                repeat,
+                                &impact_scopes,
+                                non_code,
+                            ),
+                            contract_sha256: contract_sha256.clone(),
+                            runs: stable_runs,
+                        },
+                        validation: submission,
+                    },
+                )?
+            } else {
+                store.record_validation_receipt(&id, &req, submission)?
+            };
             if json {
                 print(&serde_json::to_value(&goal)?);
             } else {
@@ -968,13 +1045,18 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
             reason,
             migrate_unreceipted,
             migrate_receipt_policy,
+            quarantine_invalid_history,
         } => {
-            let goal = store.archive_with_receipt_policy(
-                &id,
-                &reason,
-                migrate_unreceipted,
-                migrate_receipt_policy.as_deref(),
-            )?;
+            let goal = if quarantine_invalid_history {
+                store.quarantine_invalid_history(&id, &reason)?
+            } else {
+                store.archive_with_receipt_policy(
+                    &id,
+                    &reason,
+                    migrate_unreceipted,
+                    migrate_receipt_policy.as_deref(),
+                )?
+            };
             if json {
                 print(&serde_json::to_value(&goal)?);
             } else {
@@ -1014,9 +1096,62 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 }
             }
         }
+        GoalAction::Frontier { id } => {
+            let Some(selected) = store.get(&id)? else {
+                bail!("目标不存在: {id}");
+            };
+            let report = pending.frontier(&selected)?;
+            if json {
+                print(&serde_json::to_value(&report)?);
+            } else {
+                println!(
+                    "goal {} frontier={:?} ask_user_allowed={} — {}",
+                    report.goal_id, report.decision, report.ask_user_allowed, report.reason
+                );
+                for blocker in report.blockers {
+                    println!(
+                        "  {} owner={} kind={} {}",
+                        blocker.id, blocker.owner, blocker.kind, blocker.title
+                    );
+                }
+            }
+        }
         GoalAction::Pending(PendingCmd { action }) => match action {
-            PendingAction::Add { title, message } => {
-                let item = pending.add(&title, &message)?;
+            PendingAction::Add {
+                title,
+                message,
+                goal: goal_id,
+                owner,
+                kind,
+                attempts,
+                evidence_paths,
+                minimum_input,
+                recommended,
+                alternatives,
+                risk,
+                resume_command,
+                auto_resume_condition,
+            } => {
+                if let Some(goal_id) = goal_id.as_deref()
+                    && store.get(goal_id)?.is_none()
+                {
+                    bail!("pending 绑定的 goal 不存在: {goal_id}");
+                }
+                let item = pending.add_structured(goal::PendingSubmission {
+                    title,
+                    detail: message,
+                    goal_id,
+                    owner: goal::PendingOwner::parse(&owner)?,
+                    kind: goal::PendingKind::parse(&kind)?,
+                    attempts,
+                    evidence_paths,
+                    minimum_input,
+                    recommended_action: recommended,
+                    alternatives,
+                    risk,
+                    resume_command,
+                    auto_resume_condition,
+                })?;
                 if json {
                     print(&serde_json::to_value(&item)?);
                 } else {

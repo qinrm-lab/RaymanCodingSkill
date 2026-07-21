@@ -398,6 +398,7 @@ fn relevance_requires_one_current_receipt_bound_to_command_and_impact() {
         baseline: None,
         plan_receipts: Vec::new(),
         review_receipts: Vec::new(),
+        authority_receipts: Vec::new(),
         requirements: vec![requirement.clone()],
         loaded_from_legacy: false,
     };
@@ -501,6 +502,46 @@ fn lifecycle_transitions_preserve_history_and_block_mutation_until_current() {
         Some(replacement.id.as_str())
     );
     assert!(old_path.is_file());
+}
+
+#[test]
+fn legacy_v2_lifecycle_hash_projection_remains_byte_compatible() {
+    let files = BTreeMap::from([("src/lib.rs".into(), "a".repeat(64))]);
+    let goal = Goal {
+        schema_version: GOAL_SCHEMA_VERSION,
+        id: "goal_legacy_v2_snapshot".into(),
+        title: "legacy v2 snapshot".into(),
+        status: GoalStatus::Success,
+        lifecycle: GoalLifecycle::Archived,
+        lifecycle_reason: Some("completed".into()),
+        superseded_by: None,
+        lifecycle_proof: None,
+        created_at: "2026-07-17T00:00:00Z".into(),
+        updated_at: "2026-07-17T01:00:00Z".into(),
+        baseline: Some(WorkspaceBaseline {
+            recorded_at: "2026-07-17T00:00:01Z".into(),
+            workspace_fingerprint: "b".repeat(64),
+            files,
+        }),
+        plan_receipts: Vec::new(),
+        review_receipts: Vec::new(),
+        authority_receipts: Vec::new(),
+        requirements: vec![Requirement {
+            id: "req_1".into(),
+            text: "preserve historical proof".into(),
+            kind: RequirementKind::Must,
+            status: RequirementStatus::Done,
+            evidence: Some("validated".into()),
+            validations: Vec::new(),
+            impacts: Vec::new(),
+        }],
+        loaded_from_legacy: false,
+    };
+
+    assert_eq!(
+        legacy_lifecycle_contract_sha256(&goal),
+        "a51199e8ce76a5be87cfc045412efe72428a5f12201b3413493937dcc54b20f4"
+    );
 }
 
 #[test]
@@ -715,6 +756,110 @@ fn historical_lifecycle_requires_a_bound_proof_and_explicit_old_schema_migration
     handwritten.lifecycle_reason = Some("handwritten".into());
     handwritten.lifecycle_proof = None;
     assert!(handwritten.current_schema_error().is_some());
+}
+
+#[test]
+fn invalid_legacy_receipt_quarantine_preserves_history_without_minting_proof() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = GoalStore::new(dir.path());
+    let started = store
+        .start(
+            "misclassified archive",
+            &[("preserve history".into(), true)],
+        )
+        .unwrap();
+    let path = dir
+        .path()
+        .join(GOALS_DIR)
+        .join(format!("{}.json", started.id));
+    let mut historical = GoalStore::load_goal_file(&path).unwrap().unwrap();
+    historical.created_at = "2026-07-11T00:00:00Z".into();
+    write_json(&path, &historical).unwrap();
+
+    let historical = GoalStore::load_goal_file(&path).unwrap().unwrap();
+    store
+        .record_validation_receipt(
+            &historical.id,
+            "req_1",
+            ValidationReceiptSubmission {
+                evidence: "legacy receipt exists".into(),
+                command: "echo validation-ok".into(),
+                receipt: successful_receipt(
+                    dir.path(),
+                    &historical,
+                    "req_1",
+                    "echo validation-ok",
+                    &[],
+                    true,
+                ),
+                impacts: Vec::new(),
+                non_code: true,
+            },
+        )
+        .unwrap();
+    store.close(&historical.id, "success").unwrap();
+    let archived = store
+        .archive(&historical.id, "original archive", false)
+        .unwrap();
+
+    // Reproduce the historical bookkeeping defect: a record containing real
+    // receipts was labelled as the no-receipt migration.
+    let mut misclassified = archived;
+    {
+        let proof = misclassified.lifecycle_proof.as_mut().unwrap();
+        proof.migration = Some(PRE_RECEIPT_MIGRATION.into());
+        proof.receipt_policy = None;
+    }
+    let legacy_contract = legacy_lifecycle_contract_sha256(&misclassified);
+    misclassified
+        .lifecycle_proof
+        .as_mut()
+        .unwrap()
+        .contract_sha256 = legacy_contract;
+    write_json(&path, &misclassified).unwrap();
+    assert!(
+        misclassified
+            .lifecycle_proof_error(dir.path())
+            .is_some_and(|error| error.contains("无效的历史迁移"))
+    );
+
+    let quarantined = store
+        .quarantine_invalid_history(&historical.id, "retain as untrusted history")
+        .unwrap();
+    let proof = quarantined.lifecycle_proof.as_ref().unwrap();
+    assert_eq!(
+        proof.receipt_policy.as_deref(),
+        Some(RECEIPT_POLICY_QUARANTINED)
+    );
+    assert_eq!(
+        proof.migration.as_deref(),
+        Some(QUARANTINED_HISTORY_MIGRATION)
+    );
+    assert_eq!(quarantined.lifecycle_proof_error(dir.path()), None);
+
+    let mut superseded = store
+        .start(
+            "must not hide work",
+            &[("finish current work".into(), true)],
+        )
+        .unwrap();
+    superseded.lifecycle = GoalLifecycle::Superseded;
+    superseded.superseded_by = Some(quarantined.id.clone());
+    let current_fingerprint = workspace_fingerprint(dir.path()).unwrap();
+    assert!(
+        supersession_error(
+            &superseded,
+            std::slice::from_ref(&quarantined),
+            dir.path(),
+            &current_fingerprint,
+        )
+        .is_some_and(|error| error.contains("untrusted legacy quarantine"))
+    );
+    assert!(
+        store
+            .quarantine_invalid_history(&superseded.id, "cannot hide current work")
+            .is_err()
+    );
 }
 
 #[test]
@@ -1028,6 +1173,202 @@ fn pending_roundtrip() {
 }
 
 #[test]
+fn structured_frontier_never_asks_while_agent_work_remains() {
+    let dir = tempfile::tempdir().unwrap();
+    let goals = GoalStore::new(dir.path());
+    let goal = goals
+        .start("owner task", &[("finish".into(), true)])
+        .unwrap();
+    let pending = PendingStore::new(dir.path());
+    let agent = pending.add("keep working", "local repair remains").unwrap();
+
+    let frontier = pending.frontier(&goal).unwrap();
+    assert_eq!(frontier.decision, FrontierDecision::Continue);
+    assert!(!frontier.ask_user_allowed);
+    assert!(goals.close(&goal.id, "blocked").is_err());
+    pending.resolve(&agent.id).unwrap();
+
+    assert!(
+        pending
+            .add_structured(PendingSubmission {
+                title: "need decision".into(),
+                detail: "two incompatible product choices".into(),
+                goal_id: Some(goal.id.clone()),
+                owner: PendingOwner::Human,
+                kind: PendingKind::HumanInput,
+                attempts: Vec::new(),
+                evidence_paths: Vec::new(),
+                minimum_input: None,
+                recommended_action: None,
+                alternatives: Vec::new(),
+                risk: None,
+                resume_command: None,
+                auto_resume_condition: None,
+            })
+            .is_err(),
+        "a human boundary without a solution package must fail closed"
+    );
+    pending
+        .add_structured(PendingSubmission {
+            title: "need decision".into(),
+            detail: "two incompatible product choices".into(),
+            goal_id: Some(goal.id.clone()),
+            owner: PendingOwner::Human,
+            kind: PendingKind::HumanInput,
+            attempts: vec!["tested both local variants".into()],
+            evidence_paths: vec!["reports/options.md".into()],
+            minimum_input: Some("choose A or B".into()),
+            recommended_action: Some("choose A".into()),
+            alternatives: vec!["choose B".into()],
+            risk: Some("A favors safety; B favors speed".into()),
+            resume_command: Some("rayman prepare --goal owner".into()),
+            auto_resume_condition: Some("resume when the choice is recorded".into()),
+        })
+        .unwrap();
+    let frontier = pending.frontier(&goal).unwrap();
+    assert_eq!(frontier.decision, FrontierDecision::AskUser);
+    assert!(frontier.ask_user_allowed);
+    assert_eq!(
+        goals.close(&goal.id, "blocked").unwrap().status,
+        GoalStatus::Blocked
+    );
+}
+
+#[test]
+fn plan_extension_is_monotonic_and_rejects_post_hoc_paths() {
+    let dir = tempfile::tempdir().unwrap();
+    for name in ["a.txt", "b.txt", "c.txt"] {
+        fs::write(dir.path().join(name), "baseline").unwrap();
+    }
+    let store = GoalStore::new(dir.path());
+    let goal = store
+        .start("expand safely", &[("done".into(), true)])
+        .unwrap();
+    store
+        .record_plan(
+            &goal.id,
+            PlanReceiptSubmission {
+                changed_paths: vec!["a.txt".into()],
+                review_priority: "normal".into(),
+                impacted_paths: vec!["a.txt".into()],
+                recommended_checks: vec!["check-a".into()],
+            },
+        )
+        .unwrap();
+    fs::write(dir.path().join("a.txt"), "changed as planned").unwrap();
+    let extended = store
+        .extend_plan(
+            &goal.id,
+            PlanReceiptSubmission {
+                changed_paths: vec!["b.txt".into()],
+                review_priority: "high".into(),
+                impacted_paths: vec!["b.txt".into()],
+                recommended_checks: vec!["check-b".into()],
+            },
+        )
+        .unwrap();
+    let receipt = &extended.plan_receipts[0];
+    assert_eq!(receipt.effective_changed_paths(), ["a.txt", "b.txt"]);
+    assert_eq!(receipt.effective_review_priority(), "high");
+    assert!(plan_extensions_are_valid(receipt));
+
+    fs::write(dir.path().join("c.txt"), "already changed").unwrap();
+    assert!(
+        store
+            .extend_plan(
+                &goal.id,
+                PlanReceiptSubmission {
+                    changed_paths: vec!["c.txt".into()],
+                    review_priority: "normal".into(),
+                    impacted_paths: vec!["c.txt".into()],
+                    recommended_checks: Vec::new(),
+                },
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("事后补票")
+    );
+}
+
+#[test]
+fn stable_authority_receipt_requires_two_identical_workspace_passes() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("lib.rs"), "pub fn value() -> i32 { 1 }").unwrap();
+    let store = GoalStore::new(dir.path());
+    let goal = store
+        .start("stable finish", &[("prove".into(), true)])
+        .unwrap();
+    fs::write(dir.path().join("lib.rs"), "pub fn value() -> i32 { 2 }").unwrap();
+    let command = "cargo test --workspace --all-targets";
+    let impacts = vec![impact("lib.rs")];
+    let impact_scopes = validation_scopes_for_impacts(&impacts);
+    let fingerprint = workspace_fingerprint(dir.path()).unwrap();
+    let contract_sha256 = validation_contract_sha256(&goal, "req_1").unwrap();
+    let runs = (0..2)
+        .map(|_| AuthorityRunReceipt {
+            exit_code: 0,
+            workspace_fingerprint_before: fingerprint.clone(),
+            workspace_fingerprint_after: fingerprint.clone(),
+            stdout_sha256: "a".repeat(64),
+            stderr_sha256: "b".repeat(64),
+        })
+        .collect::<Vec<_>>();
+    let authority = AuthorityReceipt {
+        requirement_id: "req_1".into(),
+        command: command.into(),
+        recorded_at: now_iso(),
+        workspace_fingerprint: fingerprint.clone(),
+        repeat: 2,
+        impact_scopes: impact_scopes.clone(),
+        non_code: false,
+        invocation_sha256: authority_invocation_sha256(command, "req_1", 2, &impact_scopes, false),
+        contract_sha256,
+        runs,
+    };
+    let completed = store
+        .record_authority_validation_receipt(
+            &goal.id,
+            "req_1",
+            AuthorityReceiptSubmission {
+                validation: ValidationReceiptSubmission {
+                    evidence: "stable twice".into(),
+                    command: command.into(),
+                    receipt: successful_receipt(
+                        dir.path(),
+                        &goal,
+                        "req_1",
+                        command,
+                        &impacts,
+                        false,
+                    ),
+                    impacts,
+                    non_code: false,
+                },
+                authority,
+            },
+        )
+        .unwrap();
+    let completed = store.close(&completed.id, "success").unwrap();
+    assert!(has_current_stable_authority_receipt(
+        &completed,
+        dir.path(),
+        &fingerprint
+    ));
+}
+
+#[test]
+fn authority_classification_rejects_a_focused_command_promoted_by_flag() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("lib.rs"), "pub fn value() -> i32 { 1 }").unwrap();
+
+    let rejected =
+        validate_authority_command(dir.path(), "rustc --crate-type lib lib.rs --out-dir target")
+            .unwrap_err();
+    assert!(rejected.to_string().contains("authority gate"));
+    assert!(validate_authority_command(dir.path(), "cargo test --workspace --all-targets").is_ok());
+}
+
+#[test]
 fn state_lock_contention_includes_windows_delete_and_share_transients() {
     assert!(is_state_lock_contention(&std::io::Error::from(
         std::io::ErrorKind::AlreadyExists
@@ -1129,6 +1470,55 @@ fn corrupt_pending_store_errors_instead_of_wiping() {
     assert!(store.add("new", "item").is_err());
     assert!(store.resolve("pending_x").is_err());
     assert_eq!(std::fs::read_to_string(&path).unwrap(), "{ not json");
+}
+
+#[test]
+fn pending_store_rejects_hand_tampered_owner_kind_contract() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = PendingStore::new(dir.path());
+    store.add("local repair", "agent can execute it").unwrap();
+    let path = dir.path().join(PENDING_PATH);
+    let mut tampered: PendingList = read_json(&path).unwrap().unwrap();
+    tampered.items[0].owner = PendingOwner::Human;
+    // A human-owned machine_actionable item would let hand-edited state turn
+    // executable agent work into a fake consultation boundary.
+    write_json(&path, &tampered).unwrap();
+    let original = fs::read(&path).unwrap();
+
+    assert!(store.list().is_err());
+    assert!(store.add("new", "must not overwrite").is_err());
+    assert!(store.resolve("pending_x").is_err());
+    assert_eq!(fs::read(&path).unwrap(), original);
+}
+
+#[test]
+fn pending_store_rejects_hand_tampered_incomplete_solution_package() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = PendingStore::new(dir.path());
+    let item = store
+        .add_structured(PendingSubmission {
+            title: "owner choice".into(),
+            detail: "two incompatible requirements".into(),
+            goal_id: None,
+            owner: PendingOwner::Human,
+            kind: PendingKind::HumanInput,
+            attempts: vec!["tested both variants".into()],
+            evidence_paths: vec!["reports/options.md".into()],
+            minimum_input: Some("choose A or B".into()),
+            recommended_action: Some("choose A".into()),
+            alternatives: vec!["choose B".into()],
+            risk: Some("B weakens safety".into()),
+            resume_command: Some("rayman prepare --goal goal_x".into()),
+            auto_resume_condition: Some("choice recorded".into()),
+        })
+        .unwrap();
+    let path = dir.path().join(PENDING_PATH);
+    let mut tampered: PendingList = read_json(&path).unwrap().unwrap();
+    tampered.items[0].recommended_action = None;
+    write_json(&path, &tampered).unwrap();
+
+    assert!(store.list().is_err());
+    assert!(store.resolve(&item.id).is_err());
 }
 
 #[test]

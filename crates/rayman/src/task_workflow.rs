@@ -49,6 +49,23 @@ pub(crate) fn run_prepare(root: &Path, json_output: bool, cmd: TaskWorkflowCmd) 
     Ok(())
 }
 
+/// `finish` is the delivery boundary, not another workspace-health probe. A
+/// current authority receipt must show the exact final workspace survived at
+/// least two executions of the same project gate without content drift.
+pub(crate) fn require_stable_authority(root: &Path, goal_id: &str) -> Result<()> {
+    let store = rayman::goal::GoalStore::new(root);
+    let Some(goal) = store.get(goal_id)? else {
+        bail!("绑定的 goal 不存在: {goal_id}");
+    };
+    let fingerprint = rayman::goal::workspace_fingerprint(root)?;
+    if !rayman::goal::has_current_stable_authority_receipt(&goal, root, &fingerprint) {
+        bail!(
+            "finish 要求当前稳定 authority receipt；先运行 `rayman goal validate {goal_id} --req <req> --message <evidence> --command <project-gate> --changed <path> --authority --repeat 2`"
+        );
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
