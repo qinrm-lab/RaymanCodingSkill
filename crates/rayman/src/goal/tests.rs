@@ -1185,6 +1185,8 @@ fn structured_frontier_never_asks_while_agent_work_remains() {
     let frontier = pending.frontier(&goal).unwrap();
     assert_eq!(frontier.decision, FrontierDecision::Continue);
     assert!(!frontier.ask_user_allowed);
+    assert_eq!(frontier.execution, FrontierExecution::ContinueForeground);
+    assert_eq!(frontier.consultation, FrontierConsultation::None);
     assert!(goals.close(&goal.id, "blocked").is_err());
     pending.resolve(&agent.id).unwrap();
 
@@ -1204,6 +1206,10 @@ fn structured_frontier_never_asks_while_agent_work_remains() {
                 risk: None,
                 resume_command: None,
                 auto_resume_condition: None,
+                consultation_timing: ConsultationTiming::Deferred,
+                background_mechanism: None,
+                background_authorized: false,
+                background_isolated: false,
             })
             .is_err(),
         "a human boundary without a solution package must fail closed"
@@ -1223,15 +1229,109 @@ fn structured_frontier_never_asks_while_agent_work_remains() {
             risk: Some("A favors safety; B favors speed".into()),
             resume_command: Some("rayman prepare --goal owner".into()),
             auto_resume_condition: Some("resume when the choice is recorded".into()),
+            consultation_timing: ConsultationTiming::Deferred,
+            background_mechanism: None,
+            background_authorized: false,
+            background_isolated: false,
         })
         .unwrap();
     let frontier = pending.frontier(&goal).unwrap();
     assert_eq!(frontier.decision, FrontierDecision::AskUser);
     assert!(frontier.ask_user_allowed);
+    assert_eq!(frontier.execution, FrontierExecution::PausedForUser);
+    assert_eq!(frontier.consultation, FrontierConsultation::Presented);
     assert_eq!(
         goals.close(&goal.id, "blocked").unwrap().status,
         GoalStatus::Blocked
     );
+}
+
+#[test]
+fn structured_frontier_keeps_presented_questions_out_of_foreground_progress() {
+    let dir = tempfile::tempdir().unwrap();
+    let goals = GoalStore::new(dir.path());
+    let goal = goals
+        .start("mixed frontier", &[("finish".into(), true)])
+        .unwrap();
+    let pending = PendingStore::new(dir.path());
+    pending
+        .add("safe repair", "independent local work")
+        .unwrap();
+
+    let human_submission = |timing, mechanism, authorized, isolated| PendingSubmission {
+        title: "need owner decision".into(),
+        detail: "two incompatible product requirements".into(),
+        goal_id: Some(goal.id.clone()),
+        owner: PendingOwner::Human,
+        kind: PendingKind::HumanInput,
+        attempts: vec!["tested both variants".into()],
+        evidence_paths: vec!["reports/options.md".into()],
+        minimum_input: Some("choose A or B".into()),
+        recommended_action: Some("choose A".into()),
+        alternatives: vec!["choose B".into()],
+        risk: Some("A is safer; B is faster".into()),
+        resume_command: Some("rayman prepare --goal mixed".into()),
+        auto_resume_condition: Some("choice recorded".into()),
+        consultation_timing: timing,
+        background_mechanism: mechanism,
+        background_authorized: authorized,
+        background_isolated: isolated,
+    };
+
+    let deferred = pending
+        .add_structured(human_submission(
+            ConsultationTiming::Deferred,
+            None,
+            false,
+            false,
+        ))
+        .unwrap();
+    let frontier = pending.frontier(&goal).unwrap();
+    assert_eq!(frontier.decision, FrontierDecision::Continue);
+    assert!(!frontier.ask_user_allowed);
+    assert_eq!(frontier.execution, FrontierExecution::ContinueForeground);
+    assert_eq!(frontier.consultation, FrontierConsultation::Deferred);
+    assert!(!frontier.background_execution_allowed);
+
+    assert!(
+        pending
+            .add_structured(human_submission(
+                ConsultationTiming::Immediate,
+                Some("worktree task".into()),
+                true,
+                false,
+            ))
+            .is_err(),
+        "partial background proof must fail closed"
+    );
+
+    let immediate = pending
+        .add_structured(human_submission(
+            ConsultationTiming::Immediate,
+            None,
+            false,
+            false,
+        ))
+        .unwrap();
+    let frontier = pending.frontier(&goal).unwrap();
+    assert_eq!(frontier.execution, FrontierExecution::PausedForUser);
+    assert_eq!(frontier.consultation, FrontierConsultation::Presented);
+    assert!(frontier.ask_user_allowed);
+    pending.resolve(&immediate.id).unwrap();
+
+    pending
+        .add_structured(human_submission(
+            ConsultationTiming::Immediate,
+            Some("isolated worktree task task_123".into()),
+            true,
+            true,
+        ))
+        .unwrap();
+    let frontier = pending.frontier(&goal).unwrap();
+    assert_eq!(frontier.execution, FrontierExecution::ContinueBackground);
+    assert_eq!(frontier.consultation, FrontierConsultation::Presented);
+    assert!(frontier.background_execution_allowed);
+    assert!(pending.resolve(&deferred.id).unwrap());
 }
 
 #[test]
@@ -1510,6 +1610,10 @@ fn pending_store_rejects_hand_tampered_incomplete_solution_package() {
             risk: Some("B weakens safety".into()),
             resume_command: Some("rayman prepare --goal goal_x".into()),
             auto_resume_condition: Some("choice recorded".into()),
+            consultation_timing: ConsultationTiming::Deferred,
+            background_mechanism: None,
+            background_authorized: false,
+            background_isolated: false,
         })
         .unwrap();
     let path = dir.path().join(PENDING_PATH);

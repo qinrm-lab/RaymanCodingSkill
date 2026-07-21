@@ -404,7 +404,7 @@ pub enum GoalAction {
     /// Decide whether the agent must continue, may ask the user, waits externally, or is done.
     Frontier { id: String },
     /// 待完成项
-    Pending(PendingCmd),
+    Pending(Box<PendingCmd>),
 }
 
 #[derive(Args)]
@@ -445,6 +445,14 @@ pub enum PendingAction {
         resume_command: Option<String>,
         #[arg(long)]
         auto_resume_condition: Option<String>,
+        #[arg(long, default_value = "deferred")]
+        consultation_timing: String,
+        #[arg(long)]
+        background_mechanism: Option<String>,
+        #[arg(long)]
+        background_authorized: bool,
+        #[arg(long)]
+        background_isolated: bool,
     },
     List,
     Resolve {

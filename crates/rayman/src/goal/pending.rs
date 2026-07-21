@@ -44,6 +44,14 @@ pub struct PendingItem {
     pub resume_command: Option<String>,
     #[serde(default)]
     pub auto_resume_condition: Option<String>,
+    #[serde(default)]
+    pub consultation_timing: ConsultationTiming,
+    #[serde(default)]
+    pub background_mechanism: Option<String>,
+    #[serde(default)]
+    pub background_authorized: bool,
+    #[serde(default)]
+    pub background_isolated: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -140,6 +148,28 @@ pub struct PendingSubmission {
     pub risk: Option<String>,
     pub resume_command: Option<String>,
     pub auto_resume_condition: Option<String>,
+    pub consultation_timing: ConsultationTiming,
+    pub background_mechanism: Option<String>,
+    pub background_authorized: bool,
+    pub background_isolated: bool,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ConsultationTiming {
+    #[default]
+    Deferred,
+    Immediate,
+}
+
+impl ConsultationTiming {
+    pub fn parse(value: &str) -> Result<Self> {
+        match value {
+            "deferred" => Ok(Self::Deferred),
+            "immediate" => Ok(Self::Immediate),
+            _ => bail!("未知 consultation timing: {value}（可用: deferred | immediate）"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -151,11 +181,32 @@ pub enum FrontierDecision {
     Complete,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum FrontierExecution {
+    ContinueForeground,
+    ContinueBackground,
+    PausedForUser,
+    WaitExternal,
+    Complete,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum FrontierConsultation {
+    None,
+    Deferred,
+    Presented,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FrontierReport {
     pub goal_id: String,
     pub decision: FrontierDecision,
     pub ask_user_allowed: bool,
+    pub execution: FrontierExecution,
+    pub consultation: FrontierConsultation,
+    pub background_execution_allowed: bool,
     pub reason: String,
     pub blockers: Vec<PendingItem>,
 }
@@ -208,6 +259,10 @@ impl PendingStore {
             risk: None,
             resume_command: None,
             auto_resume_condition: None,
+            consultation_timing: ConsultationTiming::Deferred,
+            background_mechanism: None,
+            background_authorized: false,
+            background_isolated: false,
         })
     }
 
@@ -241,8 +296,16 @@ impl PendingStore {
         submission.risk = trim_optional(submission.risk);
         submission.resume_command = trim_optional(submission.resume_command);
         submission.auto_resume_condition = trim_optional(submission.auto_resume_condition);
+        submission.background_mechanism = trim_optional(submission.background_mechanism);
 
         validate_pending_owner_kind(submission.owner, submission.kind)?;
+        validate_background_contract(
+            submission.owner,
+            submission.consultation_timing,
+            submission.background_mechanism.as_deref(),
+            submission.background_authorized,
+            submission.background_isolated,
+        )?;
         if submission.owner != PendingOwner::Agent {
             validate_solution_package(&submission)?;
         }
@@ -269,6 +332,10 @@ impl PendingStore {
             risk: submission.risk,
             resume_command: submission.resume_command,
             auto_resume_condition: submission.auto_resume_condition,
+            consultation_timing: submission.consultation_timing,
+            background_mechanism: submission.background_mechanism,
+            background_authorized: submission.background_authorized,
+            background_isolated: submission.background_isolated,
         };
         list.items.push(item.clone());
         write_json(&path, &list)?;
@@ -298,23 +365,66 @@ impl PendingStore {
                     .is_none_or(|goal_id| goal_id == goal.id)
             })
             .collect::<Vec<_>>();
-        let (decision, ask_user_allowed, reason) = if blockers
+        let has_agent = blockers
             .iter()
-            .any(|item| item.owner == PendingOwner::Agent)
-        {
-            (
-                FrontierDecision::Continue,
-                false,
-                "agent-owned work remains; continue without consulting the user".into(),
-            )
-        } else if blockers
+            .any(|item| item.owner == PendingOwner::Agent);
+        let human = blockers
             .iter()
-            .any(|item| item.owner == PendingOwner::Human)
+            .filter(|item| item.owner == PendingOwner::Human)
+            .collect::<Vec<_>>();
+        let immediate_human = human
+            .iter()
+            .copied()
+            .filter(|item| item.consultation_timing == ConsultationTiming::Immediate)
+            .collect::<Vec<_>>();
+        let present_human = !human.is_empty() && (!has_agent || !immediate_human.is_empty());
+        let background_execution_allowed = has_agent
+            && present_human
+            && immediate_human
+                .iter()
+                .all(|item| item.has_background_authority());
+        let (decision, ask_user_allowed, execution, consultation, reason) = if has_agent
+            && present_human
+            && background_execution_allowed
         {
             (
                 FrontierDecision::AskUser,
                 true,
-                "all machine-actionable work is exhausted; present the complete solution package"
+                FrontierExecution::ContinueBackground,
+                FrontierConsultation::Presented,
+                "present the immediate consultation as a stable user-facing handoff; only the recorded authorized isolated background mechanism may continue".into(),
+            )
+        } else if has_agent && present_human {
+            (
+                FrontierDecision::AskUser,
+                true,
+                FrontierExecution::PausedForUser,
+                FrontierConsultation::Presented,
+                "present the immediate consultation as the final foreground handoff and pause; no authorized isolated background mechanism is recorded".into(),
+            )
+        } else if has_agent && !human.is_empty() {
+            (
+                FrontierDecision::Continue,
+                false,
+                FrontierExecution::ContinueForeground,
+                FrontierConsultation::Deferred,
+                "finish bounded safe foreground work before presenting the recorded consultation; do not emit the question in transient progress output".into(),
+            )
+        } else if has_agent {
+            (
+                FrontierDecision::Continue,
+                false,
+                FrontierExecution::ContinueForeground,
+                FrontierConsultation::None,
+                "agent-owned work remains; continue safe foreground execution".into(),
+            )
+        } else if !human.is_empty() {
+            (
+                FrontierDecision::AskUser,
+                true,
+                FrontierExecution::PausedForUser,
+                FrontierConsultation::Presented,
+                "present the complete solution package as the final foreground handoff and pause"
                     .into(),
             )
         } else if blockers
@@ -324,18 +434,24 @@ impl PendingStore {
             (
                 FrontierDecision::WaitExternal,
                 false,
+                FrontierExecution::WaitExternal,
+                FrontierConsultation::None,
                 "waiting on an external condition with a recorded auto-resume strategy".into(),
             )
         } else if goal.status == GoalStatus::Success {
             (
                 FrontierDecision::Complete,
                 false,
+                FrontierExecution::Complete,
+                FrontierConsultation::None,
                 "goal is success and no pending blocker remains".into(),
             )
         } else {
             (
                 FrontierDecision::Continue,
                 false,
+                FrontierExecution::ContinueForeground,
+                FrontierConsultation::None,
                 "goal is not complete and no proven human boundary exists".into(),
             )
         };
@@ -343,6 +459,9 @@ impl PendingStore {
             goal_id: goal.id.clone(),
             decision,
             ask_user_allowed,
+            execution,
+            consultation,
+            background_execution_allowed,
             reason,
             blockers,
         })
@@ -376,6 +495,31 @@ fn validate_solution_package(submission: &PendingSubmission) -> Result<()> {
     {
         bail!(
             "human/external blocker 必须包含 attempts、evidence-path、minimum-input、recommended、alternative、risk、resume-command 与 auto-resume-condition"
+        );
+    }
+    Ok(())
+}
+
+fn validate_background_contract(
+    owner: PendingOwner,
+    consultation_timing: ConsultationTiming,
+    background_mechanism: Option<&str>,
+    background_authorized: bool,
+    background_isolated: bool,
+) -> Result<()> {
+    let any_background_claim =
+        background_mechanism.is_some() || background_authorized || background_isolated;
+    if !any_background_claim {
+        return Ok(());
+    }
+    if owner != PendingOwner::Human
+        || consultation_timing != ConsultationTiming::Immediate
+        || background_mechanism.is_none()
+        || !background_authorized
+        || !background_isolated
+    {
+        bail!(
+            "后台继续必须绑定 immediate human consultation，并同时记录非空 background-mechanism、--background-authorized 与 --background-isolated"
         );
     }
     Ok(())
@@ -449,12 +593,20 @@ impl PendingItem {
                 "auto_resume_condition",
                 self.auto_resume_condition.as_deref(),
             ),
+            ("background_mechanism", self.background_mechanism.as_deref()),
         ] {
             if value.is_some_and(|value| value.trim().is_empty()) {
                 bail!("{label} 不能是空字符串");
             }
         }
         validate_pending_owner_kind(self.owner, self.kind)?;
+        validate_background_contract(
+            self.owner,
+            self.consultation_timing,
+            self.background_mechanism.as_deref(),
+            self.background_authorized,
+            self.background_isolated,
+        )?;
         if self.owner != PendingOwner::Agent && !self.has_complete_solution_package() {
             bail!("human/external blocker 缺少完整 solution package，不能作为咨询或等待边界");
         }
@@ -486,5 +638,15 @@ impl PendingItem {
                     .auto_resume_condition
                     .as_deref()
                     .is_some_and(|value| !value.trim().is_empty()))
+    }
+
+    fn has_background_authority(&self) -> bool {
+        self.consultation_timing == ConsultationTiming::Immediate
+            && self
+                .background_mechanism
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty())
+            && self.background_authorized
+            && self.background_isolated
     }
 }

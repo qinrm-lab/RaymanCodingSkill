@@ -14,8 +14,8 @@ use sha2::{Digest, Sha256};
 use cli::{
     AutosaveAction, AutosaveCmd, CheckCmd, CheckProfile, CheckpointAction, CheckpointCmd, Cli,
     Command, ContextAction, ContextCmd, Format, GoalAction, GoalCmd, MapAction, MapCmd,
-    PendingAction, PendingCmd, QualityProfile, StateAction, StateCmd, TempAction, TempCmd,
-    WorkspaceAction, WorkspaceCmd,
+    PendingAction, QualityProfile, StateAction, StateCmd, TempAction, TempCmd, WorkspaceAction,
+    WorkspaceCmd,
 };
 use rayman::{
     assets, autosave, checkpoint, context, goal, map, source_state, temp, workspace, workspace_root,
@@ -1105,8 +1105,14 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 print(&serde_json::to_value(&report)?);
             } else {
                 println!(
-                    "goal {} frontier={:?} ask_user_allowed={} — {}",
-                    report.goal_id, report.decision, report.ask_user_allowed, report.reason
+                    "goal {} frontier={:?} execution={:?} consultation={:?} ask_user_allowed={} background_execution_allowed={} — {}",
+                    report.goal_id,
+                    report.decision,
+                    report.execution,
+                    report.consultation,
+                    report.ask_user_allowed,
+                    report.background_execution_allowed,
+                    report.reason
                 );
                 for blocker in report.blockers {
                     println!(
@@ -1116,7 +1122,7 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 }
             }
         }
-        GoalAction::Pending(PendingCmd { action }) => match action {
+        GoalAction::Pending(pending_cmd) => match pending_cmd.action {
             PendingAction::Add {
                 title,
                 message,
@@ -1131,6 +1137,10 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 risk,
                 resume_command,
                 auto_resume_condition,
+                consultation_timing,
+                background_mechanism,
+                background_authorized,
+                background_isolated,
             } => {
                 if let Some(goal_id) = goal_id.as_deref()
                     && store.get(goal_id)?.is_none()
@@ -1151,6 +1161,10 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                     risk,
                     resume_command,
                     auto_resume_condition,
+                    consultation_timing: goal::ConsultationTiming::parse(&consultation_timing)?,
+                    background_mechanism,
+                    background_authorized,
+                    background_isolated,
                 })?;
                 if json {
                     print(&serde_json::to_value(&item)?);

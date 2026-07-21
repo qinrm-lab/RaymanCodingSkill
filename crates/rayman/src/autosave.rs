@@ -1174,6 +1174,10 @@ mod tests {
                         risk: Some("tradeoff".into()),
                         resume_command: Some("rayman prepare --goal test".into()),
                         auto_resume_condition: Some("choice recorded".into()),
+                        consultation_timing: crate::goal::ConsultationTiming::Deferred,
+                        background_mechanism: None,
+                        background_authorized: false,
+                        background_isolated: false,
                     })
                     .unwrap();
             }

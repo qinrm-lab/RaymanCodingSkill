@@ -3323,6 +3323,8 @@ fn frontier_requires_a_complete_solution_package_before_asking_user() {
     let frontier = run_json(root, &["goal", "frontier", id]);
     assert_eq!(frontier["decision"], "continue");
     assert_eq!(frontier["ask_user_allowed"], false);
+    assert_eq!(frontier["execution"], "continue_foreground");
+    assert_eq!(frontier["consultation"], "none");
     assert_eq!(
         run(root, &["goal", "close", id, "--status", "blocked"]).status,
         1
@@ -3386,10 +3388,170 @@ fn frontier_requires_a_complete_solution_package_before_asking_user() {
     let frontier = run_json(root, &["goal", "frontier", id]);
     assert_eq!(frontier["decision"], "ask_user");
     assert_eq!(frontier["ask_user_allowed"], true);
+    assert_eq!(frontier["execution"], "paused_for_user");
+    assert_eq!(frontier["consultation"], "presented");
     assert_eq!(
         run(root, &["goal", "close", id, "--status", "blocked"]).status,
         0
     );
+}
+
+#[test]
+fn frontier_requires_complete_background_authority_before_presented_parallel_work() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "README.md", "workspace");
+    run_json(root, &["context", "refresh"]);
+    let started = run_json(root, &["goal", "start", "mixed", "--must", "finish"]);
+    let id = started["id"].as_str().unwrap();
+    run_json(
+        root,
+        &[
+            "goal",
+            "pending",
+            "add",
+            "local repair",
+            "-m",
+            "safe work",
+            "--goal",
+            id,
+        ],
+    );
+
+    let partial = run(
+        root,
+        &[
+            "goal",
+            "pending",
+            "add",
+            "urgent choice",
+            "-m",
+            "owner input",
+            "--goal",
+            id,
+            "--owner",
+            "human",
+            "--kind",
+            "human_input",
+            "--attempt",
+            "tested both",
+            "--evidence-path",
+            "reports/options.md",
+            "--minimum-input",
+            "choose A or B",
+            "--recommended",
+            "choose A",
+            "--alternative",
+            "choose B",
+            "--risk",
+            "tradeoff",
+            "--resume-command",
+            "rayman prepare --goal mixed",
+            "--auto-resume-condition",
+            "choice recorded",
+            "--consultation-timing",
+            "immediate",
+            "--background-mechanism",
+            "worktree task",
+            "--background-authorized",
+        ],
+    );
+    assert_eq!(partial.status, 1);
+
+    let immediate = run_json(
+        root,
+        &[
+            "goal",
+            "pending",
+            "add",
+            "urgent choice",
+            "-m",
+            "owner input",
+            "--goal",
+            id,
+            "--owner",
+            "human",
+            "--kind",
+            "human_input",
+            "--attempt",
+            "tested both",
+            "--evidence-path",
+            "reports/options.md",
+            "--minimum-input",
+            "choose A or B",
+            "--recommended",
+            "choose A",
+            "--alternative",
+            "choose B",
+            "--risk",
+            "tradeoff",
+            "--resume-command",
+            "rayman prepare --goal mixed",
+            "--auto-resume-condition",
+            "choice recorded",
+            "--consultation-timing",
+            "immediate",
+        ],
+    );
+    let frontier = run_json(root, &["goal", "frontier", id]);
+    assert_eq!(frontier["decision"], "ask_user");
+    assert_eq!(frontier["execution"], "paused_for_user");
+    assert_eq!(frontier["consultation"], "presented");
+    assert_eq!(frontier["background_execution_allowed"], false);
+    run(
+        root,
+        &[
+            "goal",
+            "pending",
+            "resolve",
+            immediate["id"].as_str().unwrap(),
+        ],
+    );
+
+    run_json(
+        root,
+        &[
+            "goal",
+            "pending",
+            "add",
+            "urgent choice",
+            "-m",
+            "owner input",
+            "--goal",
+            id,
+            "--owner",
+            "human",
+            "--kind",
+            "human_input",
+            "--attempt",
+            "tested both",
+            "--evidence-path",
+            "reports/options.md",
+            "--minimum-input",
+            "choose A or B",
+            "--recommended",
+            "choose A",
+            "--alternative",
+            "choose B",
+            "--risk",
+            "tradeoff",
+            "--resume-command",
+            "rayman prepare --goal mixed",
+            "--auto-resume-condition",
+            "choice recorded",
+            "--consultation-timing",
+            "immediate",
+            "--background-mechanism",
+            "isolated worktree task task_123",
+            "--background-authorized",
+            "--background-isolated",
+        ],
+    );
+    let frontier = run_json(root, &["goal", "frontier", id]);
+    assert_eq!(frontier["decision"], "ask_user");
+    assert_eq!(frontier["execution"], "continue_background");
+    assert_eq!(frontier["consultation"], "presented");
+    assert_eq!(frontier["background_execution_allowed"], true);
 }
 
 #[test]
