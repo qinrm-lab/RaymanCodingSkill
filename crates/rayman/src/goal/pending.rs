@@ -49,9 +49,9 @@ pub struct PendingItem {
     #[serde(default)]
     pub background_mechanism: Option<String>,
     #[serde(default)]
-    pub background_authorized: bool,
+    pub background_authority_evidence: Option<String>,
     #[serde(default)]
-    pub background_isolated: bool,
+    pub background_isolation_evidence: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -150,8 +150,8 @@ pub struct PendingSubmission {
     pub auto_resume_condition: Option<String>,
     pub consultation_timing: ConsultationTiming,
     pub background_mechanism: Option<String>,
-    pub background_authorized: bool,
-    pub background_isolated: bool,
+    pub background_authority_evidence: Option<String>,
+    pub background_isolation_evidence: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -261,8 +261,8 @@ impl PendingStore {
             auto_resume_condition: None,
             consultation_timing: ConsultationTiming::Deferred,
             background_mechanism: None,
-            background_authorized: false,
-            background_isolated: false,
+            background_authority_evidence: None,
+            background_isolation_evidence: None,
         })
     }
 
@@ -297,14 +297,18 @@ impl PendingStore {
         submission.resume_command = trim_optional(submission.resume_command);
         submission.auto_resume_condition = trim_optional(submission.auto_resume_condition);
         submission.background_mechanism = trim_optional(submission.background_mechanism);
+        submission.background_authority_evidence =
+            trim_optional(submission.background_authority_evidence);
+        submission.background_isolation_evidence =
+            trim_optional(submission.background_isolation_evidence);
 
         validate_pending_owner_kind(submission.owner, submission.kind)?;
         validate_background_contract(
             submission.owner,
             submission.consultation_timing,
             submission.background_mechanism.as_deref(),
-            submission.background_authorized,
-            submission.background_isolated,
+            submission.background_authority_evidence.as_deref(),
+            submission.background_isolation_evidence.as_deref(),
         )?;
         if submission.owner != PendingOwner::Agent {
             validate_solution_package(&submission)?;
@@ -334,8 +338,8 @@ impl PendingStore {
             auto_resume_condition: submission.auto_resume_condition,
             consultation_timing: submission.consultation_timing,
             background_mechanism: submission.background_mechanism,
-            background_authorized: submission.background_authorized,
-            background_isolated: submission.background_isolated,
+            background_authority_evidence: submission.background_authority_evidence,
+            background_isolation_evidence: submission.background_isolation_evidence,
         };
         list.items.push(item.clone());
         write_json(&path, &list)?;
@@ -504,22 +508,23 @@ fn validate_background_contract(
     owner: PendingOwner,
     consultation_timing: ConsultationTiming,
     background_mechanism: Option<&str>,
-    background_authorized: bool,
-    background_isolated: bool,
+    background_authority_evidence: Option<&str>,
+    background_isolation_evidence: Option<&str>,
 ) -> Result<()> {
-    let any_background_claim =
-        background_mechanism.is_some() || background_authorized || background_isolated;
+    let any_background_claim = background_mechanism.is_some()
+        || background_authority_evidence.is_some()
+        || background_isolation_evidence.is_some();
     if !any_background_claim {
         return Ok(());
     }
     if owner != PendingOwner::Human
         || consultation_timing != ConsultationTiming::Immediate
         || background_mechanism.is_none()
-        || !background_authorized
-        || !background_isolated
+        || background_authority_evidence.is_none()
+        || background_isolation_evidence.is_none()
     {
         bail!(
-            "后台继续必须绑定 immediate human consultation，并同时记录非空 background-mechanism、--background-authorized 与 --background-isolated"
+            "后台继续必须绑定 immediate human consultation，并同时记录非空 background-mechanism、background-authority-evidence 与 background-isolation-evidence"
         );
     }
     Ok(())
@@ -594,6 +599,14 @@ impl PendingItem {
                 self.auto_resume_condition.as_deref(),
             ),
             ("background_mechanism", self.background_mechanism.as_deref()),
+            (
+                "background_authority_evidence",
+                self.background_authority_evidence.as_deref(),
+            ),
+            (
+                "background_isolation_evidence",
+                self.background_isolation_evidence.as_deref(),
+            ),
         ] {
             if value.is_some_and(|value| value.trim().is_empty()) {
                 bail!("{label} 不能是空字符串");
@@ -604,8 +617,8 @@ impl PendingItem {
             self.owner,
             self.consultation_timing,
             self.background_mechanism.as_deref(),
-            self.background_authorized,
-            self.background_isolated,
+            self.background_authority_evidence.as_deref(),
+            self.background_isolation_evidence.as_deref(),
         )?;
         if self.owner != PendingOwner::Agent && !self.has_complete_solution_package() {
             bail!("human/external blocker 缺少完整 solution package，不能作为咨询或等待边界");
@@ -646,7 +659,13 @@ impl PendingItem {
                 .background_mechanism
                 .as_deref()
                 .is_some_and(|value| !value.trim().is_empty())
-            && self.background_authorized
-            && self.background_isolated
+            && self
+                .background_authority_evidence
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty())
+            && self
+                .background_isolation_evidence
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty())
     }
 }

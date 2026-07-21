@@ -450,9 +450,9 @@ pub enum PendingAction {
         #[arg(long)]
         background_mechanism: Option<String>,
         #[arg(long)]
-        background_authorized: bool,
+        background_authority_evidence: Option<String>,
         #[arg(long)]
-        background_isolated: bool,
+        background_isolation_evidence: Option<String>,
     },
     List,
     Resolve {

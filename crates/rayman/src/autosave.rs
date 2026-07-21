@@ -1176,8 +1176,8 @@ mod tests {
                         auto_resume_condition: Some("choice recorded".into()),
                         consultation_timing: crate::goal::ConsultationTiming::Deferred,
                         background_mechanism: None,
-                        background_authorized: false,
-                        background_isolated: false,
+                        background_authority_evidence: None,
+                        background_isolation_evidence: None,
                     })
                     .unwrap();
             }

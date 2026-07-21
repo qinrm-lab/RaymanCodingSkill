@@ -1208,8 +1208,8 @@ fn structured_frontier_never_asks_while_agent_work_remains() {
                 auto_resume_condition: None,
                 consultation_timing: ConsultationTiming::Deferred,
                 background_mechanism: None,
-                background_authorized: false,
-                background_isolated: false,
+                background_authority_evidence: None,
+                background_isolation_evidence: None,
             })
             .is_err(),
         "a human boundary without a solution package must fail closed"
@@ -1231,8 +1231,8 @@ fn structured_frontier_never_asks_while_agent_work_remains() {
             auto_resume_condition: Some("resume when the choice is recorded".into()),
             consultation_timing: ConsultationTiming::Deferred,
             background_mechanism: None,
-            background_authorized: false,
-            background_isolated: false,
+            background_authority_evidence: None,
+            background_isolation_evidence: None,
         })
         .unwrap();
     let frontier = pending.frontier(&goal).unwrap();
@@ -1258,32 +1258,33 @@ fn structured_frontier_keeps_presented_questions_out_of_foreground_progress() {
         .add("safe repair", "independent local work")
         .unwrap();
 
-    let human_submission = |timing, mechanism, authorized, isolated| PendingSubmission {
-        title: "need owner decision".into(),
-        detail: "two incompatible product requirements".into(),
-        goal_id: Some(goal.id.clone()),
-        owner: PendingOwner::Human,
-        kind: PendingKind::HumanInput,
-        attempts: vec!["tested both variants".into()],
-        evidence_paths: vec!["reports/options.md".into()],
-        minimum_input: Some("choose A or B".into()),
-        recommended_action: Some("choose A".into()),
-        alternatives: vec!["choose B".into()],
-        risk: Some("A is safer; B is faster".into()),
-        resume_command: Some("rayman prepare --goal mixed".into()),
-        auto_resume_condition: Some("choice recorded".into()),
-        consultation_timing: timing,
-        background_mechanism: mechanism,
-        background_authorized: authorized,
-        background_isolated: isolated,
-    };
+    let human_submission =
+        |timing, mechanism, authority_evidence, isolation_evidence| PendingSubmission {
+            title: "need owner decision".into(),
+            detail: "two incompatible product requirements".into(),
+            goal_id: Some(goal.id.clone()),
+            owner: PendingOwner::Human,
+            kind: PendingKind::HumanInput,
+            attempts: vec!["tested both variants".into()],
+            evidence_paths: vec!["reports/options.md".into()],
+            minimum_input: Some("choose A or B".into()),
+            recommended_action: Some("choose A".into()),
+            alternatives: vec!["choose B".into()],
+            risk: Some("A is safer; B is faster".into()),
+            resume_command: Some("rayman prepare --goal mixed".into()),
+            auto_resume_condition: Some("choice recorded".into()),
+            consultation_timing: timing,
+            background_mechanism: mechanism,
+            background_authority_evidence: authority_evidence,
+            background_isolation_evidence: isolation_evidence,
+        };
 
     let deferred = pending
         .add_structured(human_submission(
             ConsultationTiming::Deferred,
             None,
-            false,
-            false,
+            None,
+            None,
         ))
         .unwrap();
     let frontier = pending.frontier(&goal).unwrap();
@@ -1298,8 +1299,8 @@ fn structured_frontier_keeps_presented_questions_out_of_foreground_progress() {
             .add_structured(human_submission(
                 ConsultationTiming::Immediate,
                 Some("worktree task".into()),
-                true,
-                false,
+                Some("user instruction codex://threads/test".into()),
+                None,
             ))
             .is_err(),
         "partial background proof must fail closed"
@@ -1309,8 +1310,8 @@ fn structured_frontier_keeps_presented_questions_out_of_foreground_progress() {
         .add_structured(human_submission(
             ConsultationTiming::Immediate,
             None,
-            false,
-            false,
+            None,
+            None,
         ))
         .unwrap();
     let frontier = pending.frontier(&goal).unwrap();
@@ -1323,8 +1324,8 @@ fn structured_frontier_keeps_presented_questions_out_of_foreground_progress() {
         .add_structured(human_submission(
             ConsultationTiming::Immediate,
             Some("isolated worktree task task_123".into()),
-            true,
-            true,
+            Some("user instruction codex://threads/test".into()),
+            Some("isolated worktree task task_123".into()),
         ))
         .unwrap();
     let frontier = pending.frontier(&goal).unwrap();
@@ -1612,8 +1613,8 @@ fn pending_store_rejects_hand_tampered_incomplete_solution_package() {
             auto_resume_condition: Some("choice recorded".into()),
             consultation_timing: ConsultationTiming::Deferred,
             background_mechanism: None,
-            background_authorized: false,
-            background_isolated: false,
+            background_authority_evidence: None,
+            background_isolation_evidence: None,
         })
         .unwrap();
     let path = dir.path().join(PENDING_PATH);

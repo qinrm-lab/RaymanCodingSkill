@@ -10,7 +10,7 @@
     {
       "path": "crates/rayman/tests/cli.rs",
       "kind": "large_file",
-      "reason": "This is the single cross-process CLI contract suite; its 78 isolated behavioral cases are run in full by check-repo and audit-repository, while production logic remains split into focused modules."
+      "reason": "This is the single cross-process CLI contract suite; its 80 isolated behavioral cases are run in full by check-repo and audit-repository, while production logic remains split into focused modules."
     },
     {
       "path": "crates/rayman/src/context.rs",

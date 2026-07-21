@@ -1139,8 +1139,8 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 auto_resume_condition,
                 consultation_timing,
                 background_mechanism,
-                background_authorized,
-                background_isolated,
+                background_authority_evidence,
+                background_isolation_evidence,
             } => {
                 if let Some(goal_id) = goal_id.as_deref()
                     && store.get(goal_id)?.is_none()
@@ -1163,8 +1163,8 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                     auto_resume_condition,
                     consultation_timing: goal::ConsultationTiming::parse(&consultation_timing)?,
                     background_mechanism,
-                    background_authorized,
-                    background_isolated,
+                    background_authority_evidence,
+                    background_isolation_evidence,
                 })?;
                 if json {
                     print(&serde_json::to_value(&item)?);

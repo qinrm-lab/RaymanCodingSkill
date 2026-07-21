@@ -710,7 +710,7 @@ fn doctor_verifies_installed_identity_in_an_ordinary_managed_workspace() {
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
         &format!(
-            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v7\ncli_version: 2.3.0\n"
+            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v8\ncli_version: 2.4.0\n"
         ),
     );
     let binary = std::fs::canonicalize(BIN).unwrap();
@@ -745,7 +745,7 @@ fn doctor_rejects_an_earlier_windows_path_wrapper() {
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
         &format!(
-            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v7\ncli_version: 2.3.0\n"
+            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v8\ncli_version: 2.4.0\n"
         ),
     );
     let wrapper_dir = tempfile::tempdir().unwrap();
@@ -2686,6 +2686,58 @@ fn workspace_activation_is_explicit_and_orphan_state_fails_closed() {
     assert_eq!(activated.status, 0, "{}", activated.stderr);
     assert_eq!(run_raw(root, &["context", "refresh"]).status, 0);
 }
+#[test]
+fn workspace_activation_rejects_the_previous_cli_identity() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let skill = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("SKILL.md")
+        .canonicalize()
+        .unwrap();
+    let activated = run_raw(
+        root,
+        &[
+            "workspace",
+            "activate",
+            "--skill-file",
+            skill.to_str().unwrap(),
+            "--yes",
+        ],
+    );
+    assert_eq!(activated.status, 0, "{}", activated.stderr);
+
+    let activation_path = root.join(".RaymanCodingSkill/workspace_skill.yaml");
+    let previous_identity = std::fs::read_to_string(&activation_path)
+        .unwrap()
+        .replace("rayman-cli-contract-v8", "rayman-cli-contract-v7")
+        .replace("cli_version: 2.4.0", "cli_version: 2.3.0");
+    std::fs::write(&activation_path, previous_identity).unwrap();
+
+    let status = run_raw(root, &["--format", "json", "workspace", "status"]);
+    assert_eq!(status.status, 0, "{}", status.stderr);
+    let status: Value = serde_json::from_str(&status.stdout).unwrap();
+    assert_eq!(status["status"], "invalid");
+    assert_eq!(status["active"], false);
+    assert_eq!(status["cli_contract"], "rayman-cli-contract-v7");
+    assert_eq!(status["cli_version"], "2.3.0");
+    assert_eq!(status["running_cli_contract"], "rayman-cli-contract-v8");
+    assert_eq!(status["running_cli_version"], "2.4.0");
+    assert!(
+        status["issues"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|issue| { issue.as_str().unwrap().contains("cli_contract") })
+    );
+    assert!(
+        status["issues"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|issue| { issue.as_str().unwrap().contains("cli_version") })
+    );
+}
 
 #[test]
 fn goal_plan_and_review_receipts_close_a_real_two_file_delta() {
@@ -3453,7 +3505,8 @@ fn frontier_requires_complete_background_authority_before_presented_parallel_wor
             "immediate",
             "--background-mechanism",
             "worktree task",
-            "--background-authorized",
+            "--background-authority-evidence",
+            "user instruction codex://threads/test",
         ],
     );
     assert_eq!(partial.status, 1);
@@ -3543,8 +3596,10 @@ fn frontier_requires_complete_background_authority_before_presented_parallel_wor
             "immediate",
             "--background-mechanism",
             "isolated worktree task task_123",
-            "--background-authorized",
-            "--background-isolated",
+            "--background-authority-evidence",
+            "user instruction codex://threads/test",
+            "--background-isolation-evidence",
+            "isolated worktree task task_123",
         ],
     );
     let frontier = run_json(root, &["goal", "frontier", id]);
