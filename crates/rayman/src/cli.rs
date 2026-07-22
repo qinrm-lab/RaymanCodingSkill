@@ -393,15 +393,21 @@ pub enum GoalAction {
         )]
         quarantine_invalid_history: bool,
     },
-    /// 以同源码 archived authority 为零 delta replacement 授权精确 must 转移
+    /// 以 archived authority 的同一 gate 在当前源码重跑，为精确 must 转移授权
     AuthorizeReplacement {
         id: String,
         /// 每个待替代的 current 非 success goal；可重复
         #[arg(long = "supersedes", required = true, num_args = 1..)]
         predecessors: Vec<String>,
-        /// 同 workspace/source 上带 direct stable authority 的 archived success
+        /// 同 workspace 上带 direct stable authority 的 archived success
         #[arg(long = "authority-from")]
         authority_goal: String,
+        /// Re-run the exact trusted authority command on the current source.
+        #[arg(long)]
+        command: String,
+        /// Stable repetitions for the live lifecycle authority proof.
+        #[arg(long, default_value_t = 2)]
+        repeat: u32,
     },
     /// 标记旧目标已由另一个 current 目标取代
     Supersede {

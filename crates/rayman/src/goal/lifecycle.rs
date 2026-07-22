@@ -41,7 +41,7 @@ pub(super) fn legacy_lifecycle_contract_sha256(goal: &Goal) -> String {
     lifecycle_hash_str(
         &mut hasher,
         if replacement_extended {
-            "rayman.lifecycle-contract.v4"
+            "rayman.lifecycle-contract.v5"
         } else if autonomy_extended {
             "rayman.lifecycle-contract.v3"
         } else if extended {
@@ -150,6 +150,23 @@ pub(super) fn legacy_lifecycle_contract_sha256(goal: &Goal) -> String {
             for (id, contract) in &proof.predecessor_contracts {
                 lifecycle_hash_str(&mut hasher, id);
                 lifecycle_hash_str(&mut hasher, contract);
+            }
+            hasher.update((proof.source_delta_paths.len() as u64).to_le_bytes());
+            for path in &proof.source_delta_paths {
+                lifecycle_hash_str(&mut hasher, path);
+            }
+            lifecycle_hash_str(&mut hasher, &proof.live_authority.command);
+            lifecycle_hash_str(&mut hasher, &proof.live_authority.recorded_at);
+            lifecycle_hash_str(&mut hasher, &proof.live_authority.workspace_fingerprint);
+            hasher.update(proof.live_authority.repeat.to_le_bytes());
+            lifecycle_hash_str(&mut hasher, &proof.live_authority.invocation_sha256);
+            hasher.update((proof.live_authority.runs.len() as u64).to_le_bytes());
+            for run in &proof.live_authority.runs {
+                hasher.update(run.exit_code.to_le_bytes());
+                lifecycle_hash_str(&mut hasher, &run.workspace_fingerprint_before);
+                lifecycle_hash_str(&mut hasher, &run.workspace_fingerprint_after);
+                lifecycle_hash_str(&mut hasher, &run.stdout_sha256);
+                lifecycle_hash_str(&mut hasher, &run.stderr_sha256);
             }
             lifecycle_hash_str(&mut hasher, &proof.proof_sha256);
         }
@@ -839,6 +856,10 @@ impl Goal {
                 || !is_sha256(&proof.authority_lifecycle_contract_sha256)
                 || !is_sha256(&proof.replacement_contract_sha256)
                 || !is_sha256(&proof.proof_sha256)
+                || proof.live_authority.command.trim().is_empty()
+                || proof.live_authority.recorded_at.trim().is_empty()
+                || !is_sha256(&proof.live_authority.workspace_fingerprint)
+                || !is_sha256(&proof.live_authority.invocation_sha256)
                 || proof
                     .predecessor_contracts
                     .iter()
@@ -944,11 +965,23 @@ pub(super) fn must_text_multiset<'a>(
 
 pub(super) fn transfer_goal_contract_sha256(goal: &Goal) -> String {
     let mut hasher = Sha256::new();
-    lifecycle_hash_str(&mut hasher, "rayman.transfer-goal-contract.v1");
+    lifecycle_hash_str(&mut hasher, "rayman.transfer-goal-contract.v2");
     hasher.update(goal.schema_version.to_le_bytes());
     lifecycle_hash_str(&mut hasher, &goal.id);
     lifecycle_hash_str(&mut hasher, &goal.title);
     lifecycle_hash_str(&mut hasher, &goal.created_at);
+    hasher.update([u8::from(goal.baseline.is_some())]);
+    if let Some(baseline) = goal.baseline.as_ref() {
+        lifecycle_hash_str(&mut hasher, &baseline.workspace_fingerprint);
+    }
+    hasher.update((goal.plan_receipts.len() as u64).to_le_bytes());
+    for plan in &goal.plan_receipts {
+        lifecycle_hash_str(&mut hasher, &plan.plan_sha256);
+        hasher.update((plan.extensions.len() as u64).to_le_bytes());
+        for extension in &plan.extensions {
+            lifecycle_hash_str(&mut hasher, &extension.extension_sha256);
+        }
+    }
     let must = goal
         .requirements
         .iter()
@@ -987,7 +1020,7 @@ pub(super) fn replacement_contract_sha256(goal: &Goal) -> String {
 
 pub(super) fn replacement_authority_proof_sha256(proof: &ReplacementAuthorityProof) -> String {
     let mut hasher = Sha256::new();
-    lifecycle_hash_str(&mut hasher, "rayman.lifecycle-only-replacement-proof.v1");
+    lifecycle_hash_str(&mut hasher, "rayman.lifecycle-only-replacement-proof.v2");
     lifecycle_hash_str(&mut hasher, &proof.recorded_at);
     lifecycle_hash_str(&mut hasher, &proof.workspace_identity);
     lifecycle_hash_str(&mut hasher, &proof.workspace_fingerprint);
@@ -999,6 +1032,70 @@ pub(super) fn replacement_authority_proof_sha256(proof: &ReplacementAuthorityPro
         lifecycle_hash_str(&mut hasher, id);
         lifecycle_hash_str(&mut hasher, contract);
     }
+    hasher.update((proof.source_delta_paths.len() as u64).to_le_bytes());
+    for path in &proof.source_delta_paths {
+        lifecycle_hash_str(&mut hasher, path);
+    }
+    lifecycle_hash_str(&mut hasher, &proof.live_authority.command);
+    lifecycle_hash_str(&mut hasher, &proof.live_authority.recorded_at);
+    lifecycle_hash_str(&mut hasher, &proof.live_authority.workspace_fingerprint);
+    hasher.update(proof.live_authority.repeat.to_le_bytes());
+    lifecycle_hash_str(&mut hasher, &proof.live_authority.invocation_sha256);
+    hasher.update((proof.live_authority.runs.len() as u64).to_le_bytes());
+    for run in &proof.live_authority.runs {
+        hasher.update(run.exit_code.to_le_bytes());
+        lifecycle_hash_str(&mut hasher, &run.workspace_fingerprint_before);
+        lifecycle_hash_str(&mut hasher, &run.workspace_fingerprint_after);
+        lifecycle_hash_str(&mut hasher, &run.stdout_sha256);
+        lifecycle_hash_str(&mut hasher, &run.stderr_sha256);
+    }
+    format!("{:x}", hasher.finalize())
+}
+
+pub(super) fn replacement_delta_scope_error(
+    predecessors: &[Goal],
+    source_delta_paths: &[String],
+) -> Option<String> {
+    let planned = predecessors
+        .iter()
+        .flat_map(|goal| goal.plan_receipts.iter())
+        .flat_map(|plan| plan.effective_changed_paths().iter().cloned())
+        .collect::<BTreeSet<_>>();
+    let unscoped = source_delta_paths
+        .iter()
+        .filter(|path| !planned.contains(*path))
+        .cloned()
+        .collect::<Vec<_>>();
+    if unscoped.is_empty() {
+        None
+    } else {
+        Some(format!(
+            "lifecycle-only replacement delta 未被 predecessor plan 覆盖: {}",
+            unscoped.join(", ")
+        ))
+    }
+}
+
+pub fn replacement_authority_invocation_sha256(
+    command: &str,
+    replacement_id: &str,
+    authority_goal_id: &str,
+    predecessor_ids: &[String],
+    repeat: u32,
+) -> String {
+    let mut hasher = Sha256::new();
+    lifecycle_hash_str(&mut hasher, "rayman.lifecycle-live-authority-invocation.v1");
+    lifecycle_hash_str(&mut hasher, command);
+    lifecycle_hash_str(&mut hasher, replacement_id);
+    lifecycle_hash_str(&mut hasher, authority_goal_id);
+    let mut predecessors = predecessor_ids.to_vec();
+    predecessors.sort();
+    predecessors.dedup();
+    hasher.update((predecessors.len() as u64).to_le_bytes());
+    for id in predecessors {
+        lifecycle_hash_str(&mut hasher, &id);
+    }
+    hasher.update(repeat.to_le_bytes());
     format!("{:x}", hasher.finalize())
 }
 
@@ -1019,8 +1116,7 @@ pub fn replacement_authority_error(goal: &Goal, root: &Path, fingerprint: &str) 
     let Some(baseline) = goal.baseline.as_ref() else {
         return Some("lifecycle-only replacement 缺少 baseline".into());
     };
-    if baseline.workspace_fingerprint != proof.workspace_fingerprint
-        || replacement_contract_sha256(goal) != proof.replacement_contract_sha256
+    if replacement_contract_sha256(goal) != proof.replacement_contract_sha256
         || !goal.plan_receipts.is_empty()
         || !goal.review_receipts.is_empty()
         || !goal.authority_receipts.is_empty()
@@ -1036,7 +1132,46 @@ pub fn replacement_authority_error(goal: &Goal, root: &Path, fingerprint: &str) 
                 || !requirement.impacts.is_empty()
         })
     {
-        return Some("lifecycle-only replacement 合约、baseline 或零 delta 形态无效".into());
+        return Some("lifecycle-only replacement 合约、baseline 或专用迁移形态无效".into());
+    }
+    let mut normalized_delta = proof.source_delta_paths.clone();
+    normalize_path_list(&mut normalized_delta);
+    let predecessor_ids = proof
+        .predecessor_contracts
+        .keys()
+        .cloned()
+        .collect::<Vec<_>>();
+    let live = &proof.live_authority;
+    if normalized_delta != proof.source_delta_paths
+        || live.repeat < 2
+        || live.runs.len() != live.repeat as usize
+        || live.workspace_fingerprint != fingerprint
+        || live.invocation_sha256
+            != replacement_authority_invocation_sha256(
+                &live.command,
+                &goal.id,
+                &proof.authority_goal_id,
+                &predecessor_ids,
+                live.repeat,
+            )
+        || validate_authority_command(root, &live.command).is_err()
+        || live.runs.iter().any(|run| {
+            run.exit_code != 0
+                || run.workspace_fingerprint_before != fingerprint
+                || run.workspace_fingerprint_after != fingerprint
+                || !is_sha256(&run.stdout_sha256)
+                || !is_sha256(&run.stderr_sha256)
+        })
+    {
+        return Some("live lifecycle authority receipt 无效或未绑定当前源码".into());
+    }
+    if workspace_fingerprint(root).is_ok_and(|current| current == fingerprint) {
+        let Ok(current) = workspace_baseline(root) else {
+            return Some("无法复算 lifecycle-only replacement 当前 delta".into());
+        };
+        if workspace_delta(baseline, &current) != proof.source_delta_paths {
+            return Some("lifecycle-only replacement 当前 delta 与授权 proof 不一致".into());
+        }
     }
 
     let store = GoalStore::new(root);
@@ -1054,16 +1189,20 @@ pub fn replacement_authority_error(goal: &Goal, root: &Path, fingerprint: &str) 
         || authority.current_schema_error().is_some()
         || authority_lifecycle.receipt_policy.as_deref() != Some(RECEIPT_POLICY_V2)
         || authority_lifecycle.migration.is_some()
-        || authority_lifecycle.workspace_fingerprint != proof.workspace_fingerprint
         || authority_lifecycle.contract_sha256 != proof.authority_lifecycle_contract_sha256
         || authority.lifecycle_proof_error(root).is_some()
         || historical_success_fingerprint(&authority, root, ReceiptValidationPolicy::CurrentV2)
             .as_deref()
-            != Some(fingerprint)
-        || !has_direct_stable_authority_receipt(&authority, root, fingerprint)
+            != Some(authority_lifecycle.workspace_fingerprint.as_str())
+        || !has_direct_stable_authority_command(
+            &authority,
+            root,
+            &authority_lifecycle.workspace_fingerprint,
+            &live.command,
+        )
     {
         return Some(
-            "lifecycle-only authority 必须是同源码、current-policy、direct-authority 的有效 archived success"
+            "lifecycle-only authority 必须是同 workspace、current-policy 且包含同命令 direct-authority 的有效 archived success"
                 .into(),
         );
     }
@@ -1092,6 +1231,9 @@ pub fn replacement_authority_error(goal: &Goal, root: &Path, fingerprint: &str) 
     }
     if must_text_multiset(std::iter::once(goal)) != must_text_multiset(predecessors.iter()) {
         return Some("replacement must 与被转移目标 must 的精确并集不一致".into());
+    }
+    if let Some(error) = replacement_delta_scope_error(&predecessors, &proof.source_delta_paths) {
+        return Some(error);
     }
     None
 }

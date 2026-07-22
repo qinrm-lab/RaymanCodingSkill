@@ -38,7 +38,7 @@ $workspaceManifest = Join-Path $repoRoot 'Cargo.toml'
 $crateManifest = Join-Path $repoRoot 'crates/rayman/Cargo.toml'
 $lockfile = Join-Path $repoRoot 'Cargo.lock'
 $canonicalSkill = Join-Path $repoRoot 'SKILL.md'
-$expectedContract = 'rayman-cli-contract-v9'
+$expectedContract = 'rayman-cli-contract-v10'
 $requiredMsrv = '1.88'
 
 function Read-RequiredFile {
@@ -348,7 +348,7 @@ function Invoke-ReleaseVerifierSelfTest {
         $savedContext[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
     }
     $sourceHead = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-    $exactTag = 'v2.5.0'
+    $exactTag = 'v2.5.1'
     try {
         [Environment]::SetEnvironmentVariable('GITHUB_ACTIONS', 'true', 'Process')
         $forgedCases = @(

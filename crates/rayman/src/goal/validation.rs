@@ -643,31 +643,51 @@ pub(super) fn has_direct_stable_authority_receipt(
     current_fingerprint: &str,
 ) -> bool {
     goal.authority_receipts.iter().any(|authority| {
-        let Ok(contract_sha256) = validation_contract_sha256(goal, &authority.requirement_id)
-        else {
-            return false;
-        };
-        authority.repeat >= 2
-            && authority.runs.len() == authority.repeat as usize
-            && authority.workspace_fingerprint == current_fingerprint
-            && authority.contract_sha256 == contract_sha256
-            && authority.invocation_sha256
-                == authority_invocation_sha256(
-                    &authority.command,
-                    &authority.requirement_id,
-                    authority.repeat,
-                    &authority.impact_scopes,
-                    authority.non_code,
-                )
-            && validate_authority_command(root, &authority.command).is_ok()
-            && authority.runs.iter().all(|run| {
-                run.exit_code == 0
-                    && run.workspace_fingerprint_before == current_fingerprint
-                    && run.workspace_fingerprint_after == current_fingerprint
-                    && is_sha256(&run.stdout_sha256)
-                    && is_sha256(&run.stderr_sha256)
-            })
+        direct_stable_authority_receipt_is_valid(goal, root, current_fingerprint, authority)
     })
+}
+
+pub(super) fn has_direct_stable_authority_command(
+    goal: &Goal,
+    root: &Path,
+    fingerprint: &str,
+    command: &str,
+) -> bool {
+    goal.authority_receipts.iter().any(|authority| {
+        authority.command == command
+            && direct_stable_authority_receipt_is_valid(goal, root, fingerprint, authority)
+    })
+}
+
+fn direct_stable_authority_receipt_is_valid(
+    goal: &Goal,
+    root: &Path,
+    fingerprint: &str,
+    authority: &AuthorityReceipt,
+) -> bool {
+    let Ok(contract_sha256) = validation_contract_sha256(goal, &authority.requirement_id) else {
+        return false;
+    };
+    authority.repeat >= 2
+        && authority.runs.len() == authority.repeat as usize
+        && authority.workspace_fingerprint == fingerprint
+        && authority.contract_sha256 == contract_sha256
+        && authority.invocation_sha256
+            == authority_invocation_sha256(
+                &authority.command,
+                &authority.requirement_id,
+                authority.repeat,
+                &authority.impact_scopes,
+                authority.non_code,
+            )
+        && validate_authority_command(root, &authority.command).is_ok()
+        && authority.runs.iter().all(|run| {
+            run.exit_code == 0
+                && run.workspace_fingerprint_before == fingerprint
+                && run.workspace_fingerprint_after == fingerprint
+                && is_sha256(&run.stdout_sha256)
+                && is_sha256(&run.stderr_sha256)
+        })
 }
 
 #[derive(Serialize)]

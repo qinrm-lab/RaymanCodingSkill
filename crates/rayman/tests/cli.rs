@@ -710,7 +710,7 @@ fn doctor_verifies_installed_identity_in_an_ordinary_managed_workspace() {
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
         &format!(
-            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v9\ncli_version: 2.5.0\n"
+            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v10\ncli_version: 2.5.1\n"
         ),
     );
     let binary = std::fs::canonicalize(BIN).unwrap();
@@ -745,7 +745,7 @@ fn doctor_rejects_an_earlier_windows_path_wrapper() {
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
         &format!(
-            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v9\ncli_version: 2.5.0\n"
+            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v10\ncli_version: 2.5.1\n"
         ),
     );
     let wrapper_dir = tempfile::tempdir().unwrap();
@@ -2457,6 +2457,10 @@ fn lifecycle_only_replacement_cli_uses_exact_archived_authority() {
             old_id,
             "--authority-from",
             authority_id,
+            "--command",
+            "cargo test --workspace --all-targets",
+            "--repeat",
+            "2",
         ],
     );
     assert_eq!(authorized["status"], "success");
@@ -2823,8 +2827,8 @@ fn workspace_activation_rejects_the_previous_cli_identity() {
     let activation_path = root.join(".RaymanCodingSkill/workspace_skill.yaml");
     let previous_identity = std::fs::read_to_string(&activation_path)
         .unwrap()
-        .replace("rayman-cli-contract-v9", "rayman-cli-contract-v8")
-        .replace("cli_version: 2.5.0", "cli_version: 2.4.0");
+        .replace("rayman-cli-contract-v10", "rayman-cli-contract-v9")
+        .replace("cli_version: 2.5.1", "cli_version: 2.5.0");
     std::fs::write(&activation_path, previous_identity).unwrap();
 
     let status = run_raw(root, &["--format", "json", "workspace", "status"]);
@@ -2832,10 +2836,10 @@ fn workspace_activation_rejects_the_previous_cli_identity() {
     let status: Value = serde_json::from_str(&status.stdout).unwrap();
     assert_eq!(status["status"], "invalid");
     assert_eq!(status["active"], false);
-    assert_eq!(status["cli_contract"], "rayman-cli-contract-v8");
-    assert_eq!(status["cli_version"], "2.4.0");
-    assert_eq!(status["running_cli_contract"], "rayman-cli-contract-v9");
-    assert_eq!(status["running_cli_version"], "2.5.0");
+    assert_eq!(status["cli_contract"], "rayman-cli-contract-v9");
+    assert_eq!(status["cli_version"], "2.5.0");
+    assert_eq!(status["running_cli_contract"], "rayman-cli-contract-v10");
+    assert_eq!(status["running_cli_version"], "2.5.1");
     assert!(
         status["issues"]
             .as_array()

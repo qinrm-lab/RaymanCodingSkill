@@ -331,7 +331,21 @@ pub struct ReplacementAuthorityProof {
     pub authority_lifecycle_contract_sha256: String,
     pub replacement_contract_sha256: String,
     pub predecessor_contracts: BTreeMap<String, String>,
+    #[serde(default)]
+    pub source_delta_paths: Vec<String>,
+    #[serde(default)]
+    pub live_authority: ReplacementAuthorityReceipt,
     pub proof_sha256: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct ReplacementAuthorityReceipt {
+    pub command: String,
+    pub recorded_at: String,
+    pub workspace_fingerprint: String,
+    pub repeat: u32,
+    pub invocation_sha256: String,
+    pub runs: Vec<AuthorityRunReceipt>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1544,14 +1558,16 @@ impl GoalStore {
         Ok(goal)
     }
 
-    /// Complete a zero-delta replacement by binding it to the exact mandatory
-    /// contracts it carries and to a direct archived authority success at the
-    /// same source fingerprint. Ordinary validation remains unchanged.
+    /// Complete a lifecycle-only replacement by binding its exact mandatory
+    /// contracts and source delta to a live repeated run of the same direct
+    /// authority command trusted by an archived success. Ordinary validation
+    /// remains unchanged.
     pub fn authorize_replacement(
         &self,
         id: &str,
         predecessor_ids: &[String],
         authority_goal_id: &str,
+        live_authority: ReplacementAuthorityReceipt,
     ) -> Result<Goal> {
         if predecessor_ids.is_empty() {
             bail!("lifecycle-only replacement 至少需要一个 --supersedes 目标");
@@ -1606,11 +1622,7 @@ impl GoalStore {
         let Some(baseline) = replacement.baseline.as_ref() else {
             bail!("lifecycle-only replacement 缺少 baseline");
         };
-        if baseline.workspace_fingerprint != current.workspace_fingerprint
-            || !workspace_delta(baseline, &current).is_empty()
-        {
-            bail!("lifecycle-only replacement 必须是 source-honest 零 delta 目标");
-        }
+        let source_delta_paths = workspace_delta(baseline, &current);
 
         let mut predecessors = Vec::new();
         let mut predecessor_contracts = BTreeMap::new();
@@ -1638,6 +1650,9 @@ impl GoalStore {
         {
             bail!("replacement must 必须与 --supersedes 目标 must 的精确并集一致");
         }
+        if let Some(error) = replacement_delta_scope_error(&predecessors, &source_delta_paths) {
+            bail!("{error}");
+        }
 
         let Some(authority) = self.get(authority_goal_id)? else {
             bail!("authority goal 不存在: {authority_goal_id}");
@@ -1652,7 +1667,6 @@ impl GoalStore {
             || authority.current_schema_error().is_some()
             || authority_lifecycle.receipt_policy.as_deref() != Some(RECEIPT_POLICY_V2)
             || authority_lifecycle.migration.is_some()
-            || authority_lifecycle.workspace_fingerprint != fingerprint
             || authority.lifecycle_proof_error(&self.root).is_some()
             || historical_success_fingerprint(
                 &authority,
@@ -1660,12 +1674,39 @@ impl GoalStore {
                 ReceiptValidationPolicy::CurrentV2,
             )
             .as_deref()
-                != Some(fingerprint.as_str())
-            || !has_direct_stable_authority_receipt(&authority, &self.root, &fingerprint)
+                != Some(authority_lifecycle.workspace_fingerprint.as_str())
+            || !has_direct_stable_authority_command(
+                &authority,
+                &self.root,
+                &authority_lifecycle.workspace_fingerprint,
+                &live_authority.command,
+            )
         {
             bail!(
-                "authority goal 必须是同 workspace/source、current-policy、direct-authority 的有效 archived success"
+                "authority goal 必须是同 workspace、current-policy 且包含同命令 direct-authority 的有效 archived success"
             );
+        }
+        if live_authority.repeat < 2
+            || live_authority.runs.len() != live_authority.repeat as usize
+            || live_authority.workspace_fingerprint != fingerprint
+            || live_authority.invocation_sha256
+                != replacement_authority_invocation_sha256(
+                    &live_authority.command,
+                    id,
+                    authority_goal_id,
+                    &normalized_ids,
+                    live_authority.repeat,
+                )
+            || validate_authority_command(&self.root, &live_authority.command).is_err()
+            || live_authority.runs.iter().any(|run| {
+                run.exit_code != 0
+                    || run.workspace_fingerprint_before != fingerprint
+                    || run.workspace_fingerprint_after != fingerprint
+                    || !is_sha256(&run.stdout_sha256)
+                    || !is_sha256(&run.stderr_sha256)
+            })
+        {
+            bail!("live lifecycle authority 未证明当前源码上的重复稳定仓库 gate");
         }
 
         let now = now_iso();
@@ -1686,6 +1727,8 @@ impl GoalStore {
             authority_lifecycle_contract_sha256: authority_lifecycle.contract_sha256.clone(),
             replacement_contract_sha256: replacement_contract_sha256(&replacement),
             predecessor_contracts,
+            source_delta_paths,
+            live_authority,
             proof_sha256: String::new(),
         };
         proof.proof_sha256 = replacement_authority_proof_sha256(&proof);

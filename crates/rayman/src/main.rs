@@ -1067,8 +1067,79 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
             id,
             predecessors,
             authority_goal,
+            command,
+            repeat,
         } => {
-            let goal = store.authorize_replacement(&id, &predecessors, &authority_goal)?;
+            if !(2..=10).contains(&repeat) {
+                bail!("lifecycle authority --repeat 必须在 2..=10 范围内");
+            }
+            goal::validate_authority_command(root, &command)?;
+            let parsed = goal::parse_validation_command(&command)?;
+            let listed_tests = if let Some(list_command) = goal::validation_list_command(&parsed)? {
+                let output = run_validation_command(root, &list_command)?;
+                if !output.status.success() {
+                    bail!("lifecycle authority 独立 test list proof 失败；不会写入 proof");
+                }
+                Some(goal::listed_test_count(
+                    &list_command,
+                    &output.stdout,
+                    &output.stderr,
+                )?)
+            } else {
+                None
+            };
+            let fingerprint = goal::workspace_fingerprint(root)?;
+            let mut runs = Vec::new();
+            for run_index in 1..=repeat {
+                let before = goal::workspace_fingerprint(root)?;
+                if before != fingerprint {
+                    bail!(
+                        "lifecycle authority 第 {run_index} 次运行前 source fingerprint 漂移；不会写入 proof"
+                    );
+                }
+                let output = run_validation_command(root, &parsed)?;
+                let after = goal::workspace_fingerprint(root)?;
+                if !output.status.success() {
+                    bail!(
+                        "lifecycle authority 第 {run_index}/{repeat} 次失败（exit={}）；不会写入 proof",
+                        output.status.code().unwrap_or(-1)
+                    );
+                }
+                goal::validation_execution_proof(
+                    &parsed,
+                    &output.stdout,
+                    &output.stderr,
+                    listed_tests,
+                )?;
+                if before != after || after != fingerprint {
+                    bail!(
+                        "lifecycle authority 第 {run_index}/{repeat} 次修改了工作区；不会写入 proof"
+                    );
+                }
+                runs.push(goal::AuthorityRunReceipt {
+                    exit_code: output.status.code().unwrap_or(0),
+                    workspace_fingerprint_before: before,
+                    workspace_fingerprint_after: after,
+                    stdout_sha256: sha256_hex(&output.stdout),
+                    stderr_sha256: sha256_hex(&output.stderr),
+                });
+            }
+            let live_authority = goal::ReplacementAuthorityReceipt {
+                command: command.clone(),
+                recorded_at: rayman::timefmt::now_iso(),
+                workspace_fingerprint: fingerprint,
+                repeat,
+                invocation_sha256: goal::replacement_authority_invocation_sha256(
+                    &command,
+                    &id,
+                    &authority_goal,
+                    &predecessors,
+                    repeat,
+                ),
+                runs,
+            };
+            let goal =
+                store.authorize_replacement(&id, &predecessors, &authority_goal, live_authority)?;
             if json {
                 print(&serde_json::to_value(&goal)?);
             } else {

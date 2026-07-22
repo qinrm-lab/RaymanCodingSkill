@@ -190,6 +190,38 @@ fn archived_direct_authority_success(store: &GoalStore, root: &Path) -> Goal {
         .unwrap()
 }
 
+fn live_replacement_authority(
+    root: &Path,
+    replacement_id: &str,
+    predecessor_ids: &[String],
+    authority_goal_id: &str,
+) -> ReplacementAuthorityReceipt {
+    let command = "cargo test --workspace --all-targets";
+    let fingerprint = workspace_fingerprint(root).unwrap();
+    ReplacementAuthorityReceipt {
+        command: command.into(),
+        recorded_at: now_iso(),
+        workspace_fingerprint: fingerprint.clone(),
+        repeat: 2,
+        invocation_sha256: replacement_authority_invocation_sha256(
+            command,
+            replacement_id,
+            authority_goal_id,
+            predecessor_ids,
+            2,
+        ),
+        runs: (0..2)
+            .map(|_| AuthorityRunReceipt {
+                exit_code: 0,
+                workspace_fingerprint_before: fingerprint.clone(),
+                workspace_fingerprint_after: fingerprint.clone(),
+                stdout_sha256: "a".repeat(64),
+                stderr_sha256: "b".repeat(64),
+            })
+            .collect(),
+    }
+}
+
 #[test]
 fn close_success_requires_evidence_for_must_requirements() {
     let dir = tempfile::tempdir().unwrap();
@@ -702,6 +734,12 @@ fn lifecycle_only_replacement_transfers_exact_musts_from_direct_archived_authori
             &replacement.id,
             &[first.id.clone(), second.id.clone()],
             &authority.id,
+            live_replacement_authority(
+                dir.path(),
+                &replacement.id,
+                &[first.id.clone(), second.id.clone()],
+                &authority.id,
+            ),
         )
         .unwrap();
     let fingerprint = workspace_fingerprint(dir.path()).unwrap();
@@ -742,7 +780,17 @@ fn lifecycle_only_replacement_rejects_inexact_stale_and_unlisted_transfers() {
         .unwrap();
     assert!(
         store
-            .authorize_replacement(&missing.id, std::slice::from_ref(&old.id), &authority.id,)
+            .authorize_replacement(
+                &missing.id,
+                std::slice::from_ref(&old.id),
+                &authority.id,
+                live_replacement_authority(
+                    dir.path(),
+                    &missing.id,
+                    std::slice::from_ref(&old.id),
+                    &authority.id,
+                ),
+            )
             .unwrap_err()
             .to_string()
             .contains("精确并集")
@@ -751,11 +799,81 @@ fn lifecycle_only_replacement_rejects_inexact_stale_and_unlisted_transfers() {
     let replacement = store
         .start("replacement", &[("preserve exact contract".into(), true)])
         .unwrap();
+    let mut substituted = live_replacement_authority(
+        dir.path(),
+        &replacement.id,
+        std::slice::from_ref(&old.id),
+        &authority.id,
+    );
+    substituted.command = "cargo test --all".into();
+    substituted.invocation_sha256 = replacement_authority_invocation_sha256(
+        &substituted.command,
+        &replacement.id,
+        &authority.id,
+        std::slice::from_ref(&old.id),
+        substituted.repeat,
+    );
+    assert!(
+        store
+            .authorize_replacement(
+                &replacement.id,
+                std::slice::from_ref(&old.id),
+                &authority.id,
+                substituted,
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("同命令 direct-authority")
+    );
+    let mut unstable = live_replacement_authority(
+        dir.path(),
+        &replacement.id,
+        std::slice::from_ref(&old.id),
+        &authority.id,
+    );
+    unstable.runs[1].workspace_fingerprint_after = "c".repeat(64);
+    assert!(
+        store
+            .authorize_replacement(
+                &replacement.id,
+                std::slice::from_ref(&old.id),
+                &authority.id,
+                unstable,
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("重复稳定仓库 gate")
+    );
+    let mut failing = live_replacement_authority(
+        dir.path(),
+        &replacement.id,
+        std::slice::from_ref(&old.id),
+        &authority.id,
+    );
+    failing.runs[0].exit_code = 1;
+    assert!(
+        store
+            .authorize_replacement(
+                &replacement.id,
+                std::slice::from_ref(&old.id),
+                &authority.id,
+                failing,
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("重复稳定仓库 gate")
+    );
     let authorized = store
         .authorize_replacement(
             &replacement.id,
             std::slice::from_ref(&old.id),
             &authority.id,
+            live_replacement_authority(
+                dir.path(),
+                &replacement.id,
+                std::slice::from_ref(&old.id),
+                &authority.id,
+            ),
         )
         .unwrap();
     let unlisted = store
@@ -769,25 +887,126 @@ fn lifecycle_only_replacement_rejects_inexact_stale_and_unlisted_transfers() {
     let stale_root = tempfile::tempdir().unwrap();
     let stale_store = GoalStore::new(stale_root.path());
     let stale_authority = archived_direct_authority_success(&stale_store, stale_root.path());
+    let stale_old = stale_store
+        .start("stale old", &[("preserve stale".into(), true)])
+        .unwrap();
+    let stale_old = stale_store
+        .record_plan(
+            &stale_old.id,
+            PlanReceiptSubmission {
+                changed_paths: vec!["lib.rs".into()],
+                review_priority: "normal".into(),
+                impacted_paths: vec!["lib.rs".into()],
+                recommended_checks: vec!["cargo test --workspace --all-targets".into()],
+            },
+        )
+        .unwrap();
+    let stale_replacement = stale_store
+        .start("stale replacement", &[("preserve stale".into(), true)])
+        .unwrap();
+    let stale_only = live_replacement_authority(
+        stale_root.path(),
+        &stale_replacement.id,
+        std::slice::from_ref(&stale_old.id),
+        &stale_authority.id,
+    );
     fs::write(
         stale_root.path().join("lib.rs"),
         "pub fn value() -> i32 { 3 }",
     )
     .unwrap();
-    let stale_old = stale_store
-        .start("stale old", &[("preserve stale".into(), true)])
-        .unwrap();
-    let stale_replacement = stale_store
-        .start("stale replacement", &[("preserve stale".into(), true)])
-        .unwrap();
     assert!(
         stale_store
             .authorize_replacement(
                 &stale_replacement.id,
                 std::slice::from_ref(&stale_old.id),
                 &stale_authority.id,
+                stale_only,
             )
             .is_err()
+    );
+    let authorized = stale_store
+        .authorize_replacement(
+            &stale_replacement.id,
+            std::slice::from_ref(&stale_old.id),
+            &stale_authority.id,
+            live_replacement_authority(
+                stale_root.path(),
+                &stale_replacement.id,
+                std::slice::from_ref(&stale_old.id),
+                &stale_authority.id,
+            ),
+        )
+        .unwrap();
+    assert_eq!(
+        authorized
+            .replacement_authority
+            .as_ref()
+            .unwrap()
+            .source_delta_paths,
+        vec!["lib.rs"]
+    );
+    let mut legacy_value = serde_json::to_value(&authorized).unwrap();
+    legacy_value["replacement_authority"]
+        .as_object_mut()
+        .unwrap()
+        .remove("live_authority");
+    let legacy_readable: Goal = serde_json::from_value(legacy_value).unwrap();
+    assert!(legacy_readable.current_schema_error().is_some());
+
+    let mut tampered_predecessor = stale_store.get(&stale_old.id).unwrap().unwrap();
+    tampered_predecessor.plan_receipts[0].review_priority = "broad".into();
+    tampered_predecessor.plan_receipts[0].plan_sha256 =
+        plan_receipt_sha256(&tampered_predecessor.plan_receipts[0]);
+    write_json(
+        &stale_root
+            .path()
+            .join(GOALS_DIR)
+            .join(format!("{}.json", stale_old.id)),
+        &tampered_predecessor,
+    )
+    .unwrap();
+    let current_fingerprint = workspace_fingerprint(stale_root.path()).unwrap();
+    assert!(
+        replacement_authority_error(&authorized, stale_root.path(), &current_fingerprint)
+            .unwrap()
+            .contains("合约或 lifecycle 已失效")
+    );
+
+    let unscoped_root = tempfile::tempdir().unwrap();
+    let unscoped_store = GoalStore::new(unscoped_root.path());
+    let unscoped_authority =
+        archived_direct_authority_success(&unscoped_store, unscoped_root.path());
+    let unscoped_old = unscoped_store
+        .start("unscoped old", &[("preserve unscoped".into(), true)])
+        .unwrap();
+    let unscoped_replacement = unscoped_store
+        .start(
+            "unscoped replacement",
+            &[("preserve unscoped".into(), true)],
+        )
+        .unwrap();
+    fs::write(
+        unscoped_root.path().join("lib.rs"),
+        "pub fn value() -> i32 { 4 }",
+    )
+    .unwrap();
+    assert!(
+        unscoped_store
+            .authorize_replacement(
+                &unscoped_replacement.id,
+                std::slice::from_ref(&unscoped_old.id),
+                &unscoped_authority.id,
+                live_replacement_authority(
+                    unscoped_root.path(),
+                    &unscoped_replacement.id,
+                    std::slice::from_ref(&unscoped_old.id),
+                    &unscoped_authority.id,
+                ),
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("未被 predecessor plan 覆盖")
     );
 
     let indirect_root = tempfile::tempdir().unwrap();
@@ -818,6 +1037,12 @@ fn lifecycle_only_replacement_rejects_inexact_stale_and_unlisted_transfers() {
                 &indirect_replacement.id,
                 std::slice::from_ref(&indirect_old.id),
                 &indirect_authority.id,
+                live_replacement_authority(
+                    indirect_root.path(),
+                    &indirect_replacement.id,
+                    std::slice::from_ref(&indirect_old.id),
+                    &indirect_authority.id,
+                ),
             )
             .unwrap_err()
             .to_string()
@@ -841,6 +1066,12 @@ fn lifecycle_only_replacement_proof_rejects_cross_workspace_reuse() {
             &replacement.id,
             std::slice::from_ref(&old.id),
             &authority.id,
+            live_replacement_authority(
+                source.path(),
+                &replacement.id,
+                std::slice::from_ref(&old.id),
+                &authority.id,
+            ),
         )
         .unwrap();
 
