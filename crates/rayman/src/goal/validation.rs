@@ -632,6 +632,16 @@ pub fn has_current_stable_authority_receipt(
     root: &Path,
     current_fingerprint: &str,
 ) -> bool {
+    has_direct_stable_authority_receipt(goal, root, current_fingerprint)
+        || (goal.replacement_authority.is_some()
+            && replacement_authority_error(goal, root, current_fingerprint).is_none())
+}
+
+pub(super) fn has_direct_stable_authority_receipt(
+    goal: &Goal,
+    root: &Path,
+    current_fingerprint: &str,
+) -> bool {
     goal.authority_receipts.iter().any(|authority| {
         let Ok(contract_sha256) = validation_contract_sha256(goal, &authority.requirement_id)
         else {
@@ -1324,6 +1334,14 @@ pub(super) fn goal_success_receipt_gaps_for_policy(
     let mut gaps = Vec::new();
     if goal.status != GoalStatus::Success {
         gaps.push(format!("goal 状态为 {}，不是 success", goal.status));
+    }
+    if goal.replacement_authority.is_some() {
+        if policy != ReceiptValidationPolicy::CurrentV2 {
+            gaps.push("lifecycle-only replacement 只接受 current-v2 receipt policy".into());
+        } else if let Some(error) = replacement_authority_error(goal, root, fingerprint) {
+            gaps.push(format!("lifecycle-only replacement proof 无效: {error}"));
+        }
+        return gaps;
     }
     for requirement in &goal.requirements {
         if requirement.kind != RequirementKind::Must {

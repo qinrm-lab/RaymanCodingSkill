@@ -317,6 +317,23 @@ pub struct LifecycleProof {
     pub receipt_policy: Option<String>,
 }
 
+/// Explicit proof for a source-honest, lifecycle-only replacement.  This is
+/// intentionally separate from validation receipts: it can only transfer the
+/// exact mandatory contract of named unfinished goals, and it is anchored to
+/// a direct, current-policy authority receipt from an archived success at the
+/// same workspace identity and source fingerprint.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ReplacementAuthorityProof {
+    pub recorded_at: String,
+    pub workspace_identity: String,
+    pub workspace_fingerprint: String,
+    pub authority_goal_id: String,
+    pub authority_lifecycle_contract_sha256: String,
+    pub replacement_contract_sha256: String,
+    pub predecessor_contracts: BTreeMap<String, String>,
+    pub proof_sha256: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Goal {
     #[serde(default)]
@@ -332,6 +349,8 @@ pub struct Goal {
     pub superseded_by: Option<String>,
     #[serde(default)]
     pub lifecycle_proof: Option<LifecycleProof>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replacement_authority: Option<ReplacementAuthorityProof>,
     pub created_at: String,
     pub updated_at: String,
     #[serde(default)]
@@ -682,6 +701,7 @@ impl GoalStore {
             lifecycle_reason: None,
             superseded_by: None,
             lifecycle_proof: None,
+            replacement_authority: None,
             created_at: now.clone(),
             updated_at: now,
             baseline,
@@ -1524,6 +1544,162 @@ impl GoalStore {
         Ok(goal)
     }
 
+    /// Complete a zero-delta replacement by binding it to the exact mandatory
+    /// contracts it carries and to a direct archived authority success at the
+    /// same source fingerprint. Ordinary validation remains unchanged.
+    pub fn authorize_replacement(
+        &self,
+        id: &str,
+        predecessor_ids: &[String],
+        authority_goal_id: &str,
+    ) -> Result<Goal> {
+        if predecessor_ids.is_empty() {
+            bail!("lifecycle-only replacement 至少需要一个 --supersedes 目标");
+        }
+        let mut normalized_ids = predecessor_ids.to_vec();
+        normalized_ids.sort();
+        normalized_ids.dedup();
+        if normalized_ids.len() != predecessor_ids.len() {
+            bail!("--supersedes 不能包含重复目标");
+        }
+        if normalized_ids.iter().any(|candidate| candidate == id)
+            || authority_goal_id == id
+            || normalized_ids
+                .iter()
+                .any(|candidate| candidate == authority_goal_id)
+        {
+            bail!("replacement、authority goal 与被转移目标必须彼此不同");
+        }
+
+        let goals_dir =
+            state_paths::managed_state_dir(&self.root, Path::new(GOALS_RELATIVE), false)?
+                .ok_or_else(|| anyhow::anyhow!("目标状态目录不存在"))?;
+        let _store_lock = acquire_state_lock(&goals_dir.join(".store"))?;
+        let path = self.goal_path(id)?;
+        let Some(mut replacement) = Self::load_goal_file(&path)? else {
+            bail!("替代目标不存在: {id}");
+        };
+        if replacement.lifecycle != GoalLifecycle::Current
+            || replacement.status != GoalStatus::Active
+            || !replacement.is_current_schema()
+            || replacement.replacement_authority.is_some()
+        {
+            bail!("替代目标必须是未授权的 current/active current-schema goal");
+        }
+        if let Some(error) = replacement.current_schema_error() {
+            bail!("替代目标合约无效: {error}");
+        }
+        if !replacement.plan_receipts.is_empty()
+            || !replacement.review_receipts.is_empty()
+            || !replacement.authority_receipts.is_empty()
+            || replacement.requirements.iter().any(|requirement| {
+                requirement.kind != RequirementKind::Must
+                    || requirement.status != RequirementStatus::Open
+                    || requirement.evidence.is_some()
+                    || !requirement.validations.is_empty()
+                    || !requirement.impacts.is_empty()
+            })
+        {
+            bail!("lifecycle-only replacement 必须保持 pristine 且只能包含 open must");
+        }
+        let current = workspace_baseline(&self.root)?;
+        let Some(baseline) = replacement.baseline.as_ref() else {
+            bail!("lifecycle-only replacement 缺少 baseline");
+        };
+        if baseline.workspace_fingerprint != current.workspace_fingerprint
+            || !workspace_delta(baseline, &current).is_empty()
+        {
+            bail!("lifecycle-only replacement 必须是 source-honest 零 delta 目标");
+        }
+
+        let mut predecessors = Vec::new();
+        let mut predecessor_contracts = BTreeMap::new();
+        for predecessor_id in &normalized_ids {
+            let Some(predecessor) = self.get(predecessor_id)? else {
+                bail!("被转移目标不存在: {predecessor_id}");
+            };
+            if predecessor.lifecycle != GoalLifecycle::Current
+                || predecessor.status == GoalStatus::Success
+                || !predecessor.is_current_schema()
+            {
+                bail!("被转移目标 {predecessor_id} 必须是 current 非 success current-schema goal");
+            }
+            if let Some(error) = predecessor.current_schema_error() {
+                bail!("被转移目标 {predecessor_id} 合约无效: {error}");
+            }
+            predecessor_contracts.insert(
+                predecessor_id.clone(),
+                transfer_goal_contract_sha256(&predecessor),
+            );
+            predecessors.push(predecessor);
+        }
+        if must_text_multiset(std::iter::once(&replacement))
+            != must_text_multiset(predecessors.iter())
+        {
+            bail!("replacement must 必须与 --supersedes 目标 must 的精确并集一致");
+        }
+
+        let Some(authority) = self.get(authority_goal_id)? else {
+            bail!("authority goal 不存在: {authority_goal_id}");
+        };
+        let Some(authority_lifecycle) = authority.lifecycle_proof.as_ref() else {
+            bail!("authority goal 缺少 lifecycle proof");
+        };
+        let fingerprint = current.workspace_fingerprint;
+        if authority.lifecycle != GoalLifecycle::Archived
+            || authority.status != GoalStatus::Success
+            || !authority.is_current_schema()
+            || authority.current_schema_error().is_some()
+            || authority_lifecycle.receipt_policy.as_deref() != Some(RECEIPT_POLICY_V2)
+            || authority_lifecycle.migration.is_some()
+            || authority_lifecycle.workspace_fingerprint != fingerprint
+            || authority.lifecycle_proof_error(&self.root).is_some()
+            || historical_success_fingerprint(
+                &authority,
+                &self.root,
+                ReceiptValidationPolicy::CurrentV2,
+            )
+            .as_deref()
+                != Some(fingerprint.as_str())
+            || !has_direct_stable_authority_receipt(&authority, &self.root, &fingerprint)
+        {
+            bail!(
+                "authority goal 必须是同 workspace/source、current-policy、direct-authority 的有效 archived success"
+            );
+        }
+
+        let now = now_iso();
+        let evidence = format!(
+            "lifecycle-only exact must transfer authorized by archived goal {authority_goal_id}"
+        );
+        replacement.status = GoalStatus::Success;
+        replacement.updated_at = now.clone();
+        for requirement in &mut replacement.requirements {
+            requirement.status = RequirementStatus::Done;
+            requirement.evidence = Some(evidence.clone());
+        }
+        let mut proof = ReplacementAuthorityProof {
+            recorded_at: now,
+            workspace_identity: workspace_identity(&self.root),
+            workspace_fingerprint: fingerprint.clone(),
+            authority_goal_id: authority_goal_id.to_string(),
+            authority_lifecycle_contract_sha256: authority_lifecycle.contract_sha256.clone(),
+            replacement_contract_sha256: replacement_contract_sha256(&replacement),
+            predecessor_contracts,
+            proof_sha256: String::new(),
+        };
+        proof.proof_sha256 = replacement_authority_proof_sha256(&proof);
+        replacement.replacement_authority = Some(proof);
+        if let Some(error) = replacement.current_schema_error() {
+            bail!("拒绝写入 lifecycle-only replacement: {error}");
+        }
+        if let Some(error) = replacement_authority_error(&replacement, &self.root, &fingerprint) {
+            bail!("拒绝写入 lifecycle-only replacement proof: {error}");
+        }
+        write_json(&path, &replacement)?;
+        Ok(replacement)
+    }
+
     /// Mark one goal as historical because another current goal replaced it.
     pub fn supersede(&self, id: &str, replacement_id: &str) -> Result<Goal> {
         if id == replacement_id {
@@ -1683,6 +1859,7 @@ fn goal_from_legacy(legacy: LegacyGoal) -> Goal {
         lifecycle_reason: None,
         superseded_by: None,
         lifecycle_proof: None,
+        replacement_authority: None,
         created_at,
         baseline: None,
         plan_receipts: Vec::new(),

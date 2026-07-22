@@ -393,6 +393,16 @@ pub enum GoalAction {
         )]
         quarantine_invalid_history: bool,
     },
+    /// 以同源码 archived authority 为零 delta replacement 授权精确 must 转移
+    AuthorizeReplacement {
+        id: String,
+        /// 每个待替代的 current 非 success goal；可重复
+        #[arg(long = "supersedes", required = true, num_args = 1..)]
+        predecessors: Vec<String>,
+        /// 同 workspace/source 上带 direct stable authority 的 archived success
+        #[arg(long = "authority-from")]
+        authority_goal: String,
+    },
     /// 标记旧目标已由另一个 current 目标取代
     Supersede {
         id: String,

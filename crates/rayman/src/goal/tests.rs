@@ -136,6 +136,60 @@ fn close_non_code_success(store: &GoalStore, root: &Path, goal: &Goal) -> Goal {
     store.close(&goal.id, "success").unwrap()
 }
 
+fn archived_direct_authority_success(store: &GoalStore, root: &Path) -> Goal {
+    fs::write(root.join("lib.rs"), "pub fn value() -> i32 { 1 }").unwrap();
+    let goal = store
+        .start("direct authority", &[("prove repository".into(), true)])
+        .unwrap();
+    fs::write(root.join("lib.rs"), "pub fn value() -> i32 { 2 }").unwrap();
+    let command = "cargo test --workspace --all-targets";
+    let impacts = vec![impact("lib.rs")];
+    let impact_scopes = validation_scopes_for_impacts(&impacts);
+    let fingerprint = workspace_fingerprint(root).unwrap();
+    let contract_sha256 = validation_contract_sha256(&goal, "req_1").unwrap();
+    let runs = (0..2)
+        .map(|_| AuthorityRunReceipt {
+            exit_code: 0,
+            workspace_fingerprint_before: fingerprint.clone(),
+            workspace_fingerprint_after: fingerprint.clone(),
+            stdout_sha256: "a".repeat(64),
+            stderr_sha256: "b".repeat(64),
+        })
+        .collect::<Vec<_>>();
+    let authority = AuthorityReceipt {
+        requirement_id: "req_1".into(),
+        command: command.into(),
+        recorded_at: now_iso(),
+        workspace_fingerprint: fingerprint,
+        repeat: 2,
+        impact_scopes: impact_scopes.clone(),
+        non_code: false,
+        invocation_sha256: authority_invocation_sha256(command, "req_1", 2, &impact_scopes, false),
+        contract_sha256,
+        runs,
+    };
+    store
+        .record_authority_validation_receipt(
+            &goal.id,
+            "req_1",
+            AuthorityReceiptSubmission {
+                validation: ValidationReceiptSubmission {
+                    evidence: "stable direct authority".into(),
+                    command: command.into(),
+                    receipt: successful_receipt(root, &goal, "req_1", command, &impacts, false),
+                    impacts,
+                    non_code: false,
+                },
+                authority,
+            },
+        )
+        .unwrap();
+    store.close(&goal.id, "success").unwrap();
+    store
+        .archive(&goal.id, "direct authority proof", false)
+        .unwrap()
+}
+
 #[test]
 fn close_success_requires_evidence_for_must_requirements() {
     let dir = tempfile::tempdir().unwrap();
@@ -393,6 +447,7 @@ fn relevance_requires_one_current_receipt_bound_to_command_and_impact() {
         lifecycle_reason: None,
         superseded_by: None,
         lifecycle_proof: None,
+        replacement_authority: None,
         created_at: now_iso(),
         updated_at: now_iso(),
         baseline: None,
@@ -516,6 +571,7 @@ fn legacy_v2_lifecycle_hash_projection_remains_byte_compatible() {
         lifecycle_reason: Some("completed".into()),
         superseded_by: None,
         lifecycle_proof: None,
+        replacement_authority: None,
         created_at: "2026-07-17T00:00:00Z".into(),
         updated_at: "2026-07-17T01:00:00Z".into(),
         baseline: Some(WorkspaceBaseline {
@@ -618,6 +674,196 @@ fn supersession_accepts_a_proven_archived_success_and_rejects_forgery() {
     forged.title.push_str(" forged");
     write_json(&replacement_path, &forged).unwrap();
     assert!(supersession_error(&superseded, &[forged], dir.path(), &fingerprint,).is_some());
+}
+
+#[test]
+fn lifecycle_only_replacement_transfers_exact_musts_from_direct_archived_authority() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = GoalStore::new(dir.path());
+    let authority = archived_direct_authority_success(&store, dir.path());
+    let first = store
+        .start("first unfinished", &[("preserve alpha".into(), true)])
+        .unwrap();
+    let second = store
+        .start("second unfinished", &[("preserve beta".into(), true)])
+        .unwrap();
+    let replacement = store
+        .start(
+            "exact replacement",
+            &[
+                ("preserve alpha".into(), true),
+                (" preserve   beta ".into(), true),
+            ],
+        )
+        .unwrap();
+
+    let authorized = store
+        .authorize_replacement(
+            &replacement.id,
+            &[first.id.clone(), second.id.clone()],
+            &authority.id,
+        )
+        .unwrap();
+    let fingerprint = workspace_fingerprint(dir.path()).unwrap();
+    assert_eq!(authorized.status, GoalStatus::Success);
+    assert!(authorized.replacement_authority.is_some());
+    assert!(has_current_stable_authority_receipt(
+        &authorized,
+        dir.path(),
+        &fingerprint
+    ));
+    assert!(goal_success_receipt_gaps(&authorized, dir.path(), &fingerprint).is_empty());
+
+    let first = store.supersede(&first.id, &authorized.id).unwrap();
+    let second = store.supersede(&second.id, &authorized.id).unwrap();
+    let authorized = store.get(&authorized.id).unwrap().unwrap();
+    assert_eq!(first.lifecycle, GoalLifecycle::Superseded);
+    assert_eq!(second.lifecycle, GoalLifecycle::Superseded);
+    assert_eq!(
+        replacement_authority_error(&authorized, dir.path(), &fingerprint),
+        None
+    );
+    let archived = store
+        .archive(&authorized.id, "lifecycle transfer complete", false)
+        .unwrap();
+    assert_eq!(archived.lifecycle_proof_error(dir.path()), None);
+}
+
+#[test]
+fn lifecycle_only_replacement_rejects_inexact_stale_and_unlisted_transfers() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = GoalStore::new(dir.path());
+    let authority = archived_direct_authority_success(&store, dir.path());
+    let old = store
+        .start("old", &[("preserve exact contract".into(), true)])
+        .unwrap();
+    let missing = store
+        .start("missing", &[("different contract".into(), true)])
+        .unwrap();
+    assert!(
+        store
+            .authorize_replacement(&missing.id, std::slice::from_ref(&old.id), &authority.id,)
+            .unwrap_err()
+            .to_string()
+            .contains("精确并集")
+    );
+
+    let replacement = store
+        .start("replacement", &[("preserve exact contract".into(), true)])
+        .unwrap();
+    let authorized = store
+        .authorize_replacement(
+            &replacement.id,
+            std::slice::from_ref(&old.id),
+            &authority.id,
+        )
+        .unwrap();
+    let unlisted = store
+        .start(
+            "unlisted same text",
+            &[("preserve exact contract".into(), true)],
+        )
+        .unwrap();
+    assert!(store.supersede(&unlisted.id, &authorized.id).is_err());
+
+    let stale_root = tempfile::tempdir().unwrap();
+    let stale_store = GoalStore::new(stale_root.path());
+    let stale_authority = archived_direct_authority_success(&stale_store, stale_root.path());
+    fs::write(
+        stale_root.path().join("lib.rs"),
+        "pub fn value() -> i32 { 3 }",
+    )
+    .unwrap();
+    let stale_old = stale_store
+        .start("stale old", &[("preserve stale".into(), true)])
+        .unwrap();
+    let stale_replacement = stale_store
+        .start("stale replacement", &[("preserve stale".into(), true)])
+        .unwrap();
+    assert!(
+        stale_store
+            .authorize_replacement(
+                &stale_replacement.id,
+                std::slice::from_ref(&stale_old.id),
+                &stale_authority.id,
+            )
+            .is_err()
+    );
+
+    let indirect_root = tempfile::tempdir().unwrap();
+    let indirect_store = GoalStore::new(indirect_root.path());
+    let indirect_authority = indirect_store
+        .start(
+            "non-authority success",
+            &[("not a repository gate".into(), true)],
+        )
+        .unwrap();
+    let indirect_authority =
+        close_non_code_success(&indirect_store, indirect_root.path(), &indirect_authority);
+    let indirect_authority = indirect_store
+        .archive(&indirect_authority.id, "no direct authority", false)
+        .unwrap();
+    let indirect_old = indirect_store
+        .start("indirect old", &[("preserve indirect".into(), true)])
+        .unwrap();
+    let indirect_replacement = indirect_store
+        .start(
+            "indirect replacement",
+            &[("preserve indirect".into(), true)],
+        )
+        .unwrap();
+    assert!(
+        indirect_store
+            .authorize_replacement(
+                &indirect_replacement.id,
+                std::slice::from_ref(&indirect_old.id),
+                &indirect_authority.id,
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("direct-authority")
+    );
+}
+
+#[test]
+fn lifecycle_only_replacement_proof_rejects_cross_workspace_reuse() {
+    let source = tempfile::tempdir().unwrap();
+    let source_store = GoalStore::new(source.path());
+    let authority = archived_direct_authority_success(&source_store, source.path());
+    let old = source_store
+        .start("old", &[("preserve identity".into(), true)])
+        .unwrap();
+    let replacement = source_store
+        .start("replacement", &[("preserve identity".into(), true)])
+        .unwrap();
+    let authorized = source_store
+        .authorize_replacement(
+            &replacement.id,
+            std::slice::from_ref(&old.id),
+            &authority.id,
+        )
+        .unwrap();
+
+    let target = tempfile::tempdir().unwrap();
+    fs::write(
+        target.path().join("lib.rs"),
+        fs::read(source.path().join("lib.rs")).unwrap(),
+    )
+    .unwrap();
+    fs::create_dir_all(target.path().join(GOALS_DIR)).unwrap();
+    for id in [&authority.id, &old.id, &authorized.id] {
+        fs::copy(
+            source.path().join(GOALS_DIR).join(format!("{id}.json")),
+            target.path().join(GOALS_DIR).join(format!("{id}.json")),
+        )
+        .unwrap();
+    }
+    let fingerprint = workspace_fingerprint(target.path()).unwrap();
+    assert!(
+        replacement_authority_error(&authorized, target.path(), &fingerprint)
+            .unwrap()
+            .contains("workspace identity")
+    );
 }
 
 /// `--migrate-unreceipted` 的文档承诺是"只适用于从来没有 receipt 的 pre-rollout

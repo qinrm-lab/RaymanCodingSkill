@@ -37,9 +37,12 @@ pub(super) fn legacy_lifecycle_contract_sha256(goal: &Goal) -> String {
         .iter()
         .any(|receipt| !receipt.extensions.is_empty())
         || !goal.authority_receipts.is_empty();
+    let replacement_extended = goal.replacement_authority.is_some();
     lifecycle_hash_str(
         &mut hasher,
-        if autonomy_extended {
+        if replacement_extended {
+            "rayman.lifecycle-contract.v4"
+        } else if autonomy_extended {
             "rayman.lifecycle-contract.v3"
         } else if extended {
             "rayman.lifecycle-contract.v2"
@@ -135,6 +138,20 @@ pub(super) fn legacy_lifecycle_contract_sha256(goal: &Goal) -> String {
                     lifecycle_hash_str(&mut hasher, &run.stderr_sha256);
                 }
             }
+        }
+        if let Some(proof) = goal.replacement_authority.as_ref() {
+            lifecycle_hash_str(&mut hasher, &proof.recorded_at);
+            lifecycle_hash_str(&mut hasher, &proof.workspace_identity);
+            lifecycle_hash_str(&mut hasher, &proof.workspace_fingerprint);
+            lifecycle_hash_str(&mut hasher, &proof.authority_goal_id);
+            lifecycle_hash_str(&mut hasher, &proof.authority_lifecycle_contract_sha256);
+            lifecycle_hash_str(&mut hasher, &proof.replacement_contract_sha256);
+            hasher.update((proof.predecessor_contracts.len() as u64).to_le_bytes());
+            for (id, contract) in &proof.predecessor_contracts {
+                lifecycle_hash_str(&mut hasher, id);
+                lifecycle_hash_str(&mut hasher, contract);
+            }
+            lifecycle_hash_str(&mut hasher, &proof.proof_sha256);
         }
     }
     hasher.update((goal.requirements.len() as u64).to_le_bytes());
@@ -525,6 +542,25 @@ pub fn goal_gate_verdict(
     }
 
     let requires_receipt = goal.is_current_schema();
+    let lifecycle_only = if goal.replacement_authority.is_some() {
+        let Some(fingerprint) = current_fingerprint else {
+            blockers.push(format!(
+                "goal {} lifecycle-only replacement 无法在缺少 source fingerprint 时验证",
+                goal.id
+            ));
+            return GoalGateVerdict { blockers, warnings };
+        };
+        if let Some(error) = replacement_authority_error(goal, root, fingerprint) {
+            blockers.push(format!(
+                "goal {} lifecycle-only replacement proof 无效: {error}",
+                goal.id
+            ));
+            return GoalGateVerdict { blockers, warnings };
+        }
+        true
+    } else {
+        false
+    };
     match goal.status {
         GoalStatus::Success => {}
         GoalStatus::Active => blockers.push(format!(
@@ -563,7 +599,7 @@ pub fn goal_gate_verdict(
                 goal.id, req.id
             ));
         }
-        if req.status == RequirementStatus::Done && req.validations.is_empty() {
+        if !lifecycle_only && req.status == RequirementStatus::Done && req.validations.is_empty() {
             blockers.push(format!("goal {} 需求 {} 缺少验证 receipt", goal.id, req.id));
         }
         if !req.impacts.is_empty()
@@ -573,7 +609,7 @@ pub fn goal_gate_verdict(
                 blockers.push(format!("goal {} 需求 {} {gap}", goal.id, req.id));
             }
         }
-        if requires_receipt && goal.status == GoalStatus::Success && is_must {
+        if !lifecycle_only && requires_receipt && goal.status == GoalStatus::Success && is_must {
             let has_current_receipt = req.validations.iter().any(|validation| {
                 current_fingerprint.is_some_and(|fingerprint| {
                     validation_has_current_receipt(validation, goal, req, root, fingerprint)
@@ -786,6 +822,31 @@ impl Goal {
         {
             return Some("缺少 baseline 的 goal 不能携带 plan/review/authority receipt".into());
         }
+        if let Some(proof) = self.replacement_authority.as_ref() {
+            if self.status != GoalStatus::Success {
+                return Some("lifecycle-only replacement 必须是 success".into());
+            }
+            if self.baseline.is_none()
+                || proof.recorded_at.trim().is_empty()
+                || proof.authority_goal_id.trim().is_empty()
+                || proof.predecessor_contracts.is_empty()
+                || proof.predecessor_contracts.contains_key(&self.id)
+                || proof
+                    .predecessor_contracts
+                    .contains_key(&proof.authority_goal_id)
+                || !is_sha256(&proof.workspace_identity)
+                || !is_sha256(&proof.workspace_fingerprint)
+                || !is_sha256(&proof.authority_lifecycle_contract_sha256)
+                || !is_sha256(&proof.replacement_contract_sha256)
+                || !is_sha256(&proof.proof_sha256)
+                || proof
+                    .predecessor_contracts
+                    .iter()
+                    .any(|(id, contract)| id.trim().is_empty() || !is_sha256(contract))
+            {
+                return Some("lifecycle-only replacement proof 结构或摘要无效".into());
+            }
+        }
         None
     }
 
@@ -858,6 +919,183 @@ fn normalized_requirement_text(text: &str) -> String {
         .to_ascii_lowercase()
 }
 
+pub(super) fn workspace_identity(root: &Path) -> String {
+    let canonical = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    crate::hash::sha256_bytes(canonical.to_string_lossy().as_bytes())
+}
+
+pub(super) fn must_text_multiset<'a>(
+    goals: impl IntoIterator<Item = &'a Goal>,
+) -> BTreeMap<String, usize> {
+    let mut result = BTreeMap::new();
+    for goal in goals {
+        for requirement in goal
+            .requirements
+            .iter()
+            .filter(|requirement| requirement.kind == RequirementKind::Must)
+        {
+            *result
+                .entry(normalized_requirement_text(&requirement.text))
+                .or_default() += 1;
+        }
+    }
+    result
+}
+
+pub(super) fn transfer_goal_contract_sha256(goal: &Goal) -> String {
+    let mut hasher = Sha256::new();
+    lifecycle_hash_str(&mut hasher, "rayman.transfer-goal-contract.v1");
+    hasher.update(goal.schema_version.to_le_bytes());
+    lifecycle_hash_str(&mut hasher, &goal.id);
+    lifecycle_hash_str(&mut hasher, &goal.title);
+    lifecycle_hash_str(&mut hasher, &goal.created_at);
+    let must = goal
+        .requirements
+        .iter()
+        .filter(|requirement| requirement.kind == RequirementKind::Must)
+        .collect::<Vec<_>>();
+    hasher.update((must.len() as u64).to_le_bytes());
+    for requirement in must {
+        lifecycle_hash_str(&mut hasher, &requirement.id);
+        lifecycle_hash_str(&mut hasher, &requirement.text);
+        lifecycle_hash_str(&mut hasher, requirement.kind.as_str());
+    }
+    format!("{:x}", hasher.finalize())
+}
+
+pub(super) fn replacement_contract_sha256(goal: &Goal) -> String {
+    let mut hasher = Sha256::new();
+    lifecycle_hash_str(&mut hasher, "rayman.lifecycle-only-replacement-contract.v1");
+    hasher.update(goal.schema_version.to_le_bytes());
+    lifecycle_hash_str(&mut hasher, &goal.id);
+    lifecycle_hash_str(&mut hasher, &goal.title);
+    lifecycle_hash_str(&mut hasher, goal.status.as_str());
+    lifecycle_hash_str(&mut hasher, &goal.created_at);
+    if let Some(baseline) = goal.baseline.as_ref() {
+        lifecycle_hash_str(&mut hasher, &baseline.workspace_fingerprint);
+    }
+    hasher.update((goal.requirements.len() as u64).to_le_bytes());
+    for requirement in &goal.requirements {
+        lifecycle_hash_str(&mut hasher, &requirement.id);
+        lifecycle_hash_str(&mut hasher, &requirement.text);
+        lifecycle_hash_str(&mut hasher, requirement.kind.as_str());
+        lifecycle_hash_str(&mut hasher, requirement.status.as_str());
+        lifecycle_hash_optional_str(&mut hasher, requirement.evidence.as_deref());
+    }
+    format!("{:x}", hasher.finalize())
+}
+
+pub(super) fn replacement_authority_proof_sha256(proof: &ReplacementAuthorityProof) -> String {
+    let mut hasher = Sha256::new();
+    lifecycle_hash_str(&mut hasher, "rayman.lifecycle-only-replacement-proof.v1");
+    lifecycle_hash_str(&mut hasher, &proof.recorded_at);
+    lifecycle_hash_str(&mut hasher, &proof.workspace_identity);
+    lifecycle_hash_str(&mut hasher, &proof.workspace_fingerprint);
+    lifecycle_hash_str(&mut hasher, &proof.authority_goal_id);
+    lifecycle_hash_str(&mut hasher, &proof.authority_lifecycle_contract_sha256);
+    lifecycle_hash_str(&mut hasher, &proof.replacement_contract_sha256);
+    hasher.update((proof.predecessor_contracts.len() as u64).to_le_bytes());
+    for (id, contract) in &proof.predecessor_contracts {
+        lifecycle_hash_str(&mut hasher, id);
+        lifecycle_hash_str(&mut hasher, contract);
+    }
+    format!("{:x}", hasher.finalize())
+}
+
+/// Revalidate a lifecycle-only replacement without trusting its serialized
+/// conclusion.  All referenced records are loaded from this workspace's
+/// managed goal store, so copied cross-workspace JSON cannot mint authority.
+pub fn replacement_authority_error(goal: &Goal, root: &Path, fingerprint: &str) -> Option<String> {
+    let proof = goal.replacement_authority.as_ref()?;
+    if proof.proof_sha256 != replacement_authority_proof_sha256(proof) {
+        return Some("lifecycle-only replacement proof hash 无效".into());
+    }
+    if proof.workspace_identity != workspace_identity(root) {
+        return Some("lifecycle-only replacement 来自不同 workspace identity".into());
+    }
+    if proof.workspace_fingerprint != fingerprint {
+        return Some("lifecycle-only replacement source fingerprint 已过期".into());
+    }
+    let Some(baseline) = goal.baseline.as_ref() else {
+        return Some("lifecycle-only replacement 缺少 baseline".into());
+    };
+    if baseline.workspace_fingerprint != proof.workspace_fingerprint
+        || replacement_contract_sha256(goal) != proof.replacement_contract_sha256
+        || !goal.plan_receipts.is_empty()
+        || !goal.review_receipts.is_empty()
+        || !goal.authority_receipts.is_empty()
+        || goal.requirements.iter().any(|requirement| {
+            requirement.status != RequirementStatus::Done
+                || requirement
+                    .evidence
+                    .as_deref()
+                    .map(str::trim)
+                    .unwrap_or_default()
+                    .is_empty()
+                || !requirement.validations.is_empty()
+                || !requirement.impacts.is_empty()
+        })
+    {
+        return Some("lifecycle-only replacement 合约、baseline 或零 delta 形态无效".into());
+    }
+
+    let store = GoalStore::new(root);
+    let authority = match store.get(&proof.authority_goal_id) {
+        Ok(Some(authority)) => authority,
+        Ok(None) => return Some("lifecycle-only authority goal 不存在".into()),
+        Err(error) => return Some(format!("无法读取 lifecycle-only authority goal: {error}")),
+    };
+    let Some(authority_lifecycle) = authority.lifecycle_proof.as_ref() else {
+        return Some("lifecycle-only authority goal 缺少 lifecycle proof".into());
+    };
+    if authority.lifecycle != GoalLifecycle::Archived
+        || authority.status != GoalStatus::Success
+        || !authority.is_current_schema()
+        || authority.current_schema_error().is_some()
+        || authority_lifecycle.receipt_policy.as_deref() != Some(RECEIPT_POLICY_V2)
+        || authority_lifecycle.migration.is_some()
+        || authority_lifecycle.workspace_fingerprint != proof.workspace_fingerprint
+        || authority_lifecycle.contract_sha256 != proof.authority_lifecycle_contract_sha256
+        || authority.lifecycle_proof_error(root).is_some()
+        || historical_success_fingerprint(&authority, root, ReceiptValidationPolicy::CurrentV2)
+            .as_deref()
+            != Some(fingerprint)
+        || !has_direct_stable_authority_receipt(&authority, root, fingerprint)
+    {
+        return Some(
+            "lifecycle-only authority 必须是同源码、current-policy、direct-authority 的有效 archived success"
+                .into(),
+        );
+    }
+
+    let mut predecessors = Vec::new();
+    for (id, expected_contract) in &proof.predecessor_contracts {
+        let predecessor = match store.get(id) {
+            Ok(Some(predecessor)) => predecessor,
+            Ok(None) => return Some(format!("被转移目标不存在: {id}")),
+            Err(error) => return Some(format!("无法读取被转移目标 {id}: {error}")),
+        };
+        if predecessor.status == GoalStatus::Success
+            || !predecessor.is_current_schema()
+            || predecessor.current_schema_error().is_some()
+            || transfer_goal_contract_sha256(&predecessor) != *expected_contract
+            || !matches!(
+                predecessor.lifecycle,
+                GoalLifecycle::Current | GoalLifecycle::Superseded
+            )
+            || (predecessor.lifecycle == GoalLifecycle::Superseded
+                && predecessor.superseded_by.as_deref() != Some(goal.id.as_str()))
+        {
+            return Some(format!("被转移目标 {id} 的合约或 lifecycle 已失效"));
+        }
+        predecessors.push(predecessor);
+    }
+    if must_text_multiset(std::iter::once(goal)) != must_text_multiset(predecessors.iter()) {
+        return Some("replacement must 与被转移目标 must 的精确并集不一致".into());
+    }
+    None
+}
+
 pub fn supersession_error(
     goal: &Goal,
     goals: &[Goal],
@@ -928,6 +1166,14 @@ pub fn supersession_error(
             }
         }
         GoalLifecycle::Superseded => unreachable!("lifecycle was checked above"),
+    }
+    if let Some(proof) = replacement.replacement_authority.as_ref()
+        && !proof.predecessor_contracts.contains_key(&goal.id)
+    {
+        return Some(format!(
+            "lifecycle-only replacement 未显式绑定被替代目标 {}",
+            goal.id
+        ));
     }
     if goal.status != GoalStatus::Success {
         let replacement_must = replacement

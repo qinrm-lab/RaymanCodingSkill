@@ -1063,6 +1063,26 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 println!("目标 {} 已归档：{}", goal.id, reason.trim());
             }
         }
+        GoalAction::AuthorizeReplacement {
+            id,
+            predecessors,
+            authority_goal,
+        } => {
+            let goal = store.authorize_replacement(&id, &predecessors, &authority_goal)?;
+            if json {
+                print(&serde_json::to_value(&goal)?);
+            } else {
+                println!(
+                    "目标 {} 已获 lifecycle-only replacement authority（source={}，predecessors={}）",
+                    goal.id,
+                    goal.replacement_authority
+                        .as_ref()
+                        .map(|proof| proof.workspace_fingerprint.as_str())
+                        .unwrap_or("unknown"),
+                    predecessors.join(",")
+                );
+            }
+        }
         GoalAction::Supersede { id, replacement } => {
             let goal = store.supersede(&id, &replacement)?;
             if json {

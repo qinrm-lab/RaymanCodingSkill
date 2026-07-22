@@ -31,7 +31,7 @@ cargo run -p rayman -- context status
 
 ## Release identity and installed CLI
 
-`2.4.0` binds the orthogonal frontier/consultation surface to `rayman-cli-contract-v8` and the exact running CLI version, so a v7 executable cannot report READY against the v8 workspace contract. Keep these claims separate: `check --profile release` proves workspace strict-quality only; `doctor --check` proves installed binary/PATH/SKILL/activation identity only; release handoff additionally requires a locked fresh-source rebuild. The exact contract and release procedure live in [docs/RELEASE_CONTRACT.md](docs/RELEASE_CONTRACT.md).
+`2.5.0` binds source-honest lifecycle-only replacement authority to `rayman-cli-contract-v9` and the exact running CLI version, so a v8 executable cannot interpret or report READY against the v9 proof contract. Keep these claims separate: `check --profile release` proves workspace strict-quality only; `doctor --check` proves installed binary/PATH/SKILL/activation identity only; release handoff additionally requires a locked fresh-source rebuild. The exact contract and release procedure live in [docs/RELEASE_CONTRACT.md](docs/RELEASE_CONTRACT.md).
 
 The only supported source-checkout install/upgrade entry point is below. Open a PowerShell 7 (`pwsh`) session first—never Windows PowerShell. A historical profile shim that searches for `.Rayman\rayman.ps1` can loop forever at a drive root; inspect and migrate only that exact known shim before installation:
 
@@ -99,6 +99,7 @@ rayman goal close <id> [--status success|partial|blocked] # only these three; st
 rayman goal archive <id> --reason "<historical reason>"
 rayman goal archive <id> --reason "<historical reason>" --migrate-receipt-policy receipt_integrity_v1
 rayman goal archive <id> --reason "<legacy quarantine reason>" --quarantine-invalid-history
+rayman goal authorize-replacement <replacement> --supersedes <old>... --authority-from <archived-success>
 rayman goal supersede <id> --by <current gate-ready replacement>
 rayman goal current [<id>]                                # list current goals; with an id, restore an archived/superseded goal to current
 rayman goal frontier <id>       # legacy decision plus orthogonal execution / consultation
@@ -125,6 +126,8 @@ Retired v1 spellings fail nonzero with migration guidance rather than silently c
 
 
 Archiving or superseding a completed goal revalidates its receipt integrity at the fingerprint where that work actually passed; later source changes do not make historical proof current. Lifecycle proofs bind the receipt-policy version into their contract hash, so a later classifier upgrade cannot silently reinterpret valid history or be downgraded by editing JSON. Proofs written before policy versioning are checked with the exact legacy v1 integrity rules. A pre-policy-v2 current or archived success may be explicitly migrated with `--migrate-receipt-policy receipt_integrity_v1`, but only when it predates that rollout and every real v1 receipt still passes fingerprint, cwd, command/scope, contract, and output-hash checks. This option cannot repair missing receipts, post-rollout work, an incomplete requirement, or a goal whose immutable plan omitted real changes. A second, wider hatch exists for records that predate receipts entirely: `--migrate-unreceipted` archives a pre-rollout success whose requirements carry evidence and validations but no receipts at all, and the proof it writes is thereafter accepted without a receipt recheck. It is limited to goals whose `created_at` precedes the rollout, so no goal created by `goal start` today can reach it; use it only to file genuine pre-receipt history, and prefer `archive` without it whenever real receipts exist. Supersession requires a separate current, gate-ready replacement at the moment it is recorded; if that replacement is archived afterwards, its own lifecycle proof keeps the supersession valid.
+
+The narrow zero-delta recovery is `goal authorize-replacement`. It does not treat a code gate as non-code and does not mint synthetic validation receipts. Instead, it requires a pristine replacement whose must texts are the exact normalized multiset from all named unfinished predecessors, then binds that contract to a non-migrated current-policy archived success with a direct repeated authority receipt at the same canonical workspace identity and source fingerprint. The persisted proof also binds each predecessor ID and immutable transfer contract, so unrelated goals cannot reuse it. Source drift, copied state, quarantine, legacy policy, indirect lifecycle authority, extra or missing musts, or any ordinary delta rejects the operation.
 
 ## State and checkpoint integrity
 

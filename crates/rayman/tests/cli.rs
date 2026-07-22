@@ -710,7 +710,7 @@ fn doctor_verifies_installed_identity_in_an_ordinary_managed_workspace() {
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
         &format!(
-            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v8\ncli_version: 2.4.0\n"
+            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v9\ncli_version: 2.5.0\n"
         ),
     );
     let binary = std::fs::canonicalize(BIN).unwrap();
@@ -745,7 +745,7 @@ fn doctor_rejects_an_earlier_windows_path_wrapper() {
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
         &format!(
-            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v8\ncli_version: 2.4.0\n"
+            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v9\ncli_version: 2.5.0\n"
         ),
     );
     let wrapper_dir = tempfile::tempdir().unwrap();
@@ -2364,6 +2364,119 @@ fn goal_lifecycle_preserves_history_without_hiding_unfinished_work() {
 }
 
 #[test]
+fn lifecycle_only_replacement_cli_uses_exact_archived_authority() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(
+        root,
+        "Cargo.toml",
+        "[package]\nname = \"lifecycle-cli\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(
+        root,
+        "src/lib.rs",
+        "pub fn answer() -> i32 { 41 }\n#[test]\nfn smoke() { assert_eq!(answer(), 41); }\n",
+    );
+    let warmup = Command::new("cargo")
+        .args(["test", "--workspace", "--all-targets"])
+        .current_dir(root)
+        .output()
+        .unwrap();
+    assert!(warmup.status.success());
+    run_json(root, &["context", "refresh"]);
+
+    let authority = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "direct authority",
+            "--must",
+            "prove repository",
+        ],
+    );
+    let authority_id = authority["id"].as_str().unwrap();
+    write(
+        root,
+        "src/lib.rs",
+        "pub fn answer() -> i32 { 42 }\n#[test]\nfn smoke() { assert_eq!(answer(), 42); }\n",
+    );
+    run_json(root, &["context", "refresh"]);
+    validate_goal_authority(
+        root,
+        authority_id,
+        "req_1",
+        "stable direct authority",
+        &["src/lib.rs"],
+    );
+    assert_eq!(run(root, &["goal", "close", authority_id]).status, 0);
+    assert_eq!(
+        run(
+            root,
+            &[
+                "goal",
+                "archive",
+                authority_id,
+                "--reason",
+                "direct authority complete",
+            ],
+        )
+        .status,
+        0
+    );
+
+    let old = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "unfinished",
+            "--must",
+            "preserve exact contract",
+        ],
+    );
+    let old_id = old["id"].as_str().unwrap();
+    let replacement = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "replacement",
+            "--must",
+            "preserve exact contract",
+        ],
+    );
+    let replacement_id = replacement["id"].as_str().unwrap();
+    let authorized = run_json(
+        root,
+        &[
+            "goal",
+            "authorize-replacement",
+            replacement_id,
+            "--supersedes",
+            old_id,
+            "--authority-from",
+            authority_id,
+        ],
+    );
+    assert_eq!(authorized["status"], "success");
+    assert_eq!(
+        authorized["replacement_authority"]["authority_goal_id"],
+        authority_id
+    );
+    let superseded = run_json(root, &["goal", "supersede", old_id, "--by", replacement_id]);
+    assert_eq!(superseded["lifecycle"], "superseded");
+    let checked = run(root, &["check", "--goal", replacement_id]);
+    assert_eq!(checked.status, 0, "{}\n{}", checked.stdout, checked.stderr);
+    let finished = run(root, &["finish", "--goal", replacement_id]);
+    assert_eq!(
+        finished.status, 0,
+        "{}\n{}",
+        finished.stdout, finished.stderr
+    );
+}
+
+#[test]
 fn checkpoint_verify_state_audit_and_recursive_temp_status_are_exposed_by_cli() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
@@ -2710,8 +2823,8 @@ fn workspace_activation_rejects_the_previous_cli_identity() {
     let activation_path = root.join(".RaymanCodingSkill/workspace_skill.yaml");
     let previous_identity = std::fs::read_to_string(&activation_path)
         .unwrap()
-        .replace("rayman-cli-contract-v8", "rayman-cli-contract-v7")
-        .replace("cli_version: 2.4.0", "cli_version: 2.3.0");
+        .replace("rayman-cli-contract-v9", "rayman-cli-contract-v8")
+        .replace("cli_version: 2.5.0", "cli_version: 2.4.0");
     std::fs::write(&activation_path, previous_identity).unwrap();
 
     let status = run_raw(root, &["--format", "json", "workspace", "status"]);
@@ -2719,10 +2832,10 @@ fn workspace_activation_rejects_the_previous_cli_identity() {
     let status: Value = serde_json::from_str(&status.stdout).unwrap();
     assert_eq!(status["status"], "invalid");
     assert_eq!(status["active"], false);
-    assert_eq!(status["cli_contract"], "rayman-cli-contract-v7");
-    assert_eq!(status["cli_version"], "2.3.0");
-    assert_eq!(status["running_cli_contract"], "rayman-cli-contract-v8");
-    assert_eq!(status["running_cli_version"], "2.4.0");
+    assert_eq!(status["cli_contract"], "rayman-cli-contract-v8");
+    assert_eq!(status["cli_version"], "2.4.0");
+    assert_eq!(status["running_cli_contract"], "rayman-cli-contract-v9");
+    assert_eq!(status["running_cli_version"], "2.5.0");
     assert!(
         status["issues"]
             .as_array()
