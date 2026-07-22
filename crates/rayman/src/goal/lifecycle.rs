@@ -1020,7 +1020,14 @@ pub(super) fn replacement_contract_sha256(goal: &Goal) -> String {
 
 pub(super) fn replacement_authority_proof_sha256(proof: &ReplacementAuthorityProof) -> String {
     let mut hasher = Sha256::new();
-    lifecycle_hash_str(&mut hasher, "rayman.lifecycle-only-replacement-proof.v2");
+    lifecycle_hash_str(
+        &mut hasher,
+        if proof.live_authority.command_rebind.is_some() {
+            "rayman.lifecycle-only-replacement-proof.v3"
+        } else {
+            "rayman.lifecycle-only-replacement-proof.v2"
+        },
+    );
     lifecycle_hash_str(&mut hasher, &proof.recorded_at);
     lifecycle_hash_str(&mut hasher, &proof.workspace_identity);
     lifecycle_hash_str(&mut hasher, &proof.workspace_fingerprint);
@@ -1037,6 +1044,9 @@ pub(super) fn replacement_authority_proof_sha256(proof: &ReplacementAuthorityPro
         lifecycle_hash_str(&mut hasher, path);
     }
     lifecycle_hash_str(&mut hasher, &proof.live_authority.command);
+    if let Some(rebind) = proof.live_authority.command_rebind.as_ref() {
+        lifecycle_hash_rebind(&mut hasher, rebind);
+    }
     lifecycle_hash_str(&mut hasher, &proof.live_authority.recorded_at);
     lifecycle_hash_str(&mut hasher, &proof.live_authority.workspace_fingerprint);
     hasher.update(proof.live_authority.repeat.to_le_bytes());
@@ -1083,9 +1093,45 @@ pub fn replacement_authority_invocation_sha256(
     predecessor_ids: &[String],
     repeat: u32,
 ) -> String {
+    replacement_authority_invocation_sha256_with_rebind(
+        command,
+        replacement_id,
+        authority_goal_id,
+        predecessor_ids,
+        repeat,
+        None,
+    )
+}
+
+fn lifecycle_hash_rebind(hasher: &mut Sha256, rebind: &ReplacementAuthorityCommandRebind) {
+    lifecycle_hash_str(hasher, &rebind.schema);
+    lifecycle_hash_str(hasher, &rebind.flag);
+    lifecycle_hash_str(hasher, &rebind.archived_value);
+    lifecycle_hash_str(hasher, &rebind.current_value);
+    lifecycle_hash_str(hasher, &rebind.current_sha256);
+}
+
+pub fn replacement_authority_invocation_sha256_with_rebind(
+    command: &str,
+    replacement_id: &str,
+    authority_goal_id: &str,
+    predecessor_ids: &[String],
+    repeat: u32,
+    command_rebind: Option<&ReplacementAuthorityCommandRebind>,
+) -> String {
     let mut hasher = Sha256::new();
-    lifecycle_hash_str(&mut hasher, "rayman.lifecycle-live-authority-invocation.v1");
+    lifecycle_hash_str(
+        &mut hasher,
+        if command_rebind.is_some() {
+            "rayman.lifecycle-live-authority-invocation.v2"
+        } else {
+            "rayman.lifecycle-live-authority-invocation.v1"
+        },
+    );
     lifecycle_hash_str(&mut hasher, command);
+    if let Some(rebind) = command_rebind {
+        lifecycle_hash_rebind(&mut hasher, rebind);
+    }
     lifecycle_hash_str(&mut hasher, replacement_id);
     lifecycle_hash_str(&mut hasher, authority_goal_id);
     let mut predecessors = predecessor_ids.to_vec();
@@ -1147,14 +1193,17 @@ pub fn replacement_authority_error(goal: &Goal, root: &Path, fingerprint: &str) 
         || live.runs.len() != live.repeat as usize
         || live.workspace_fingerprint != fingerprint
         || live.invocation_sha256
-            != replacement_authority_invocation_sha256(
+            != replacement_authority_invocation_sha256_with_rebind(
                 &live.command,
                 &goal.id,
                 &proof.authority_goal_id,
                 &predecessor_ids,
                 live.repeat,
+                live.command_rebind.as_ref(),
             )
         || validate_authority_command(root, &live.command).is_err()
+        || replacement_authority_effective_command(&live.command, live.command_rebind.as_ref())
+            .is_err()
         || live.runs.iter().any(|run| {
             run.exit_code != 0
                 || run.workspace_fingerprint_before != fingerprint

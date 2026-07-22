@@ -405,6 +405,9 @@ pub enum GoalAction {
         /// Re-run the exact trusted authority command on the current source.
         #[arg(long)]
         command: String,
+        /// Rebind only the archived command's unique -MaintenanceOrchestrationCycle value.
+        #[arg(long, value_name = "WORKSPACE_RELATIVE_CYCLE_JSON")]
+        maintenance_cycle_rebind: Option<String>,
         /// Stable repetitions for the live lifecycle authority proof.
         #[arg(long, default_value_t = 2)]
         repeat: u32,

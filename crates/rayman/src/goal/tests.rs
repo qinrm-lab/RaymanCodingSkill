@@ -137,12 +137,23 @@ fn close_non_code_success(store: &GoalStore, root: &Path, goal: &Goal) -> Goal {
 }
 
 fn archived_direct_authority_success(store: &GoalStore, root: &Path) -> Goal {
+    archived_direct_authority_success_for_command(
+        store,
+        root,
+        "cargo test --workspace --all-targets",
+    )
+}
+
+fn archived_direct_authority_success_for_command(
+    store: &GoalStore,
+    root: &Path,
+    command: &str,
+) -> Goal {
     fs::write(root.join("lib.rs"), "pub fn value() -> i32 { 1 }").unwrap();
     let goal = store
         .start("direct authority", &[("prove repository".into(), true)])
         .unwrap();
     fs::write(root.join("lib.rs"), "pub fn value() -> i32 { 2 }").unwrap();
-    let command = "cargo test --workspace --all-targets";
     let impacts = vec![impact("lib.rs")];
     let impact_scopes = validation_scopes_for_impacts(&impacts);
     let fingerprint = workspace_fingerprint(root).unwrap();
@@ -200,6 +211,7 @@ fn live_replacement_authority(
     let fingerprint = workspace_fingerprint(root).unwrap();
     ReplacementAuthorityReceipt {
         command: command.into(),
+        command_rebind: None,
         recorded_at: now_iso(),
         workspace_fingerprint: fingerprint.clone(),
         repeat: 2,
@@ -765,6 +777,143 @@ fn lifecycle_only_replacement_transfers_exact_musts_from_direct_archived_authori
         .archive(&authorized.id, "lifecycle transfer complete", false)
         .unwrap();
     assert_eq!(archived.lifecycle_proof_error(dir.path()), None);
+}
+
+#[test]
+fn lifecycle_only_replacement_rebinds_only_a_verified_maintenance_cycle_path() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let store = GoalStore::new(root);
+    fs::create_dir_all(root.join("scripts")).unwrap();
+    fs::create_dir_all(root.join(".check-repo-output")).unwrap();
+    fs::write(root.join("scripts/check-repo.ps1"), "exit 0\n").unwrap();
+    let archived_cycle = ".check-repo-output/archived-maintenance-review-cycle.json";
+    let current_cycle = ".check-repo-output/current-maintenance-review-cycle.json";
+    fs::write(root.join(archived_cycle), "{\"snapshot\":\"old\"}\n").unwrap();
+    fs::write(root.join(current_cycle), "{\"snapshot\":\"current\"}\n").unwrap();
+    let command = format!(
+        "pwsh -NoProfile -File scripts/check-repo.ps1 -QuickParallel -MaintenanceOrchestrationCycle {archived_cycle}"
+    );
+    let authority = archived_direct_authority_success_for_command(&store, root, command.as_str());
+    let old = store
+        .start("old", &[("preserve exact contract".into(), true)])
+        .unwrap();
+    let replacement = store
+        .start("replacement", &[("preserve exact contract".into(), true)])
+        .unwrap();
+    let (effective, rebind) =
+        prepare_maintenance_cycle_rebind(root, &command, current_cycle).unwrap();
+    assert_eq!(
+        effective.args.last().map(String::as_str),
+        Some(current_cycle)
+    );
+    assert_eq!(rebind.archived_value, archived_cycle);
+    assert_eq!(
+        rebind.current_sha256,
+        crate::hash::sha256_file(&root.join(current_cycle)).unwrap()
+    );
+
+    let fingerprint = workspace_fingerprint(root).unwrap();
+    let predecessors = vec![old.id.clone()];
+    let live = ReplacementAuthorityReceipt {
+        command: command.clone(),
+        command_rebind: Some(rebind.clone()),
+        recorded_at: now_iso(),
+        workspace_fingerprint: fingerprint.clone(),
+        repeat: 2,
+        invocation_sha256: replacement_authority_invocation_sha256_with_rebind(
+            &command,
+            &replacement.id,
+            &authority.id,
+            &predecessors,
+            2,
+            Some(&rebind),
+        ),
+        runs: (0..2)
+            .map(|_| AuthorityRunReceipt {
+                exit_code: 0,
+                workspace_fingerprint_before: fingerprint.clone(),
+                workspace_fingerprint_after: fingerprint.clone(),
+                stdout_sha256: "a".repeat(64),
+                stderr_sha256: "b".repeat(64),
+            })
+            .collect(),
+    };
+    let authorized = store
+        .authorize_replacement(&replacement.id, &predecessors, &authority.id, live)
+        .unwrap();
+    assert_eq!(authorized.status, GoalStatus::Success);
+    assert_eq!(
+        authorized
+            .replacement_authority
+            .as_ref()
+            .unwrap()
+            .live_authority
+            .command,
+        command
+    );
+    assert_eq!(
+        replacement_authority_error(&authorized, root, &fingerprint),
+        None
+    );
+
+    fs::write(root.join(current_cycle), "{\"snapshot\":\"drifted\"}\n").unwrap();
+    assert!(verify_maintenance_cycle_rebind_artifact(root, &rebind).is_err());
+}
+
+#[test]
+fn maintenance_cycle_rebind_rejects_substitution_traversal_and_ambiguous_flags() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".check-repo-output")).unwrap();
+    let current_cycle = ".check-repo-output/current-maintenance-review-cycle.json";
+    fs::write(root.join(current_cycle), "{}\n").unwrap();
+    let exact = "pwsh -NoProfile -File scripts/check-repo.ps1 -MaintenanceOrchestrationCycle .check-repo-output/old-maintenance-review-cycle.json";
+    assert!(prepare_maintenance_cycle_rebind(root, exact, current_cycle).is_ok());
+    for invalid_command in [
+        "pwsh -NoProfile -File scripts/check-repo.ps1 -OtherCycle .check-repo-output/old-maintenance-review-cycle.json",
+        "pwsh -NoProfile -File scripts/check-repo.ps1 -MaintenanceOrchestrationCycle .check-repo-output/a-maintenance-review-cycle.json -MaintenanceOrchestrationCycle .check-repo-output/b-maintenance-review-cycle.json",
+    ] {
+        assert!(prepare_maintenance_cycle_rebind(root, invalid_command, current_cycle).is_err());
+    }
+    for invalid_path in [
+        "../outside-maintenance-review-cycle.json",
+        "./.check-repo-output/current-maintenance-review-cycle.json",
+        "C:/outside-maintenance-review-cycle.json",
+        ".check-repo-output\\current-maintenance-review-cycle.json",
+        ".check-repo-output//current-maintenance-review-cycle.json",
+        ".check-repo-output/not-a-cycle.json",
+    ] {
+        assert!(prepare_maintenance_cycle_rebind(root, exact, invalid_path).is_err());
+    }
+
+    let (_, mut rebind) = prepare_maintenance_cycle_rebind(root, exact, current_cycle).unwrap();
+    rebind.flag = "-OtherCycle".into();
+    assert!(replacement_authority_effective_command(exact, Some(&rebind)).is_err());
+}
+
+#[cfg(unix)]
+#[test]
+fn maintenance_cycle_rebind_rejects_symlink_components() {
+    use std::os::unix::fs::symlink;
+
+    let dir = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    fs::write(
+        outside.path().join("current-maintenance-review-cycle.json"),
+        "{}\n",
+    )
+    .unwrap();
+    symlink(outside.path(), dir.path().join("linked")).unwrap();
+    let command = "pwsh -NoProfile -File scripts/check-repo.ps1 -MaintenanceOrchestrationCycle old-maintenance-review-cycle.json";
+    assert!(
+        prepare_maintenance_cycle_rebind(
+            dir.path(),
+            command,
+            "linked/current-maintenance-review-cycle.json",
+        )
+        .is_err()
+    );
 }
 
 #[test]

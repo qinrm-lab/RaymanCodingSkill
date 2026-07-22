@@ -710,7 +710,7 @@ fn doctor_verifies_installed_identity_in_an_ordinary_managed_workspace() {
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
         &format!(
-            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v10\ncli_version: 2.5.1\n"
+            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v11\ncli_version: 2.5.2\n"
         ),
     );
     let binary = std::fs::canonicalize(BIN).unwrap();
@@ -745,7 +745,7 @@ fn doctor_rejects_an_earlier_windows_path_wrapper() {
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
         &format!(
-            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v10\ncli_version: 2.5.1\n"
+            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v11\ncli_version: 2.5.2\n"
         ),
     );
     let wrapper_dir = tempfile::tempdir().unwrap();
@@ -2480,6 +2480,133 @@ fn lifecycle_only_replacement_cli_uses_exact_archived_authority() {
     );
 }
 
+#[cfg(windows)]
+#[test]
+fn lifecycle_only_replacement_cli_rebinds_only_the_maintenance_cycle_path() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(
+        root,
+        "Cargo.toml",
+        "[package]\nname = \"lifecycle-cycle-rebind\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 41 }\n");
+    write(
+        root,
+        "scripts/check-repo.ps1",
+        "param([string]$MaintenanceOrchestrationCycle)\nif (-not (Test-Path -LiteralPath $MaintenanceOrchestrationCycle -PathType Leaf)) { exit 11 }\nif ((Get-Content -Raw -LiteralPath $MaintenanceOrchestrationCycle) -notmatch '\"status\"\\s*:\\s*\"pass\"') { exit 12 }\n",
+    );
+    write(
+        root,
+        "target/archived-maintenance-review-cycle.json",
+        "{\"status\":\"pass\",\"snapshot\":\"archived\"}\n",
+    );
+    write(
+        root,
+        "target/current-maintenance-review-cycle.json",
+        "{\"status\":\"pass\",\"snapshot\":\"current\"}\n",
+    );
+    run_json(root, &["context", "refresh"]);
+
+    let archived_command = "pwsh -NoProfile -File scripts/check-repo.ps1 -MaintenanceOrchestrationCycle target/archived-maintenance-review-cycle.json";
+    let authority = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "cycle authority",
+            "--must",
+            "prove repository",
+        ],
+    );
+    let authority_id = authority["id"].as_str().unwrap();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+    run_json(
+        root,
+        &[
+            "goal",
+            "validate",
+            authority_id,
+            "--req",
+            "req_1",
+            "-m",
+            "stable cycle authority",
+            "--command",
+            archived_command,
+            "--changed",
+            "src/lib.rs",
+            "--authority",
+            "--repeat",
+            "2",
+        ],
+    );
+    assert_eq!(run(root, &["goal", "close", authority_id]).status, 0);
+    assert_eq!(
+        run(
+            root,
+            &[
+                "goal",
+                "archive",
+                authority_id,
+                "--reason",
+                "cycle authority complete",
+            ],
+        )
+        .status,
+        0
+    );
+
+    let old = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "unfinished cycle consumer",
+            "--must",
+            "preserve cycle contract",
+        ],
+    );
+    let replacement = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "replacement cycle consumer",
+            "--must",
+            "preserve cycle contract",
+        ],
+    );
+    std::fs::remove_file(root.join("target/archived-maintenance-review-cycle.json")).unwrap();
+    let authorized = run_json(
+        root,
+        &[
+            "goal",
+            "authorize-replacement",
+            replacement["id"].as_str().unwrap(),
+            "--supersedes",
+            old["id"].as_str().unwrap(),
+            "--authority-from",
+            authority_id,
+            "--command",
+            archived_command,
+            "--maintenance-cycle-rebind",
+            "target/current-maintenance-review-cycle.json",
+            "--repeat",
+            "2",
+        ],
+    );
+    assert_eq!(authorized["status"], "success");
+    assert_eq!(
+        authorized["replacement_authority"]["live_authority"]["command"],
+        archived_command
+    );
+    assert_eq!(
+        authorized["replacement_authority"]["live_authority"]["command_rebind"]["current_value"],
+        "target/current-maintenance-review-cycle.json"
+    );
+}
+
 #[test]
 fn checkpoint_verify_state_audit_and_recursive_temp_status_are_exposed_by_cli() {
     let temp = tempfile::tempdir().unwrap();
@@ -2827,8 +2954,8 @@ fn workspace_activation_rejects_the_previous_cli_identity() {
     let activation_path = root.join(".RaymanCodingSkill/workspace_skill.yaml");
     let previous_identity = std::fs::read_to_string(&activation_path)
         .unwrap()
-        .replace("rayman-cli-contract-v10", "rayman-cli-contract-v9")
-        .replace("cli_version: 2.5.1", "cli_version: 2.5.0");
+        .replace("rayman-cli-contract-v11", "rayman-cli-contract-v10")
+        .replace("cli_version: 2.5.2", "cli_version: 2.5.1");
     std::fs::write(&activation_path, previous_identity).unwrap();
 
     let status = run_raw(root, &["--format", "json", "workspace", "status"]);
@@ -2836,10 +2963,10 @@ fn workspace_activation_rejects_the_previous_cli_identity() {
     let status: Value = serde_json::from_str(&status.stdout).unwrap();
     assert_eq!(status["status"], "invalid");
     assert_eq!(status["active"], false);
-    assert_eq!(status["cli_contract"], "rayman-cli-contract-v9");
-    assert_eq!(status["cli_version"], "2.5.0");
-    assert_eq!(status["running_cli_contract"], "rayman-cli-contract-v10");
-    assert_eq!(status["running_cli_version"], "2.5.1");
+    assert_eq!(status["cli_contract"], "rayman-cli-contract-v10");
+    assert_eq!(status["cli_version"], "2.5.1");
+    assert_eq!(status["running_cli_contract"], "rayman-cli-contract-v11");
+    assert_eq!(status["running_cli_version"], "2.5.2");
     assert!(
         status["issues"]
             .as_array()

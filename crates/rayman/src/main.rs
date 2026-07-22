@@ -1068,13 +1068,21 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
             predecessors,
             authority_goal,
             command,
+            maintenance_cycle_rebind,
             repeat,
         } => {
             if !(2..=10).contains(&repeat) {
                 bail!("lifecycle authority --repeat 必须在 2..=10 范围内");
             }
             goal::validate_authority_command(root, &command)?;
-            let parsed = goal::parse_validation_command(&command)?;
+            let (parsed, command_rebind) = match maintenance_cycle_rebind.as_deref() {
+                Some(current_cycle) => {
+                    let (parsed, rebind) =
+                        goal::prepare_maintenance_cycle_rebind(root, &command, current_cycle)?;
+                    (parsed, Some(rebind))
+                }
+                None => (goal::parse_validation_command(&command)?, None),
+            };
             let listed_tests = if let Some(list_command) = goal::validation_list_command(&parsed)? {
                 let output = run_validation_command(root, &list_command)?;
                 if !output.status.success() {
@@ -1091,6 +1099,9 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
             let fingerprint = goal::workspace_fingerprint(root)?;
             let mut runs = Vec::new();
             for run_index in 1..=repeat {
+                if let Some(rebind) = command_rebind.as_ref() {
+                    goal::verify_maintenance_cycle_rebind_artifact(root, rebind)?;
+                }
                 let before = goal::workspace_fingerprint(root)?;
                 if before != fingerprint {
                     bail!(
@@ -1098,6 +1109,9 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                     );
                 }
                 let output = run_validation_command(root, &parsed)?;
+                if let Some(rebind) = command_rebind.as_ref() {
+                    goal::verify_maintenance_cycle_rebind_artifact(root, rebind)?;
+                }
                 let after = goal::workspace_fingerprint(root)?;
                 if !output.status.success() {
                     bail!(
@@ -1124,18 +1138,21 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                     stderr_sha256: sha256_hex(&output.stderr),
                 });
             }
+            let invocation_sha256 = goal::replacement_authority_invocation_sha256_with_rebind(
+                &command,
+                &id,
+                &authority_goal,
+                &predecessors,
+                repeat,
+                command_rebind.as_ref(),
+            );
             let live_authority = goal::ReplacementAuthorityReceipt {
                 command: command.clone(),
+                command_rebind,
                 recorded_at: rayman::timefmt::now_iso(),
                 workspace_fingerprint: fingerprint,
                 repeat,
-                invocation_sha256: goal::replacement_authority_invocation_sha256(
-                    &command,
-                    &id,
-                    &authority_goal,
-                    &predecessors,
-                    repeat,
-                ),
+                invocation_sha256,
                 runs,
             };
             let goal =
