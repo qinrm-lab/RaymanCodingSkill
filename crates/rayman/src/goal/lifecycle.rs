@@ -339,6 +339,19 @@ pub(super) fn historical_success_fingerprint(
     root: &Path,
     policy: ReceiptValidationPolicy,
 ) -> Option<String> {
+    if policy == ReceiptValidationPolicy::CurrentV2
+        && let Some(proof) = goal.replacement_authority.as_ref()
+        && goal_success_receipt_gaps_for_policy(
+            goal,
+            root,
+            &proof.workspace_fingerprint,
+            false,
+            policy,
+        )
+        .is_empty()
+    {
+        return Some(proof.workspace_fingerprint.clone());
+    }
     let candidates = goal
         .requirements
         .iter()

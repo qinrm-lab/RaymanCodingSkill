@@ -824,7 +824,7 @@ fn lifecycle_only_replacement_stays_standard_ready_after_superseding_predecessor
             ),
         )
         .unwrap();
-    store.supersede(&predecessor.id, &authorized.id).unwrap();
+    let predecessor = store.supersede(&predecessor.id, &authorized.id).unwrap();
     let authorized = store.get(&authorized.id).unwrap().unwrap();
     let fingerprint = workspace_fingerprint(root).unwrap();
     let goals = store.list().unwrap();
@@ -834,6 +834,30 @@ fn lifecycle_only_replacement_stays_standard_ready_after_superseding_predecessor
         verdict.blockers.is_empty(),
         "valid lifecycle-only replacement must bypass ordinary planning gaps: {:?}",
         verdict.blockers
+    );
+
+    fs::write(root.join("first.rs"), "pub fn first() -> i32 { 1 }\n").unwrap();
+    let later_fingerprint = workspace_fingerprint(root).unwrap();
+    assert_ne!(later_fingerprint, fingerprint);
+    let archived = store
+        .archive(&authorized.id, "delivered lifecycle replacement", false)
+        .unwrap();
+    assert_eq!(
+        archived
+            .lifecycle_proof
+            .as_ref()
+            .map(|proof| proof.workspace_fingerprint.as_str()),
+        Some(fingerprint.as_str())
+    );
+    assert_eq!(archived.lifecycle_proof_error(root), None);
+    assert_eq!(
+        supersession_error(
+            &predecessor,
+            std::slice::from_ref(&archived),
+            root,
+            &later_fingerprint,
+        ),
+        None
     );
 }
 
