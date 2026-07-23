@@ -780,6 +780,64 @@ fn lifecycle_only_replacement_transfers_exact_musts_from_direct_archived_authori
 }
 
 #[test]
+fn lifecycle_only_replacement_stays_standard_ready_after_superseding_predecessors() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let store = GoalStore::new(root);
+    let authority = archived_direct_authority_success(&store, root);
+    let predecessor = store
+        .start(
+            "planned predecessor",
+            &[("preserve planned delta".into(), true)],
+        )
+        .unwrap();
+    let predecessor = store
+        .record_plan(
+            &predecessor.id,
+            PlanReceiptSubmission {
+                changed_paths: vec!["first.rs".into(), "second.rs".into()],
+                review_priority: "normal".into(),
+                impacted_paths: vec!["first.rs".into(), "second.rs".into()],
+                recommended_checks: vec!["cargo test --workspace --all-targets".into()],
+            },
+        )
+        .unwrap();
+    let replacement = store
+        .start(
+            "lifecycle-only replacement",
+            &[("preserve planned delta".into(), true)],
+        )
+        .unwrap();
+    fs::write(root.join("first.rs"), "pub fn first() {}\n").unwrap();
+    fs::write(root.join("second.rs"), "pub fn second() {}\n").unwrap();
+
+    let authorized = store
+        .authorize_replacement(
+            &replacement.id,
+            std::slice::from_ref(&predecessor.id),
+            &authority.id,
+            live_replacement_authority(
+                root,
+                &replacement.id,
+                std::slice::from_ref(&predecessor.id),
+                &authority.id,
+            ),
+        )
+        .unwrap();
+    store.supersede(&predecessor.id, &authorized.id).unwrap();
+    let authorized = store.get(&authorized.id).unwrap().unwrap();
+    let fingerprint = workspace_fingerprint(root).unwrap();
+    let goals = store.list().unwrap();
+    let verdict = goal_gate_verdict(&authorized, &goals, root, Some(&fingerprint));
+
+    assert!(
+        verdict.blockers.is_empty(),
+        "valid lifecycle-only replacement must bypass ordinary planning gaps: {:?}",
+        verdict.blockers
+    );
+}
+
+#[test]
 fn lifecycle_only_replacement_rebinds_only_a_verified_maintenance_cycle_path() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();

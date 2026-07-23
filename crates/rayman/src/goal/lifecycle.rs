@@ -654,7 +654,8 @@ pub fn goal_gate_verdict(
     // receipt 声明的变更、high-priority plan 的 review 绑定。这些规则曾只在
     // `goal close` 内生效，而 close 不会重置 status，已关闭的 success 目标可以
     // 原地反复重新验证，于是它们全部逃过了交付门禁。
-    if requires_receipt
+    if !lifecycle_only
+        && requires_receipt
         && goal.status == GoalStatus::Success
         && let Some(fingerprint) = current_fingerprint
     {
