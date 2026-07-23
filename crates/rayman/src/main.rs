@@ -1,4 +1,5 @@
 mod cli;
+mod codex_hook_cli;
 mod doctor;
 mod task_workflow;
 
@@ -39,6 +40,9 @@ fn main() {
 
 fn run(cli: Cli) -> Result<()> {
     let json = matches!(cli.format, Format::Json);
+    if let Command::CodexHook(command) = &cli.command {
+        return codex_hook_cli::run(json, command);
+    }
     let root = workspace_root()?;
     if !matches!(
         &cli.command,
@@ -204,6 +208,7 @@ fn run(cli: Cli) -> Result<()> {
         Command::Autosave(cmd) => return run_autosave(&root, json, cmd),
 
         Command::Doctor(cmd) => return doctor::run(&root, json, cmd),
+        Command::CodexHook(_) => unreachable!(),
         Command::LegacyAudit(_) => bail!(
             "`rayman audit` 已退役；工作区门禁使用 `rayman check --profile standard`，任务交付使用 `rayman finish --goal <id>`，状态卫生使用 `rayman state audit --check`"
         ),

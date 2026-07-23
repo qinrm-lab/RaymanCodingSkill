@@ -6,6 +6,8 @@ param(
 
     [switch]$AddToUserPath,
 
+    [switch]$SkipCodexStopHook,
+
     [switch]$SelfTest,
 
     [switch]$Yes
@@ -866,6 +868,11 @@ try {
                         throw 'The persisted Windows user PATH changed during post-install verification.'
                     }
                 }
+                if (-not $SkipCodexStopHook) {
+                    Invoke-NativeChecked -FilePath $destinationCli -Arguments @(
+                        'codex-hook', 'install', '--yes'
+                    )
+                }
             } catch {
                 $installFailure = $_.Exception.Message
                 $recoveryErrors = @()
@@ -920,6 +927,11 @@ try {
 Write-Host 'RaymanCodingSkill installation verified.'
 Write-Host "  CLI: $destinationCli"
 Write-Host "  Skill: $destinationSkill"
+if ($SkipCodexStopHook) {
+    Write-Host '  Codex Stop guard: skipped by explicit request'
+} else {
+    Write-Host '  Codex Stop guard: installed; review/trust the exact hook in /hooks, then restart Codex'
+}
 if ($AddToUserPath) {
     Write-Host "  Persistent user PATH: verified with '$resolvedBinDirectory' first in the user segment"
 } else {

@@ -30,6 +30,8 @@ pub enum Format {
 #[allow(clippy::large_enum_variant)]
 #[derive(Subcommand)]
 pub enum Command {
+    /// Codex lifecycle hook integration that prevents premature Owner Mode handoff.
+    CodexHook(CodexHookCmd),
     /// Explicitly activate, deactivate, or inspect the RaymanCodingSkill workspace contract.
     Workspace(WorkspaceCmd),
     /// 工作区上下文索引（内容 hash 证明；map/check 会拒绝未验证内容）
@@ -62,6 +64,42 @@ pub enum Command {
     LegacyWorkspaceSkill(LegacyCommandArgs),
     #[command(name = "subagent", hide = true)]
     LegacySubagent(LegacyCommandArgs),
+}
+
+#[derive(Args)]
+pub struct CodexHookCmd {
+    #[command(subcommand)]
+    pub action: CodexHookAction,
+}
+
+#[derive(Subcommand)]
+pub enum CodexHookAction {
+    /// Read one Codex Stop event from stdin and emit the hook protocol response.
+    Stop,
+    /// Merge the Rayman Stop guard into a user Codex hooks.json.
+    Install {
+        /// Override the Codex home directory (defaults to CODEX_HOME or ~/.codex).
+        #[arg(long)]
+        codex_home: Option<PathBuf>,
+        /// Confirm the hooks.json write.
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Inspect whether the managed Rayman Stop guard is installed.
+    Status {
+        /// Override the Codex home directory (defaults to CODEX_HOME or ~/.codex).
+        #[arg(long)]
+        codex_home: Option<PathBuf>,
+    },
+    /// Remove only the managed Rayman Stop guard and preserve every other hook.
+    Uninstall {
+        /// Override the Codex home directory (defaults to CODEX_HOME or ~/.codex).
+        #[arg(long)]
+        codex_home: Option<PathBuf>,
+        /// Confirm the hooks.json write.
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 #[derive(Args)]

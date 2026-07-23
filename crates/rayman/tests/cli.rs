@@ -2,8 +2,9 @@
 //! 这些测试补足单元测试无法覆盖的东西——真实进程、真实退出码、真实文件系统状态。
 
 use std::collections::BTreeMap;
+use std::io::Write;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use serde_json::Value;
 
@@ -22,6 +23,29 @@ fn run_raw(dir: &Path, args: &[&str]) -> Output {
         .current_dir(dir)
         .output()
         .expect("无法启动 rayman 二进制");
+    Output {
+        status: output.status.code().unwrap_or(-1),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    }
+}
+
+fn run_raw_with_stdin(dir: &Path, args: &[&str], stdin: &str) -> Output {
+    let mut child = Command::new(BIN)
+        .args(args)
+        .current_dir(dir)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("无法启动 rayman 二进制");
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(stdin.as_bytes())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
     Output {
         status: output.status.code().unwrap_or(-1),
         stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
@@ -710,7 +734,7 @@ fn doctor_verifies_installed_identity_in_an_ordinary_managed_workspace() {
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
         &format!(
-            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v11\ncli_version: 2.5.2\n"
+            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v12\ncli_version: 2.6.0\n"
         ),
     );
     let binary = std::fs::canonicalize(BIN).unwrap();
@@ -745,7 +769,7 @@ fn doctor_rejects_an_earlier_windows_path_wrapper() {
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
         &format!(
-            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v11\ncli_version: 2.5.2\n"
+            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v12\ncli_version: 2.6.0\n"
         ),
     );
     let wrapper_dir = tempfile::tempdir().unwrap();
@@ -2954,8 +2978,8 @@ fn workspace_activation_rejects_the_previous_cli_identity() {
     let activation_path = root.join(".RaymanCodingSkill/workspace_skill.yaml");
     let previous_identity = std::fs::read_to_string(&activation_path)
         .unwrap()
-        .replace("rayman-cli-contract-v11", "rayman-cli-contract-v10")
-        .replace("cli_version: 2.5.2", "cli_version: 2.5.1");
+        .replace("rayman-cli-contract-v12", "rayman-cli-contract-v10")
+        .replace("cli_version: 2.6.0", "cli_version: 2.5.1");
     std::fs::write(&activation_path, previous_identity).unwrap();
 
     let status = run_raw(root, &["--format", "json", "workspace", "status"]);
@@ -2965,8 +2989,8 @@ fn workspace_activation_rejects_the_previous_cli_identity() {
     assert_eq!(status["active"], false);
     assert_eq!(status["cli_contract"], "rayman-cli-contract-v10");
     assert_eq!(status["cli_version"], "2.5.1");
-    assert_eq!(status["running_cli_contract"], "rayman-cli-contract-v11");
-    assert_eq!(status["running_cli_version"], "2.5.2");
+    assert_eq!(status["running_cli_contract"], "rayman-cli-contract-v12");
+    assert_eq!(status["running_cli_version"], "2.6.0");
     assert!(
         status["issues"]
             .as_array()
@@ -3985,4 +4009,83 @@ fn map_impact_rejects_directory_inputs_instead_of_returning_empty_success() {
         impact.stderr
     );
     assert!(impact.stderr.contains("map plan"), "{}", impact.stderr);
+}
+#[test]
+fn codex_stop_hook_blocks_active_goal_and_installs_idempotently() {
+    let inactive = tempfile::tempdir().unwrap();
+    let allowed = run_raw_with_stdin(
+        inactive.path(),
+        &["codex-hook", "stop"],
+        r#"{"hook_event_name":"Stop","stop_hook_active":false}"#,
+    );
+    assert_eq!(allowed.status, 0, "{}", allowed.stderr);
+    let allowed: Value = serde_json::from_str(&allowed.stdout).unwrap();
+    assert_eq!(allowed["continue"], true);
+
+    let workspace = tempfile::tempdir().unwrap();
+    let goal = run_json(
+        workspace.path(),
+        &[
+            "goal",
+            "start",
+            "whole program",
+            "--must",
+            "original requirement",
+            "--must",
+            "mid-turn addition",
+        ],
+    );
+    let goal_id = goal["id"].as_str().unwrap();
+    let blocked = run_raw_with_stdin(
+        workspace.path(),
+        &["codex-hook", "stop"],
+        r#"{"hook_event_name":"Stop","stop_hook_active":false}"#,
+    );
+    assert_eq!(blocked.status, 0, "{}", blocked.stderr);
+    let blocked: Value = serde_json::from_str(&blocked.stdout).unwrap();
+    assert_eq!(blocked["decision"], "block");
+    assert!(blocked["reason"].as_str().unwrap().contains(goal_id));
+
+    let codex_home = tempfile::tempdir().unwrap();
+    std::fs::write(
+        codex_home.path().join("hooks.json"),
+        r#"{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"other","statusMessage":"Other"}]}]}}"#,
+    )
+    .unwrap();
+    let home = codex_home.path().to_str().unwrap();
+    for _ in 0..2 {
+        let installed = run_raw(
+            workspace.path(),
+            &[
+                "--format",
+                "json",
+                "codex-hook",
+                "install",
+                "--codex-home",
+                home,
+                "--yes",
+            ],
+        );
+        assert_eq!(installed.status, 0, "{}", installed.stderr);
+    }
+    let status = run_raw(
+        workspace.path(),
+        &[
+            "--format",
+            "json",
+            "codex-hook",
+            "status",
+            "--codex-home",
+            home,
+        ],
+    );
+    assert_eq!(status.status, 0, "{}", status.stderr);
+    let status: Value = serde_json::from_str(&status.stdout).unwrap();
+    assert_eq!(status["installed"], true);
+    let hooks = std::fs::read_to_string(codex_home.path().join("hooks.json")).unwrap();
+    assert!(hooks.contains("Other"));
+    assert_eq!(
+        hooks.matches("Rayman Owner Mode completion guard").count(),
+        1
+    );
 }

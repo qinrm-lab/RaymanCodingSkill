@@ -2,11 +2,12 @@
 //! 只保留 load-bearing 能力：上下文索引、最小目标契约、只读资产扫描、托管临时目录。
 
 pub mod assets;
-pub const CLI_CONTRACT: &str = "rayman-cli-contract-v11";
+pub const CLI_CONTRACT: &str = "rayman-cli-contract-v12";
 pub const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub mod autosave;
 pub mod checkpoint;
+pub mod codex_hook;
 pub mod context;
 pub mod goal;
 pub mod hash;
