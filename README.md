@@ -4,6 +4,7 @@ A lean, owner-minded and evidence-first coding-agent helper. One small Rust bina
 
 - **Context index** — a content-proven map of the workspace (files, kinds, symbols). `context refresh` hashes indexed content and preserves read failures as blockers; the cheap `context status` command remains a stat-only UI probe, while map and readiness conclusions re-check content hashes.
 - **Explicit activation** — `.RaymanCodingSkill/` by itself is only runtime state. `workspace activate` writes a canonical-skill path/SHA256 plus the exact CLI contract/version; orphan state, skill drift, and stale CLIs are inactive. The six-field activation schema rejects duplicates, unknown fields, nesting, and malformed scalars.
+- **Multilingual Unicode UI** — human-facing text supports Simplified Chinese and English through `--language auto|zh-CN|en` (or `RAYMAN_LANG`). Auto mode follows locale metadata and the Windows user locale, with a Chinese fail-safe when none exists. JSON output remains a locale-independent automation contract, and all captured CLI output must be valid UTF-8.
 - **Project map** — a derived architecture view (modules, symbols, local dependencies, Cargo/pyproject packages, entrypoints, heuristic test candidates, impact hints). Rust modules/tests and Python imports plus pytest filename conventions are modeled; unsupported ecosystems remain advisory for missing-test conclusions.
 - **Owner Mode** — the agent keeps working through locally knowable implementation, repair, risk checks, and re-audit. Frontier reports separate execution from consultation: a deferred question stays out of transient progress output, a presented question pauses foreground execution, and background continuation requires an explicitly authorized isolated mechanism. The installed Codex `Stop` hook asks the same deterministic goal/frontier contracts before a turn may end, so an assistant cannot replace `finish --goal` with a reassuring final message.
 - **Change plan** — capture the workspace's per-file SHA256 baseline at goal start, persist one immutable aggregate path set before mutation, and compare it with the real delta. A hash-chained extension may widen the plan only before new paths change; it cannot shrink scope or review priority. Missing baselines, split/post-hoc plans, unplanned files, and incomplete validation declarations are blocked.
@@ -31,7 +32,7 @@ cargo run -p rayman -- context status
 
 ## Release identity and installed CLI
 
-`2.6.0` binds the Codex Stop-hook completion guard to `rayman-cli-contract-v12` and the exact running CLI version, so an older executable cannot claim or enforce the v12 Owner Mode stop contract. Keep these claims separate: `check --profile release` proves workspace strict-quality only; `doctor --check` proves installed binary/PATH/SKILL/activation identity only; release handoff additionally requires a locked fresh-source rebuild. The exact contract and release procedure live in [docs/RELEASE_CONTRACT.md](docs/RELEASE_CONTRACT.md).
+`2.7.0` binds the multilingual Unicode CLI surface to `rayman-cli-contract-v13` and the exact running CLI version, so an older executable cannot claim the v13 language and encoding contract. Keep these claims separate: `check --profile release` proves workspace strict-quality only; `doctor --check` proves installed binary/PATH/SKILL/activation identity only; release handoff additionally requires a locked fresh-source rebuild. The exact contract and release procedure live in [docs/RELEASE_CONTRACT.md](docs/RELEASE_CONTRACT.md).
 
 The only supported source-checkout install/upgrade entry point is below. Open a PowerShell 7 (`pwsh`) session first—never Windows PowerShell. A historical profile shim that searches for `.Rayman\rayman.ps1` can loop forever at a drive root; inspect and migrate only that exact known shim before installation:
 
@@ -59,7 +60,9 @@ For an installed executable, pass its resolved path as `-CliPath` and the newly 
 
 ## Commands
 
-```
+```text
+rayman --language zh-CN context status # force Simplified Chinese UI
+rayman --language en context status    # force English UI
 rayman workspace status         # activation only: active/inactive/orphan/invalid
 rayman workspace inspect        # activation plus Git HEAD/clean/dirty/untracked source state
 rayman workspace activate --skill-file <canonical-SKILL.md> --yes
@@ -120,6 +123,8 @@ rayman doctor [--check]                                   # installed binary/PAT
 ```
 
 Every command accepts `--format json` for machine-readable output.
+
+Text mode is UTF-8 and locale-aware. `--language auto` checks `RAYMAN_LANG`, `LC_ALL`, `LC_MESSAGES`, `LANG`, then the Windows user locale; explicit `--language` wins. Chinese, English, Unicode workspace paths, and safe Unicode scratch labels round-trip without lossy decoding. JSON keys, enum/status values, and schema are identical in every language.
 
 `goal start` records a per-file SHA256 baseline. A baseline-less current v2 goal is never gate-ready; preserve completed history with `archive`, or replace unfinished work with a new baseline-bound goal and `supersede`. For multi-file work, `goal plan` must be written while the workspace still matches that baseline. `--extend` keeps the base receipt immutable and appends a cumulative hash-chained snapshot only when prior delta is already planned and newly added paths still equal the baseline. Paths/checks can only widen and review priority can only rise. Actual additions, edits, and deletions are recomputed from the baseline, so validation and close reject unplanned delta. A high-priority effective plan also needs `goal review` bound to the final source fingerprint.
 `check` without a goal remains a workspace-health result and reports `workspace_ready`; it must not be presented as proof that a user task is complete. `check --goal <id>` additionally reports task evidence readiness. `finish --goal <id>` is stricter: it first requires an authority validation that ran the same project gate at least twice without changing the final workspace fingerprint, then refreshes and checks the exact closed goal. Every check also reports Git/source state when available.

@@ -32,6 +32,7 @@ An explicit invocation or valid activation opts programming work into Owner Mode
 
 ## Core commands
 
+- Global UI contract: `--language auto|zh-CN|en` (alias `--lang`) selects locale-aware UTF-8 text; `RAYMAN_LANG` participates in auto detection. `--format json` is never translated and keeps stable keys/status values.
 - `rayman workspace status|inspect|activate --skill-file <canonical-SKILL.md> --yes|deactivate --yes` — `status` reports activation only; `inspect` adds Git HEAD, clean/dirty counts, untracked count, changed paths, lossy-path encoding state, and explicit unavailable/error states. Activation is a strict six-field contract bound to the canonical skill hash plus the running CLI contract/version.
 - `rayman codex-hook status|install --yes|uninstall --yes|stop` — manage the user-level Codex `Stop` guard. Install/uninstall preserve unrelated handlers and reject linked, malformed, or non-object `hooks.json`; `stop` is the read-only host entrypoint and always emits Codex hook JSON. A new/changed non-managed hook still requires explicit trust in `/hooks` and a Codex restart.
 - `rayman context refresh` — rebuild the index with content-hash proof; a file read error is recorded and cannot produce a ready index. Runtime state stays excluded, but the exact shared `.RaymanCodingSkill/quality.json` policy is indexed and participates in workspace fingerprints.

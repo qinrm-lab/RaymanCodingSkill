@@ -2,13 +2,19 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
+use crate::i18n::Language;
+
 #[derive(Parser)]
 #[command(
     name = "rayman",
     version,
-    about = "RaymanCodingSkill v2（精简）：上下文索引 / 目标 / 只读检查 / 资产 / 临时目录"
+    about = "RaymanCodingSkill v2：多语言的上下文索引 / 目标 / 检查 / 恢复工作流\nMultilingual context / goal / check / recovery workflow"
 )]
 pub struct Cli {
+    /// 界面语言：auto 按环境/系统区域选择；也可用 RAYMAN_LANG / UI language
+    #[arg(long, visible_alias = "lang", value_enum, default_value_t = Language::Auto, global = true)]
+    pub language: Language,
+
     /// 输出格式
     #[arg(long, value_enum, default_value_t = Format::Text, global = true)]
     pub format: Format,
@@ -30,9 +36,9 @@ pub enum Format {
 #[allow(clippy::large_enum_variant)]
 #[derive(Subcommand)]
 pub enum Command {
-    /// Codex lifecycle hook integration that prevents premature Owner Mode handoff.
+    /// Codex 生命周期钩子，防止 Owner Mode 过早交接 / Codex lifecycle hook integration.
     CodexHook(CodexHookCmd),
-    /// Explicitly activate, deactivate, or inspect the RaymanCodingSkill workspace contract.
+    /// 激活、停用或检查工作区契约 / Activate, deactivate, or inspect the workspace contract.
     Workspace(WorkspaceCmd),
     /// 工作区上下文索引（内容 hash 证明；map/check 会拒绝未验证内容）
     Context(ContextCmd),
@@ -287,13 +293,13 @@ pub struct CheckCmd {
     /// 检查强度：默认 standard；quick 仅基础快照；release 为工作区 strict-quality，不是安装发布验证
     #[arg(long, value_enum, default_value_t = CheckProfile::Standard)]
     pub profile: CheckProfile,
-    /// Bind this readiness result to one exact goal.
+    /// 将就绪结果绑定到一个精确目标 / Bind this result to one exact goal.
     #[arg(long)]
     pub goal: Option<String>,
-    /// Require exactly one current goal when --goal is omitted.
+    /// 未传 --goal 时要求恰好一个 current 目标 / Require exactly one current goal.
     #[arg(long)]
     pub require_current_goal: bool,
-    /// Refresh context in this process immediately before checking.
+    /// 检查前在同一进程刷新上下文 / Refresh context immediately before checking.
     #[arg(long)]
     pub refresh_context: bool,
 }
@@ -607,6 +613,15 @@ mod tests {
             }
             _ => panic!("unexpected command"),
         }
+    }
+
+    #[test]
+    fn parses_global_language_with_long_name_and_alias() {
+        let chinese = Cli::try_parse_from(["rayman", "--language", "zh-CN", "check"]).unwrap();
+        assert_eq!(chinese.language, Language::ZhCn);
+
+        let english = Cli::try_parse_from(["rayman", "check", "--lang", "en"]).unwrap();
+        assert_eq!(english.language, Language::En);
     }
 
     #[test]

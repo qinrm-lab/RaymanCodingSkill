@@ -1,3 +1,5 @@
+#[macro_use]
+mod i18n;
 mod cli;
 mod codex_hook_cli;
 mod doctor;
@@ -24,7 +26,7 @@ use rayman::{
 
 fn main() {
     let cli = Cli::parse();
-    let json = matches!(cli.format, Format::Json);
+    let json = i18n::configure(cli.language, matches!(cli.format, Format::Json));
     if let Err(error) = run(cli) {
         if json {
             match serde_json::to_string_pretty(&json!({ "error": error.to_string() })) {

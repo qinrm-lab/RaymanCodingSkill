@@ -21,8 +21,20 @@ pub fn temp_root(root: &Path) -> PathBuf {
 pub fn scratch_dir(root: &Path, label: &str) -> Result<PathBuf> {
     let mut safe: String = label
         .chars()
-        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
+        .map(|ch| {
+            if ch.is_control() || matches!(ch, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*')
+            {
+                '_'
+            } else {
+                ch
+            }
+        })
         .collect();
+    // Apply Windows' trailing-dot/space rule everywhere so checkpoints remain portable.
+    while safe.ends_with(' ') || safe.ends_with('.') {
+        safe.pop();
+        safe.push('_');
+    }
     // Windows 保留设备名（con/nul/aux/com1…）作目录名非法，会报一条与输入无关的 OS 错误。
     if is_windows_reserved_name(&safe) {
         safe.push('_');
@@ -33,7 +45,13 @@ pub fn scratch_dir(root: &Path, label: &str) -> Result<PathBuf> {
 }
 
 fn is_windows_reserved_name(name: &str) -> bool {
-    let lower = name.to_ascii_lowercase();
+    // Device names remain reserved with an extension (for example NUL.txt).
+    let lower = name
+        .trim_end_matches([' ', '.'])
+        .split('.')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
     matches!(lower.as_str(), "con" | "prn" | "aux" | "nul")
         || (lower.len() == 4
             && (lower.starts_with("com") || lower.starts_with("lpt"))
@@ -171,6 +189,26 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let scratch = scratch_dir(dir.path(), "nul").unwrap();
         assert_ne!(scratch.file_name().unwrap(), "nul");
+        assert!(scratch.is_dir());
+    }
+
+    #[test]
+    fn scratch_label_preserves_safe_unicode_and_sanitizes_path_syntax() {
+        let dir = tempfile::tempdir().unwrap();
+        let unicode = scratch_dir(dir.path(), "中文-資料-🙂").unwrap();
+        assert_eq!(unicode.file_name().unwrap(), "中文-資料-🙂");
+
+        let unsafe_label = scratch_dir(dir.path(), "../危险\\路径:*?").unwrap();
+        let name = unsafe_label.file_name().unwrap().to_string_lossy();
+        assert!(!name.contains('/') && !name.contains('\\'));
+        assert!(!name.contains(':') && !name.contains('*') && !name.contains('?'));
+    }
+
+    #[test]
+    fn scratch_label_rejects_reserved_device_stems_with_extensions() {
+        let dir = tempfile::tempdir().unwrap();
+        let scratch = scratch_dir(dir.path(), "NUL.txt").unwrap();
+        assert_ne!(scratch.file_name().unwrap(), "NUL.txt");
         assert!(scratch.is_dir());
     }
 

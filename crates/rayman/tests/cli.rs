@@ -25,8 +25,8 @@ fn run_raw(dir: &Path, args: &[&str]) -> Output {
         .expect("无法启动 rayman 二进制");
     Output {
         status: output.status.code().unwrap_or(-1),
-        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        stdout: String::from_utf8(output.stdout).expect("rayman stdout 必须是有效 UTF-8"),
+        stderr: String::from_utf8(output.stderr).expect("rayman stderr 必须是有效 UTF-8"),
     }
 }
 
@@ -48,8 +48,8 @@ fn run_raw_with_stdin(dir: &Path, args: &[&str], stdin: &str) -> Output {
     let output = child.wait_with_output().unwrap();
     Output {
         status: output.status.code().unwrap_or(-1),
-        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        stdout: String::from_utf8(output.stdout).expect("rayman stdout 必须是有效 UTF-8"),
+        stderr: String::from_utf8(output.stderr).expect("rayman stderr 必须是有效 UTF-8"),
     }
 }
 
@@ -109,8 +109,8 @@ fn run_with_path(
     let output = command.output().expect("无法启动 rayman 二进制");
     Output {
         status: output.status.code().unwrap_or(-1),
-        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        stdout: String::from_utf8(output.stdout).expect("rayman stdout 必须是有效 UTF-8"),
+        stderr: String::from_utf8(output.stderr).expect("rayman stderr 必须是有效 UTF-8"),
     }
 }
 
@@ -252,6 +252,68 @@ fn state_snapshot(root: &Path) -> BTreeMap<String, (u64, std::time::SystemTime, 
         visit(&state_root, &state_root, &mut out);
     }
     out
+}
+
+#[test]
+fn language_selection_preserves_utf8_unicode_paths_and_json_contract() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("中文工作区🙂");
+    std::fs::create_dir_all(&root).unwrap();
+    write(&root, "src/中文模块.rs", "pub fn 中文函数() {}");
+
+    let chinese = run(&root, &["--language", "zh-CN", "context", "status"]);
+    assert_eq!(chinese.status, 0, "stderr={}", chinese.stderr);
+    assert!(chinese.stdout.contains("上下文索引:"), "{}", chinese.stdout);
+    assert!(!chinese.stdout.contains('\u{fffd}'), "{}", chinese.stdout);
+
+    let english = run(&root, &["context", "status", "--lang", "en"]);
+    assert_eq!(english.status, 0, "stderr={}", english.stderr);
+    assert!(
+        english.stdout.contains("Context index:"),
+        "{}",
+        english.stdout
+    );
+    assert!(!english.stdout.contains('\u{fffd}'), "{}", english.stdout);
+
+    let unicode_path = run(
+        &root,
+        &["--language", "zh-CN", "temp", "scratch", "中文-資料-🙂"],
+    );
+    assert_eq!(unicode_path.status, 0, "stderr={}", unicode_path.stderr);
+    assert!(
+        unicode_path.stdout.contains("中文工作区🙂")
+            && unicode_path.stdout.contains("中文-資料-🙂"),
+        "{}",
+        unicode_path.stdout
+    );
+
+    let chinese_json = run_raw(
+        &root,
+        &[
+            "--format",
+            "json",
+            "--language",
+            "zh-CN",
+            "workspace",
+            "inspect",
+        ],
+    );
+    let english_json = run_raw(
+        &root,
+        &[
+            "--format",
+            "json",
+            "--language",
+            "en",
+            "workspace",
+            "inspect",
+        ],
+    );
+    assert_eq!(chinese_json.status, 0, "stderr={}", chinese_json.stderr);
+    assert_eq!(english_json.status, 0, "stderr={}", english_json.stderr);
+    let chinese_value: Value = serde_json::from_str(&chinese_json.stdout).unwrap();
+    let english_value: Value = serde_json::from_str(&english_json.stdout).unwrap();
+    assert_eq!(chinese_value, english_value);
 }
 
 #[test]
@@ -734,7 +796,7 @@ fn doctor_verifies_installed_identity_in_an_ordinary_managed_workspace() {
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
         &format!(
-            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v12\ncli_version: 2.6.0\n"
+            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v13\ncli_version: 2.7.0\n"
         ),
     );
     let binary = std::fs::canonicalize(BIN).unwrap();
@@ -769,7 +831,7 @@ fn doctor_rejects_an_earlier_windows_path_wrapper() {
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
         &format!(
-            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v12\ncli_version: 2.6.0\n"
+            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v13\ncli_version: 2.7.0\n"
         ),
     );
     let wrapper_dir = tempfile::tempdir().unwrap();
@@ -2978,8 +3040,8 @@ fn workspace_activation_rejects_the_previous_cli_identity() {
     let activation_path = root.join(".RaymanCodingSkill/workspace_skill.yaml");
     let previous_identity = std::fs::read_to_string(&activation_path)
         .unwrap()
-        .replace("rayman-cli-contract-v12", "rayman-cli-contract-v10")
-        .replace("cli_version: 2.6.0", "cli_version: 2.5.1");
+        .replace("rayman-cli-contract-v13", "rayman-cli-contract-v10")
+        .replace("cli_version: 2.7.0", "cli_version: 2.5.1");
     std::fs::write(&activation_path, previous_identity).unwrap();
 
     let status = run_raw(root, &["--format", "json", "workspace", "status"]);
@@ -2989,8 +3051,8 @@ fn workspace_activation_rejects_the_previous_cli_identity() {
     assert_eq!(status["active"], false);
     assert_eq!(status["cli_contract"], "rayman-cli-contract-v10");
     assert_eq!(status["cli_version"], "2.5.1");
-    assert_eq!(status["running_cli_contract"], "rayman-cli-contract-v12");
-    assert_eq!(status["running_cli_version"], "2.6.0");
+    assert_eq!(status["running_cli_contract"], "rayman-cli-contract-v13");
+    assert_eq!(status["running_cli_version"], "2.7.0");
     assert!(
         status["issues"]
             .as_array()
