@@ -3,6 +3,32 @@
   "block_warning_kinds": [],
   "exemptions": [
     {
+      "path": "crates/rayman/src/checkpoint.rs",
+      "kind": "high_fan_in",
+      "reason": "Checkpoint capture, integrity, retention, and restore entrypoints intentionally share one fail-closed recovery contract; focused checkpoint tests, recovery tests, CLI integration tests, and the full repository gate cover all consumers."
+    },
+    {
+      "path": "crates/rayman/src/checkpoint_cli.rs",
+      "kind": "public_api_without_test_evidence",
+      "reason": "This binary-only command adapter exposes one parent-visible dispatch function after splitting main.rs; checkpoint unit tests and cross-process CLI integration tests cover its behavior."
+    },
+    {
+      "path": "crates/rayman/src/i18n.rs",
+      "kind": "large_file",
+      "reason": "This module contains the immutable authored-message template catalog used to prove complete English coverage without mutating dynamic Unicode; exact source/catalog equality, every-template localization, dynamic-value preservation, CLI integration tests, and the full repository gate cover the executable logic."
+    },
+
+    {
+      "path": "crates/rayman/src/goal.rs",
+      "kind": "high_fan_in",
+      "reason": "Goal contracts, receipt types, and the state store intentionally form the shared fail-closed lifecycle boundary; focused goal tests, CLI integration tests, and repeated repository authority gates cover all consumers."
+    },
+    {
+      "path": "crates/rayman/src/goal/state_lock.rs",
+      "kind": "public_api_without_test_evidence",
+      "reason": "This goal-private OS advisory-lock module exposes only parent-visible helpers; focused contention and ACL classification tests run through the goal test module and the full repository gate."
+    },
+    {
       "path": "crates/rayman/src/cli.rs",
       "kind": "high_fan_in",
       "reason": "Clap command schemas are intentionally centralized so main dispatch, the Codex Stop hook, and focused command adapters share one parsed contract; CLI integration tests and the full repository gate cover all consumers."

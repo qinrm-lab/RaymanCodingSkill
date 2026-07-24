@@ -1,5 +1,6 @@
 #[macro_use]
 mod i18n;
+mod checkpoint_cli;
 mod cli;
 mod codex_hook_cli;
 mod doctor;
@@ -17,16 +18,31 @@ use sha2::{Digest, Sha256};
 
 use cli::{
     AutosaveAction, AutosaveCmd, CheckCmd, CheckProfile, CheckpointAction, CheckpointCmd, Cli,
-    Command, ContextAction, ContextCmd, Format, GoalAction, GoalCmd, MapAction, MapCmd,
-    PendingAction, QualityProfile, StateAction, StateCmd, TempAction, TempCmd, WorkspaceAction,
-    WorkspaceCmd,
+    Command, ContextAction, ContextCmd, Format, GoalAction, GoalCmd, HandoffAction, MapAction,
+    MapCmd, PendingAction, QualityProfile, StateAction, StateCmd, TempAction, TempCmd,
+    WorkspaceAction, WorkspaceCmd,
 };
-use rayman::{
-    assets, autosave, checkpoint, context, goal, map, source_state, temp, workspace, workspace_root,
-};
+use rayman::{assets, autosave, context, goal, map, source_state, temp, workspace, workspace_root};
 
 fn main() {
-    let cli = Cli::parse();
+    i18n::preconfigure_from_process_args();
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(error) => {
+            let use_stdout = matches!(
+                error.kind(),
+                clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
+            );
+            let exit_code = error.exit_code();
+            let rendered = i18n::localize_text(error.to_string());
+            if use_stdout {
+                println!("{rendered}");
+            } else {
+                eprintln!("{rendered}");
+            }
+            std::process::exit(exit_code);
+        }
+    };
     let json = i18n::configure(cli.language, matches!(cli.format, Format::Json));
     if let Err(error) = run(cli) {
         if json {
@@ -239,7 +255,7 @@ fn run(cli: Cli) -> Result<()> {
 
         Command::Map(cmd) => return run_map(&root, json, cmd),
 
-        Command::Checkpoint(cmd) => return run_checkpoint(&root, json, cmd),
+        Command::Checkpoint(cmd) => return checkpoint_cli::run_checkpoint(&root, json, cmd),
 
         Command::Autosave(cmd) => return run_autosave(&root, json, cmd),
 
@@ -580,187 +596,6 @@ fn run_autosave(root: &std::path::Path, json: bool, cmd: AutosaveCmd) -> Result<
     Ok(())
 }
 
-fn run_checkpoint(root: &std::path::Path, json: bool, cmd: CheckpointCmd) -> Result<()> {
-    let dir = cmd.dir.as_deref();
-    match cmd.action {
-        CheckpointAction::Save { keep } => {
-            let outcome = checkpoint::save(root, dir, keep)?;
-            let mb = outcome.total_bytes as f64 / 1_048_576.0;
-            if json {
-                print(&json!({
-                    "id": outcome.id,
-                    "path": outcome.path.display().to_string(),
-                    "file_count": outcome.file_count,
-                    "skipped_count": outcome.skipped_count,
-                    "total_bytes": outcome.total_bytes,
-                    "pruned": outcome.pruned,
-                    "purpose": outcome.purpose,
-                }));
-            } else {
-                println!(
-                    "已保存快照 {} — {} 个文件 ({:.1} MB){}，清理旧快照 {} 个",
-                    outcome.id,
-                    outcome.file_count,
-                    mb,
-                    if outcome.skipped_count > 0 {
-                        format!("，跳过 {}（锁定/无权限）", outcome.skipped_count)
-                    } else {
-                        String::new()
-                    },
-                    outcome.pruned
-                );
-                println!("  位置: {}", rayman::pathfmt::display_path(&outcome.path));
-            }
-        }
-        CheckpointAction::SalvageSave => {
-            let outcome = checkpoint::salvage_save(root, dir)?;
-            if json {
-                print(&json!({
-                    "id": outcome.id,
-                    "path": outcome.path.display().to_string(),
-                    "file_count": outcome.file_count,
-                    "total_bytes": outcome.total_bytes,
-                    "pruned": outcome.pruned,
-                    "purpose": outcome.purpose,
-                    "authoritative": false,
-                }));
-            } else {
-                println!(
-                    "已保存 recovery-only 快照 {} — {} 个文件；它不会成为默认 latest 或完成证据",
-                    outcome.id, outcome.file_count
-                );
-                println!("  位置: {}", rayman::pathfmt::display_path(&outcome.path));
-            }
-        }
-        CheckpointAction::List => {
-            let checkpoints = checkpoint::list(root, dir)?;
-            if json {
-                let items: Vec<_> = checkpoints
-                    .iter()
-                    .map(|c| {
-                        json!({
-                            "id": c.id,
-                            "status": c.status,
-                            "purpose": c.manifest.as_ref().map(|m| m.purpose),
-                            "activation_status": c.manifest.as_ref().map(|m| m.activation.status.clone()),
-                            "created_at": c.manifest.as_ref().map(|m| m.created_at.clone()),
-                            "file_count": c.manifest.as_ref().map(|m| m.file_count),
-                            "total_bytes": c.manifest.as_ref().map(|m| m.total_bytes),
-                        })
-                    })
-                    .collect();
-                print(&serde_json::to_value(&items)?);
-            } else if checkpoints.is_empty() {
-                println!("当前工作区暂无快照。运行 `rayman checkpoint save` 创建一个。");
-            } else {
-                println!("快照（旧→新）:");
-                for c in &checkpoints {
-                    match &c.manifest {
-                        Some(m) => println!(
-                            "  {}  {:?}/{:?}  {} 个文件  {:.1} MB",
-                            c.id,
-                            c.status,
-                            m.purpose,
-                            m.file_count,
-                            m.total_bytes as f64 / 1_048_576.0
-                        ),
-                        None => println!("  {}  {:?}  (缺或损坏 manifest)", c.id, c.status),
-                    }
-                }
-            }
-        }
-        CheckpointAction::Status => {
-            let latest = checkpoint::latest(root, dir)?;
-            if json {
-                print(&json!({
-                    "has_checkpoint": latest.is_some(),
-                    "latest": latest.as_ref().map(|c| json!({
-                        "id": c.id,
-                        "status": c.status,
-                        "purpose": c.manifest.as_ref().map(|m| m.purpose),
-                        "created_at": c.manifest.as_ref().map(|m| m.created_at.clone()),
-                        "file_count": c.manifest.as_ref().map(|m| m.file_count),
-                    })),
-                }));
-            } else {
-                match latest {
-                    Some(c) => {
-                        let created = c
-                            .manifest
-                            .as_ref()
-                            .map(|m| m.created_at.clone())
-                            .unwrap_or_else(|| "?".to_string());
-                        println!("最近完整快照: {} ({:?}, 保存于 {created})", c.id, c.status);
-                    }
-                    None => println!("当前工作区暂无快照。"),
-                }
-            }
-        }
-        CheckpointAction::Restore {
-            id,
-            yes,
-            allow_recovery_only,
-        } => {
-            if !yes {
-                bail!(
-                    "恢复会用快照覆盖工作区里的同名文件。确认请加 --yes：rayman checkpoint restore --yes"
-                );
-            }
-            let outcome =
-                checkpoint::restore_with_options(root, dir, id.as_deref(), allow_recovery_only)?;
-            if json {
-                print(&json!({
-                    "id": outcome.id,
-                    "restored": outcome.restored,
-                    "failed": outcome.failed,
-                }));
-            } else {
-                println!(
-                    "已从快照 {} 恢复 {} 个文件{}。",
-                    outcome.id,
-                    outcome.restored,
-                    if outcome.failed > 0 {
-                        format!("，{} 个失败", outcome.failed)
-                    } else {
-                        String::new()
-                    }
-                );
-            }
-        }
-        CheckpointAction::Verify { id } => {
-            let checkpoints = checkpoint::list(root, dir)?;
-            let target = match id.as_deref() {
-                None | Some("latest") => checkpoint::latest(root, dir)?,
-                Some(id) => checkpoints
-                    .into_iter()
-                    .find(|checkpoint| checkpoint.id == id),
-            }
-            .ok_or_else(|| anyhow::anyhow!("找不到可验证的 checkpoint"))?;
-            let manifest = checkpoint::verify_snapshot(&target.path)?;
-            if json {
-                print(&json!({
-                    "id": target.id,
-                    "status": "complete",
-                    "file_count": manifest.file_count,
-                    "total_bytes": manifest.total_bytes,
-                    "schema": manifest.schema,
-                    "version": manifest.version,
-                    "purpose": manifest.purpose,
-                    "activation": manifest.activation,
-                }));
-            } else {
-                println!(
-                    "checkpoint {} 已验证：{} 个文件，{:.1} MB",
-                    target.id,
-                    manifest.file_count,
-                    manifest.total_bytes as f64 / 1_048_576.0
-                );
-            }
-        }
-    }
-    Ok(())
-}
-
 fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()> {
     let store = goal::GoalStore::new(root);
     let pending = goal::PendingStore::new(root);
@@ -768,19 +603,45 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
         GoalAction::Start {
             title,
             must,
+            must_proof,
             should,
         } => {
-            let mut requirements: Vec<(String, bool)> =
-                must.into_iter().map(|text| (text, true)).collect();
-            requirements.extend(should.into_iter().map(|text| (text, false)));
-            let goal = store.start(&title, &requirements)?;
+            let mut requirements = must
+                .into_iter()
+                .map(|text| goal::RequirementSpec {
+                    text,
+                    kind: goal::RequirementKind::Must,
+                    proof_kind: None,
+                })
+                .collect::<Vec<_>>();
+            for value in must_proof {
+                let (kind, text) = value
+                    .split_once("::")
+                    .ok_or_else(|| anyhow::anyhow!("--must-proof must use KIND::TEXT"))?;
+                if text.trim().is_empty() {
+                    bail!("--must-proof text cannot be empty");
+                }
+                requirements.push(goal::RequirementSpec {
+                    text: text.trim().to_string(),
+                    kind: goal::RequirementKind::Must,
+                    proof_kind: Some(kind.parse()?),
+                });
+            }
+            requirements.extend(should.into_iter().map(|text| goal::RequirementSpec {
+                text,
+                kind: goal::RequirementKind::Should,
+                proof_kind: None,
+            }));
+            let goal = store.start_with_specs(&title, &requirements)?;
             if json {
                 print(&serde_json::to_value(&goal)?);
             } else {
                 println!(
-                    "已创建目标 {} ({} 个需求)",
-                    goal.id,
-                    goal.requirements.len()
+                    "{}",
+                    i18n::message(
+                        i18n::MessageId::GoalCreated,
+                        &[goal.id, goal.requirements.len().to_string()],
+                    )
                 );
             }
         }
@@ -801,6 +662,22 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
         }
         GoalAction::Show { id } => goal_cli::run_show(&store, json, id)?,
         GoalAction::Summary { id } => goal_cli::run_summary(&store, json, id)?,
+        GoalAction::Handoff(command) => match command.action {
+            HandoffAction::Start { from_goal, commit } => {
+                let goal = store.start_handoff(&from_goal, &commit)?;
+                if json {
+                    print(&serde_json::to_value(&goal)?);
+                } else {
+                    println!(
+                        "{}",
+                        i18n::message(
+                            i18n::MessageId::HandoffCreated,
+                            &[goal.id, from_goal, commit],
+                        )
+                    );
+                }
+            }
+        },
         GoalAction::Plan {
             id,
             paths,
@@ -1490,7 +1367,17 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
             let verdict =
                 goal::goal_gate_verdict(checked_goal, &goals, root, current_fingerprint.as_deref());
             goal_blockers.insert(checked_goal.id.clone(), verdict.blockers.clone());
-            standard_blockers.extend(verdict.blockers);
+            // Unbound `check` is a workspace-health claim. Goal lifecycle and
+            // completion evidence belong only to an explicitly bound task
+            // check/finish; otherwise an active goal makes the repository's
+            // own authority gate circular and impossible to record.
+            if !verdict.blockers.is_empty() {
+                standard_warnings.push(format!(
+                    "goal {} is not task-ready (bind with --goal to enforce): {}",
+                    checked_goal.id,
+                    verdict.blockers.join("; ")
+                ));
+            }
             standard_warnings.extend(verdict.warnings);
         }
     }

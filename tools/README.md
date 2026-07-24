@@ -39,7 +39,7 @@ rayman autosave start --no-auto-stop              # 不自动停，需手动 sto
 一次快照 = **当前工作树**（尊重 `.gitignore`，跳过 `target/`、`node_modules/` 等）+ **v2 白名单任务状态**：goals、`pending.json`、context index/project map 和 `autosave.json`。它不会把整份 `.RaymanCodingSkill/` 当作备份源，因此不带入 `tmp/`、退役状态、评测运行物或其它未列入白名单的数据。
 
 - 存到**用户级**目录，不进仓库：Windows 为 `%LOCALAPPDATA%\Rayman\checkpoints\<工作区名>-<哈希>\<时间戳>\`；其它平台优先为 `$XDG_DATA_HOME/Rayman/checkpoints/`，否则为 `$HOME/.local/share/Rayman/checkpoints/`。若这些变量不可用而有 `$USERPROFILE`，则退回 `$USERPROFILE/Rayman/checkpoints/`。`--dir` 会覆盖以上位置。
-- save/restore/prune 共用跨进程锁，重叠的手工/计划任务不会互删正在写的 staging。普通完整快照、`recovery_only` 和 `partial` 使用互不影响的轮换池；普通保存默认保留最近 3 个（`--keep N`），紧急 salvage 默认保留最近 5 个。`corrupt` 及 crash 遗留 staging 保留取证，自动 prune 不删除 staging。
+- save/restore/prune 共用跨进程锁，重叠的手工/计划任务不会互删正在写的 staging。手工 `checkpoint save` 与 `salvage-save` 默认不删除任何旧恢复点；只有显式 `save --keep N`、`prune --keep N --yes`，或 `autosave start --keep N` 写入的 retention policy 才能裁剪已验证快照。普通完整快照、`recovery_only` 和 `partial` 使用互不影响的池；`corrupt` 及 crash 遗留 staging 保留取证，自动 prune 不删除 staging。
 - 保存是“先写暂存目录再原子改名”。复制、遍历或完整性校验失败会留下取证状态并以非零失败，绝不替换或污染最近的完整快照。
 - `checkpoint list` 同时显示完整性状态和 `standard|recovery_only` purpose；`checkpoint status` / 默认 `latest` 只选择最近一次已验证的普通完整快照。
 - `checkpoint verify [id|latest]` 只读复核 v3 manifest、路径、文件数、大小、权限和 SHA-256；显式 ID 可检查 recovery-only。
@@ -51,8 +51,9 @@ rayman autosave start --no-auto-stop              # 不自动停，需手动 sto
 ## 手动快照命令
 
 ```powershell
-rayman checkpoint save            # 存当前工作区，保留最近 3 个
-rayman checkpoint save --keep 5
+rayman checkpoint save                         # 存当前工作区，不删除旧恢复点
+rayman checkpoint save --keep 5                # 本次保存后显式保留最近 5 个
+rayman checkpoint prune --keep 5 --yes          # 独立、显式裁剪
 rayman checkpoint salvage-save   # 激活无效也可保存；只作 recovery-only
 rayman checkpoint list            # 列出快照
 rayman checkpoint status          # 最近一次已验证的完整快照

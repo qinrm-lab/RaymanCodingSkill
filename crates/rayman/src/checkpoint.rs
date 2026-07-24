@@ -31,7 +31,6 @@ pub const DEFAULT_KEEP: usize = 3;
 pub const MAX_PARTIAL_SNAPSHOTS: usize = 5;
 /// Recovery-only snapshots rotate independently from ordinary checkpoints so
 /// a burst of emergency saves can never consume the normal recovery history.
-pub const MAX_RECOVERY_SNAPSHOTS: usize = 5;
 pub const MANIFEST_SCHEMA: &str = "rayman.checkpoint.v3";
 pub const MANIFEST_VERSION: u32 = 3;
 const LEGACY_MANIFEST_SCHEMA: &str = "rayman.checkpoint.v2";
@@ -428,23 +427,23 @@ fn collect_goal_state_files(state: &Path, out: &mut Vec<PathBuf>) -> Result<()> 
     Ok(())
 }
 
-/// 保存当前工作树快照，然后仅按 `keep` 清理旧的完整快照。
+/// 保存当前工作树快照，并按调用方已经确认的 retention policy 清理旧完整快照。
 ///
 /// 若复制、遍历或验证有任何错误，会保留一份 `partial` 快照供取证并返回 Err；
 /// 此路径不轮换任何完整快照，因此至少最近的完整恢复点不会被失败保存删除。
 pub fn save(root: &Path, override_dir: Option<&Path>, keep: usize) -> Result<SaveOutcome> {
-    save_with_purpose(root, override_dir, keep, CheckpointPurpose::Standard)
+    save_with_purpose(root, override_dir, Some(keep), CheckpointPurpose::Standard)
+}
+
+/// 保存快照但不删除任何既有恢复点。交互式 `checkpoint save` 的默认安全语义。
+pub fn save_without_prune(root: &Path, override_dir: Option<&Path>) -> Result<SaveOutcome> {
+    save_with_purpose(root, override_dir, None, CheckpointPurpose::Standard)
 }
 
 /// Capture an emergency snapshot without requiring a valid activation
 /// contract. It remains recovery-only forever and is excluded from `latest`.
 pub fn salvage_save(root: &Path, override_dir: Option<&Path>) -> Result<SaveOutcome> {
-    save_with_purpose(
-        root,
-        override_dir,
-        MAX_RECOVERY_SNAPSHOTS,
-        CheckpointPurpose::RecoveryOnly,
-    )
+    save_with_purpose(root, override_dir, None, CheckpointPurpose::RecoveryOnly)
 }
 
 fn activation_provenance(root: &Path) -> ActivationProvenance {
@@ -476,11 +475,10 @@ fn activation_provenance(root: &Path) -> ActivationProvenance {
 fn save_with_purpose(
     root: &Path,
     override_dir: Option<&Path>,
-    keep: usize,
+    keep: Option<usize>,
     purpose: CheckpointPurpose,
 ) -> Result<SaveOutcome> {
-    // keep=0 会在 prune 时把刚保存的快照一起删光，安全网形同虚设。
-    let keep = keep.max(1);
+    let keep = keep.map(|value| value.max(1));
     ensure_real_directory(root)?;
     let root = root
         .canonicalize()
@@ -597,9 +595,9 @@ fn save_with_purpose(
     }
 
     commit_snapshot(&staging, &final_dir, &manifest)?;
-    let pruned = match purpose {
-        CheckpointPurpose::Standard => prune_standard(&ws_dir, keep)?,
-        CheckpointPurpose::RecoveryOnly => prune_recovery_only(&ws_dir)?,
+    let pruned = match (purpose, keep) {
+        (CheckpointPurpose::Standard, Some(keep)) => prune_standard(&ws_dir, keep)?,
+        (CheckpointPurpose::Standard, None) | (CheckpointPurpose::RecoveryOnly, _) => 0,
     };
     Ok(SaveOutcome {
         id,
@@ -719,6 +717,25 @@ fn fs_safe_id(timestamp: &str) -> String {
     timestamp.replace(':', "-")
 }
 
+/// Explicitly prune verified standard checkpoints after user confirmation.
+pub fn prune_standard_snapshots(
+    root: &Path,
+    override_dir: Option<&Path>,
+    keep: usize,
+) -> Result<usize> {
+    let ws_dir = workspace_dir(root, override_dir)?;
+    match fs::symlink_metadata(&ws_dir) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(0),
+        Err(error) => {
+            return Err(error)
+                .with_context(|| format!("无法检查 checkpoint 目录: {}", display_path(&ws_dir)));
+        }
+        Ok(_) => ensure_real_directory(&ws_dir)?,
+    }
+    let _lock = CheckpointLock::acquire(&ws_dir)?;
+    prune_standard(&ws_dir, keep.max(1))
+}
+
 /// 轮换完整快照（按 `keep`）并把 partial 快照压到 [`MAX_PARTIAL_SNAPSHOTS`] 以内。
 /// corrupt 快照仍然永不自动删除：它们的 manifest 不可信，无从判断该保留哪一份。
 #[cfg(test)]
@@ -728,10 +745,6 @@ fn prune(ws_dir: &Path, keep: usize) -> Result<usize> {
 
 fn prune_standard(ws_dir: &Path, keep: usize) -> Result<usize> {
     prune_inner(ws_dir, Some(keep), None)
-}
-
-fn prune_recovery_only(ws_dir: &Path) -> Result<usize> {
-    prune_inner(ws_dir, None, Some(MAX_RECOVERY_SNAPSHOTS))
 }
 
 /// 只轮换 partial 快照。保存失败路径专用：一次失败的保存绝不能连带删掉任何完整
@@ -1000,13 +1013,14 @@ mod recovery_only_tests {
     }
 
     #[test]
-    fn recovery_rotation_never_prunes_or_replaces_standard_latest() {
+    fn recovery_only_saves_preserve_every_snapshot_and_standard_latest() {
         let workspace = tempfile::tempdir().unwrap();
         let store = tempfile::tempdir().unwrap();
         let root = workspace.path();
         fs::write(root.join("payload.txt"), "standard\n").unwrap();
         let standard = save(root, Some(store.path()), 1).unwrap();
-        for index in 0..(MAX_RECOVERY_SNAPSHOTS + 2) {
+        const RECOVERY_SAVES: usize = 7;
+        for index in 0..RECOVERY_SAVES {
             fs::write(root.join("payload.txt"), format!("salvage-{index}\n")).unwrap();
             salvage_save(root, Some(store.path())).unwrap();
         }
@@ -1020,7 +1034,7 @@ mod recovery_only_tests {
                     })
                 )
                 .count(),
-            MAX_RECOVERY_SNAPSHOTS
+            RECOVERY_SAVES
         );
         assert!(standard.path.exists());
         assert_eq!(

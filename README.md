@@ -22,9 +22,13 @@ Operational runtime/task state is local under `.RaymanCodingSkill/` and normally
 
 Shared repository rules live in [AGENTS.md](AGENTS.md). Codex enters through
 [SKILL.md](SKILL.md); Claude Code enters through [CLAUDE.md](CLAUDE.md). These
-native entry files reference the shared contract rather than copying it. Run
-pwsh ./scripts/check-agent-instructions.ps1 to verify the UTF-8 files and
-their shared contract marker; scripts/check-repo.ps1 runs the same check.
+native entry files reference [references/workflow-contract.md](references/workflow-contract.md)
+rather than copying client-neutral workflow policy. [install-manifest.json](install-manifest.json)
+is the deployment authority: Codex receives the declared global skill resources,
+while Claude Code remains a repository-only entrypoint and is not advertised as
+a global install. Run `pwsh ./scripts/check-agent-instructions.ps1` to verify the
+UTF-8 adapters, shared marker, manifest schema, exact resource set, and deployment
+scopes; `scripts/check-repo.ps1` runs the same check.
 
 ## Build
 
@@ -52,7 +56,7 @@ The only supported source-checkout install/upgrade entry point is below. Open a 
 
 The repair tool parses the profile, refuses custom `rayman` functions, preserves unrelated profile content, and uses a staged replacement with rollback. Do not run unbounded output-capturing probes such as `$output = rayman --version` while a profile shadow is unresolved; use `pwsh -NoProfile` and the direct application path for diagnosis.
 
-It requires clean Git source, pins the preverified artifact/skill hashes, rechecks them before/after every copy, and replaces only the managed CLI, canonical skill, and shared AGENTS.md contract through same-directory staging. By default it also idempotently merges the Rayman handler into the user Codex `hooks.json`; existing handlers are preserved. Codex requires one explicit `/hooks` trust review for a new or changed non-managed hook, followed by a restart. Use `-SkipCodexStopHook` only for an intentional CLI/skill-only install. On Windows, `-AddToUserPath` moves the managed bin directory to the front of the user segment inside the same transaction, then proves the exact future persistent ordering (`Machine PATH + proposed User PATH`) without an artificial process-only prepend; an older machine-level `rayman` therefore blocks installation. Without `-AddToUserPath`, the current effective PATH must already resolve the destination first, and non-Windows callers must configure PATH themselves because that switch fails explicitly. Any staging, backup, file, PATH-persistence, or verification failure attempts all file and PATH restorations and reports retained evidence. Verification is the commit point; later backup-cleanup failure only retains evidence and never deletes the committed install. Override destinations only for intentional managed roots. Manual copying and `cargo install` alone are not supported handoff procedures.
+It requires clean Git source, pins the preverified artifact and every manifest resource hash, rechecks them before/after every copy, and replaces only the managed CLI plus the exact `codex_skill_resources` set through same-directory staging. `CLAUDE.md` is intentionally absent from that global set. By default it also idempotently merges the Rayman handler into the user Codex `hooks.json`; existing handlers are preserved. Codex requires one explicit `/hooks` trust review for a new or changed non-managed hook, followed by a restart. Use `-SkipCodexStopHook` only for an intentional CLI/skill-only install. On Windows, `-AddToUserPath` moves the managed bin directory to the front of the user segment inside the same transaction, then proves the exact future persistent ordering (`Machine PATH + proposed User PATH`) without an artificial process-only prepend; an older machine-level `rayman` therefore blocks installation. Without `-AddToUserPath`, the current effective PATH must already resolve the destination first, and non-Windows callers must configure PATH themselves because that switch fails explicitly. Any staging, backup, file, PATH-persistence, or verification failure attempts all file and PATH restorations and reports retained evidence. Verification is the commit point; later backup-cleanup failure only retains evidence and never deletes the committed install. Override destinations only for intentional managed roots. Manual copying and `cargo install` alone are not supported handoff procedures.
 
 Do not assume that `rayman` on `PATH` is current. To inspect a built artifact without installing it, deliberately put it on `PATH` for this shell and verify it:
 

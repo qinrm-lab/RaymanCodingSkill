@@ -649,6 +649,22 @@ pub fn goal_gate_verdict(
         ));
         return GoalGateVerdict { blockers, warnings };
     }
+    if goal.handoff.is_some() {
+        let Some(fingerprint) = current_fingerprint else {
+            blockers.push(format!(
+                "goal {} handoff cannot be verified without a source fingerprint",
+                goal.id
+            ));
+            return GoalGateVerdict { blockers, warnings };
+        };
+        if let Some(error) = handoff_contract_error(goal, all_goals, root, fingerprint) {
+            blockers.push(format!(
+                "goal {} handoff contract invalid: {error}",
+                goal.id
+            ));
+            return GoalGateVerdict { blockers, warnings };
+        }
+    }
 
     let requires_receipt = goal.is_current_schema();
     let lifecycle_only = if goal.replacement_authority.is_some() {

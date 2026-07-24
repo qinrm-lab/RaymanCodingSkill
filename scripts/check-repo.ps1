@@ -11,6 +11,8 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $repoRoot
 
 & (Join-Path $PSScriptRoot 'check-agent-instructions.ps1')
+& (Join-Path $PSScriptRoot 'release-closeout.ps1') -SelfTest
+& (Join-Path $PSScriptRoot 'audit-repository.ps1') -SelfTest
 
 function Resolve-NativeApplication {
     param([Parameter(Mandatory = $true)][string]$Name)

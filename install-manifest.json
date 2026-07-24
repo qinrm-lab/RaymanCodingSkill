@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "clients": {
+    "codex": {
+      "deployment_scope": "global_skill",
+      "destination": "~/.codex/skills/raymancodingskill"
+    },
+    "claude_code": {
+      "deployment_scope": "repository_entrypoint_only",
+      "entrypoint": "CLAUDE.md"
+    }
+  },
+  "codex_skill_resources": [
+    {
+      "source": "SKILL.md",
+      "destination": "SKILL.md"
+    },
+    {
+      "source": "AGENTS.md",
+      "destination": "AGENTS.md"
+    },
+    {
+      "source": "references/workflow-contract.md",
+      "destination": "references/workflow-contract.md"
+    }
+  ]
+}

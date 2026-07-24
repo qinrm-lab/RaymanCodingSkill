@@ -459,6 +459,7 @@ fn relevance_requires_one_current_receipt_bound_to_command_and_impact() {
         id: "req_1".into(),
         text: "validate source".into(),
         kind: RequirementKind::Must,
+        proof_kind: None,
         status: RequirementStatus::Done,
         evidence: Some("checked".into()),
         validations: vec![
@@ -501,6 +502,7 @@ fn relevance_requires_one_current_receipt_bound_to_command_and_impact() {
         work_packages: Vec::new(),
         progress_receipts: Vec::new(),
         lanes: Vec::new(),
+        handoff: None,
         requirements: vec![requirement.clone()],
         loaded_from_legacy: false,
     };
@@ -632,10 +634,12 @@ fn legacy_v2_lifecycle_hash_projection_remains_byte_compatible() {
         work_packages: Vec::new(),
         progress_receipts: Vec::new(),
         lanes: Vec::new(),
+        handoff: None,
         requirements: vec![Requirement {
             id: "req_1".into(),
             text: "preserve historical proof".into(),
             kind: RequirementKind::Must,
+            proof_kind: None,
             status: RequirementStatus::Done,
             evidence: Some("validated".into()),
             validations: Vec::new(),
@@ -2184,18 +2188,39 @@ fn authority_classification_rejects_a_focused_command_promoted_by_flag() {
 }
 
 #[test]
-fn state_lock_contention_includes_windows_delete_and_share_transients() {
+fn state_lock_contention_excludes_acl_denial_and_only_retries_os_lock_conflicts() {
     assert!(is_state_lock_contention(&std::io::Error::from(
-        std::io::ErrorKind::AlreadyExists
+        std::io::ErrorKind::WouldBlock
     )));
-    for code in [5, 32, 33] {
+    for code in [32, 33] {
         assert!(is_state_lock_contention(
             &std::io::Error::from_raw_os_error(code)
         ));
     }
+    assert!(!is_state_lock_contention(
+        &std::io::Error::from_raw_os_error(5)
+    ));
+    assert!(!is_state_lock_contention(&std::io::Error::from(
+        std::io::ErrorKind::PermissionDenied
+    )));
     assert!(!is_state_lock_contention(&std::io::Error::from(
         std::io::ErrorKind::NotFound
     )));
+}
+
+#[test]
+fn state_lock_file_is_stable_and_reusable_after_unlock() {
+    let dir = tempfile::tempdir().unwrap();
+    let target = dir.path().join("goal.json");
+    {
+        let _lock = acquire_state_lock(&target).unwrap();
+    }
+    let lock_path = dir.path().join(".goal.json.rayman.lock");
+    assert!(
+        lock_path.is_file(),
+        "stable OS lock file must remain after unlock"
+    );
+    let _reacquired = acquire_state_lock(&target).unwrap();
 }
 
 #[test]

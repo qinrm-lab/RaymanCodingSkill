@@ -3,83 +3,62 @@ name: raymancodingskill
 description: Lean, owner-minded coding-workflow helper for a workspace with a valid workspace_skill.yaml activation contract, or when the user explicitly invokes rayman in the current turn. Drives safe local work to a stable, evidence-bound finish; provides workspace activation, context indexing, goal planning and validation, structured blocker ownership, read-only audits, and managed temp. Do not use for unrelated repos, host-app accounts, IDE assistant login, OAuth, or connectors.
 ---
 
-# RaymanCodingSkill (lean)
-
-A small, evidence-first coding helper. The `rayman` CLI keeps workspace-local state under `.RaymanCodingSkill/`; current files and command output are the source of truth, not cached summaries.
+# RaymanCodingSkill
 
 <!-- AGENT_CONTRACT: rayman-shared-v1 -->
 
-## Cross-agent project contract
+## Required reading
 
-Before non-trivial work, read [AGENTS.md](AGENTS.md). It is the shared source
-of project rules for Codex and Claude Code. This file remains the Codex-native
-workflow and release contract; CLAUDE.md is the Claude Code entrypoint.
-Client-specific files must not duplicate or weaken the shared contract.
+Read [AGENTS.md](AGENTS.md) before non-trivial work. It is the mandatory
+client-neutral contract. For standard/release work, goal lifecycle, blocker
+handling, checkpoints, concurrency, or evidence claims, also read
+[references/workflow-contract.md](references/workflow-contract.md).
 
-## When to use
+## Activation
 
-Use when `.RaymanCodingSkill/workspace_skill.yaml` is valid and hash-bound to the canonical skill file, or when the user explicitly names `rayman` in the current turn. A leftover `.RaymanCodingSkill/` directory without that activation contract is orphan state, not permission to auto-use the skill.
+Use this skill when the user explicitly invokes Rayman or when
+`.RaymanCodingSkill/workspace_skill.yaml` is valid and hash-bound to this
+canonical file. A leftover state directory without that activation contract
+is orphan state and does not authorize automatic use.
 
-## Owner Mode — default to finishing
+## Codex adapter
 
-An explicit invocation or valid activation opts programming work into Owner Mode. Treat the user's objective as the finish line, not the latest literal step: inspect, implement, test, repair, re-audit, preserve recovery state, and present a stable result without asking about locally knowable technical choices. The human is the final acceptance authority, not the routine workflow coordinator.
+- This repository installer deploys the Codex adapter as a global skill.
+- The installed Codex Stop hook may continue active foreground work or reject
+  an unsupported completion claim. Verify the real hook configuration and
+  restart/trust boundary instead of inferring installation from UI state.
+- Use `rayman codex-hook status|install --yes|uninstall --yes|stop` only for
+  the Codex host integration. Preserve unrelated handlers.
+- Claude Code uses the repository `CLAUDE.md` entrypoint; this installer does
+  not claim a global Claude deployment.
 
-- `全仓审计` / full-repository audit means audit-to-closure: find issues, repair safe in-scope defects, rerun the authority gates, and report the final state. Stay read-only only when the user explicitly says `只审计`, `只报告`, `不要修改`, or equivalent.
-- Make conservative, reversible assumptions and state material ones in the handoff. Proactively inspect adjacent correctness, security, failure-recovery, idempotence, and gate-side-effect risks; do not optimize only for the happy path or the named file.
-- Keep working while safe agent-owned work remains, but keep execution and consultation separate. Use `goal frontier` before waiting: `execution=continue_foreground` with `consultation=deferred` means finish bounded safe work without emitting the question in transient progress output; `execution=paused_for_user` with `consultation=presented` means present the solution package in the final foreground handoff and end the turn. `continue_background + presented` is valid only when the pending record names a concrete mechanism and proves both explicit authority and workspace isolation.
-- Ask or wait only for a proven human/external boundary: missing credentials or permissions; CAPTCHA/MFA/payment/legal acceptance; irreversible/destructive action outside prior authority; materially conflicting product requirements; a business choice only the owner can make; or an unavailable external service after safe fallbacks are exhausted. Commit, push, deploy, account changes, payments, and destructive deletion still require scope authority from the original task or a later explicit instruction.
-- A necessary consultation must be a solution package, not an open-ended question: include attempts, evidence paths, the smallest missing input, a recommended action, at least one alternative, risk, the exact resume command, and the auto-resume condition. A non-urgent consultation may be deferred until bounded independent foreground work finishes. An immediate safety, authority, or materially blocking direction question must be presented as the final response and pause foreground execution; never bury a presented question in commentary.
-- Do not restore the retired v1 LLM/runtime stack. The host agent owns execution and judgment; `rayman` remains a deterministic local contract and evidence tool. The installed Codex `Stop` hook enforces this boundary at turn end: active foreground work, invalid state, or incomplete goal evidence produces an automatic continuation prompt instead of accepting a premature final answer.
+## Working flow
 
-## Task tiers — do the least that fits
+1. Confirm activation, start a goal, and run `prepare --goal <id>`.
+2. Persist a pre-mutation plan for multi-file work and extend it before
+   touching newly discovered paths.
+3. Implement conservatively, run focused project checks, and record staged
+   progress without treating it as authority.
+4. Use atomic `--must-proof KIND::TEXT` requirements and matching
+   `goal validate` receipts for delivery claims.
+5. Record a stable final gate with `--authority --repeat 2`, review a
+   high-priority final fingerprint, close packages and goal, then run
+   `finish --goal <id>`.
+6. For release transfer, create a clean-HEAD `goal handoff start` contract and
+   complete its installation, audit, and source-fresh stages.
 
-- **Trivial** (typo, one-liner, doc tweak): just edit and run the project's own focused test. No `rayman` commands required.
-- **Standard** (a feature or fix): explicitly activate once with `rayman workspace activate --skill-file <canonical-SKILL.md> --yes` (or confirm activation with `workspace status`), create the task contract with `goal start`, then run `prepare --goal <id>` so context refresh, compact goal counts, the latest verified standard checkpoint, and source state are captured sequentially. Before changing two or more files, persist the intended paths with `goal plan <id> <paths...> --check`; use file-scoped `map impact` and `map quality --check` for non-trivial scope. If a new path is discovered later, run `goal plan <id> <new-paths...> --check --extend` before touching it. Split broad/long plans into hierarchical `goal package` units and record same-package `goal progress` receipts at useful recovery points. Those receipts are always non-authoritative: implement, record `goal review` when `priority=high`, and use `goal validate` receipts whose `--changed` declarations cover the real baseline delta. The final project gate must be recorded with `--authority --repeat 2`; close only after every `must` and required package is current, then run `finish --goal <id>`. Only its goal-bound `task.ready=true` result plus the stable authority receipt supports a task-complete claim.
-- **Release / hand-off**: everything in Standard, plus resolve pending work and run `scripts/audit-repository.ps1 -CliPath <installed-application> -SkillPath <deployed-canonical-SKILL.md>`. That single lane includes the full root/evals suites, package/install smoke, strict/release self-dogfood, state/assets audit, and clean-source installed-release verification. `rayman check --profile release` alone remains only a workspace strict-quality claim.
+Keep working while safe agent-owned work remains. Human/external consultations
+must be complete solution packages. Commit, push, install, publish, deploy,
+destructive deletion, and account changes still require user authority.
 
-`rayman check` defaults to `--profile standard`, but without `--goal` it remains a workspace-health claim only. `check --goal <id>` and `finish --goal <id>` add an exact task binding and expose separate `workspace_ready` and `task.ready` fields. Use `check --profile quick` only for strong content freshness, asset findings, and pending work; it cannot support a delivery claim. Use `release` for strict policy. `rayman state audit --check` is a separate state-hygiene check.
+## Detailed contract
 
-## Core commands
+The shared command, evidence, lifecycle, checkpoint, and release rules live in
+[references/workflow-contract.md](references/workflow-contract.md).
 
-- Global UI contract: `--language auto|zh-CN|en` (alias `--lang`) selects locale-aware UTF-8 text; `RAYMAN_LANG` participates in auto detection. `--format json` is never translated and keeps stable keys/status values.
-- `rayman workspace status|inspect|activate --skill-file <canonical-SKILL.md> --yes|deactivate --yes` — `status` reports activation only; `inspect` adds Git HEAD, clean/dirty counts, untracked count, changed paths, lossy-path encoding state, and explicit unavailable/error states. Activation is a strict six-field contract bound to the canonical skill hash plus the running CLI contract/version.
-- `rayman codex-hook status|install --yes|uninstall --yes|stop` — manage the user-level Codex `Stop` guard. Install/uninstall preserve unrelated handlers and reject linked, malformed, or non-object `hooks.json`; `stop` is the read-only host entrypoint and always emits Codex hook JSON. A new/changed non-managed hook still requires explicit trust in `/hooks` and a Codex restart.
-- `rayman context refresh` — rebuild the index with content-hash proof; a file read error is recorded and cannot produce a ready index. Runtime state stays excluded, but the exact shared `.RaymanCodingSkill/quality.json` policy is indexed and participates in workspace fingerprints.
-- `rayman context status` — cheap stat-only freshness UI probe; it does not prove content identity. Map and readiness commands use strong content-hash freshness; run `refresh` if any of them reports `stale`/`missing`.
-- `rayman map summary|file <path>|symbol <name>|topology|impact <file>|plan <paths...> [--check]|quality [--profile standard|strict] [--check]` — `impact` accepts one concrete file and rejects indexed directories with a `map plan` migration. Quality findings retain their original severity/policy behavior while reporting `first_party`, `fixture`, `test`, `generated`, `benchmark`, or `workspace` roles and per-role counts.
-- `rayman goal start "<title>" --must "<req>" [--should "<req>"]` — capture the task as a contract and record the per-file SHA256 baseline used to calculate the real change set.
-- `rayman goal plan <id> <paths...> --check [--extend]` — before the first mutation, persist the planned paths, impact set, suggested checks, review priority, and baseline binding. The base receipt stays immutable. `--extend` appends a hash-chained cumulative snapshot only when all existing delta is already planned and every added path still equals the baseline; paths/checks can only widen and review priority can only increase. Post-hoc files, split-plan bypass, unplanned real delta, and unplanned `--changed` declarations remain blocked.
-- `rayman goal review <id> --reviewer <name> -m "<review>"` — bind review evidence to the current source fingerprint. A high-priority plan requires a current review; any later source drift invalidates it.
-- `rayman goal summary <id> | package add|complete | progress` — `summary` omits the full baseline and reports compact requirement/package/receipt counts plus scale warnings. Packages form a validated parent graph. A required package completes only from a linked same-package progress receipt whose direct command passed without source drift; progress is resumability evidence (`authoritative=false`) and never substitutes final validation.
-- `rayman goal lane open|close` — register `advisory-read-only`, scoped `writer`, or `final-reviewer` lanes against an opening workspace baseline. Close recomputes the delta: read-only/reviewer lanes reject every drift and writer lanes reject paths outside their exact allowlist. The ledger coordinates concurrency but is never validation authority.
-- `rayman goal validate <id> --req <req_id> -m "<evidence>" --command "<command to execute>" [--changed <path>] [--authority --repeat 2]` then `goal close <id>` — Rayman runs a direct program from the workspace root and records its zero exit code, output hashes, and before/after fingerprints. `--authority` accepts only a reviewed conventional repository gate (`check-repo`, `audit-repository`, or `verify-release-contract`), workspace-wide Cargo tests, or selector-free workspace pytest, and requires at least two executions on one unchanged workspace fingerprint; any nonzero run or gate-side mutation writes no receipt. Pytest commands also get an independent collect proof and must show a nonzero, consistent passed/skipped/xfailed/xpassed summary; collect-only cannot masquerade as execution. Close additionally requires all real delta paths to be declared by current receipts; a baseline-less current v2 goal must be archived or superseded and cannot become gate-ready.
-- `rayman goal archive <id> --reason "<why>"|supersede <id> --by <replacement>` — retain completed history without making old receipts pretend to validate later source. Historical success receipts are rechecked at their recorded fingerprint and lifecycle proof binds the receipt-policy version. For a success created before the v2 classifier rollout whose real v1 receipts still pass v1 integrity, use the narrow explicit recovery `archive ... --migrate-receipt-policy receipt_integrity_v1`; it cannot repair missing receipts, incomplete requirements, post-rollout work, or an immutable plan that omitted real changes. The separate `--migrate-unreceipted` hatch does waive the receipt recheck, but only for pre-rollout records that never had receipts; it cannot be reached by any goal created today. `--quarantine-invalid-history` is narrower still: it preserves an already-archived rollout-era `pre_receipt_schema_v2` misclassification as explicitly untrusted history, cannot hide current/unfinished work, and can never serve as supersession proof. `supersede` requires a current, gate-ready replacement at the time it is recorded; a replacement archived later keeps the supersession valid through its own lifecycle proof.
-- `rayman goal authorize-replacement <replacement> --supersedes <old>... --authority-from <archived-success> --command "<exact archived authority command>" --repeat 2` — narrow lifecycle-only recovery for an exact must-transfer replacement. The replacement must be goal-state-pristine current/active and contain only the exact normalized multiset of must requirements from every named current non-success predecessor; every current source-delta path must be covered by those predecessors' immutable plans. The authority goal must be a non-migrated, current-policy archived success with the same direct stable authority command at the same canonical workspace identity. Rayman reruns that command at least twice on one unchanged current source fingerprint and binds the live run receipts, current source delta, every predecessor contract and plan, and workspace identity into the proof. If and only if the archived command contains exactly one `-MaintenanceOrchestrationCycle <path>`, `--maintenance-cycle-rebind <current-workspace-relative-cycle.json>` may replace that single source-bound value while every other argv token remains archived-exact; the current file must be a normalized ordinary in-workspace file, every ancestor must reject symlink/junction/reparse, and its SHA-256 must remain unchanged before and after every run. The proof binds the archived command, the derived effective argv, both path values, current cycle hash, and repeated runs. Unplanned, stale-only, arbitrary command/flag substitution, unstable or failing execution, copied state, quarantine, migration, indirect authority, unsafe paths, or later source drift fails closed. This does not relax `goal validate`, plan rules, or ordinary code-goal evidence requirements.
-- `rayman goal pending add|list|resolve` and `rayman goal frontier <id>` — carry unfinished work across sessions and classify its owner. Frontier output keeps legacy `decision` plus orthogonal `execution` and `consultation`. Human pending defaults to `--consultation-timing deferred`; use `immediate` only for a real safety/authority/direction boundary. Background continuation additionally requires non-empty `--background-mechanism`, `--background-authority-evidence`, and `--background-isolation-evidence`; bare booleans or agent-authored claims are not authority. Human/external entries still require the complete solution package; a goal cannot close `blocked` while agent work remains or without a proven non-agent boundary. Never report done while pending items remain.
-- `rayman check [--profile standard] [--goal <id>|--require-current-goal] [--refresh-context]` — unbound output is workspace health; a goal-bound output fails unless the exact current goal is closed success with current receipts. `--refresh-context` performs refresh and check sequentially in one process. Every report includes source state when Git is available.
-- `rayman prepare --goal <id> | finish --goal <id> [--profile standard|release]` — `prepare` requires a current active goal and serializes context refresh before work while returning a compact resume summary and latest verified standard checkpoint; `finish` first requires a current repeated-stable authority receipt, then refreshes and runs the exact goal-bound completion gate.
-- Retired v1 commands `audit`, `workspace-skill`, `context os`, `context task`, and `subagent` fail nonzero with explicit v2 migration guidance; they never silently alias broader or weaker semantics.
-- `rayman check --profile release` — workspace standard plus strict built-in quality and additive `.RaymanCodingSkill/quality.json` policy. Malformed/broad policy, unknown fields/kinds, duplicate entries, and blank exemption reasons are blockers. Its READY result never proves installed CLI identity or source freshness.
-- `rayman assets` — read-only scan for obsolete-looking files and work-in-progress markers. It never deletes anything; deciding what to remove is yours.
-- `rayman temp scratch <label> | pytest-lease <label> | pytest-probe <id> | pytest-release <id> | status | cleanup` — put throwaway runtime files under `.RaymanCodingSkill/tmp/`, not system temp. A pytest lease pre-creates and probes independent basetemp/cache/TMP/pycache paths and emits exact argv/environment; probe/release accept only its untampered manifest ID. `status` is read-only and recursively reports files, directories, bytes, and traversal errors; `cleanup` only removes that managed root.
-- `rayman state audit [--check]` — read-only audit of allowed v2 state entries, retired entries, and recursive temp metrics. It never deletes files. `--check` exits nonzero when retired state, an audit error, or a traversal error needs review. Owner Mode may perform a lossless, verified migration into managed backup state without asking; destructive deletion still requires explicit authority.
-- `rayman checkpoint save | salvage-save | list | status | verify [id|latest] | restore [id|latest] --yes [--allow-recovery-only]` — list/status/verify and `salvage-save` remain available when activation is invalid. Salvage records activation provenance as `recovery_only`, rotates separately, and never becomes default `latest` or completion evidence. Restoring it requires an explicit ID, a repaired active contract, and `--allow-recovery-only`. Cross-process locking protects save/restore/prune; failed or crashed staging is preserved for forensics, and standard/recovery/partial pools cannot prune each other. Restore remains a journaled all-or-nothing transaction and never deletes extra workspace files.
-- `rayman autosave start | stop | status` — start-of-session, `start` saves a snapshot and registers a Windows scheduled task that auto-snapshots every N minutes (default 30); on completion or error call `stop` to attempt a final snapshot and unregister only after that snapshot succeeds. With auto-stop on (default), it self-stops only when at least one goal exists, every goal is `success`, and no pending work remains; `active`/`partial`/`blocked`, unreadable goal state, or no goals keep it running. On non-Windows platforms the scheduler is unsupported; use your system scheduler to call `rayman checkpoint save`. See `tools/README.md`.
-- `rayman doctor [--check]` — report whether the running executable, the `rayman` application found on `PATH`, and the recorded `SKILL.md` hash form the same installed identity tuple. It does not prove source freshness. The handoff verifier requires explicit `-SkillPath`, rejects PowerShell shadows/known build-shaping env, compares an isolated locked rebuild, then terminally re-hashes every identity. It does not isolate or attest user/parent Cargo config; the claim is current active build-context byte identity, not hermetic provenance.
+## Degradation and boundary
 
-## Evidence and honesty
-
-- For a current-schema **standard/release success claim**, every `must` needs a successful `goal validate` receipt bound to the current workspace fingerprint, and those receipts must collectively declare the real baseline delta. The only exception is the explicit lifecycle-only `authorize-replacement` path above, whose exact-transfer contract, source delta, and live repeated archived-authority command are revalidated instead of inventing ordinary validation receipts. `goal close --status success` is otherwise refused without receipts; evidence-only completion can only be closed as `partial` or `blocked`, and a success closure is terminal — reopen by superseding, not by downgrading. Model confidence and a merely typed `--validated` string are not evidence.
-- Project-map `related_tests`, `impact`, and `plan` output are planning heuristics, not coverage proof. Do not claim a source change is validated from `docs reviewed` or another unrelated command; standard profile checks validation relevance.
-- If something is unverified, blocked, or skipped, say so plainly and record it with `goal pending add`. Prefer "unknown" over a plausible but unchecked claim.
-- Don't limit yourself to the literal ask: if you notice a real, unrelated problem in files you're reading or touching (a bug, a security issue, clearly broken behavior), fix it if it's small and low-risk. If it's out of scope, risky, or you're unsure, don't silently skip it — record it with `goal pending add` and tell the user what you found, with a couple of concrete options and a recommended one. `rayman check` won't pass while that item is open.
-
-## Degradation ladder — when `rayman` is missing
-
-1. On PATH → use the commands above.
-2. Built but not on PATH → call the binary by its `target/release` path, or `cargo run -p rayman --`.
-3. Not built / unavailable → do the work manually: read current files, run the project's own tests, and record unfinished items in your reply. Do not claim gate-verified success, and do not go build the tool as a side quest unless asked.
-
-## Boundaries
-
-Programming workflows only. No host-app accounts, IDE assistant login, OAuth, or connector management. Operational task state stays workspace-local; checkpoint archives use a user-level store by default (or an explicit `--dir`), and there is no cross-project memory.
+Prefer `rayman` on PATH, then a built release binary, then
+`cargo run -p rayman --`. If unavailable, work manually and state that Rayman
+gates were not verified. This skill covers programming workflows only; it does
+not manage host accounts, OAuth, IDE login, or connectors.

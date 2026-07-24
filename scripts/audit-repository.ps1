@@ -34,6 +34,33 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $artifactName = if ($IsWindows) { 'rayman.exe' } else { 'rayman' }
+$script:CurrentAuditPhase = 'bootstrap'
+
+function Write-AuditPhase {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('start', 'pass', 'fail')]
+        [string]$Status,
+        [string]$Detail
+    )
+
+    if ($Status -eq 'start') {
+        $script:CurrentAuditPhase = $Name
+    }
+    $record = [ordered]@{
+        schema = 'rayman.audit.phase.v1'
+        phase = $Name
+        status = $Status
+        timestamp_utc = [DateTimeOffset]::UtcNow.ToString('O')
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Detail)) {
+        $record.detail = $Detail
+    }
+    Write-Output ('RAYMAN_AUDIT_PHASE ' + ($record | ConvertTo-Json -Compress))
+}
+
 $pathComparison = if ($IsWindows) {
     [StringComparison]::OrdinalIgnoreCase
 } else {
@@ -608,7 +635,9 @@ $nativeApplications = [ordered]@{
     Rustc = Resolve-NativeApplication -Name 'rustc' -Label 'rustc'
 }
 $capturedNativeIdentities = @($nativeApplications.Values)
+Write-AuditPhase -Name 'script_self_test' -Status 'start'
 Invoke-AuditScriptSelfTest -NativeIdentities $capturedNativeIdentities
+Write-AuditPhase -Name 'script_self_test' -Status 'pass'
 if ($SelfTest) {
     Write-Host 'audit-repository.ps1 self-test passed.'
     return
@@ -616,7 +645,9 @@ if ($SelfTest) {
 if ($DependencyPolicyOnly) {
     Push-Location $repoRoot
     try {
+        Write-AuditPhase -Name 'dependency_policy' -Status 'start'
         Invoke-IsolatedCargoDenyChecks -CargoDenyIdentity $nativeApplications.CargoDeny
+        Write-AuditPhase -Name 'dependency_policy' -Status 'pass'
     } finally {
         Pop-Location
     }
@@ -625,20 +656,25 @@ if ($DependencyPolicyOnly) {
 }
 Push-Location $repoRoot
 try {
+    Write-AuditPhase -Name 'root_quality' -Status 'start'
     Invoke-NativeChecked $nativeApplications.Cargo.Path @('fmt', '--all', '--check')
     Invoke-NativeChecked $nativeApplications.Cargo.Path @('clippy', '--locked', '--workspace', '--all-targets', '--all-features', '--', '-D', 'warnings')
     Invoke-NativeChecked $nativeApplications.Cargo.Path @('test', '--locked', '--workspace', '--all-targets')
     Invoke-IsolatedCargoDenyChecks -CargoDenyIdentity $nativeApplications.CargoDeny
+    Write-AuditPhase -Name 'root_quality' -Status 'pass'
 
     # MSRV is mandatory. rustup run fails explicitly when the declared toolchain
     # is unavailable; the complete audit never silently falls back to stable.
+    Write-AuditPhase -Name 'msrv' -Status 'start'
     Invoke-NativeChecked $nativeApplications.Rustup.Path @('run', $MsrvToolchain, 'rustc', '--version')
     Invoke-NativeChecked $nativeApplications.Rustup.Path @('run', $MsrvToolchain, 'cargo', 'build', '--locked', '--release', '-p', 'rayman')
     Invoke-NativeChecked $nativeApplications.Rustup.Path @('run', $MsrvToolchain, 'cargo', 'test', '--locked', '--workspace', '--all-targets')
+    Write-AuditPhase -Name 'msrv' -Status 'pass'
 
     # Real shipped-CLI coverage. Always install the exact measurement tool into
     # a fresh managed root, resolve that exact Application, and invoke it by its
     # captured path. An arbitrary PATH copy is never accepted as coverage proof.
+    Write-AuditPhase -Name 'cli_coverage' -Status 'start'
     Invoke-NativeChecked $nativeApplications.Rustup.Path @('component', 'add', 'llvm-tools-preview')
     $coverageToolRoot = New-ManagedAuditDirectory -Label "cargo-llvm-cov-$CoverageToolVersion"
     $originalPathForCoverage = $env:PATH
@@ -674,7 +710,9 @@ try {
         $env:PATH = $originalPathForCoverage
         Remove-ManagedAuditDirectory -Path $coverageToolRoot
     }
+    Write-AuditPhase -Name 'cli_coverage' -Status 'pass'
 
+    Write-AuditPhase -Name 'evals' -Status 'start'
     Invoke-NativeChecked $nativeApplications.Cargo.Path @('fmt', '--manifest-path', 'evals/Cargo.toml', '--all', '--check')
     Invoke-NativeChecked $nativeApplications.Cargo.Path @('clippy', '--manifest-path', 'evals/Cargo.toml', '--locked', '--all-targets', '--all-features', '--', '-D', 'warnings')
     Invoke-NativeChecked $nativeApplications.Cargo.Path @('test', '--manifest-path', 'evals/Cargo.toml', '--locked', '--all-targets')
@@ -725,6 +763,8 @@ try {
     } finally {
         Remove-ManagedAuditDirectory -Path $evalRuns
     }
+    Write-AuditPhase -Name 'evals' -Status 'pass'
+    Write-AuditPhase -Name 'package_install_smoke' -Status 'start'
 
     # Packaging and cargo-install are separate from a workspace build. Exercise
     # both so missing package metadata/files cannot survive until release day.
@@ -753,6 +793,8 @@ try {
             Remove-Item -LiteralPath $smokeRoot -Recurse -Force
         }
     }
+    Write-AuditPhase -Name 'package_install_smoke' -Status 'pass'
+    Write-AuditPhase -Name 'workspace_self_dogfood' -Status 'start'
 
     Invoke-NativeChecked $nativeApplications.Cargo.Path @('build', '--locked', '--release', '-p', 'rayman')
     $referenceArtifact = (Resolve-Path -LiteralPath (Join-Path 'target/release' $artifactName)).Path
@@ -774,6 +816,8 @@ try {
     } finally {
         Remove-ManagedAuditDirectory -Path $checkpointRoot
     }
+    Write-AuditPhase -Name 'workspace_self_dogfood' -Status 'pass'
+    Write-AuditPhase -Name 'installed_release_identity' -Status 'start'
 
     & './scripts/verify-release-contract.ps1' `
         -CliPath $resolvedCli `
@@ -785,8 +829,13 @@ try {
     foreach ($identity in $capturedNativeIdentities) {
         Assert-NativeApplicationIdentity -Identity $identity
     }
+    Write-AuditPhase -Name 'installed_release_identity' -Status 'pass'
+} catch {
+    Write-AuditPhase -Name $script:CurrentAuditPhase -Status 'fail' -Detail $_.Exception.Message
+    throw
 } finally {
     Pop-Location
 }
 
 Write-Host 'Complete repository audit passed: root/MSRV/CLI coverage, evals safety+mock provenance, package/install, strict workspace, checkpoint/state/assets, and installed release identity.'
+Write-AuditPhase -Name 'complete' -Status 'pass'

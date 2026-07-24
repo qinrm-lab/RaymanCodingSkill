@@ -25,6 +25,10 @@ Run the complete audit from a PowerShell 7 (`pwsh`) session only, from a clean c
 ```
 
 The complete-audit parameter set has no skip switches. Its contract parameters cannot be weakened: MSRV and the coverage tool are fixed at `1.88.0` and `0.8.7`, while the CLI line threshold may stay at 75 or be raised. It fails rather than silently substituting another toolchain or omitting a lane. At startup it resolves the effective `cargo`, `cargo-deny`, `rustup`, `git`, and `rustc` commands, rejects Function/Alias/Cmdlet shadows, captures each Application path and SHA-256, invokes the captured paths throughout, and re-resolves/re-hashes them before success. The declared MSRV must already be available through rustup. Every audit creates a fresh writable managed-temp advisory root and seeds it from the existing cargo-deny database when one is available, injects that exact path into temporary root/evals configs, runs both dependency-policy checks, and deletes the copy; the committed configs and user cache are never rewritten. With `CARGO_NET_OFFLINE=true`, fetching is disabled but the advisories check still runs against the isolated database; if no seed exists, it fails closed. Every audit also installs the exact pinned `cargo-llvm-cov` version into a fresh managed-temp root, verifies that exact Application path and version, invokes it directly, re-hashes it, and removes the root; an arbitrary PATH copy is never accepted as coverage evidence. The threshold was set from a current measured shipped-CLI total of 79.86% lines.
+Every lane emits `RAYMAN_AUDIT_PHASE` JSON records with `start|pass|fail`
+status. A failure record names the current phase before the original exception
+is rethrown, so CI and host agents can report live progress without parsing
+free-form command logs.
 
 The script-level negative guards can be exercised without running the expensive audit lanes. This also runs the release-verifier self-test and the exact-match legacy PowerShell profile migration self-test:
 
@@ -32,6 +36,11 @@ The script-level negative guards can be exercised without running the expensive 
 ./scripts/audit-repository.ps1 -SelfTest
 ```
 
+
+`scripts/release-closeout.ps1 -SelfTest` separately proves that cached audit
+evidence is rejected across binding drift and that the closeout command always
+retains `--authority --repeat 2`. The normal closeout accepts reuse only for an
+exact clean HEAD/CLI/SKILL/script/tool binding.
 The focused dependency-policy regression lane exercises the same isolated root/evals advisory state without claiming a complete audit:
 
 ```powershell

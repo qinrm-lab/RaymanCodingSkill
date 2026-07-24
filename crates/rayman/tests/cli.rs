@@ -275,6 +275,31 @@ fn language_selection_preserves_utf8_unicode_paths_and_json_contract() {
     );
     assert!(!english.stdout.contains('\u{fffd}'), "{}", english.stdout);
 
+    let english_goal = run(
+        &root,
+        &[
+            "--language",
+            "en",
+            "goal",
+            "start",
+            "中文目标🙂",
+            "--must",
+            "prove it",
+        ],
+    );
+    assert_eq!(english_goal.status, 0, "{}", english_goal.stderr);
+    assert!(
+        english_goal.stdout.contains("Goal goal_")
+            && english_goal.stdout.contains("created (1 requirements)"),
+        "{}",
+        english_goal.stdout
+    );
+    assert!(
+        !english_goal.stdout.contains("个需求"),
+        "{}",
+        english_goal.stdout
+    );
+
     let unicode_path = run(
         &root,
         &["--language", "zh-CN", "temp", "scratch", "中文-資料-🙂"],
@@ -314,6 +339,62 @@ fn language_selection_preserves_utf8_unicode_paths_and_json_contract() {
     let chinese_value: Value = serde_json::from_str(&chinese_json.stdout).unwrap();
     let english_value: Value = serde_json::from_str(&english_json.stdout).unwrap();
     assert_eq!(chinese_value, english_value);
+    let contains_han = |text: &str| {
+        text.chars().any(|character| {
+            matches!(character as u32, 0x3400..=0x4dbf | 0x4e00..=0x9fff | 0xf900..=0xfaff)
+        })
+    };
+    for arguments in [
+        vec!["--language", "en", "--help"],
+        vec!["--language", "en", "workspace", "--help"],
+        vec!["--language", "en", "codex-hook", "--help"],
+        vec!["--language", "en", "checkpoint", "--help"],
+        vec!["--language", "en", "autosave", "--help"],
+        vec!["--language", "en", "context", "--help"],
+        vec!["--language", "en", "map", "--help"],
+        vec!["--language", "en", "goal", "--help"],
+        vec!["--language", "en", "state", "--help"],
+        vec!["--language", "en", "temp", "--help"],
+        vec!["--language", "en", "doctor", "--help"],
+        vec!["--language", "en", "check", "--help"],
+        vec!["--language", "en", "prepare", "--help"],
+        vec!["--language", "en", "finish", "--help"],
+    ] {
+        let help = run_raw(&root, &arguments);
+        assert_eq!(help.status, 0, "stderr={}", help.stderr);
+        assert!(!contains_han(&help.stdout), "{}", help.stdout);
+    }
+    let parse_error = run_raw(&root, &["--language", "en", "--definitely-invalid"]);
+    assert_ne!(parse_error.status, 0);
+    assert!(!contains_han(&parse_error.stderr), "{}", parse_error.stderr);
+    for arguments in [
+        vec!["--language", "en", "context", "refresh"],
+        vec!["--language", "en", "map", "summary"],
+        vec!["--language", "en", "map", "quality"],
+        vec!["--language", "en", "state", "audit"],
+        vec!["--language", "en", "assets"],
+        vec!["--language", "en", "doctor"],
+    ] {
+        let output = run(&root, &arguments);
+        assert_eq!(output.status, 0, "stderr={}", output.stderr);
+        let fixed_stdout = output.stdout.replace("src/中文模块.rs", "<dynamic-path>");
+        let fixed_stderr = output.stderr.replace("src/中文模块.rs", "<dynamic-path>");
+        assert!(!contains_han(&fixed_stdout), "{}", output.stdout);
+        assert!(!contains_han(&fixed_stderr), "{}", output.stderr);
+    }
+    for arguments in [
+        vec!["--language", "en", "map", "file", "missing.rs"],
+        vec!["--language", "en", "goal", "show", "goal_missing"],
+        vec!["--language", "en", "checkpoint", "verify", "missing"],
+        vec!["--language", "en", "doctor", "--check"],
+        vec!["--language", "en", "autosave", "status"],
+    ] {
+        let output = run(&root, &arguments);
+        let fixed_stdout = output.stdout.replace("src/中文模块.rs", "<dynamic-path>");
+        let fixed_stderr = output.stderr.replace("src/中文模块.rs", "<dynamic-path>");
+        assert!(!contains_han(&fixed_stdout), "{}", output.stdout);
+        assert!(!contains_han(&fixed_stderr), "{}", output.stderr);
+    }
 }
 
 #[test]
@@ -414,7 +495,7 @@ fn goal_success_close_is_refused_without_must_evidence() {
 }
 
 #[test]
-fn standard_check_blocks_active_must_requirements_without_evidence() {
+fn unbound_standard_check_reports_active_goal_without_blocking_workspace() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
@@ -424,16 +505,29 @@ fn standard_check_blocks_active_must_requirements_without_evidence() {
         &["goal", "start", "wire impact", "--must", "record evidence"],
     );
 
-    // Bare `check` is the readiness gate, so its default profile must be the
-    // same fail-closed standard behavior as `--profile standard`.
-    let default_profile = run(root, &["check"]);
-    assert_eq!(default_profile.status, 1);
+    // Bare `check` is workspace health. It reports unfinished goals, but task
+    // completion is enforced only when a goal is explicitly bound.
+    let default_profile = run(root, &["--format", "json", "check"]);
+    assert_eq!(
+        default_profile.status, 0,
+        "stderr={}",
+        default_profile.stderr
+    );
+    let default_json: Value = serde_json::from_str(&default_profile.stdout).unwrap();
+    assert_eq!(default_json["workspace_ready"], true);
+    assert_eq!(default_json["task"]["requested"], false);
     assert!(
-        default_profile.stdout.contains("active goal") && default_profile.stdout.contains("must"),
+        default_json["standard"]["warnings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|warning| warning.as_str().unwrap().contains("not task-ready")),
         "stdout={}",
         default_profile.stdout
     );
-    let standard = run(root, &["check", "--profile", "standard"]);
+    let current = run_json(root, &["goal", "current"]);
+    let id = current[0]["id"].as_str().unwrap();
+    let standard = run(root, &["check", "--profile", "standard", "--goal", id]);
     assert_eq!(standard.status, 1);
     assert!(
         standard.stdout.contains("active goal") && standard.stdout.contains("must"),
@@ -472,7 +566,7 @@ fn standard_check_blocks_active_goal_even_with_validated_evidence() {
     );
     assert_eq!(recorded.status, 0, "stderr={}", recorded.stderr);
 
-    let standard = run(root, &["check", "--profile", "standard"]);
+    let standard = run(root, &["check", "--profile", "standard", "--goal", id]);
     assert_eq!(standard.status, 1);
     assert!(
         standard.stdout.contains("仍为 active") && standard.stdout.contains("goal close"),
@@ -509,11 +603,12 @@ fn standard_check_blocks_done_requirement_without_validation_receipt() {
     let closed = run(root, &["goal", "close", id]);
     assert_eq!(closed.status, 1, "stderr={}", closed.stderr);
 
-    let standard = run(root, &["check", "--profile", "standard"]);
+    let standard = run(root, &["check", "--profile", "standard", "--goal", id]);
     assert_eq!(standard.status, 1);
     assert!(
         standard.stdout.contains("缺少验证 receipt")
-            && standard.stdout.contains("standard blockers: 2"),
+            && standard.stdout.contains("任务阻断")
+            && standard.stdout.contains("standard blockers: 0"),
         "stdout={}",
         standard.stdout
     );
@@ -553,7 +648,10 @@ fn standard_check_blocks_done_requirement_without_evidence() {
     );
     run_json(root, &["context", "refresh"]);
 
-    let standard = run(root, &["check", "--profile", "standard"]);
+    let standard = run(
+        root,
+        &["check", "--profile", "standard", "--goal", "goal_manual"],
+    );
     assert_eq!(standard.status, 1);
     assert!(
         standard.stdout.contains("goal_manual") && standard.stdout.contains("缺少 evidence 文本"),
@@ -590,7 +688,7 @@ fn standard_check_blocks_partial_goal_without_structured_validation() {
     let closed = run(root, &["goal", "close", id, "--status", "partial"]);
     assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
 
-    let standard = run(root, &["check", "--profile", "standard"]);
+    let standard = run(root, &["check", "--profile", "standard", "--goal", id]);
     assert_eq!(standard.status, 1);
     assert!(
         standard.stdout.contains("状态为 partial") && standard.stdout.contains("缺少验证 receipt"),
@@ -671,7 +769,10 @@ fn standard_check_reads_legacy_goal_schema_and_blocks_missing_validation() {
 
     let listed = run_json(root, &["goal", "list"]);
     assert_eq!(listed[0]["id"], "goal_legacy");
-    let standard = run(root, &["check", "--profile", "standard"]);
+    let standard = run(
+        root,
+        &["check", "--profile", "standard", "--goal", "goal_legacy"],
+    );
     assert_eq!(standard.status, 1);
     assert!(
         standard.stdout.contains("legacy goal goal_legacy")
@@ -713,7 +814,10 @@ fn standard_check_blocks_legacy_goal_level_verification_without_a_receipt() {
     );
     run_json(root, &["context", "refresh"]);
 
-    let standard = run(root, &["check", "--profile", "standard"]);
+    let standard = run(
+        root,
+        &["check", "--profile", "standard", "--goal", "goal_legacy"],
+    );
     assert_eq!(standard.status, 1, "stdout={}", standard.stdout);
     assert!(
         standard.stdout.contains("legacy goal goal_legacy")
@@ -934,7 +1038,7 @@ fn standard_check_does_not_change_state_tree() {
     assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
     let before = state_snapshot(root);
 
-    let standard = run(root, &["check", "--profile", "standard"]);
+    let standard = run(root, &["check", "--profile", "standard", "--goal", id]);
     assert_eq!(
         standard.status, 0,
         "stdout={} stderr={}",
@@ -1022,7 +1126,7 @@ fn standard_check_accepts_done_requirement_with_validation_and_no_impact_warning
     let closed = run(root, &["goal", "close", id]);
     assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
 
-    let standard = run(root, &["check", "--profile", "standard"]);
+    let standard = run(root, &["check", "--profile", "standard", "--goal", id]);
     assert_eq!(
         standard.status, 0,
         "stdout={} stderr={}",
@@ -1128,7 +1232,7 @@ fn goal_evidence_changed_requires_validation_and_standard_accepts_it() {
     let closed = run(root, &["goal", "close", id]);
     assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
 
-    let standard = run(root, &["check", "--profile", "standard"]);
+    let standard = run(root, &["check", "--profile", "standard", "--goal", id]);
     assert_eq!(
         standard.status, 0,
         "stdout={} stderr={}",
@@ -1173,7 +1277,7 @@ fn standard_check_blocks_irrelevant_validation_for_source_changes() {
     let closed = run(root, &["goal", "close", id]);
     assert_eq!(closed.status, 1, "stderr={}", closed.stderr);
 
-    let standard = run(root, &["check", "--profile", "standard"]);
+    let standard = run(root, &["check", "--profile", "standard", "--goal", id]);
     assert_eq!(standard.status, 1);
     assert!(
         standard.stdout.contains("validation 不覆盖 src/lib.rs"),
@@ -1233,7 +1337,7 @@ fn standard_check_accepts_rust_validation_for_cargo_manifest_changes() {
     let closed = run(root, &["goal", "close", id]);
     assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
 
-    let standard = run(root, &["check", "--profile", "standard"]);
+    let standard = run(root, &["check", "--profile", "standard", "--goal", id]);
     assert_eq!(
         standard.status, 0,
         "stdout={} stderr={}",
@@ -1292,7 +1396,7 @@ fn standard_check_accepts_rust_validation_for_cargo_lock_changes() {
     let closed = run(root, &["goal", "close", id]);
     assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
 
-    let standard = run(root, &["check", "--profile", "standard"]);
+    let standard = run(root, &["check", "--profile", "standard", "--goal", id]);
     assert_eq!(
         standard.status, 0,
         "stdout={} stderr={}",
@@ -2019,7 +2123,10 @@ fn standard_check_rejects_a_forged_v2_success_goal_without_must_requirements() {
     );
     run_json(root, &["context", "refresh"]);
 
-    let standard = run(root, &["check", "--profile", "standard"]);
+    let standard = run(
+        root,
+        &["check", "--profile", "standard", "--goal", "goal_forged"],
+    );
     assert_eq!(standard.status, 1);
     assert!(
         standard.stdout.contains("goal_forged") && standard.stdout.contains("至少需要一个 must"),
@@ -2058,7 +2165,10 @@ fn standard_check_rejects_an_unknown_nonzero_goal_schema() {
     );
     run_json(root, &["context", "refresh"]);
 
-    let standard = run(root, &["check", "--profile", "standard"]);
+    let standard = run(
+        root,
+        &["check", "--profile", "standard", "--goal", "goal_future"],
+    );
     assert_eq!(standard.status, 1);
     assert!(
         standard.stdout.contains("goal_future")
@@ -2116,7 +2226,16 @@ fn legacy_goal_mutation_remains_legacy_history_after_writeback() {
         1
     );
 
-    let standard = run(root, &["check", "--profile", "standard"]);
+    let standard = run(
+        root,
+        &[
+            "check",
+            "--profile",
+            "standard",
+            "--goal",
+            "goal_legacy_active",
+        ],
+    );
     assert_eq!(standard.status, 1, "stdout={}", standard.stdout);
     assert!(standard.stdout.contains("legacy goal goal_legacy_active"));
     assert!(!standard.stdout.contains("合约无效"));
@@ -2201,7 +2320,7 @@ fn typed_validated_claim_cannot_replace_an_executed_receipt() {
     assert_eq!(close.status, 1);
     assert!(close.stderr.contains("validation receipt"));
 
-    let standard = run(root, &["check", "--profile", "standard"]);
+    let standard = run(root, &["check", "--profile", "standard", "--goal", id]);
     assert_eq!(standard.status, 1);
     assert!(
         standard.stdout.contains("仍为 active"),
@@ -2223,11 +2342,14 @@ fn source_change_after_receipt_invalidates_standard_readiness() {
     let id = goal["id"].as_str().unwrap();
     validate_goal(root, id, "req_1", "executed receipt", &[]);
     assert_eq!(run(root, &["goal", "close", id]).status, 0);
-    assert_eq!(run(root, &["check", "--profile", "standard"]).status, 0);
+    assert_eq!(
+        run(root, &["check", "--profile", "standard", "--goal", id]).status,
+        0
+    );
 
     write(root, "src/lib.rs", "pub fn answer() -> i32 { 43 }\n");
     run_json(root, &["context", "refresh"]);
-    let standard = run(root, &["check", "--profile", "standard"]);
+    let standard = run(root, &["check", "--profile", "standard", "--goal", id]);
     assert_eq!(standard.status, 1);
     assert!(
         standard
@@ -2374,7 +2496,7 @@ fn typed_relevance_cannot_be_combined_with_an_unscoped_receipt() {
     assert_eq!(typed.status, 0, "stderr={}", typed.stderr);
     assert_eq!(run(root, &["goal", "close", id]).status, 1);
 
-    let standard = run(root, &["check", "--profile", "standard"]);
+    let standard = run(root, &["check", "--profile", "standard", "--goal", id]);
     assert_eq!(standard.status, 1);
     assert!(
         standard.stdout.contains("同一条当前成功 receipt"),
@@ -2446,7 +2568,10 @@ fn goal_lifecycle_preserves_history_without_hiding_unfinished_work() {
 
     let restored = run_json(root, &["goal", "current", old_id]);
     assert_eq!(restored["lifecycle"], "current");
-    assert_eq!(run(root, &["check", "--profile", "standard"]).status, 1);
+    assert_eq!(
+        run(root, &["check", "--profile", "standard", "--goal", old_id]).status,
+        1
+    );
 }
 
 #[test]
@@ -2728,6 +2853,54 @@ fn checkpoint_verify_state_audit_and_recursive_temp_status_are_exposed_by_cli() 
         root.join(".RaymanCodingSkill/research/retired.json")
             .exists()
     );
+}
+#[test]
+fn checkpoint_save_is_lossless_by_default_and_prune_requires_yes() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let checkpoint_dir = tempfile::tempdir().unwrap();
+    let checkpoint_dir = checkpoint_dir.path().to_str().unwrap();
+    write(root, "src/lib.rs", "pub fn value() -> i32 { 1 }\n");
+
+    let first = run_json(root, &["checkpoint", "--dir", checkpoint_dir, "save"]);
+    assert_eq!(first["retention_applied"], false);
+    assert_eq!(first["pruned"], 0);
+    write(root, "src/lib.rs", "pub fn value() -> i32 { 2 }\n");
+    let second = run_json(root, &["checkpoint", "--dir", checkpoint_dir, "save"]);
+    assert_eq!(second["retention_applied"], false);
+    assert_eq!(second["pruned"], 0);
+
+    let before = run_json(root, &["checkpoint", "--dir", checkpoint_dir, "list"]);
+    assert_eq!(before.as_array().unwrap().len(), 2);
+    let refused = run(
+        root,
+        &[
+            "checkpoint",
+            "--dir",
+            checkpoint_dir,
+            "prune",
+            "--keep",
+            "1",
+        ],
+    );
+    assert_eq!(refused.status, 1);
+    assert!(refused.stderr.contains("--yes"));
+    let after_refusal = run_json(root, &["checkpoint", "--dir", checkpoint_dir, "list"]);
+    assert_eq!(after_refusal.as_array().unwrap().len(), 2);
+
+    let pruned = run_json(
+        root,
+        &[
+            "checkpoint",
+            "--dir",
+            checkpoint_dir,
+            "prune",
+            "--keep",
+            "1",
+            "--yes",
+        ],
+    );
+    assert_eq!(pruned["pruned"], 1);
 }
 
 #[test]
@@ -4275,4 +4448,216 @@ fn goal_package_progress_summary_and_lane_fail_closed_through_cli() {
     let rejected = run(root, &["goal", "lane", "close", id, "review"]);
     assert_eq!(rejected.status, 1);
     assert!(rejected.stderr.contains("只读 lane"), "{}", rejected.stderr);
+}
+
+#[test]
+fn typed_must_proof_requires_a_matching_validation_command_kind() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(
+        root,
+        "Cargo.toml",
+        "[package]\nname = \"typed-proof-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(
+        root,
+        "src/lib.rs",
+        "pub fn answer() -> i32 { 42 }\n#[test]\nfn answer_is_valid() { assert_eq!(answer(), 42); }\n",
+    );
+    generate_lockfile(root);
+    run_json(root, &["context", "refresh"]);
+    let started = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "atomic typed proof",
+            "--must-proof",
+            "test::run the test suite",
+            "--must-proof",
+            "documentation::validate the agent contract",
+        ],
+    );
+    let id = started["id"].as_str().unwrap();
+    assert_eq!(started["requirements"][0]["proof_kind"], "test");
+    assert_eq!(started["requirements"][1]["proof_kind"], "documentation");
+
+    let wrong = run(
+        root,
+        &[
+            "goal",
+            "validate",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "a build is not a test proof",
+            "--changed",
+            "src/lib.rs",
+            "--command",
+            "cargo check --quiet",
+        ],
+    );
+    assert_eq!(wrong.status, 1);
+    assert!(
+        wrong.stderr.contains("proof kind mismatch"),
+        "stderr={}",
+        wrong.stderr
+    );
+    let still_open = run_json(root, &["goal", "show", id]);
+    assert_eq!(still_open["requirements"][0]["status"], "open");
+
+    let test_receipt = run(
+        root,
+        &[
+            "goal",
+            "validate",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "test proof",
+            "--changed",
+            "src/lib.rs",
+            "--command",
+            "cargo test --quiet",
+        ],
+    );
+    assert_eq!(test_receipt.status, 0, "stderr={}", test_receipt.stderr);
+
+    let wrong_for_docs = run(
+        root,
+        &[
+            "goal",
+            "validate",
+            id,
+            "--req",
+            "req_2",
+            "-m",
+            "tests cannot prove the documentation contract",
+            "--changed",
+            "src/lib.rs",
+            "--command",
+            "cargo test --quiet",
+        ],
+    );
+    assert_eq!(wrong_for_docs.status, 1);
+    assert!(wrong_for_docs.stderr.contains("proof kind mismatch"));
+}
+
+#[test]
+fn handoff_start_binds_source_goal_authority_clean_head_and_structured_stages() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(
+        root,
+        "Cargo.toml",
+        "[package]\nname = \"handoff-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(
+        root,
+        "src/lib.rs",
+        "pub fn answer() -> i32 { 42 }\n#[test]\nfn answer_is_valid() { assert_eq!(answer(), 42); }\n",
+    );
+    write(root, ".gitignore", ".RaymanCodingSkill/\ntarget/\n");
+    generate_lockfile(root);
+    let git = |args: &[&str]| {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    };
+    git(&["init", "--quiet"]);
+    git(&["add", "."]);
+    git(&[
+        "-c",
+        "user.name=Rayman Test",
+        "-c",
+        "user.email=rayman@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "fixture",
+    ]);
+    let commit = git(&["rev-parse", "HEAD"]);
+
+    run_json(root, &["context", "refresh"]);
+    let source = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "implementation",
+            "--must",
+            "prove implementation",
+        ],
+    );
+    let source_id = source["id"].as_str().unwrap();
+    let authority = run(
+        root,
+        &[
+            "goal",
+            "validate",
+            source_id,
+            "--req",
+            "req_1",
+            "-m",
+            "stable implementation authority",
+            "--changed",
+            "src/lib.rs",
+            "--command",
+            "cargo test --all",
+            "--authority",
+            "--repeat",
+            "2",
+        ],
+    );
+    assert_eq!(authority.status, 0, "stderr={}", authority.stderr);
+    assert_eq!(run(root, &["goal", "close", source_id]).status, 0);
+
+    let handoff = run_json(
+        root,
+        &[
+            "goal",
+            "handoff",
+            "start",
+            "--from-goal",
+            source_id,
+            "--commit",
+            &commit,
+        ],
+    );
+    assert_eq!(handoff["handoff"]["source_goal_id"], source_id);
+    assert_eq!(handoff["handoff"]["git_commit"], commit);
+    assert_eq!(handoff["handoff"]["stages"].as_array().unwrap().len(), 3);
+    assert_eq!(handoff["requirements"][0]["proof_kind"], "installation");
+    assert_eq!(handoff["requirements"][1]["proof_kind"], "repository_gate");
+    assert_eq!(handoff["requirements"][2]["proof_kind"], "source_fresh");
+
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 43 }\n");
+    let dirty = run(
+        root,
+        &[
+            "goal",
+            "handoff",
+            "start",
+            "--from-goal",
+            source_id,
+            "--commit",
+            &commit,
+        ],
+    );
+    assert_eq!(dirty.status, 1);
+    assert!(
+        dirty.stderr.contains("clean Git worktree"),
+        "{}",
+        dirty.stderr
+    );
 }

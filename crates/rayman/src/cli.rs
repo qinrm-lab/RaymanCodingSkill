@@ -200,11 +200,20 @@ pub struct CheckpointCmd {
 
 #[derive(Subcommand)]
 pub enum CheckpointAction {
-    /// 保存当前工作树快照，然后清理旧快照
+    /// 保存当前工作树快照；默认不删除任何旧恢复点
     Save {
-        /// 保留最近 N 个快照（默认 3）
+        /// 显式确认保存后只保留最近 N 个完整快照；省略则不裁剪
+        #[arg(long)]
+        keep: Option<usize>,
+    },
+    /// 显式裁剪已验证的完整快照；不会把损坏快照当作可删除候选
+    Prune {
+        /// 保留最近 N 个完整快照（至少 1）
         #[arg(long, default_value_t = rayman::checkpoint::DEFAULT_KEEP)]
         keep: usize,
+        /// 确认删除旧恢复点
+        #[arg(long)]
+        yes: bool,
     },
     /// 激活无效时仍保存 recovery-only 快照；不会成为默认 latest 或完成证据
     SalvageSave,
@@ -345,6 +354,23 @@ pub struct GoalCmd {
     pub action: GoalAction,
 }
 
+#[derive(Args)]
+pub struct HandoffCmd {
+    #[command(subcommand)]
+    pub action: HandoffAction,
+}
+
+#[derive(Subcommand)]
+pub enum HandoffAction {
+    /// Start a release handoff bound to one completed implementation goal and exact Git commit.
+    Start {
+        #[arg(long = "from-goal")]
+        from_goal: String,
+        #[arg(long)]
+        commit: String,
+    },
+}
+
 #[derive(Subcommand)]
 pub enum GoalAction {
     /// 新建目标
@@ -353,6 +379,9 @@ pub enum GoalAction {
         /// must 需求（可重复）
         #[arg(long = "must")]
         must: Vec<String>,
+        /// Typed atomic must proof in KIND::TEXT form (repeatable).
+        #[arg(long = "must-proof", value_name = "KIND::TEXT")]
+        must_proof: Vec<String>,
         /// should 需求（可重复）
         #[arg(long = "should")]
         should: Vec<String>,
@@ -363,6 +392,8 @@ pub enum GoalAction {
     Show { id: String },
     /// 紧凑显示需求、计划、工作包和收据计数，不输出完整 baseline
     Summary { id: String },
+    /// Manage a commit-bound release handoff contract.
+    Handoff(Box<HandoffCmd>),
     /// Persist a pre-mutation plan receipt bound to the goal baseline.
     Plan {
         id: String,
@@ -668,11 +699,13 @@ mod tests {
                     GoalAction::Start {
                         title,
                         must,
+                        must_proof,
                         should,
                     },
             }) => {
                 assert_eq!(title, "add parser");
                 assert_eq!(must, vec!["implement".to_string()]);
+                assert!(must_proof.is_empty());
                 assert_eq!(should, vec!["nice errors".to_string()]);
             }
             _ => panic!("unexpected command"),

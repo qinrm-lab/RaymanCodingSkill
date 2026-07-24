@@ -30,8 +30,28 @@ contract.
   state without the user's explicit authorization.
 - Preserve unrelated work in a dirty checkout. Do not reset or discard it.
 
+## Shared workflow authority
+
+- For standard/release work, goal lifecycle, blocker handling, checkpoints,
+  concurrency, or evidence claims, read and follow
+  [references/workflow-contract.md](references/workflow-contract.md).
+- Continue safe agent-owned work to a stable finish. A human/external pause
+  must be a complete solution package, not an open-ended question.
+- Treat unbound `rayman check` as workspace health only. Task completion
+  requires a goal-bound gate; release completion additionally requires
+  installation, repository audit, and source-fresh proof.
+- Use `--must-proof KIND::TEXT` for atomic mandatory evidence and split
+  compound claims. A typed requirement accepts only a matching validation
+  command.
+- Start release transfer with `goal handoff start --from-goal <id> --commit
+  <sha>`. Do not hand off an uncommitted, dirty, authority-less, or
+  source-stale implementation.
+- Checkpoint save is lossless by default. Pruning requires explicit user
+  authorization or an already confirmed retention policy.
+
 ## Compatibility boundary
 
 `SKILL.md` and `CLAUDE.md` are adapters, not independent policy copies. Any
 change to this shared contract must keep their `AGENT_CONTRACT:
-rayman-shared-v1` marker and pass `scripts/check-agent-instructions.ps1`.
+rayman-shared-v1` marker, preserve the workflow reference link, and pass
+`scripts/check-agent-instructions.ps1`.

@@ -35,6 +35,75 @@ if ([string]::IsNullOrWhiteSpace($SkillDirectory)) {
     $SkillDirectory = Join-Path $HOME '.codex/skills/raymancodingskill'
 }
 
+function Get-CodexSkillResourcePlan {
+    param([Parameter(Mandatory = $true)][string]$DestinationRoot)
+
+    $manifestPath = Join-Path $repoRoot 'install-manifest.json'
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        throw "Install manifest is missing: $manifestPath"
+    }
+    try {
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding utf8 |
+            ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        throw "Install manifest is invalid: $($_.Exception.Message)"
+    }
+    if ($manifest.schema_version -ne 1 -or
+        $manifest.clients.codex.deployment_scope -ne 'global_skill' -or
+        $manifest.clients.claude_code.deployment_scope -ne 'repository_entrypoint_only' -or
+        $manifest.clients.claude_code.entrypoint -ne 'CLAUDE.md') {
+        throw 'Install manifest client deployment scopes are invalid.'
+    }
+
+    $resources = @($manifest.codex_skill_resources)
+    if ($resources.Count -eq 0) {
+        throw 'Install manifest has no Codex skill resources.'
+    }
+    $plan = @()
+    foreach ($resource in $resources) {
+        $properties = @($resource.PSObject.Properties.Name | Sort-Object)
+        if (($properties -join ',') -ne 'destination,source') {
+            throw 'Install manifest resource has unknown or missing fields.'
+        }
+        $sourceRelative = [string]$resource.source
+        $destinationRelative = [string]$resource.destination
+        foreach ($candidate in @($sourceRelative, $destinationRelative)) {
+            if ([string]::IsNullOrWhiteSpace($candidate) -or
+                [IO.Path]::IsPathRooted($candidate) -or
+                $candidate.Contains('..') -or
+                $candidate.Contains('\')) {
+                throw "Install manifest path must be an ordinary forward-slash relative path: $candidate"
+            }
+        }
+        if ($sourceRelative -eq 'CLAUDE.md') {
+            throw 'CLAUDE.md is repository-scoped and must not be globally installed.'
+        }
+        $source = [IO.Path]::GetFullPath((Join-Path $repoRoot $sourceRelative))
+        if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+            throw "Install manifest source is missing: $sourceRelative"
+        }
+        $destination = [IO.Path]::GetFullPath(
+            (Join-Path $DestinationRoot $destinationRelative)
+        )
+        $destinationPrefix = $DestinationRoot.TrimEnd(
+            [IO.Path]::DirectorySeparatorChar
+        ) + [IO.Path]::DirectorySeparatorChar
+        if (-not $destination.StartsWith(
+            $destinationPrefix,
+            $(if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal })
+        )) {
+            throw "Install manifest destination escaped the skill root: $destinationRelative"
+        }
+        $plan += [pscustomobject]@{
+            SourceRelative = $sourceRelative
+            DestinationRelative = $destinationRelative
+            Source = $source
+            Destination = $destination
+        }
+    }
+    return $plan
+}
+
 function Invoke-NativeChecked {
     param(
         [Parameter(Mandatory = $true)]
@@ -512,6 +581,16 @@ function Invoke-InstallPathSelfTest {
     $null = Resolve-ManagedDirectory -Path $inside -Label 'Self-test inside'
     $null = Resolve-ManagedDirectory -Path $outside -Label 'Self-test outside'
     try {
+        $resourcePlan = @(Get-CodexSkillResourcePlan -DestinationRoot $inside)
+        $resourceDestinations = @($resourcePlan.DestinationRelative | Sort-Object)
+        if ($resourcePlan.Count -ne 3 -or
+            $resourceDestinations -contains 'CLAUDE.md' -or
+            $resourceDestinations -notcontains 'SKILL.md' -or
+            $resourceDestinations -notcontains 'references/workflow-contract.md') {
+            throw 'Install self-test failed: the manifest did not produce the exact Codex resource plan.'
+        }
+
+
         $hashProbe = Join-Path $testRoot 'hash-probe.bin'
         Set-Content -LiteralPath $hashProbe -Value 'verified' -NoNewline -Encoding utf8
         $expectedHash = (Get-FileHash -LiteralPath $hashProbe -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -728,19 +807,22 @@ $cargoApplicationHash = (Get-FileHash -LiteralPath $cargoApplication -Algorithm 
 
 $resolvedBinDirectory = Resolve-ManagedDirectory -Path $BinDirectory -Label 'CLI directory'
 $resolvedSkillDirectory = Resolve-ManagedDirectory -Path $SkillDirectory -Label 'Skill directory'
+$skillResources = @(Get-CodexSkillResourcePlan -DestinationRoot $resolvedSkillDirectory)
 $destinationCli = Join-Path $resolvedBinDirectory $artifactName
-$destinationSkill = Join-Path $resolvedSkillDirectory 'SKILL.md'
-$destinationAgents = Join-Path $resolvedSkillDirectory 'AGENTS.md'
+$destinationSkill = @($skillResources | Where-Object DestinationRelative -eq 'SKILL.md').Destination
+if ($destinationSkill.Count -ne 1) {
+    throw 'Install manifest must contain exactly one canonical SKILL.md destination.'
+}
+$destinationSkill = $destinationSkill[0]
 Assert-ReplaceableFile -Path $destinationCli -Label 'CLI'
-Assert-ReplaceableFile -Path $destinationSkill -Label 'Skill'
-Assert-ReplaceableFile -Path $destinationAgents -Label 'Shared agent contract'
+foreach ($resource in $skillResources) {
+    Assert-ReplaceableFile -Path $resource.Destination -Label "Codex skill resource '$($resource.DestinationRelative)'"
+}
 
 Push-Location $repoRoot
 try {
     Invoke-NativeChecked -FilePath $cargoApplication -Arguments @('build', '--locked', '--release', '-p', 'rayman')
     $artifact = (Resolve-Path -LiteralPath (Join-Path 'target/release' $artifactName)).Path
-    $canonicalSkill = (Resolve-Path -LiteralPath 'SKILL.md').Path
-    $canonicalAgents = (Resolve-Path -LiteralPath 'AGENTS.md').Path
 
     $artifactIdentityText = & $artifact '--format' 'json' 'doctor'
     if ($LASTEXITCODE -ne 0) {
@@ -786,8 +868,10 @@ try {
             # Pre-install proof: clean source, locked isolated rebuild, canonical skill,
             # and the exact artifact that will be copied.
             $artifactHashBeforeVerification = (Get-FileHash -LiteralPath $artifact -Algorithm SHA256).Hash.ToLowerInvariant()
-            $skillHashBeforeVerification = (Get-FileHash -LiteralPath $canonicalSkill -Algorithm SHA256).Hash.ToLowerInvariant()
-            $agentsHashBeforeVerification = (Get-FileHash -LiteralPath $canonicalAgents -Algorithm SHA256).Hash.ToLowerInvariant()
+            $resourceHashes = @{}
+            foreach ($resource in $skillResources) {
+                $resourceHashes[$resource.DestinationRelative] = (Get-FileHash -LiteralPath $resource.Source -Algorithm SHA256).Hash.ToLowerInvariant()
+            }
             $env:PATH = "$(Split-Path -Parent $artifact)$([IO.Path]::PathSeparator)$originalPath"
             & './scripts/verify-release-contract.ps1' `
                 -CliPath $artifact `
@@ -796,11 +880,10 @@ try {
                 -RequireSourceFresh
 
             Assert-ExpectedFileHash -Path $artifact -ExpectedHash $artifactHashBeforeVerification -Label 'Source-fresh verified artifact'
-            Assert-ExpectedFileHash -Path $canonicalSkill -ExpectedHash $skillHashBeforeVerification -Label 'Source-fresh verified canonical skill'
-            Assert-ExpectedFileHash -Path $canonicalAgents -ExpectedHash $agentsHashBeforeVerification -Label 'Verified canonical shared agent contract'
+            foreach ($resource in $skillResources) {
+                Assert-ExpectedFileHash -Path $resource.Source -ExpectedHash $resourceHashes[$resource.DestinationRelative] -Label "Verified canonical resource '$($resource.SourceRelative)'"
+            }
             $verifiedArtifactHash = $artifactHashBeforeVerification
-            $verifiedSkillHash = $skillHashBeforeVerification
-            $verifiedAgentsHash = $agentsHashBeforeVerification
 
             $nonce = [Guid]::NewGuid().ToString('N')
             $installed = @()
@@ -809,15 +892,17 @@ try {
             $pathMutationAttempted = $false
             try {
                 $installed += Install-FileWithRollback -Source $artifact -Destination $destinationCli -Nonce $nonce -ExpectedHash $verifiedArtifactHash
-                $installed += Install-FileWithRollback -Source $canonicalSkill -Destination $destinationSkill -Nonce $nonce -ExpectedHash $verifiedSkillHash
-                $installed += Install-FileWithRollback -Source $canonicalAgents -Destination $destinationAgents -Nonce $nonce -ExpectedHash $verifiedAgentsHash
+                foreach ($resource in $skillResources) {
+                    $installed += Install-FileWithRollback -Source $resource.Source -Destination $resource.Destination -Nonce $nonce -ExpectedHash $resourceHashes[$resource.DestinationRelative]
+                }
 
                 Assert-ExpectedFileHash -Path $artifact -ExpectedHash $verifiedArtifactHash -Label 'Verified artifact before post-install check'
-                Assert-ExpectedFileHash -Path $canonicalSkill -ExpectedHash $verifiedSkillHash -Label 'Verified skill before post-install check'
-                Assert-ExpectedFileHash -Path $canonicalAgents -ExpectedHash $verifiedAgentsHash -Label 'Verified shared agent contract before post-install check'
                 Assert-ExpectedFileHash -Path $destinationCli -ExpectedHash $verifiedArtifactHash -Label 'Installed CLI'
-                Assert-ExpectedFileHash -Path $destinationSkill -ExpectedHash $verifiedSkillHash -Label 'Installed skill'
-                Assert-ExpectedFileHash -Path $destinationAgents -ExpectedHash $verifiedAgentsHash -Label 'Installed shared agent contract'
+                foreach ($resource in $skillResources) {
+                    $expectedHash = $resourceHashes[$resource.DestinationRelative]
+                    Assert-ExpectedFileHash -Path $resource.Source -ExpectedHash $expectedHash -Label "Verified resource before post-install check '$($resource.SourceRelative)'"
+                    Assert-ExpectedFileHash -Path $resource.Destination -ExpectedHash $expectedHash -Label "Installed resource '$($resource.DestinationRelative)'"
+                }
 
                 if ($AddToUserPath) {
                     # Read and write the raw HKCU\Environment value. The
@@ -864,11 +949,12 @@ try {
                     -RequirePath
 
                 Assert-ExpectedFileHash -Path $artifact -ExpectedHash $verifiedArtifactHash -Label 'Verified artifact after post-install check'
-                Assert-ExpectedFileHash -Path $canonicalSkill -ExpectedHash $verifiedSkillHash -Label 'Verified skill after post-install check'
-                Assert-ExpectedFileHash -Path $canonicalAgents -ExpectedHash $verifiedAgentsHash -Label 'Verified shared agent contract after post-install check'
                 Assert-ExpectedFileHash -Path $destinationCli -ExpectedHash $verifiedArtifactHash -Label 'Installed CLI after post-install check'
-                Assert-ExpectedFileHash -Path $destinationSkill -ExpectedHash $verifiedSkillHash -Label 'Installed skill after post-install check'
-                Assert-ExpectedFileHash -Path $destinationAgents -ExpectedHash $verifiedAgentsHash -Label 'Installed shared agent contract after post-install check'
+                foreach ($resource in $skillResources) {
+                    $expectedHash = $resourceHashes[$resource.DestinationRelative]
+                    Assert-ExpectedFileHash -Path $resource.Source -ExpectedHash $expectedHash -Label "Verified resource after post-install check '$($resource.SourceRelative)'"
+                    Assert-ExpectedFileHash -Path $resource.Destination -ExpectedHash $expectedHash -Label "Installed resource after post-install check '$($resource.DestinationRelative)'"
+                }
                 if ((Get-FileHash -LiteralPath $cargoApplication -Algorithm SHA256).Hash.ToLowerInvariant() -ne
                     $cargoApplicationHash) {
                     throw 'Cargo executable identity changed during installation.'
@@ -937,8 +1023,9 @@ try {
 
 Write-Host 'RaymanCodingSkill installation verified.'
 Write-Host "  CLI: $destinationCli"
-Write-Host "  Skill: $destinationSkill"
-Write-Host "  Shared agent contract: $destinationAgents"
+foreach ($resource in $skillResources) {
+    Write-Host "  Codex resource ($($resource.DestinationRelative)): $($resource.Destination)"
+}
 if ($SkipCodexStopHook) {
     Write-Host '  Codex Stop guard: skipped by explicit request'
 } else {

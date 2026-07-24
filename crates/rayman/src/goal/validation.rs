@@ -194,6 +194,70 @@ fn test_invocation(command: &ParsedValidationCommand) -> bool {
     cargo_test_invocation(command) || pytest_invocation(command)
 }
 
+fn normalized_script_name(command: &ParsedValidationCommand) -> Option<String> {
+    let path = powershell_script(command)?;
+    Some(
+        Path::new(path)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or(path)
+            .to_ascii_lowercase(),
+    )
+}
+
+pub fn validation_proof_kind(command: &str) -> Result<ProofKind> {
+    let parsed = parse_validation_command(command)?;
+    let executable = executable_name(&parsed);
+    let script = normalized_script_name(&parsed).unwrap_or_default();
+    let has_arg = |needle: &str| {
+        parsed
+            .args
+            .iter()
+            .any(|argument| argument.eq_ignore_ascii_case(needle))
+    };
+
+    if script == "verify-release-contract.ps1" && has_arg("-RequireSourceFresh") {
+        return Ok(ProofKind::SourceFresh);
+    }
+    if matches!(
+        script.as_str(),
+        "check-repo.ps1" | "audit-repository.ps1" | "release-closeout.ps1"
+    ) {
+        return Ok(ProofKind::RepositoryGate);
+    }
+    if script == "install-rayman.ps1" {
+        return Ok(ProofKind::Installation);
+    }
+    if script == "check-agent-instructions.ps1"
+        || executable == "markdownlint"
+        || parsed.args.iter().any(|argument| {
+            argument
+                .replace('\\', "/")
+                .to_ascii_lowercase()
+                .ends_with("quick_validate.py")
+        })
+    {
+        return Ok(ProofKind::Documentation);
+    }
+    if executable == "git"
+        && parsed
+            .args
+            .first()
+            .is_some_and(|argument| argument == "rev-parse")
+        && parsed.args.iter().any(|argument| argument == "--verify")
+    {
+        return Ok(ProofKind::GitCommit);
+    }
+    if test_invocation(&parsed) {
+        return Ok(ProofKind::Test);
+    }
+    Ok(ProofKind::Generic)
+}
+
+pub fn proof_kind_matches(required: Option<ProofKind>, actual: ProofKind) -> bool {
+    matches!(required, None | Some(ProofKind::Generic)) || required == Some(actual)
+}
+
 fn pytest_arguments(command: &ParsedValidationCommand) -> &[String] {
     let executable = executable_name(command);
     if (executable == "py" || executable.starts_with("python"))
@@ -659,7 +723,7 @@ pub(super) fn has_direct_stable_authority_command(
     })
 }
 
-fn direct_stable_authority_receipt_is_valid(
+pub(super) fn direct_stable_authority_receipt_is_valid(
     goal: &Goal,
     root: &Path,
     fingerprint: &str,
@@ -695,6 +759,8 @@ struct ImmutableRequirementContract<'a> {
     id: &'a str,
     text: &'a str,
     kind: RequirementKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    proof_kind: Option<ProofKind>,
 }
 
 #[derive(Serialize)]
@@ -704,6 +770,45 @@ struct ImmutableGoalContract<'a> {
     created_at: &'a str,
     target_requirement_id: &'a str,
     requirements: Vec<ImmutableRequirementContract<'a>>,
+}
+
+#[derive(Serialize)]
+struct ImmutableGoalIdentityContract<'a> {
+    goal_id: &'a str,
+    title: &'a str,
+    created_at: &'a str,
+    requirements: Vec<ImmutableRequirementContract<'a>>,
+}
+
+fn immutable_requirements(goal: &Goal) -> Vec<ImmutableRequirementContract<'_>> {
+    goal.requirements
+        .iter()
+        .map(|requirement| ImmutableRequirementContract {
+            id: &requirement.id,
+            text: &requirement.text,
+            kind: requirement.kind,
+            proof_kind: requirement.proof_kind,
+        })
+        .collect()
+}
+
+pub fn goal_contract_sha256(goal: &Goal) -> Result<String> {
+    let contract = ImmutableGoalIdentityContract {
+        goal_id: &goal.id,
+        title: &goal.title,
+        created_at: &goal.created_at,
+        requirements: immutable_requirements(goal),
+    };
+    let mut hasher = Sha256::new();
+    hasher.update(serde_json::to_vec(&contract)?);
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+pub fn authority_receipt_sha256(receipt: &AuthorityReceipt) -> Result<String> {
+    let mut hasher = Sha256::new();
+    hasher.update(b"rayman.authority-receipt.v1");
+    hasher.update(serde_json::to_vec(receipt)?);
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 pub fn validation_contract_sha256(goal: &Goal, requirement_id: &str) -> Result<String> {
@@ -719,15 +824,7 @@ pub fn validation_contract_sha256(goal: &Goal, requirement_id: &str) -> Result<S
         title: &goal.title,
         created_at: &goal.created_at,
         target_requirement_id: requirement_id,
-        requirements: goal
-            .requirements
-            .iter()
-            .map(|requirement| ImmutableRequirementContract {
-                id: &requirement.id,
-                text: &requirement.text,
-                kind: requirement.kind,
-            })
-            .collect(),
+        requirements: immutable_requirements(goal),
     };
     let bytes = serde_json::to_vec(&contract)?;
     let mut hasher = Sha256::new();
@@ -789,6 +886,14 @@ pub fn validation_has_current_receipt(
     root: &Path,
     current_fingerprint: &str,
 ) -> bool {
+    if !proof_kind_matches(
+        requirement.proof_kind,
+        validation_proof_kind(&validation.command)
+            .ok()
+            .unwrap_or_default(),
+    ) {
+        return false;
+    }
     let Ok(contract_sha256) = validation_contract_sha256(goal, &requirement.id) else {
         return false;
     };

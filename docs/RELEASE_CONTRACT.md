@@ -55,13 +55,13 @@ The supported source-checkout procedure is transactional and deliberately refuse
 ./scripts/install-rayman.ps1 -Yes -AddToUserPath
 ```
 
-The installer builds and verifies before writing, pins the verified hashes across every copy, stages beside each destination, and updates only the managed CLI and canonical skill. Unless `-SkipCodexStopHook` is explicit, it then idempotently merges the verified installed CLI as the Rayman user-level Codex `Stop` handler while preserving all unrelated hook entries. Codex requires the exact non-managed hook definition to be reviewed/trusted through `/hooks` and loaded by a restart; the installer never forges that trust state. It derives the recorded `cli_contract`/`cli_version` activation values from the built artifact's own `doctor` output; that binding is enforced by consumption rather than source inspection, because `rayman doctor --check` fails whenever the recorded contract or version does not match the installed binary. The complete staging lifecycle—including copy, hash, source recheck, original-to-backup move, and final replace—is one rollback domain.
+The installer builds and verifies before writing, reads `install-manifest.json`, validates the declared client deployment scopes, pins the verified hashes across every copy, and stages beside each destination. It updates only the managed CLI and the exact Codex global-skill resource set; `CLAUDE.md` remains a repository-only entrypoint and is never globally deployed by this installer. Unless `-SkipCodexStopHook` is explicit, it then idempotently merges the verified installed CLI as the Rayman user-level Codex `Stop` handler while preserving all unrelated hook entries. Codex requires the exact non-managed hook definition to be reviewed/trusted through `/hooks` and loaded by a restart; the installer never forges that trust state. It derives the recorded `cli_contract`/`cli_version` activation values from the built artifact's own `doctor` output; that binding is enforced by consumption rather than source inspection, because `rayman doctor --check` fails whenever the recorded contract or version does not match the installed binary. The complete staging lifecycle—including every manifest resource copy, hash, source recheck, original-to-backup move, and final replace—is one rollback domain.
 
 That binding rewrite necessarily happens *before* the source-fresh gate, because the gate's own `doctor --check` reads it. It is therefore backed up first (including the fact that no binding existed) and restored on every abort below that point, so a run that stops at the clean-worktree check cannot leave the repository claiming a version that was never installed. Its directory is resolved with the same reparse-point-checked walk used for every other managed directory.
 
 On Windows, `-AddToUserPath` prepends the managed directory inside the user PATH as part of that same transaction and verifies the projected future environment in real Windows order (`Machine PATH + proposed User PATH`); it refuses an older machine/user `rayman` that would win. The user PATH is read and written as a raw `HKCU\Environment` value: `[Environment]::GetEnvironmentVariable(...,'User')` expands `%VAR%` on read and its setter always writes `REG_SZ`, so using those accessors would freeze entries such as `%JAVA_HOME%\bin` into installation-time literals and downgrade `REG_EXPAND_SZ` to `REG_SZ` on success as well as on rollback. The existing value kind is preserved as-is (a value that was already `REG_SZ` stays `REG_SZ`; the installer does not retroactively repair one), unexpanded entries are carried through verbatim, and `WM_SETTINGCHANGE` is broadcast explicitly since the raw registry write bypasses the framework's own notification. If `-AddToUserPath` is omitted, the current PATH must already resolve the destination first. The switch fails on non-Windows instead of pretending to persist a shell-specific PATH.
 
-A failure attempts every file, activation-binding, and user-PATH rollback and reports retained evidence if any restore fails. Verification is the commit point: later backup-cleanup failure retains the backup and cannot trigger destructive rollback of the committed install. `cargo install` is package smoke only because it does not deploy `SKILL.md`.
+A failure attempts every file, activation-binding, and user-PATH rollback and reports retained evidence if any restore fails. Verification is the commit point: later backup-cleanup failure retains the backup and cannot trigger destructive rollback of the committed install. `cargo install` is package smoke only because it does not deploy the manifest-bound Codex skill resources.
 
 ## Verify an existing installation before using it
 
@@ -98,3 +98,12 @@ The verifier above is one release primitive, not the test suite. The single full
 ```
 
 It includes root and evals fmt/Clippy/tests/dependency policy, `cargo package` and `cargo install` smoke, context refresh, strict quality, release readiness, state/assets checks, and this installed release contract. See [AUDIT.md](AUDIT.md).
+
+For goal-bound handoff closure, `scripts/release-closeout.ps1` composes the
+audit, source-fresh verification, and the final goal authority gate. Its
+optional evidence reuse is content-addressed over the canonical workspace,
+clean Git HEAD, installed CLI and deployed SKILL hashes, every release script,
+and the exact native tool paths and hashes. Missing, malformed, dirty, or drifted
+bindings rerun the audit. Even an exact reusable binding never replaces the
+current goal validation: `pwsh -NoProfile -File scripts/check-repo.ps1` is still
+executed with `--authority --repeat 2` on one unchanged fingerprint.

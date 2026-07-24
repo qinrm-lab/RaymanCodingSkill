@@ -42,6 +42,27 @@ fn save_with_keep_zero_still_retains_latest_snapshot() {
         SnapshotStatus::Complete
     );
 }
+#[test]
+fn default_save_preserves_all_recovery_points_until_explicit_prune() {
+    let ws = tempfile::tempdir().unwrap();
+    let store = tempfile::tempdir().unwrap();
+    let root = ws.path();
+    write(&root.join("src/main.rs"), "fn main() {}");
+
+    for index in 0..4 {
+        write(
+            &root.join("src/main.rs"),
+            &format!("fn value() -> usize {{ {index} }}"),
+        );
+        let outcome = save_without_prune(root, Some(store.path())).unwrap();
+        assert_eq!(outcome.pruned, 0);
+    }
+    assert_eq!(list(root, Some(store.path())).unwrap().len(), 4);
+
+    let removed = prune_standard_snapshots(root, Some(store.path()), 2).unwrap();
+    assert_eq!(removed, 2);
+    assert_eq!(list(root, Some(store.path())).unwrap().len(), 2);
+}
 
 #[test]
 fn save_captures_only_v2_state_whitelist_and_restores() {

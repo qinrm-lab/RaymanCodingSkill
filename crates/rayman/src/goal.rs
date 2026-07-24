@@ -7,10 +7,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
-use std::fs::{self, OpenOptions};
+use std::fs;
 use std::path::{Path, PathBuf};
-use std::thread;
-use std::time::{Duration, SystemTime};
 
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
@@ -18,6 +16,11 @@ use sha2::{Digest, Sha256};
 
 use crate::file_io::{read_json, write_json};
 use crate::state_paths;
+mod state_lock;
+use state_lock::acquire_state_lock;
+#[cfg(test)]
+use state_lock::is_state_lock_contention;
+
 use crate::timefmt::now_iso;
 
 const GOALS_DIR: &str = ".RaymanCodingSkill/goals";
@@ -57,6 +60,50 @@ impl RequirementKind {
 impl fmt::Display for RequirementKind {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum ProofKind {
+    #[default]
+    Generic,
+    Test,
+    RepositoryGate,
+    SourceFresh,
+    Installation,
+    Documentation,
+    GitCommit,
+}
+
+impl ProofKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Generic => "generic",
+            Self::Test => "test",
+            Self::RepositoryGate => "repository_gate",
+            Self::SourceFresh => "source_fresh",
+            Self::Installation => "installation",
+            Self::Documentation => "documentation",
+            Self::GitCommit => "git_commit",
+        }
+    }
+}
+
+impl std::str::FromStr for ProofKind {
+    type Err = anyhow::Error;
+
+    fn from_str(value: &str) -> Result<Self> {
+        match value.trim() {
+            "generic" => Ok(Self::Generic),
+            "test" => Ok(Self::Test),
+            "repository_gate" => Ok(Self::RepositoryGate),
+            "source_fresh" => Ok(Self::SourceFresh),
+            "installation" => Ok(Self::Installation),
+            "documentation" => Ok(Self::Documentation),
+            "git_commit" => Ok(Self::GitCommit),
+            other => bail!("未知 proof kind: {other}"),
+        }
     }
 }
 
@@ -140,6 +187,9 @@ pub struct Requirement {
     pub text: String,
     #[serde(default)]
     pub kind: RequirementKind,
+    /// None preserves the legacy generic contract; Some(kind) is an atomic typed proof.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proof_kind: Option<ProofKind>,
     #[serde(default)]
     pub status: RequirementStatus,
     #[serde(default)]
@@ -148,6 +198,13 @@ pub struct Requirement {
     pub validations: Vec<ValidationEvidence>,
     #[serde(default)]
     pub impacts: Vec<ImpactEvidence>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RequirementSpec {
+    pub text: String,
+    pub kind: RequirementKind,
+    pub proof_kind: Option<ProofKind>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -386,6 +443,8 @@ pub struct Goal {
     pub progress_receipts: Vec<ProgressReceipt>,
     #[serde(default)]
     pub lanes: Vec<LaneRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handoff: Option<HandoffContract>,
     pub requirements: Vec<Requirement>,
     #[serde(default, skip)]
     pub loaded_from_legacy: bool,
@@ -397,11 +456,13 @@ pub struct ParsedValidationCommand {
     pub args: Vec<String>,
 }
 
+mod handoff;
 mod lifecycle;
 mod pending;
 mod rebind;
 mod validation;
 
+pub use handoff::*;
 pub use lifecycle::*;
 pub use pending::*;
 pub use rebind::*;
@@ -430,79 +491,6 @@ fn short_id(prefix: &str, seed: &str) -> String {
     hasher.update(seed.as_bytes());
     let digest = format!("{:x}", hasher.finalize());
     format!("{prefix}_{}", &digest[..10])
-}
-
-/// 进程间互斥：原子 rename 只能避免半写，不能避免两个 agent 的 read-modify-write
-/// 相互覆盖。锁文件只保护极短的状态事务；异常退出后的旧锁会在宽限期后被回收。
-struct StateLock {
-    path: PathBuf,
-}
-
-impl Drop for StateLock {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
-    }
-}
-
-fn is_state_lock_contention(error: &std::io::Error) -> bool {
-    // Windows can report a lock file that another thread just closed/removed as
-    // access denied or a share/lock violation while the deletion is still
-    // pending. Treat only these exact transient identities like AlreadyExists;
-    // a persistent ACL denial still exhausts the bounded retry and fails closed.
-    error.kind() == std::io::ErrorKind::AlreadyExists
-        || error.kind() == std::io::ErrorKind::PermissionDenied
-        || matches!(error.raw_os_error(), Some(5 | 32 | 33))
-}
-
-fn acquire_state_lock(target: &Path) -> Result<StateLock> {
-    let parent = target.parent().unwrap_or_else(|| Path::new("."));
-    state_paths::ensure_real_directory(parent)?;
-    let name = target
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("state");
-    let lock_path = parent.join(format!(".{name}.rayman.lock"));
-    const ATTEMPTS: usize = 100;
-    const STALE_AFTER: Duration = Duration::from_secs(300);
-    let mut last_contention = None;
-    for _ in 0..ATTEMPTS {
-        match OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(&lock_path)
-        {
-            Ok(mut file) => {
-                use std::io::Write;
-                let _ = writeln!(file, "pid={}", std::process::id());
-                return Ok(StateLock { path: lock_path });
-            }
-            Err(error) if is_state_lock_contention(&error) => {
-                last_contention = Some(error);
-                let stale = fs::metadata(&lock_path)
-                    .and_then(|metadata| metadata.modified())
-                    .and_then(|modified| {
-                        SystemTime::now()
-                            .duration_since(modified)
-                            .map_err(std::io::Error::other)
-                    })
-                    .map(|age| age >= STALE_AFTER)
-                    .unwrap_or(false);
-                if stale {
-                    let _ = fs::remove_file(&lock_path);
-                    continue;
-                }
-                thread::sleep(Duration::from_millis(25));
-            }
-            Err(error) => return Err(error.into()),
-        }
-    }
-    let detail = last_contention
-        .map(|error| format!("；最后一次锁冲突: {error}"))
-        .unwrap_or_default();
-    bail!(
-        "状态正在被另一个 rayman 进程修改: {}{detail}",
-        target.display()
-    )
 }
 
 fn normalize_path_list(paths: &mut Vec<String>) {
@@ -695,13 +683,28 @@ impl GoalStore {
 
     /// 新建目标。`requirements` 为 (text, is_must) 列表。
     pub fn start(&self, title: &str, requirements: &[(String, bool)]) -> Result<Goal> {
+        let requirements = requirements
+            .iter()
+            .map(|(text, is_must)| RequirementSpec {
+                text: text.clone(),
+                kind: if *is_must {
+                    RequirementKind::Must
+                } else {
+                    RequirementKind::Should
+                },
+                proof_kind: None,
+            })
+            .collect::<Vec<_>>();
+        self.start_with_specs(title, &requirements)
+    }
+
+    pub fn start_with_specs(&self, title: &str, requirements: &[RequirementSpec]) -> Result<Goal> {
         if title.trim().is_empty() {
             bail!("目标标题不能为空");
         }
-        if !requirements
-            .iter()
-            .any(|(text, is_must)| *is_must && !text.trim().is_empty())
-        {
+        if !requirements.iter().any(|requirement| {
+            requirement.kind == RequirementKind::Must && !requirement.text.trim().is_empty()
+        }) {
             bail!("新目标至少需要一个非空 --must 需求");
         }
         let goals_dir =
@@ -713,14 +716,11 @@ impl GoalStore {
         let requirements = requirements
             .iter()
             .enumerate()
-            .map(|(index, (text, is_must))| Requirement {
+            .map(|(index, requirement)| Requirement {
                 id: format!("req_{}", index + 1),
-                text: text.clone(),
-                kind: if *is_must {
-                    RequirementKind::Must
-                } else {
-                    RequirementKind::Should
-                },
+                text: requirement.text.clone(),
+                kind: requirement.kind,
+                proof_kind: requirement.proof_kind,
                 status: RequirementStatus::Open,
                 evidence: None,
                 validations: Vec::new(),
@@ -747,6 +747,7 @@ impl GoalStore {
             work_packages: Vec::new(),
             progress_receipts: Vec::new(),
             lanes: Vec::new(),
+            handoff: None,
             requirements,
             loaded_from_legacy: false,
         };
@@ -1115,6 +1116,12 @@ impl GoalStore {
         let Some(req) = goal.requirements.iter_mut().find(|req| req.id == req_id) else {
             bail!("需求不存在: {req_id}");
         };
+        if let Some(proof_kind) = req.proof_kind {
+            bail!(
+                "typed requirement {req_id} requires a matching goal validate receipt (proof_kind={})",
+                proof_kind.as_str()
+            );
+        }
         let now = now_iso();
         req.evidence = Some(evidence.into());
         let impact_paths = impacts
@@ -1207,6 +1214,20 @@ impl GoalStore {
             bail!(
                 "目标 {id} lifecycle={}，不能写入 receipt；先用 `goal current {id}` 恢复为 current",
                 goal.lifecycle
+            );
+        }
+        let required_proof = goal
+            .requirements
+            .iter()
+            .find(|requirement| requirement.id == req_id)
+            .ok_or_else(|| anyhow::anyhow!("需求不存在: {req_id}"))?
+            .proof_kind;
+        let actual_proof = validation_proof_kind(&command)?;
+        if !proof_kind_matches(required_proof, actual_proof) {
+            bail!(
+                "validation proof kind mismatch: requirement={} command={}",
+                required_proof.unwrap_or_default().as_str(),
+                actual_proof.as_str()
             );
         }
         // baseline 缺失时整个 plan/差量门禁曾被静默跳过（无 else 分支），于是这类
@@ -1905,6 +1926,7 @@ fn goal_from_legacy(legacy: LegacyGoal) -> Goal {
                         RequirementKind::Must
                     }
                 },
+                proof_kind: None,
                 status: match req.status.as_str() {
                     "satisfied" | "done" => RequirementStatus::Done,
                     _ => RequirementStatus::Open,
@@ -1948,6 +1970,7 @@ fn goal_from_legacy(legacy: LegacyGoal) -> Goal {
         work_packages: Vec::new(),
         progress_receipts: Vec::new(),
         lanes: Vec::new(),
+        handoff: None,
         updated_at,
         requirements,
         loaded_from_legacy: true,
