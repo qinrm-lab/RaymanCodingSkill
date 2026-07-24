@@ -103,18 +103,17 @@ function Get-CodexSkillResourcePlan {
     }
     return $plan
 }
-function Get-CanonicalSkillDestination {
+function Get-CanonicalSkillResource {
     param([Parameter(Mandatory = $true)][array]$ResourcePlan)
 
-    $destinations = @(
+    $resources = @(
         $ResourcePlan |
-            Where-Object { $_.DestinationRelative -eq 'SKILL.md' } |
-            ForEach-Object { $_.Destination }
+            Where-Object { $_.DestinationRelative -eq 'SKILL.md' }
     )
-    if ($destinations.Count -ne 1) {
+    if ($resources.Count -ne 1) {
         throw 'Install manifest must contain exactly one canonical SKILL.md destination.'
     }
-    return $destinations[0]
+    return $resources[0]
 }
 
 
@@ -605,18 +604,19 @@ function Invoke-InstallPathSelfTest {
         }
 
 
-        $selectedSkillDestination = Get-CanonicalSkillDestination -ResourcePlan $resourcePlan
-        $expectedSkillDestination = @(
+        $selectedSkillResource = Get-CanonicalSkillResource -ResourcePlan $resourcePlan
+        $expectedSkillResource = @(
             $resourcePlan |
-                Where-Object { $_.DestinationRelative -eq 'SKILL.md' } |
-                ForEach-Object { $_.Destination }
+                Where-Object { $_.DestinationRelative -eq 'SKILL.md' }
         )[0]
-        if (-not [string]::Equals(
-                $selectedSkillDestination,
-                $expectedSkillDestination,
-                [StringComparison]::Ordinal
-            )) {
-            throw 'Install self-test failed: canonical SKILL.md destination selection drifted.'
+        foreach ($property in @('Source', 'Destination')) {
+            if (-not [string]::Equals(
+                    $selectedSkillResource.$property,
+                    $expectedSkillResource.$property,
+                    [StringComparison]::Ordinal
+                )) {
+                throw "Install self-test failed: canonical SKILL.md $property selection drifted."
+            }
         }
 
         $hashProbe = Join-Path $testRoot 'hash-probe.bin'
@@ -837,7 +837,9 @@ $resolvedBinDirectory = Resolve-ManagedDirectory -Path $BinDirectory -Label 'CLI
 $resolvedSkillDirectory = Resolve-ManagedDirectory -Path $SkillDirectory -Label 'Skill directory'
 $skillResources = @(Get-CodexSkillResourcePlan -DestinationRoot $resolvedSkillDirectory)
 $destinationCli = Join-Path $resolvedBinDirectory $artifactName
-$destinationSkill = Get-CanonicalSkillDestination -ResourcePlan $skillResources
+$canonicalSkillResource = Get-CanonicalSkillResource -ResourcePlan $skillResources
+$canonicalSkill = $canonicalSkillResource.Source
+$destinationSkill = $canonicalSkillResource.Destination
 Assert-ReplaceableFile -Path $destinationCli -Label 'CLI'
 foreach ($resource in $skillResources) {
     Assert-ReplaceableFile -Path $resource.Destination -Label "Codex skill resource '$($resource.DestinationRelative)'"
