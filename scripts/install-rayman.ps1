@@ -103,6 +103,20 @@ function Get-CodexSkillResourcePlan {
     }
     return $plan
 }
+function Get-CanonicalSkillDestination {
+    param([Parameter(Mandatory = $true)][array]$ResourcePlan)
+
+    $destinations = @(
+        $ResourcePlan |
+            Where-Object { $_.DestinationRelative -eq 'SKILL.md' } |
+            ForEach-Object { $_.Destination }
+    )
+    if ($destinations.Count -ne 1) {
+        throw 'Install manifest must contain exactly one canonical SKILL.md destination.'
+    }
+    return $destinations[0]
+}
+
 
 function Invoke-NativeChecked {
     param(
@@ -591,6 +605,20 @@ function Invoke-InstallPathSelfTest {
         }
 
 
+        $selectedSkillDestination = Get-CanonicalSkillDestination -ResourcePlan $resourcePlan
+        $expectedSkillDestination = @(
+            $resourcePlan |
+                Where-Object { $_.DestinationRelative -eq 'SKILL.md' } |
+                ForEach-Object { $_.Destination }
+        )[0]
+        if (-not [string]::Equals(
+                $selectedSkillDestination,
+                $expectedSkillDestination,
+                [StringComparison]::Ordinal
+            )) {
+            throw 'Install self-test failed: canonical SKILL.md destination selection drifted.'
+        }
+
         $hashProbe = Join-Path $testRoot 'hash-probe.bin'
         Set-Content -LiteralPath $hashProbe -Value 'verified' -NoNewline -Encoding utf8
         $expectedHash = (Get-FileHash -LiteralPath $hashProbe -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -809,11 +837,7 @@ $resolvedBinDirectory = Resolve-ManagedDirectory -Path $BinDirectory -Label 'CLI
 $resolvedSkillDirectory = Resolve-ManagedDirectory -Path $SkillDirectory -Label 'Skill directory'
 $skillResources = @(Get-CodexSkillResourcePlan -DestinationRoot $resolvedSkillDirectory)
 $destinationCli = Join-Path $resolvedBinDirectory $artifactName
-$destinationSkill = @($skillResources | Where-Object DestinationRelative -eq 'SKILL.md').Destination
-if ($destinationSkill.Count -ne 1) {
-    throw 'Install manifest must contain exactly one canonical SKILL.md destination.'
-}
-$destinationSkill = $destinationSkill[0]
+$destinationSkill = Get-CanonicalSkillDestination -ResourcePlan $skillResources
 Assert-ReplaceableFile -Path $destinationCli -Label 'CLI'
 foreach ($resource in $skillResources) {
     Assert-ReplaceableFile -Path $resource.Destination -Label "Codex skill resource '$($resource.DestinationRelative)'"

@@ -226,7 +226,11 @@ pub fn validation_proof_kind(command: &str) -> Result<ProofKind> {
         return Ok(ProofKind::RepositoryGate);
     }
     if script == "install-rayman.ps1" {
-        return Ok(ProofKind::Installation);
+        return Ok(if has_arg("-SelfTest") {
+            ProofKind::Test
+        } else {
+            ProofKind::Installation
+        });
     }
     if script == "check-agent-instructions.ps1"
         || executable == "markdownlint"
