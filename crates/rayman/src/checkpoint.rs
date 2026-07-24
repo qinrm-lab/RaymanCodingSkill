@@ -29,6 +29,9 @@ pub const DEFAULT_KEEP: usize = 3;
 /// 提交一份新的 partial；30 分钟一次即约 48 份/天，且计划任务的输出无人可见。
 /// 保留最近这么多份足够诊断反复出现的同一个故障，再旧的按时间轮换掉。
 pub const MAX_PARTIAL_SNAPSHOTS: usize = 5;
+/// Recovery-only snapshots rotate independently from ordinary checkpoints so
+/// a burst of emergency saves can never consume the normal recovery history.
+pub const MAX_RECOVERY_SNAPSHOTS: usize = 5;
 pub const MANIFEST_SCHEMA: &str = "rayman.checkpoint.v3";
 pub const MANIFEST_VERSION: u32 = 3;
 const LEGACY_MANIFEST_SCHEMA: &str = "rayman.checkpoint.v2";
@@ -126,6 +129,42 @@ pub enum SnapshotStatus {
     Corrupt,
 }
 
+/// Whether a snapshot is ordinary recovery evidence or an emergency capture
+/// created while the workspace activation contract could not be trusted.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CheckpointPurpose {
+    #[default]
+    Standard,
+    RecoveryOnly,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ActivationProvenance {
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub active: bool,
+    #[serde(default)]
+    pub config_present: bool,
+    #[serde(default)]
+    pub skill_file: Option<String>,
+    #[serde(default)]
+    pub expected_sha256: Option<String>,
+    #[serde(default)]
+    pub actual_sha256: Option<String>,
+    #[serde(default)]
+    pub cli_contract: Option<String>,
+    #[serde(default)]
+    pub cli_version: Option<String>,
+    #[serde(default)]
+    pub running_cli_contract: String,
+    #[serde(default)]
+    pub running_cli_version: String,
+    #[serde(default)]
+    pub issues: Vec<String>,
+}
+
 /// 一份被写入树中的文件的不可变完整性记录。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FileIntegrity {
@@ -154,6 +193,10 @@ pub struct Manifest {
     pub version: u32,
     #[serde(default)]
     pub status: SnapshotStatus,
+    #[serde(default)]
+    pub purpose: CheckpointPurpose,
+    #[serde(default)]
+    pub activation: ActivationProvenance,
     pub created_at: String,
     pub workspace_root: String,
     pub file_count: usize,
@@ -177,6 +220,7 @@ pub struct SaveOutcome {
     pub skipped_count: usize,
     pub total_bytes: u64,
     pub pruned: usize,
+    pub purpose: CheckpointPurpose,
 }
 
 /// 列出时的单条快照信息。
@@ -389,12 +433,59 @@ fn collect_goal_state_files(state: &Path, out: &mut Vec<PathBuf>) -> Result<()> 
 /// 若复制、遍历或验证有任何错误，会保留一份 `partial` 快照供取证并返回 Err；
 /// 此路径不轮换任何完整快照，因此至少最近的完整恢复点不会被失败保存删除。
 pub fn save(root: &Path, override_dir: Option<&Path>, keep: usize) -> Result<SaveOutcome> {
+    save_with_purpose(root, override_dir, keep, CheckpointPurpose::Standard)
+}
+
+/// Capture an emergency snapshot without requiring a valid activation
+/// contract. It remains recovery-only forever and is excluded from `latest`.
+pub fn salvage_save(root: &Path, override_dir: Option<&Path>) -> Result<SaveOutcome> {
+    save_with_purpose(
+        root,
+        override_dir,
+        MAX_RECOVERY_SNAPSHOTS,
+        CheckpointPurpose::RecoveryOnly,
+    )
+}
+
+fn activation_provenance(root: &Path) -> ActivationProvenance {
+    match crate::workspace::activation_status(root) {
+        Ok(report) => ActivationProvenance {
+            status: report.status,
+            active: report.active,
+            config_present: report.config_present,
+            skill_file: report.skill_file,
+            expected_sha256: report.expected_sha256,
+            actual_sha256: report.actual_sha256,
+            cli_contract: report.cli_contract,
+            cli_version: report.cli_version,
+            running_cli_contract: report.running_cli_contract,
+            running_cli_version: report.running_cli_version,
+            issues: report.issues,
+        },
+        Err(error) => ActivationProvenance {
+            status: "unreadable".into(),
+            active: false,
+            running_cli_contract: crate::CLI_CONTRACT.into(),
+            running_cli_version: crate::CLI_VERSION.into(),
+            issues: vec![error.to_string()],
+            ..ActivationProvenance::default()
+        },
+    }
+}
+
+fn save_with_purpose(
+    root: &Path,
+    override_dir: Option<&Path>,
+    keep: usize,
+    purpose: CheckpointPurpose,
+) -> Result<SaveOutcome> {
     // keep=0 会在 prune 时把刚保存的快照一起删光，安全网形同虚设。
     let keep = keep.max(1);
     ensure_real_directory(root)?;
     let root = root
         .canonicalize()
         .with_context(|| format!("无法规范化工作区根: {}", display_path(root)))?;
+    let activation = activation_provenance(&root);
 
     let ckpt_root = checkpoints_root(override_dir)?;
     ensure_real_directory_chain(&ckpt_root)?;
@@ -440,7 +531,14 @@ pub fn save(root: &Path, override_dir: Option<&Path>, keep: usize) -> Result<Sav
                 &ws_dir,
                 &staging,
                 &final_dir,
-                partial_manifest(&timestamp, &root, Vec::new(), vec![error.to_string()]),
+                partial_manifest(
+                    &timestamp,
+                    &root,
+                    purpose,
+                    activation.clone(),
+                    Vec::new(),
+                    vec![error.to_string()],
+                ),
             );
         }
     };
@@ -472,6 +570,8 @@ pub fn save(root: &Path, override_dir: Option<&Path>, keep: usize) -> Result<Sav
         schema: MANIFEST_SCHEMA.to_string(),
         version: MANIFEST_VERSION,
         status: SnapshotStatus::Complete,
+        purpose,
+        activation,
         created_at: timestamp,
         workspace_root: display_path(&root),
         file_count: integrity.len(),
@@ -497,7 +597,10 @@ pub fn save(root: &Path, override_dir: Option<&Path>, keep: usize) -> Result<Sav
     }
 
     commit_snapshot(&staging, &final_dir, &manifest)?;
-    let pruned = prune(&ws_dir, keep)?;
+    let pruned = match purpose {
+        CheckpointPurpose::Standard => prune_standard(&ws_dir, keep)?,
+        CheckpointPurpose::RecoveryOnly => prune_recovery_only(&ws_dir)?,
+    };
     Ok(SaveOutcome {
         id,
         path: final_dir,
@@ -505,12 +608,15 @@ pub fn save(root: &Path, override_dir: Option<&Path>, keep: usize) -> Result<Sav
         skipped_count: 0,
         total_bytes: manifest.total_bytes,
         pruned,
+        purpose,
     })
 }
 
 fn partial_manifest(
     timestamp: &str,
     root: &Path,
+    purpose: CheckpointPurpose,
+    activation: ActivationProvenance,
     files: Vec<FileIntegrity>,
     errors: Vec<String>,
 ) -> Manifest {
@@ -518,6 +624,8 @@ fn partial_manifest(
         schema: MANIFEST_SCHEMA.to_string(),
         version: MANIFEST_VERSION,
         status: SnapshotStatus::Partial,
+        purpose,
+        activation,
         created_at: timestamp.to_string(),
         workspace_root: display_path(root),
         file_count: files.len(),
@@ -613,19 +721,33 @@ fn fs_safe_id(timestamp: &str) -> String {
 
 /// 轮换完整快照（按 `keep`）并把 partial 快照压到 [`MAX_PARTIAL_SNAPSHOTS`] 以内。
 /// corrupt 快照仍然永不自动删除：它们的 manifest 不可信，无从判断该保留哪一份。
+#[cfg(test)]
 fn prune(ws_dir: &Path, keep: usize) -> Result<usize> {
-    prune_inner(ws_dir, Some(keep))
+    prune_standard(ws_dir, keep)
+}
+
+fn prune_standard(ws_dir: &Path, keep: usize) -> Result<usize> {
+    prune_inner(ws_dir, Some(keep), None)
+}
+
+fn prune_recovery_only(ws_dir: &Path) -> Result<usize> {
+    prune_inner(ws_dir, None, Some(MAX_RECOVERY_SNAPSHOTS))
 }
 
 /// 只轮换 partial 快照。保存失败路径专用：一次失败的保存绝不能连带删掉任何完整
 /// 恢复点，否则失败本身就会吃掉用户最后的安全网。
 fn prune_partial_only(ws_dir: &Path) -> Result<usize> {
-    prune_inner(ws_dir, None)
+    prune_inner(ws_dir, None, None)
 }
 
-fn prune_inner(ws_dir: &Path, keep: Option<usize>) -> Result<usize> {
+fn prune_inner(
+    ws_dir: &Path,
+    keep_standard: Option<usize>,
+    keep_recovery: Option<usize>,
+) -> Result<usize> {
     ensure_real_directory(ws_dir)?;
-    let mut complete = Vec::new();
+    let mut standard = Vec::new();
+    let mut recovery_only = Vec::new();
     let mut partial = Vec::new();
     let entries = fs::read_dir(ws_dir)
         .with_context(|| format!("无法列出 checkpoint 目录: {}", display_path(ws_dir)))?;
@@ -651,17 +773,27 @@ fn prune_inner(ws_dir: &Path, keep: Option<usize>) -> Result<usize> {
         if name.starts_with('.') {
             continue;
         }
-        match inspect_snapshot(&path).1 {
-            SnapshotStatus::Complete => complete.push(path),
+        let (manifest, status) = inspect_snapshot(&path);
+        match status {
+            SnapshotStatus::Complete => {
+                match manifest.map(|value| value.purpose).unwrap_or_default() {
+                    CheckpointPurpose::Standard => standard.push(path),
+                    CheckpointPurpose::RecoveryOnly => recovery_only.push(path),
+                }
+            }
             SnapshotStatus::Partial => partial.push(path),
             SnapshotStatus::Corrupt => {}
         }
     }
-    complete.sort(); // 时间戳目录名字典序 = 时间序
+    standard.sort(); // 时间戳目录名字典序 = 时间序
+    recovery_only.sort();
     partial.sort();
     let mut pruned = 0;
-    if let Some(keep) = keep {
-        pruned += rotate_oldest(&complete, keep)?;
+    if let Some(keep) = keep_standard {
+        pruned += rotate_oldest(&standard, keep)?;
+    }
+    if let Some(keep) = keep_recovery {
+        pruned += rotate_oldest(&recovery_only, keep)?;
     }
     pruned += rotate_oldest(&partial, MAX_PARTIAL_SNAPSHOTS)?;
     Ok(pruned)
@@ -724,7 +856,13 @@ pub fn latest(root: &Path, override_dir: Option<&Path>) -> Result<Option<Checkpo
     Ok(list(root, override_dir)?
         .into_iter()
         .rev()
-        .find(|checkpoint| checkpoint.status == SnapshotStatus::Complete))
+        .find(|checkpoint| {
+            checkpoint.status == SnapshotStatus::Complete
+                && checkpoint
+                    .manifest
+                    .as_ref()
+                    .is_some_and(|manifest| manifest.purpose == CheckpointPurpose::Standard)
+        }))
 }
 
 /// 验证单个快照的 manifest、文件数、所有路径、大小和 SHA-256。
@@ -828,3 +966,66 @@ pub use restore::*;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod recovery_only_tests {
+    use super::*;
+
+    #[test]
+    fn recovery_only_requires_explicit_restore_and_repaired_activation() {
+        let workspace = tempfile::tempdir().unwrap();
+        let store = tempfile::tempdir().unwrap();
+        let root = workspace.path();
+        fs::write(root.join("SKILL.md"), "# canonical\n").unwrap();
+        fs::write(root.join("payload.txt"), "saved\n").unwrap();
+
+        let saved = salvage_save(root, Some(store.path())).unwrap();
+        let manifest = verify_snapshot(&saved.path).unwrap();
+        assert_eq!(manifest.purpose, CheckpointPurpose::RecoveryOnly);
+        assert!(!manifest.activation.active);
+        assert!(latest(root, Some(store.path())).unwrap().is_none());
+
+        fs::write(root.join("payload.txt"), "changed\n").unwrap();
+        assert!(restore(root, Some(store.path()), Some(&saved.id)).is_err());
+        assert!(
+            restore_with_options(root, Some(store.path()), Some(&saved.id), true).is_err(),
+            "explicit recovery flag must still require a repaired activation"
+        );
+        crate::workspace::activate(root, &root.join("SKILL.md")).unwrap();
+        restore_with_options(root, Some(store.path()), Some(&saved.id), true).unwrap();
+        assert_eq!(
+            fs::read_to_string(root.join("payload.txt")).unwrap(),
+            "saved\n"
+        );
+    }
+
+    #[test]
+    fn recovery_rotation_never_prunes_or_replaces_standard_latest() {
+        let workspace = tempfile::tempdir().unwrap();
+        let store = tempfile::tempdir().unwrap();
+        let root = workspace.path();
+        fs::write(root.join("payload.txt"), "standard\n").unwrap();
+        let standard = save(root, Some(store.path()), 1).unwrap();
+        for index in 0..(MAX_RECOVERY_SNAPSHOTS + 2) {
+            fs::write(root.join("payload.txt"), format!("salvage-{index}\n")).unwrap();
+            salvage_save(root, Some(store.path())).unwrap();
+        }
+        let checkpoints = list(root, Some(store.path())).unwrap();
+        assert_eq!(
+            checkpoints
+                .iter()
+                .filter(
+                    |checkpoint| checkpoint.manifest.as_ref().is_some_and(|manifest| {
+                        manifest.purpose == CheckpointPurpose::RecoveryOnly
+                    })
+                )
+                .count(),
+            MAX_RECOVERY_SNAPSHOTS
+        );
+        assert!(standard.path.exists());
+        assert_eq!(
+            latest(root, Some(store.path())).unwrap().unwrap().id,
+            standard.id
+        );
+    }
+}

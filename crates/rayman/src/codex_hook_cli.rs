@@ -45,3 +45,26 @@ pub(crate) fn run(json_output: bool, command: &CodexHookCmd) -> Result<()> {
     }
     Ok(())
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn install_and_uninstall_require_confirmation_before_writes() {
+        let codex_home = tempfile::tempdir().unwrap();
+        for action in [
+            CodexHookAction::Install {
+                codex_home: Some(codex_home.path().to_path_buf()),
+                yes: false,
+            },
+            CodexHookAction::Uninstall {
+                codex_home: Some(codex_home.path().to_path_buf()),
+                yes: false,
+            },
+        ] {
+            let error = run(false, &CodexHookCmd { action }).unwrap_err();
+            assert!(error.to_string().contains("--yes"));
+            assert!(!codex_home.path().join("hooks.json").exists());
+        }
+    }
+}

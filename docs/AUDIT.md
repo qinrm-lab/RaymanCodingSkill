@@ -14,6 +14,8 @@ rayman finish --goal <id>
 
 An authority command is still a single direct executable plus argv. Inline/nested shells remain rejected. Authority is limited to a reviewed conventional repository gate (`check-repo`, `audit-repository`, or `verify-release-contract`), workspace-wide Cargo tests, or selector-free workspace pytest; an agent cannot promote an arbitrary focused command merely by adding `--authority`. Both runs must exit zero on the same workspace fingerprint; a normalizer, formatter, generator, or gate that changes indexed bytes writes no receipt. `finish` refuses a merely momentary PASS without that fixed-point proof.
 
+For broad audits, use `goal package` plus `goal progress` to leave compact stage receipts and `goal lane` to prove read-only/final-reviewer lanes did not write or scoped writers stayed inside their allowlists. These are recovery and coordination records only: they never satisfy the authority line above. Python lanes should obtain a manifest-owned `temp pytest-lease`, apply its emitted basetemp/cache/environment values, probe it before reuse, and release that exact lease afterward; concurrent runs must not share pytest cache, basetemp, TMP, or pycache roots.
+
 Run the complete audit from a PowerShell 7 (`pwsh`) session only, from a clean checkout after installing/upgrading through `scripts/install-rayman.ps1`:
 
 ```powershell
@@ -43,7 +45,7 @@ It covers, in order:
 3. A real `cargo llvm-cov` line threshold for the shipped root CLI workspace. This threshold does not claim coverage for the standalone eval harness.
 4. Standalone `evals` fmt, Clippy, tests, cargo-deny, real-backend host-exec rejection, third-party-grade rejection, and offline mock report/grade provenance.
 5. `cargo package` plus an isolated managed-temp `cargo install` smoke.
-6. A locked release build followed by current-artifact context refresh, strict quality, release readiness, state/assets checks, and isolated checkpoint save + `checkpoint verify`.
+6. A locked release build followed by current-artifact context refresh, strict quality, release readiness, state/assets checks, and isolated standard checkpoint save + `checkpoint verify`; recovery-only salvage is negative-tested but never accepted as release evidence.
 7. Installed CLI/reference artifact/deployed skill/effective PATH identity plus a clean isolated source-fresh rebuild and terminal identity re-hash.
 
 Use focused Cargo/rayman commands during development; only this command supports the complete local claim. CI mirrors these mandatory lanes across platform jobs and additionally performs the scheduled weekly advisory refresh declared in `.github/workflows/ci.yml`.

@@ -34,6 +34,9 @@ const RECEIPT_POLICY_V2_ROLLOUT_AT: &str = "2026-07-18T04:34:13Z";
 const RECEIPT_POLICY_V1_MIGRATION: &str = "pre_receipt_policy_v2";
 const QUARANTINED_HISTORY_MIGRATION: &str = "invalid_legacy_receipts_quarantined";
 
+mod long_task;
+pub use long_task::*;
+
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum RequirementKind {
@@ -377,6 +380,12 @@ pub struct Goal {
     pub review_receipts: Vec<ReviewReceipt>,
     #[serde(default)]
     pub authority_receipts: Vec<AuthorityReceipt>,
+    #[serde(default)]
+    pub work_packages: Vec<WorkPackage>,
+    #[serde(default)]
+    pub progress_receipts: Vec<ProgressReceipt>,
+    #[serde(default)]
+    pub lanes: Vec<LaneRecord>,
     pub requirements: Vec<Requirement>,
     #[serde(default, skip)]
     pub loaded_from_legacy: bool,
@@ -507,6 +516,15 @@ fn normalize_path_list(paths: &mut Vec<String>) {
     paths.retain(|path| !path.is_empty());
     paths.sort();
     paths.dedup();
+}
+
+fn ordinary_workspace_relative_path(path: &str) -> bool {
+    let path = Path::new(path);
+    !path.as_os_str().is_empty()
+        && !path.is_absolute()
+        && path
+            .components()
+            .all(|component| matches!(component, std::path::Component::Normal(_)))
 }
 
 fn hash_string_sequence(hasher: &mut Sha256, values: &[String]) {
@@ -726,6 +744,9 @@ impl GoalStore {
             plan_receipts: Vec::new(),
             review_receipts: Vec::new(),
             authority_receipts: Vec::new(),
+            work_packages: Vec::new(),
+            progress_receipts: Vec::new(),
+            lanes: Vec::new(),
             requirements,
             loaded_from_legacy: false,
         };
@@ -1924,6 +1945,9 @@ fn goal_from_legacy(legacy: LegacyGoal) -> Goal {
         plan_receipts: Vec::new(),
         review_receipts: Vec::new(),
         authority_receipts: Vec::new(),
+        work_packages: Vec::new(),
+        progress_receipts: Vec::new(),
+        lanes: Vec::new(),
         updated_at,
         requirements,
         loaded_from_legacy: true,

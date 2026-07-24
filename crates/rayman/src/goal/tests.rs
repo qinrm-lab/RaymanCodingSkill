@@ -498,6 +498,9 @@ fn relevance_requires_one_current_receipt_bound_to_command_and_impact() {
         plan_receipts: Vec::new(),
         review_receipts: Vec::new(),
         authority_receipts: Vec::new(),
+        work_packages: Vec::new(),
+        progress_receipts: Vec::new(),
+        lanes: Vec::new(),
         requirements: vec![requirement.clone()],
         loaded_from_legacy: false,
     };
@@ -626,6 +629,9 @@ fn legacy_v2_lifecycle_hash_projection_remains_byte_compatible() {
         plan_receipts: Vec::new(),
         review_receipts: Vec::new(),
         authority_receipts: Vec::new(),
+        work_packages: Vec::new(),
+        progress_receipts: Vec::new(),
+        lanes: Vec::new(),
         requirements: vec![Requirement {
             id: "req_1".into(),
             text: "preserve historical proof".into(),

@@ -796,7 +796,7 @@ fn doctor_verifies_installed_identity_in_an_ordinary_managed_workspace() {
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
         &format!(
-            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v13\ncli_version: 2.7.0\n"
+            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v14\ncli_version: 2.8.0\n"
         ),
     );
     let binary = std::fs::canonicalize(BIN).unwrap();
@@ -831,7 +831,7 @@ fn doctor_rejects_an_earlier_windows_path_wrapper() {
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
         &format!(
-            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v13\ncli_version: 2.7.0\n"
+            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v14\ncli_version: 2.8.0\n"
         ),
     );
     let wrapper_dir = tempfile::tempdir().unwrap();
@@ -3040,8 +3040,8 @@ fn workspace_activation_rejects_the_previous_cli_identity() {
     let activation_path = root.join(".RaymanCodingSkill/workspace_skill.yaml");
     let previous_identity = std::fs::read_to_string(&activation_path)
         .unwrap()
-        .replace("rayman-cli-contract-v13", "rayman-cli-contract-v10")
-        .replace("cli_version: 2.7.0", "cli_version: 2.5.1");
+        .replace("rayman-cli-contract-v14", "rayman-cli-contract-v10")
+        .replace("cli_version: 2.8.0", "cli_version: 2.5.1");
     std::fs::write(&activation_path, previous_identity).unwrap();
 
     let status = run_raw(root, &["--format", "json", "workspace", "status"]);
@@ -3051,8 +3051,8 @@ fn workspace_activation_rejects_the_previous_cli_identity() {
     assert_eq!(status["active"], false);
     assert_eq!(status["cli_contract"], "rayman-cli-contract-v10");
     assert_eq!(status["cli_version"], "2.5.1");
-    assert_eq!(status["running_cli_contract"], "rayman-cli-contract-v13");
-    assert_eq!(status["running_cli_version"], "2.7.0");
+    assert_eq!(status["running_cli_contract"], "rayman-cli-contract-v14");
+    assert_eq!(status["running_cli_version"], "2.8.0");
     assert!(
         status["issues"]
             .as_array()
@@ -4150,4 +4150,129 @@ fn codex_stop_hook_blocks_active_goal_and_installs_idempotently() {
         hooks.matches("Rayman Owner Mode completion guard").count(),
         1
     );
+}
+
+#[test]
+fn pytest_lease_cli_is_manifest_owned_and_releasable() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let lease = run_json(root, &["temp", "pytest-lease", "focused tests"]);
+    let id = lease["id"].as_str().unwrap();
+    assert_eq!(lease["schema"], "rayman.pytest-lease.v1");
+    assert!(lease["root"].as_str().unwrap().contains("tmp\\leases"));
+    assert_eq!(lease["pytest_args"].as_array().unwrap().len(), 4);
+    let probed = run_json(root, &["temp", "pytest-probe", id]);
+    assert_eq!(probed["id"], id);
+    let released = run_json(root, &["temp", "pytest-release", id]);
+    assert_eq!(released["removed"], true);
+    let traversal = run(root, &["temp", "pytest-probe", "../outside"]);
+    assert_eq!(traversal.status, 1);
+}
+
+#[test]
+fn salvage_save_cli_works_without_activation_but_never_becomes_latest() {
+    let workspace = tempfile::tempdir().unwrap();
+    let checkpoint_store = tempfile::tempdir().unwrap();
+    let root = workspace.path();
+    write(root, "payload.txt", "emergency\n");
+    let store = checkpoint_store.path().to_str().unwrap();
+    let saved = run_raw(
+        root,
+        &[
+            "--format",
+            "json",
+            "checkpoint",
+            "salvage-save",
+            "--dir",
+            store,
+        ],
+    );
+    assert_eq!(saved.status, 0, "{}", saved.stderr);
+    let saved: Value = serde_json::from_str(&saved.stdout).unwrap();
+    assert_eq!(saved["purpose"], "recovery_only");
+    assert_eq!(saved["authoritative"], false);
+    let status = run_raw(
+        root,
+        &["--format", "json", "checkpoint", "status", "--dir", store],
+    );
+    assert_eq!(status.status, 0, "{}", status.stderr);
+    let status: Value = serde_json::from_str(&status.stdout).unwrap();
+    assert_eq!(status["has_checkpoint"], false);
+    let listed = run_raw(
+        root,
+        &["--format", "json", "checkpoint", "list", "--dir", store],
+    );
+    let listed: Value = serde_json::from_str(&listed.stdout).unwrap();
+    assert_eq!(listed[0]["purpose"], "recovery_only");
+}
+
+#[test]
+fn goal_package_progress_summary_and_lane_fail_closed_through_cli() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn value() -> u8 { 1 }\n");
+    let goal = run_json(root, &["goal", "start", "staged cli", "--must", "deliver"]);
+    let id = goal["id"].as_str().unwrap();
+    run_json(
+        root,
+        &[
+            "goal",
+            "package",
+            "add",
+            id,
+            "stage1",
+            "focused stage",
+            "--req",
+            "req_1",
+        ],
+    );
+    let progress = run_json(
+        root,
+        &[
+            "goal",
+            "progress",
+            id,
+            "--package",
+            "stage1",
+            "-m",
+            "focused check",
+            "--command",
+            "rustc --version",
+        ],
+    );
+    assert_eq!(progress["authoritative"], false);
+    let progress_id = progress["id"].as_str().unwrap();
+    run_json(
+        root,
+        &[
+            "goal",
+            "package",
+            "complete",
+            id,
+            "stage1",
+            "--progress",
+            progress_id,
+        ],
+    );
+    let summary = run_json(root, &["goal", "summary", id]);
+    assert_eq!(summary["completed_packages"], 1);
+    assert_eq!(summary["progress_receipts"], 1);
+    assert_eq!(summary["validation_receipts"], 0);
+
+    run_json(
+        root,
+        &[
+            "goal",
+            "lane",
+            "open",
+            id,
+            "review",
+            "--mode",
+            "final-reviewer",
+        ],
+    );
+    write(root, "src/lib.rs", "pub fn value() -> u8 { 2 }\n");
+    let rejected = run(root, &["goal", "lane", "close", id, "review"]);
+    assert_eq!(rejected.status, 1);
+    assert!(rejected.stderr.contains("只读 lane"), "{}", rejected.stderr);
 }

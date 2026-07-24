@@ -39,11 +39,12 @@ rayman autosave start --no-auto-stop              # 不自动停，需手动 sto
 一次快照 = **当前工作树**（尊重 `.gitignore`，跳过 `target/`、`node_modules/` 等）+ **v2 白名单任务状态**：goals、`pending.json`、context index/project map 和 `autosave.json`。它不会把整份 `.RaymanCodingSkill/` 当作备份源，因此不带入 `tmp/`、退役状态、评测运行物或其它未列入白名单的数据。
 
 - 存到**用户级**目录，不进仓库：Windows 为 `%LOCALAPPDATA%\Rayman\checkpoints\<工作区名>-<哈希>\<时间戳>\`；其它平台优先为 `$XDG_DATA_HOME/Rayman/checkpoints/`，否则为 `$HOME/.local/share/Rayman/checkpoints/`。若这些变量不可用而有 `$USERPROFILE`，则退回 `$USERPROFILE/Rayman/checkpoints/`。`--dir` 会覆盖以上位置。
-- save/restore/prune 共用跨进程锁，重叠的手工/计划任务不会互删正在写的 staging。每次成功保存只**滚动清理完整快照**，默认保留最近 3 个（`--keep N`）；`partial`/`corrupt` 及 crash 遗留 staging 都保留取证，自动 prune 不删除 staging。
+- save/restore/prune 共用跨进程锁，重叠的手工/计划任务不会互删正在写的 staging。普通完整快照、`recovery_only` 和 `partial` 使用互不影响的轮换池；普通保存默认保留最近 3 个（`--keep N`），紧急 salvage 默认保留最近 5 个。`corrupt` 及 crash 遗留 staging 保留取证，自动 prune 不删除 staging。
 - 保存是“先写暂存目录再原子改名”。复制、遍历或完整性校验失败会留下取证状态并以非零失败，绝不替换或污染最近的完整快照。
-- `checkpoint list` 会标记每个快照为 `complete`、`partial` 或 `corrupt`；`checkpoint status` 只选择最近一次已验证的 `complete` 快照。
-- `checkpoint verify [id|latest]` 只读复核 v2 manifest、路径、文件数、大小和 SHA-256；`latest` 是最近完整快照。
-- **恢复是叠加式、逐文件原子、可幂等重跑**：只允许经过验证的完整快照，先检查全部 manifest/源/目标路径，再对每个文件在目标同目录 staging，`flush`/`fsync` 后原子 rename。它不是整批事务；崩溃可能留下已恢复的前缀，但重跑会安全完成其余文件。不会删除工作区里多出来的文件。
+- `checkpoint list` 同时显示完整性状态和 `standard|recovery_only` purpose；`checkpoint status` / 默认 `latest` 只选择最近一次已验证的普通完整快照。
+- `checkpoint verify [id|latest]` 只读复核 v3 manifest、路径、文件数、大小、权限和 SHA-256；显式 ID 可检查 recovery-only。
+- **恢复是叠加式、journaled all-or-nothing、可幂等重跑**：全部源先 staging/校验，全部既有目标先备份，发布失败会逆序回滚；崩溃留下 transaction，由下一次 save/restore 恢复。不会删除工作区里多出来的文件。
+- 激活损坏时可运行 `checkpoint salvage-save`。manifest 会记录激活来源并永久标为 `recovery_only`，不能冒充默认恢复点或完成证据。恢复它必须先修复激活，再显式给 ID、`--yes --allow-recovery-only`。
 
 > 快照默认**不含被 `.gitignore` 忽略的文件**（`.RaymanCodingSkill/` 任务状态是特意加回来的例外）。重要代码请照常 `git commit`；快照是“切工具 / 断电”的第二道保险，不是版本控制替代。
 
@@ -52,12 +53,14 @@ rayman autosave start --no-auto-stop              # 不自动停，需手动 sto
 ```powershell
 rayman checkpoint save            # 存当前工作区，保留最近 3 个
 rayman checkpoint save --keep 5
+rayman checkpoint salvage-save   # 激活无效也可保存；只作 recovery-only
 rayman checkpoint list            # 列出快照
 rayman checkpoint status          # 最近一次已验证的完整快照
 rayman checkpoint verify          # 只读验证最近完整快照
 rayman checkpoint verify <id>     # 只读验证指定快照
 rayman checkpoint restore --yes         # 恢复最近完整快照（覆盖同名文件）
 rayman checkpoint restore <id> --yes    # 恢复指定的完整快照
+rayman checkpoint restore <recovery-id> --yes --allow-recovery-only
 ```
 
 ## 状态审计与托管临时目录
@@ -66,6 +69,9 @@ rayman checkpoint restore <id> --yes    # 恢复指定的完整快照
 rayman state audit          # 只读列出 v2 允许状态、退役条目和递归 temp 指标
 rayman state audit --check  # 退役状态、审计错误或遍历错误时非零；不会删除任何文件
 rayman temp status          # 递归 files/dirs/bytes 与 traversal errors
+rayman temp pytest-lease <label>  # 独立 basetemp/cache/TMP/pycache + 探针
+rayman temp pytest-probe <id>
+rayman temp pytest-release <id>   # 只释放 manifest 精确拥有的租约
 ```
 
 `state audit` 只提供清理/迁移决策所需的证据。即使 `--check` 失败，它也不会删除、迁移或覆盖状态；先审阅输出并取得明确批准。`temp cleanup` 仍是唯一会删除状态的 temp 命令，且只删除 `.RaymanCodingSkill/tmp/`。

@@ -11,13 +11,33 @@ pub fn restore(
     override_dir: Option<&Path>,
     which: Option<&str>,
 ) -> Result<RestoreOutcome> {
-    restore_impl(root, override_dir, which, None)
+    restore_with_options(root, override_dir, which, false)
 }
 
+pub fn restore_with_options(
+    root: &Path,
+    override_dir: Option<&Path>,
+    which: Option<&str>,
+    allow_recovery_only: bool,
+) -> Result<RestoreOutcome> {
+    restore_impl_with_options(root, override_dir, which, allow_recovery_only, None)
+}
+
+#[cfg(test)]
 pub(super) fn restore_impl(
     root: &Path,
     override_dir: Option<&Path>,
     which: Option<&str>,
+    fail_on_publish_index: Option<usize>,
+) -> Result<RestoreOutcome> {
+    restore_impl_with_options(root, override_dir, which, false, fail_on_publish_index)
+}
+
+fn restore_impl_with_options(
+    root: &Path,
+    override_dir: Option<&Path>,
+    which: Option<&str>,
+    allow_recovery_only: bool,
     fail_on_publish_index: Option<usize>,
 ) -> Result<RestoreOutcome> {
     ensure_real_directory(root)?;
@@ -40,7 +60,13 @@ pub(super) fn restore_impl(
         None | Some("latest") => checkpoints
             .iter()
             .rev()
-            .find(|checkpoint| checkpoint.status == SnapshotStatus::Complete)
+            .find(|checkpoint| {
+                checkpoint.status == SnapshotStatus::Complete
+                    && checkpoint
+                        .manifest
+                        .as_ref()
+                        .is_some_and(|manifest| manifest.purpose == CheckpointPurpose::Standard)
+            })
             .ok_or_else(|| anyhow::anyhow!("没有完整且已验证的 checkpoint"))?,
         Some(id) => checkpoints
             .iter()
@@ -55,6 +81,20 @@ pub(super) fn restore_impl(
         );
     }
     let manifest = verify_snapshot(&target.path)?;
+    if manifest.purpose == CheckpointPurpose::RecoveryOnly {
+        if !allow_recovery_only {
+            bail!(
+                "checkpoint {} 是 recovery-only；修复并重新激活工作区后，显式加 --allow-recovery-only 才能恢复",
+                target.id
+            );
+        }
+        crate::workspace::require_active(&root).with_context(|| {
+            format!(
+                "拒绝恢复 recovery-only checkpoint {}：当前激活合同尚未修复",
+                target.id
+            )
+        })?;
+    }
     let tree = target.path.join(TREE_SUBDIR);
     ensure_manifest_paths_preserve_case(&target.id, &tree, &manifest)?;
 

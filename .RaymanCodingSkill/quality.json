@@ -3,6 +3,16 @@
   "block_warning_kinds": [],
   "exemptions": [
     {
+      "path": "crates/rayman/src/cli.rs",
+      "kind": "high_fan_in",
+      "reason": "Clap command schemas are intentionally centralized so main dispatch, the Codex Stop hook, and focused command adapters share one parsed contract; CLI integration tests and the full repository gate cover all consumers."
+    },
+    {
+      "path": "crates/rayman/src/workspace.rs",
+      "kind": "high_fan_in",
+      "reason": "Workspace activation and source identity are intentionally centralized as the shared fail-closed boundary; workspace unit tests, CLI integration tests, and the full repository gate cover every consumer."
+    },
+    {
       "path": "crates/rayman/src/timefmt.rs",
       "kind": "high_fan_in",
       "reason": "UTC receipt timestamps are intentionally centralized in one tiny helper; goal, pending, checkpoint, and autosave behavior tests plus the full root suite cover every consumer."

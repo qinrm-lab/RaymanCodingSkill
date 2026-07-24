@@ -38,9 +38,14 @@ pub(super) fn legacy_lifecycle_contract_sha256(goal: &Goal) -> String {
         .any(|receipt| !receipt.extensions.is_empty())
         || !goal.authority_receipts.is_empty();
     let replacement_extended = goal.replacement_authority.is_some();
+    let workflow_extended = !goal.work_packages.is_empty()
+        || !goal.progress_receipts.is_empty()
+        || !goal.lanes.is_empty();
     lifecycle_hash_str(
         &mut hasher,
-        if replacement_extended {
+        if workflow_extended {
+            "rayman.lifecycle-contract.v6"
+        } else if replacement_extended {
             "rayman.lifecycle-contract.v5"
         } else if autonomy_extended {
             "rayman.lifecycle-contract.v3"
@@ -137,6 +142,80 @@ pub(super) fn legacy_lifecycle_contract_sha256(goal: &Goal) -> String {
                     lifecycle_hash_str(&mut hasher, &run.stdout_sha256);
                     lifecycle_hash_str(&mut hasher, &run.stderr_sha256);
                 }
+            }
+        }
+        if workflow_extended {
+            hasher.update((goal.work_packages.len() as u64).to_le_bytes());
+            for package in &goal.work_packages {
+                lifecycle_hash_str(&mut hasher, &package.id);
+                lifecycle_hash_str(&mut hasher, &package.title);
+                lifecycle_hash_optional_str(&mut hasher, package.parent_id.as_deref());
+                hasher.update([u8::from(package.required)]);
+                lifecycle_hash_str(
+                    &mut hasher,
+                    match package.status {
+                        WorkPackageStatus::Open => "open",
+                        WorkPackageStatus::Complete => "complete",
+                    },
+                );
+                for values in [&package.requirement_ids, &package.progress_receipt_ids] {
+                    hasher.update((values.len() as u64).to_le_bytes());
+                    for value in values {
+                        lifecycle_hash_str(&mut hasher, value);
+                    }
+                }
+                lifecycle_hash_optional_str(&mut hasher, package.completed_at.as_deref());
+            }
+            hasher.update((goal.progress_receipts.len() as u64).to_le_bytes());
+            for receipt in &goal.progress_receipts {
+                for value in [
+                    &receipt.id,
+                    &receipt.package_id,
+                    &receipt.recorded_at,
+                    &receipt.message,
+                    &receipt.command,
+                    &receipt.cwd,
+                    &receipt.workspace_fingerprint_before,
+                    &receipt.workspace_fingerprint_after,
+                    &receipt.stdout_sha256,
+                    &receipt.stderr_sha256,
+                    &receipt.invocation_sha256,
+                ] {
+                    lifecycle_hash_str(&mut hasher, value);
+                }
+                hasher.update(receipt.exit_code.to_le_bytes());
+                hasher.update([u8::from(receipt.authoritative)]);
+            }
+            hasher.update((goal.lanes.len() as u64).to_le_bytes());
+            for lane in &goal.lanes {
+                lifecycle_hash_str(&mut hasher, &lane.id);
+                lifecycle_hash_str(
+                    &mut hasher,
+                    match lane.mode {
+                        LaneMode::AdvisoryReadOnly => "advisory_read_only",
+                        LaneMode::Writer => "writer",
+                        LaneMode::FinalReviewer => "final_reviewer",
+                    },
+                );
+                lifecycle_hash_str(&mut hasher, &lane.opened_at);
+                lifecycle_hash_str(&mut hasher, &lane.opening_baseline.workspace_fingerprint);
+                for values in [&lane.allowed_paths, &lane.delta_paths] {
+                    hasher.update((values.len() as u64).to_le_bytes());
+                    for value in values {
+                        lifecycle_hash_str(&mut hasher, value);
+                    }
+                }
+                lifecycle_hash_str(
+                    &mut hasher,
+                    match lane.status {
+                        LaneStatus::Open => "open",
+                        LaneStatus::Closed => "closed",
+                    },
+                );
+                lifecycle_hash_optional_str(&mut hasher, lane.closed_at.as_deref());
+                lifecycle_hash_optional_str(&mut hasher, lane.closing_fingerprint.as_deref());
+                lifecycle_hash_optional_str(&mut hasher, lane.violation.as_deref());
+                hasher.update([u8::from(lane.authoritative)]);
             }
         }
         if let Some(proof) = goal.replacement_authority.as_ref() {
@@ -368,7 +447,7 @@ pub(super) fn historical_success_fingerprint(
     })
 }
 
-fn fingerprint_for_files(files: &BTreeMap<String, String>) -> String {
+pub(super) fn fingerprint_for_files(files: &BTreeMap<String, String>) -> String {
     let mut hasher = Sha256::new();
     for (relative, hash) in files {
         hasher.update(relative.as_bytes());
@@ -782,6 +861,32 @@ impl Goal {
         if must_count == 0 {
             return Some("goal 至少需要一个 must 需求".into());
         }
+        if let Some(error) = work_package_graph_error(self) {
+            return Some(error);
+        }
+        if let Some(error) = lane_ledger_error(self) {
+            return Some(error);
+        }
+        if self.status == GoalStatus::Success
+            && let Some(package) = self.work_packages.iter().find(|package| {
+                package.required
+                    && (package.status != WorkPackageStatus::Complete
+                        || package.progress_receipt_ids.is_empty())
+            })
+        {
+            return Some(format!(
+                "required work package {} 未完成或缺少 progress receipt",
+                package.id
+            ));
+        }
+        if self.status == GoalStatus::Success
+            && let Some(lane) = self
+                .lanes
+                .iter()
+                .find(|lane| lane.status == LaneStatus::Open)
+        {
+            return Some(format!("lane {} 尚未关闭", lane.id));
+        }
         if let Some(baseline) = self.baseline.as_ref() {
             if !is_sha256(&baseline.workspace_fingerprint)
                 || fingerprint_for_files(&baseline.files) != baseline.workspace_fingerprint
@@ -850,8 +955,13 @@ impl Goal {
         } else if !self.plan_receipts.is_empty()
             || !self.review_receipts.is_empty()
             || !self.authority_receipts.is_empty()
+            || !self.work_packages.is_empty()
+            || !self.progress_receipts.is_empty()
+            || !self.lanes.is_empty()
         {
-            return Some("缺少 baseline 的 goal 不能携带 plan/review/authority receipt".into());
+            return Some(
+                "缺少 baseline 的 goal 不能携带 plan/review/authority/work-package receipt".into(),
+            );
         }
         if let Some(proof) = self.replacement_authority.as_ref() {
             if self.status != GoalStatus::Success {

@@ -206,6 +206,8 @@ pub enum CheckpointAction {
         #[arg(long, default_value_t = rayman::checkpoint::DEFAULT_KEEP)]
         keep: usize,
     },
+    /// 激活无效时仍保存 recovery-only 快照；不会成为默认 latest 或完成证据
+    SalvageSave,
     /// 列出已有快照
     List,
     /// 恢复快照到工作区（默认最近；会覆盖同名文件）
@@ -215,6 +217,9 @@ pub enum CheckpointAction {
         /// 确认覆盖工作区文件（恢复是破坏性操作，必须显式确认）
         #[arg(long)]
         yes: bool,
+        /// 显式允许恢复 recovery-only 快照；当前激活仍必须已经修复
+        #[arg(long)]
+        allow_recovery_only: bool,
     },
     /// 验证指定或最近完整快照的 manifest、路径和逐文件 hash，不写入工作区
     Verify {
@@ -356,6 +361,8 @@ pub enum GoalAction {
     List,
     /// 查看单个目标
     Show { id: String },
+    /// 紧凑显示需求、计划、工作包和收据计数，不输出完整 baseline
+    Summary { id: String },
     /// Persist a pre-mutation plan receipt bound to the goal baseline.
     Plan {
         id: String,
@@ -375,6 +382,20 @@ pub enum GoalAction {
         reviewer: String,
         #[arg(long = "message", short = 'm')]
         message: String,
+    },
+    /// 管理分层 work package
+    Package(Box<WorkPackageCmd>),
+    /// 管理源码绑定的并发 lane 台账
+    Lane(Box<LaneCmd>),
+    /// 执行阶段检查并记录非权威 progress receipt
+    Progress {
+        id: String,
+        #[arg(long)]
+        package: String,
+        #[arg(long = "message", short = 'm')]
+        message: String,
+        #[arg(long)]
+        command: String,
     },
     /// 记录尚未被机器验证的进展说明并标记需求完成（evidence-only completion，不能支撑门禁主张）
     Evidence {
@@ -471,6 +492,56 @@ pub enum GoalAction {
 }
 
 #[derive(Args)]
+pub struct WorkPackageCmd {
+    #[command(subcommand)]
+    pub action: WorkPackageAction,
+}
+
+#[derive(Subcommand)]
+pub enum WorkPackageAction {
+    /// 新增一个 package；父节点必须已存在
+    Add {
+        goal: String,
+        id: String,
+        title: String,
+        #[arg(long)]
+        parent: Option<String>,
+        #[arg(long = "req")]
+        requirements: Vec<String>,
+        #[arg(long)]
+        optional: bool,
+    },
+    /// 用同包且绑定当前源码快照的 progress receipt 完成 package
+    Complete {
+        goal: String,
+        id: String,
+        #[arg(long)]
+        progress: String,
+    },
+}
+
+#[derive(Args)]
+pub struct LaneCmd {
+    #[command(subcommand)]
+    pub action: LaneAction,
+}
+
+#[derive(Subcommand)]
+pub enum LaneAction {
+    /// 在当前源码 baseline 上打开一个 lane
+    Open {
+        goal: String,
+        id: String,
+        #[arg(long)]
+        mode: String,
+        #[arg(long = "allow")]
+        allowed_paths: Vec<String>,
+    },
+    /// 计算 lane 期间的源码差量并按 mode/allowlist 机械验收
+    Close { goal: String, id: String },
+}
+
+#[derive(Args)]
 pub struct PendingCmd {
     #[command(subcommand)]
     pub action: PendingAction,
@@ -551,6 +622,18 @@ pub enum TempAction {
     /// 在托管临时根下创建具名子目录
     Scratch {
         label: String,
+    },
+    /// 创建可探测、可归因且源码排除的 pytest 临时租约
+    PytestLease {
+        label: String,
+    },
+    /// 重新探测现有 pytest lease 的路径与读写能力
+    PytestProbe {
+        id: String,
+    },
+    /// 按 manifest 精确释放一个 pytest lease
+    PytestRelease {
+        id: String,
     },
     /// 清理整个托管临时根
     Cleanup,

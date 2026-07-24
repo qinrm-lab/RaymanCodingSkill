@@ -3,6 +3,7 @@ mod i18n;
 mod cli;
 mod codex_hook_cli;
 mod doctor;
+mod goal_cli;
 mod task_workflow;
 
 use std::collections::BTreeMap;
@@ -55,6 +56,13 @@ fn run(cli: Cli) -> Result<()> {
             | Command::LegacyAudit(_)
             | Command::LegacyWorkspaceSkill(_)
             | Command::LegacySubagent(_)
+            | Command::Checkpoint(CheckpointCmd {
+                action: CheckpointAction::SalvageSave
+                    | CheckpointAction::List
+                    | CheckpointAction::Status
+                    | CheckpointAction::Verify { .. },
+                ..
+            })
             | Command::Context(ContextCmd {
                 action: ContextAction::LegacyOs { .. } | ContextAction::LegacyTask { .. }
             })
@@ -178,6 +186,32 @@ fn run(cli: Cli) -> Result<()> {
                     print(&json!({ "path": dir.display().to_string() }));
                 } else {
                     println!("{}", dir.display());
+                }
+            }
+            TempAction::PytestLease { label } => {
+                let lease = temp::create_pytest_lease(&root, &label)?;
+                if json {
+                    print(&serde_json::to_value(&lease)?);
+                } else {
+                    println!("pytest lease {} 已创建并通过读写探针", lease.id);
+                    println!("  root: {}", lease.root);
+                    println!("  pytest args: {}", lease.pytest_args.join(" "));
+                }
+            }
+            TempAction::PytestProbe { id } => {
+                let lease = temp::verify_pytest_lease(&root, &id)?;
+                if json {
+                    print(&serde_json::to_value(&lease)?);
+                } else {
+                    println!("pytest lease {} 探针通过", lease.id);
+                }
+            }
+            TempAction::PytestRelease { id } => {
+                let removed = temp::release_pytest_lease(&root, &id)?;
+                if json {
+                    print(&json!({ "id": id, "removed": removed }));
+                } else {
+                    println!("pytest lease {id} 已释放");
                 }
             }
             TempAction::Cleanup => {
@@ -560,6 +594,7 @@ fn run_checkpoint(root: &std::path::Path, json: bool, cmd: CheckpointCmd) -> Res
                     "skipped_count": outcome.skipped_count,
                     "total_bytes": outcome.total_bytes,
                     "pruned": outcome.pruned,
+                    "purpose": outcome.purpose,
                 }));
             } else {
                 println!(
@@ -577,6 +612,26 @@ fn run_checkpoint(root: &std::path::Path, json: bool, cmd: CheckpointCmd) -> Res
                 println!("  位置: {}", rayman::pathfmt::display_path(&outcome.path));
             }
         }
+        CheckpointAction::SalvageSave => {
+            let outcome = checkpoint::salvage_save(root, dir)?;
+            if json {
+                print(&json!({
+                    "id": outcome.id,
+                    "path": outcome.path.display().to_string(),
+                    "file_count": outcome.file_count,
+                    "total_bytes": outcome.total_bytes,
+                    "pruned": outcome.pruned,
+                    "purpose": outcome.purpose,
+                    "authoritative": false,
+                }));
+            } else {
+                println!(
+                    "已保存 recovery-only 快照 {} — {} 个文件；它不会成为默认 latest 或完成证据",
+                    outcome.id, outcome.file_count
+                );
+                println!("  位置: {}", rayman::pathfmt::display_path(&outcome.path));
+            }
+        }
         CheckpointAction::List => {
             let checkpoints = checkpoint::list(root, dir)?;
             if json {
@@ -586,6 +641,8 @@ fn run_checkpoint(root: &std::path::Path, json: bool, cmd: CheckpointCmd) -> Res
                         json!({
                             "id": c.id,
                             "status": c.status,
+                            "purpose": c.manifest.as_ref().map(|m| m.purpose),
+                            "activation_status": c.manifest.as_ref().map(|m| m.activation.status.clone()),
                             "created_at": c.manifest.as_ref().map(|m| m.created_at.clone()),
                             "file_count": c.manifest.as_ref().map(|m| m.file_count),
                             "total_bytes": c.manifest.as_ref().map(|m| m.total_bytes),
@@ -600,9 +657,10 @@ fn run_checkpoint(root: &std::path::Path, json: bool, cmd: CheckpointCmd) -> Res
                 for c in &checkpoints {
                     match &c.manifest {
                         Some(m) => println!(
-                            "  {}  {:?}  {} 个文件  {:.1} MB",
+                            "  {}  {:?}/{:?}  {} 个文件  {:.1} MB",
                             c.id,
                             c.status,
+                            m.purpose,
                             m.file_count,
                             m.total_bytes as f64 / 1_048_576.0
                         ),
@@ -619,6 +677,7 @@ fn run_checkpoint(root: &std::path::Path, json: bool, cmd: CheckpointCmd) -> Res
                     "latest": latest.as_ref().map(|c| json!({
                         "id": c.id,
                         "status": c.status,
+                        "purpose": c.manifest.as_ref().map(|m| m.purpose),
                         "created_at": c.manifest.as_ref().map(|m| m.created_at.clone()),
                         "file_count": c.manifest.as_ref().map(|m| m.file_count),
                     })),
@@ -637,13 +696,18 @@ fn run_checkpoint(root: &std::path::Path, json: bool, cmd: CheckpointCmd) -> Res
                 }
             }
         }
-        CheckpointAction::Restore { id, yes } => {
+        CheckpointAction::Restore {
+            id,
+            yes,
+            allow_recovery_only,
+        } => {
             if !yes {
                 bail!(
                     "恢复会用快照覆盖工作区里的同名文件。确认请加 --yes：rayman checkpoint restore --yes"
                 );
             }
-            let outcome = checkpoint::restore(root, dir, id.as_deref())?;
+            let outcome =
+                checkpoint::restore_with_options(root, dir, id.as_deref(), allow_recovery_only)?;
             if json {
                 print(&json!({
                     "id": outcome.id,
@@ -681,6 +745,8 @@ fn run_checkpoint(root: &std::path::Path, json: bool, cmd: CheckpointCmd) -> Res
                     "total_bytes": manifest.total_bytes,
                     "schema": manifest.schema,
                     "version": manifest.version,
+                    "purpose": manifest.purpose,
+                    "activation": manifest.activation,
                 }));
             } else {
                 println!(
@@ -733,110 +799,27 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 }
             }
         }
-        GoalAction::Show { id } => {
-            // 未知 id 必须非零退出。此前 show 静默 exit 0 且 JSON 输出裸 `null`，
-            // 而 evidence/validate/close 对同一个 id 都 exit 1——脚本用
-            // `goal show $ID && ...` 判断存在性时会把不存在当成查到了。
-            let Some(goal) = store.get(&id)? else {
-                bail!("目标不存在: {id}");
-            };
-            if json {
-                print(&serde_json::to_value(&goal)?);
-            } else {
-                println!(
-                    "{} [{}/{}] {}",
-                    goal.id, goal.lifecycle, goal.status, goal.title
-                );
-                for req in goal.requirements {
-                    println!(
-                        "  {} [{}/{}] {}{}",
-                        req.id,
-                        req.kind,
-                        req.status,
-                        req.text,
-                        req.evidence
-                            .map(|evidence| format!("  证据: {evidence}"))
-                            .unwrap_or_default()
-                    );
-                    for validation in &req.validations {
-                        println!("    validated: {}", validation.command);
-                    }
-                    for impact in &req.impacts {
-                        println!(
-                            "    impact: {} deps={} dependents={} candidate_tests={} recommended_checks={}",
-                            impact.changed_path,
-                            impact.direct_dependencies.len(),
-                            impact.direct_dependents.len(),
-                            impact.candidate_tests.len(),
-                            impact.recommended_checks.len()
-                        );
-                    }
-                }
-            }
-        }
+        GoalAction::Show { id } => goal_cli::run_show(&store, json, id)?,
+        GoalAction::Summary { id } => goal_cli::run_summary(&store, json, id)?,
         GoalAction::Plan {
             id,
             paths,
             check,
             extend,
-        } => {
-            if extend {
-                // A legitimate extension normally happens after already planned
-                // files changed, which makes the old index stale by design.
-                // Refresh in-process before computing the new path impact.
-                context::refresh(root)?;
-            }
-            let project_map = map::build_readonly(root)?;
-            let report = map::change_plan(&project_map, &paths)?;
-            if !report.ready {
-                let mode = if check { " --check" } else { "" };
-                bail!("goal plan{mode} blocked: {}", report.blockers.join("; "));
-            }
-            let submission = goal::PlanReceiptSubmission {
-                changed_paths: report.changed_paths,
-                review_priority: report.review_priority,
-                impacted_paths: report
-                    .impacted_files
-                    .iter()
-                    .map(|file| file.path.clone())
-                    .collect(),
-                recommended_checks: report.recommended_checks,
-            };
-            let goal = if extend {
-                store.extend_plan(&id, submission)?
-            } else {
-                store.record_plan(&id, submission)?
-            };
-            if json {
-                print(&serde_json::to_value(&goal)?);
-            } else {
-                let receipt = goal.plan_receipts.last().expect("recorded plan");
-                println!(
-                    "goal {} plan receipt recorded: priority={} changed={} sha256={} extensions={}",
-                    goal.id,
-                    receipt.effective_review_priority(),
-                    receipt.effective_changed_paths().len(),
-                    receipt.effective_plan_sha256(),
-                    receipt.extensions.len()
-                );
-            }
-        }
+        } => goal_cli::run_plan(root, &store, json, id, paths, check, extend)?,
         GoalAction::Review {
             id,
             reviewer,
             message,
-        } => {
-            let goal = store.record_review(&id, &reviewer, &message)?;
-            if json {
-                print(&serde_json::to_value(&goal)?);
-            } else {
-                let receipt = goal.review_receipts.last().expect("recorded review");
-                println!(
-                    "goal {} review receipt recorded: reviewer={} source_fingerprint={}",
-                    goal.id, receipt.reviewer, receipt.source_fingerprint
-                );
-            }
-        }
+        } => goal_cli::run_review(&store, json, id, reviewer, message)?,
+        GoalAction::Package(command) => goal_cli::run_package(&store, json, *command)?,
+        GoalAction::Lane(command) => goal_cli::run_lane(&store, json, *command)?,
+        GoalAction::Progress {
+            id,
+            package,
+            message,
+            command,
+        } => goal_cli::run_progress(root, &store, json, id, package, message, command)?,
         GoalAction::Evidence {
             id,
             req,

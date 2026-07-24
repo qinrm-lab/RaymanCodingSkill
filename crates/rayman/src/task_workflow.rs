@@ -7,7 +7,7 @@ use crate::cli::TaskWorkflowCmd;
 
 pub(crate) fn run_prepare(root: &Path, json_output: bool, cmd: TaskWorkflowCmd) -> Result<()> {
     let store = rayman::goal::GoalStore::new(root);
-    let (goal_id, goal_status, refresh, source) =
+    let (goal_id, goal_status, summary, refresh, source) =
         store.with_locked_goal(&cmd.goal, |selected| {
             if selected.lifecycle != rayman::goal::GoalLifecycle::Current
                 || selected.status != rayman::goal::GoalStatus::Active
@@ -23,10 +23,20 @@ pub(crate) fn run_prepare(root: &Path, json_output: bool, cmd: TaskWorkflowCmd) 
             Ok((
                 selected.id.clone(),
                 selected.status,
+                selected.summary(),
                 refresh,
                 rayman::source_state::inspect(root),
             ))
         })?;
+    let latest_checkpoint = rayman::checkpoint::latest(root, None)?;
+    let latest_checkpoint = latest_checkpoint.as_ref().map(|checkpoint| {
+        json!({
+            "id": checkpoint.id,
+            "status": checkpoint.status,
+            "created_at": checkpoint.manifest.as_ref().map(|manifest| manifest.created_at.clone()),
+            "file_count": checkpoint.manifest.as_ref().map(|manifest| manifest.file_count),
+        })
+    });
     if json_output {
         println!(
             "{}",
@@ -34,12 +44,31 @@ pub(crate) fn run_prepare(root: &Path, json_output: bool, cmd: TaskWorkflowCmd) 
                 "ready": true,
                 "goal_id": goal_id,
                 "goal_status": goal_status,
+                "summary": summary,
+                "latest_verified_checkpoint": latest_checkpoint,
                 "context_refresh": refresh,
                 "source": source,
             }))?
         );
     } else {
         println!("任务准备完成: {} (status={})", goal_id, goal_status);
+        println!(
+            "  summary: must={}/{} packages={}/{} progress={} validation={} authority={}",
+            summary.done_must,
+            summary.done_must + summary.open_must,
+            summary.completed_packages,
+            summary.work_packages,
+            summary.progress_receipts,
+            summary.validation_receipts,
+            summary.authority_receipts
+        );
+        for warning in &summary.warnings {
+            println!("  warning: {warning}");
+        }
+        match latest_checkpoint {
+            Some(checkpoint) => println!("  checkpoint: {}", checkpoint["id"]),
+            None => println!("  checkpoint: none"),
+        }
         println!(
             "  context: total={} reused={} rehashed={} removed={}",
             refresh.total, refresh.reused, refresh.rehashed, refresh.removed
