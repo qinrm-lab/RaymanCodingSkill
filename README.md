@@ -18,6 +18,14 @@ Operational runtime/task state is local under `.RaymanCodingSkill/` and normally
 
 > This is the v2 rewrite. It deliberately drops the previous framework's parallel LLM stack, HTTP API, research agents, and process-governance manifests in favor of the small load-bearing core above. See `SKILL.md` for the agent-facing usage contract.
 
+## Codex and Claude Code compatibility
+
+Shared repository rules live in [AGENTS.md](AGENTS.md). Codex enters through
+[SKILL.md](SKILL.md); Claude Code enters through [CLAUDE.md](CLAUDE.md). These
+native entry files reference the shared contract rather than copying it. Run
+pwsh ./scripts/check-agent-instructions.ps1 to verify the UTF-8 files and
+their shared contract marker; scripts/check-repo.ps1 runs the same check.
+
 ## Build
 
 ```

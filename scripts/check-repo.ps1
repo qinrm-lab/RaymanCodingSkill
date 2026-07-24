@@ -10,6 +10,8 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $repoRoot
 
+& (Join-Path $PSScriptRoot 'check-agent-instructions.ps1')
+
 function Resolve-NativeApplication {
     param([Parameter(Mandatory = $true)][string]$Name)
 

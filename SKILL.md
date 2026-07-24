@@ -7,6 +7,15 @@ description: Lean, owner-minded coding-workflow helper for a workspace with a va
 
 A small, evidence-first coding helper. The `rayman` CLI keeps workspace-local state under `.RaymanCodingSkill/`; current files and command output are the source of truth, not cached summaries.
 
+<!-- AGENT_CONTRACT: rayman-shared-v1 -->
+
+## Cross-agent project contract
+
+Before non-trivial work, read [AGENTS.md](AGENTS.md). It is the shared source
+of project rules for Codex and Claude Code. This file remains the Codex-native
+workflow and release contract; CLAUDE.md is the Claude Code entrypoint.
+Client-specific files must not duplicate or weaken the shared contract.
+
 ## When to use
 
 Use when `.RaymanCodingSkill/workspace_skill.yaml` is valid and hash-bound to the canonical skill file, or when the user explicitly names `rayman` in the current turn. A leftover `.RaymanCodingSkill/` directory without that activation contract is orphan state, not permission to auto-use the skill.
