@@ -714,7 +714,7 @@ if ($SelfTest) {
 }
 
 if (-not $Yes) {
-    throw 'Installation replaces the managed rayman executable and canonical SKILL.md. Re-run with -Yes after reviewing the destination paths.'
+    throw 'Installation replaces the managed rayman executable, canonical SKILL.md, and shared AGENTS.md. Re-run with -Yes after reviewing the destination paths.'
 }
 
 # Fail before any installation write when this shell would invoke an alias or
@@ -730,14 +730,17 @@ $resolvedBinDirectory = Resolve-ManagedDirectory -Path $BinDirectory -Label 'CLI
 $resolvedSkillDirectory = Resolve-ManagedDirectory -Path $SkillDirectory -Label 'Skill directory'
 $destinationCli = Join-Path $resolvedBinDirectory $artifactName
 $destinationSkill = Join-Path $resolvedSkillDirectory 'SKILL.md'
+$destinationAgents = Join-Path $resolvedSkillDirectory 'AGENTS.md'
 Assert-ReplaceableFile -Path $destinationCli -Label 'CLI'
 Assert-ReplaceableFile -Path $destinationSkill -Label 'Skill'
+Assert-ReplaceableFile -Path $destinationAgents -Label 'Shared agent contract'
 
 Push-Location $repoRoot
 try {
     Invoke-NativeChecked -FilePath $cargoApplication -Arguments @('build', '--locked', '--release', '-p', 'rayman')
     $artifact = (Resolve-Path -LiteralPath (Join-Path 'target/release' $artifactName)).Path
     $canonicalSkill = (Resolve-Path -LiteralPath 'SKILL.md').Path
+    $canonicalAgents = (Resolve-Path -LiteralPath 'AGENTS.md').Path
 
     $artifactIdentityText = & $artifact '--format' 'json' 'doctor'
     if ($LASTEXITCODE -ne 0) {
@@ -784,6 +787,7 @@ try {
             # and the exact artifact that will be copied.
             $artifactHashBeforeVerification = (Get-FileHash -LiteralPath $artifact -Algorithm SHA256).Hash.ToLowerInvariant()
             $skillHashBeforeVerification = (Get-FileHash -LiteralPath $canonicalSkill -Algorithm SHA256).Hash.ToLowerInvariant()
+            $agentsHashBeforeVerification = (Get-FileHash -LiteralPath $canonicalAgents -Algorithm SHA256).Hash.ToLowerInvariant()
             $env:PATH = "$(Split-Path -Parent $artifact)$([IO.Path]::PathSeparator)$originalPath"
             & './scripts/verify-release-contract.ps1' `
                 -CliPath $artifact `
@@ -793,8 +797,10 @@ try {
 
             Assert-ExpectedFileHash -Path $artifact -ExpectedHash $artifactHashBeforeVerification -Label 'Source-fresh verified artifact'
             Assert-ExpectedFileHash -Path $canonicalSkill -ExpectedHash $skillHashBeforeVerification -Label 'Source-fresh verified canonical skill'
+            Assert-ExpectedFileHash -Path $canonicalAgents -ExpectedHash $agentsHashBeforeVerification -Label 'Verified canonical shared agent contract'
             $verifiedArtifactHash = $artifactHashBeforeVerification
             $verifiedSkillHash = $skillHashBeforeVerification
+            $verifiedAgentsHash = $agentsHashBeforeVerification
 
             $nonce = [Guid]::NewGuid().ToString('N')
             $installed = @()
@@ -804,11 +810,14 @@ try {
             try {
                 $installed += Install-FileWithRollback -Source $artifact -Destination $destinationCli -Nonce $nonce -ExpectedHash $verifiedArtifactHash
                 $installed += Install-FileWithRollback -Source $canonicalSkill -Destination $destinationSkill -Nonce $nonce -ExpectedHash $verifiedSkillHash
+                $installed += Install-FileWithRollback -Source $canonicalAgents -Destination $destinationAgents -Nonce $nonce -ExpectedHash $verifiedAgentsHash
 
                 Assert-ExpectedFileHash -Path $artifact -ExpectedHash $verifiedArtifactHash -Label 'Verified artifact before post-install check'
                 Assert-ExpectedFileHash -Path $canonicalSkill -ExpectedHash $verifiedSkillHash -Label 'Verified skill before post-install check'
+                Assert-ExpectedFileHash -Path $canonicalAgents -ExpectedHash $verifiedAgentsHash -Label 'Verified shared agent contract before post-install check'
                 Assert-ExpectedFileHash -Path $destinationCli -ExpectedHash $verifiedArtifactHash -Label 'Installed CLI'
                 Assert-ExpectedFileHash -Path $destinationSkill -ExpectedHash $verifiedSkillHash -Label 'Installed skill'
+                Assert-ExpectedFileHash -Path $destinationAgents -ExpectedHash $verifiedAgentsHash -Label 'Installed shared agent contract'
 
                 if ($AddToUserPath) {
                     # Read and write the raw HKCU\Environment value. The
@@ -856,8 +865,10 @@ try {
 
                 Assert-ExpectedFileHash -Path $artifact -ExpectedHash $verifiedArtifactHash -Label 'Verified artifact after post-install check'
                 Assert-ExpectedFileHash -Path $canonicalSkill -ExpectedHash $verifiedSkillHash -Label 'Verified skill after post-install check'
+                Assert-ExpectedFileHash -Path $canonicalAgents -ExpectedHash $verifiedAgentsHash -Label 'Verified shared agent contract after post-install check'
                 Assert-ExpectedFileHash -Path $destinationCli -ExpectedHash $verifiedArtifactHash -Label 'Installed CLI after post-install check'
                 Assert-ExpectedFileHash -Path $destinationSkill -ExpectedHash $verifiedSkillHash -Label 'Installed skill after post-install check'
+                Assert-ExpectedFileHash -Path $destinationAgents -ExpectedHash $verifiedAgentsHash -Label 'Installed shared agent contract after post-install check'
                 if ((Get-FileHash -LiteralPath $cargoApplication -Algorithm SHA256).Hash.ToLowerInvariant() -ne
                     $cargoApplicationHash) {
                     throw 'Cargo executable identity changed during installation.'
@@ -927,6 +938,7 @@ try {
 Write-Host 'RaymanCodingSkill installation verified.'
 Write-Host "  CLI: $destinationCli"
 Write-Host "  Skill: $destinationSkill"
+Write-Host "  Shared agent contract: $destinationAgents"
 if ($SkipCodexStopHook) {
     Write-Host '  Codex Stop guard: skipped by explicit request'
 } else {
