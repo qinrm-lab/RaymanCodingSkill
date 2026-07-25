@@ -26,6 +26,11 @@ const HOOKS_FILE: &str = "hooks.json";
 #[derive(Debug, Deserialize)]
 struct StopHookInput {
     hook_event_name: Option<String>,
+    // Accepted for schema compatibility but deliberately not honored: de-escalating a
+    // block after the guard already fired once would let an agent escape a legitimate,
+    // still-unsatisfied completion gate by simply retrying the stop. The guard therefore
+    // stays fail-closed on every invocation. Repair the flagged goal/pending/activation
+    // state to clear the block — that is the only intended exit.
     #[allow(dead_code)]
     stop_hook_active: Option<bool>,
 }

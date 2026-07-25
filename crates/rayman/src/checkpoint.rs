@@ -29,8 +29,6 @@ pub const DEFAULT_KEEP: usize = 3;
 /// 提交一份新的 partial；30 分钟一次即约 48 份/天，且计划任务的输出无人可见。
 /// 保留最近这么多份足够诊断反复出现的同一个故障，再旧的按时间轮换掉。
 pub const MAX_PARTIAL_SNAPSHOTS: usize = 5;
-/// Recovery-only snapshots rotate independently from ordinary checkpoints so
-/// a burst of emergency saves can never consume the normal recovery history.
 pub const MANIFEST_SCHEMA: &str = "rayman.checkpoint.v3";
 pub const MANIFEST_VERSION: u32 = 3;
 const LEGACY_MANIFEST_SCHEMA: &str = "rayman.checkpoint.v2";
@@ -744,23 +742,18 @@ fn prune(ws_dir: &Path, keep: usize) -> Result<usize> {
 }
 
 fn prune_standard(ws_dir: &Path, keep: usize) -> Result<usize> {
-    prune_inner(ws_dir, Some(keep), None)
+    prune_inner(ws_dir, Some(keep))
 }
 
 /// 只轮换 partial 快照。保存失败路径专用：一次失败的保存绝不能连带删掉任何完整
 /// 恢复点，否则失败本身就会吃掉用户最后的安全网。
 fn prune_partial_only(ws_dir: &Path) -> Result<usize> {
-    prune_inner(ws_dir, None, None)
+    prune_inner(ws_dir, None)
 }
 
-fn prune_inner(
-    ws_dir: &Path,
-    keep_standard: Option<usize>,
-    keep_recovery: Option<usize>,
-) -> Result<usize> {
+fn prune_inner(ws_dir: &Path, keep_standard: Option<usize>) -> Result<usize> {
     ensure_real_directory(ws_dir)?;
     let mut standard = Vec::new();
-    let mut recovery_only = Vec::new();
     let mut partial = Vec::new();
     let entries = fs::read_dir(ws_dir)
         .with_context(|| format!("无法列出 checkpoint 目录: {}", display_path(ws_dir)))?;
@@ -791,7 +784,11 @@ fn prune_inner(
             SnapshotStatus::Complete => {
                 match manifest.map(|value| value.purpose).unwrap_or_default() {
                     CheckpointPurpose::Standard => standard.push(path),
-                    CheckpointPurpose::RecoveryOnly => recovery_only.push(path),
+                    // Recovery-only (salvage) snapshots are intentionally never rotated:
+                    // an emergency save must never delete another recovery point. The
+                    // `recovery_only_saves_preserve_every_snapshot_and_standard_latest`
+                    // test locks this in.
+                    CheckpointPurpose::RecoveryOnly => {}
                 }
             }
             SnapshotStatus::Partial => partial.push(path),
@@ -799,14 +796,10 @@ fn prune_inner(
         }
     }
     standard.sort(); // 时间戳目录名字典序 = 时间序
-    recovery_only.sort();
     partial.sort();
     let mut pruned = 0;
     if let Some(keep) = keep_standard {
         pruned += rotate_oldest(&standard, keep)?;
-    }
-    if let Some(keep) = keep_recovery {
-        pruned += rotate_oldest(&recovery_only, keep)?;
     }
     pruned += rotate_oldest(&partial, MAX_PARTIAL_SNAPSHOTS)?;
     Ok(pruned)

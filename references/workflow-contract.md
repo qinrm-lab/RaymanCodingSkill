@@ -80,8 +80,11 @@ overwriting user-managed state still require user authority.
   evidence.
 - Restore is journaled and all-or-nothing; it never deletes extra workspace
   files.
-- `goal lane` coordinates read-only, scoped-writer, and final-reviewer work,
-  but lane records never replace validation.
+- `goal lane` coordinates scoped-writer, advisory read-only, and
+  final-reviewer work. Read-only and final-reviewer lanes are zero-write
+  brackets that reject any workspace change, so a drifted one is discharged by
+  reverting or by `supersede`/`archive`, not by a partial close. Lane records
+  never replace validation.
 - Give concurrent pytest runs independent managed leases and traversable temp
   roots.
 

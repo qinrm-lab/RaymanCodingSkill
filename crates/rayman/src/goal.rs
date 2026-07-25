@@ -1378,11 +1378,15 @@ impl GoalStore {
                     "拒绝关闭为 success：legacy goal 不能生成当前 receipt；只可归档已是 success 的历史记录"
                 );
             }
-            if let Some(error) = goal.current_schema_error() {
-                bail!("拒绝关闭为 success：目标合约无效: {error}");
-            }
             let mut candidate = goal.clone();
             candidate.status = GoalStatus::Success;
+            // current_schema_error 里的 lane-closed / required-work-package 不变量以
+            // status==Success 为前提。必须在已置 Success 的候选上校验；若在仍为 Active 的
+            // goal 上跑，这两条永不触发，一个开着 lane 或有未完成 required package 的目标
+            // 就能被 close 成 success（close/frontier 谎报完成，只有读路径的 check 才拦）。
+            if let Some(error) = candidate.current_schema_error() {
+                bail!("拒绝关闭为 success：目标合约无效: {error}");
+            }
             let fingerprint = workspace_fingerprint(&self.root)?;
             let gaps = goal_success_receipt_gaps(&candidate, &self.root, &fingerprint);
             if !gaps.is_empty() {

@@ -143,6 +143,20 @@ impl GoalStore {
         if source.handoff.is_some() {
             bail!("a release handoff cannot be used as its own implementation source");
         }
+        // A release must start from a *current* implementation. goal_gate_verdict returns
+        // only warnings (no blockers) for non-current lifecycles, so without this guard an
+        // archived or superseded source passes the blocker-emptiness gate below and drives a
+        // release from a retired record. The fingerprint/authority binding already forces the
+        // current bytes to match the source's proven state, so this is defense-in-depth, but it
+        // keeps the release aligned with the lifecycle contract (retired goals do not
+        // participate in current readiness).
+        if source.lifecycle != GoalLifecycle::Current {
+            bail!(
+                "source implementation goal {} lifecycle={}; a release handoff must start from a current goal (archive/supersede retires it from current readiness)",
+                source.id,
+                source.lifecycle
+            );
+        }
         let fingerprint = workspace_fingerprint(&self.root)?;
         let source_verdict = goal_gate_verdict(
             &source,

@@ -4661,3 +4661,104 @@ fn handoff_start_binds_source_goal_authority_clean_head_and_structured_stages() 
         dirty.stderr
     );
 }
+
+#[test]
+fn handoff_start_rejects_a_retired_source_goal() {
+    // 回归：goal_gate_verdict 对非 current lifecycle 只出 warning、无 blocker，故 handoff 曾能
+    // 从一个已 archive 的退休实现切 release。现在 start_handoff 要求源目标 lifecycle=current。
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(
+        root,
+        "Cargo.toml",
+        "[package]\nname = \"handoff-retired-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(
+        root,
+        "src/lib.rs",
+        "pub fn answer() -> i32 { 42 }\n#[test]\nfn answer_is_valid() { assert_eq!(answer(), 42); }\n",
+    );
+    write(root, ".gitignore", ".RaymanCodingSkill/\ntarget/\n");
+    generate_lockfile(root);
+    let git = |args: &[&str]| {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    };
+    git(&["init", "--quiet"]);
+    git(&["add", "."]);
+    git(&[
+        "-c",
+        "user.name=Rayman Test",
+        "-c",
+        "user.email=rayman@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "fixture",
+    ]);
+    let commit = git(&["rev-parse", "HEAD"]);
+
+    run_json(root, &["context", "refresh"]);
+    let source = run_json(
+        root,
+        &["goal", "start", "implementation", "--must", "prove it"],
+    );
+    let source_id = source["id"].as_str().unwrap();
+    assert_eq!(
+        run(
+            root,
+            &[
+                "goal",
+                "validate",
+                source_id,
+                "--req",
+                "req_1",
+                "-m",
+                "stable implementation authority",
+                "--changed",
+                "src/lib.rs",
+                "--command",
+                "cargo test --all",
+                "--authority",
+                "--repeat",
+                "2",
+            ],
+        )
+        .status,
+        0
+    );
+    assert_eq!(run(root, &["goal", "close", source_id]).status, 0);
+    // Archive the proven success into its normal terminal (retired) state.
+    assert_eq!(
+        run(root, &["goal", "archive", source_id, "--reason", "retired"],).status,
+        0
+    );
+
+    let retired = run(
+        root,
+        &[
+            "goal",
+            "handoff",
+            "start",
+            "--from-goal",
+            source_id,
+            "--commit",
+            &commit,
+        ],
+    );
+    assert_eq!(retired.status, 1, "stdout={}", retired.stdout);
+    assert!(
+        retired.stderr.contains("lifecycle") && retired.stderr.contains("current"),
+        "{}",
+        retired.stderr
+    );
+}

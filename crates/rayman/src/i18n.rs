@@ -923,13 +923,14 @@ fn localize_authored_message(content: &str, language: ActiveLanguage) -> Option<
 }
 
 fn contains_han_text(text: &str) -> bool {
-    text.chars().any(
-        |character| matches!(character as u32, 0x3400..=0x4dbf | 0x4e00..=0x9fff | 0xf900..=0xfaff),
-    )
+    text.chars().any(is_han)
 }
 
-// Prefixes are anchored after indentation. Dynamic values are not searched or
-// globally replaced, so goal titles and Unicode paths remain byte-for-byte intact.
+// Prefixes are anchored after indentation, and authored templates reinsert their
+// captured dynamic values byte-for-byte. Known-fragment translation is skipped for
+// any fragment embedded inside an ideographic (Han) word (see
+// replace_fragment_outside_han_words), so goal titles, requirement text, and Unicode
+// paths are preserved rather than partially translated.
 const MESSAGE_PREFIX_CATALOG: &[(&str, &str)] = &[
     ("已安装身份契约:", "Installed identity contract:"),
     ("当前二进制:", "Running binary:"),
@@ -2684,9 +2685,39 @@ fn localize_known_fragments(mut line: String, language: ActiveLanguage) -> Strin
         return line;
     }
     for &(chinese, english) in MESSAGE_FRAGMENT_CATALOG {
-        line = line.replace(chinese, english);
+        line = replace_fragment_outside_han_words(&line, chinese, english);
     }
     line
+}
+
+/// 翻译已知固定片段，但**不触碰被表意文字夹在词中间的出现**。localize 是对已格式化
+/// 整行的事后重写，无法区分框架固定文案与用户动态内容（goal 标题、需求、路径）。
+/// 单字/短片段如「秒」会同时出现在固定文案和用户标题「秒表功能」里；对整行盲替换会把
+/// 后者改成「seconds表功能」（数据损坏）。这里要求片段紧邻的前后字符都不是表意文字，
+/// 即它是一个 Han 词边界上的完整片段，而非嵌在更长 Han 串中间——宁可漏翻固定文案，
+/// 也不改动用户内容。残留边界情形：某个动态值本身恰好整词等于一个片段，仍会被翻译。
+fn replace_fragment_outside_han_words(line: &str, chinese: &str, english: &str) -> String {
+    let mut result = String::with_capacity(line.len());
+    let mut rest = line;
+    while let Some(position) = rest.find(chinese) {
+        let before = rest[..position].chars().next_back();
+        let after_index = position + chinese.len();
+        let after = rest[after_index..].chars().next();
+        let embedded_in_han_word = before.is_some_and(is_han) || after.is_some_and(is_han);
+        result.push_str(&rest[..position]);
+        result.push_str(if embedded_in_han_word {
+            chinese
+        } else {
+            english
+        });
+        rest = &rest[after_index..];
+    }
+    result.push_str(rest);
+    result
+}
+
+fn is_han(character: char) -> bool {
+    matches!(character as u32, 0x3400..=0x4dbf | 0x4e00..=0x9fff | 0xf900..=0xfaff)
 }
 
 macro_rules! println {
@@ -2784,6 +2815,46 @@ mod tests {
         assert_eq!(
             language_from_locale("en_US.UTF-8"),
             Some(ActiveLanguage::En)
+        );
+    }
+
+    #[test]
+    fn known_fragments_do_not_corrupt_dynamic_han_content() {
+        // 回归：MESSAGE_FRAGMENT_CATALOG 含单字 key「秒」→"seconds"。此前 localize_known_fragments
+        // 对整行盲替换，把用户 goal 标题/需求里的「秒」翻掉，损坏动态内容。
+        assert_eq!(
+            localize_line_for(
+                "goal_x [current/active] 计时器 秒表功能".into(),
+                ActiveLanguage::En,
+                false,
+            ),
+            "goal_x [current/active] 计时器 秒表功能"
+        );
+        assert_eq!(
+            localize_line_for(
+                "  req_1 [must/open] 支持启动 秒级精度".into(),
+                ActiveLanguage::En,
+                false,
+            ),
+            "  req_1 [must/open] 支持启动 秒级精度"
+        );
+    }
+
+    #[test]
+    fn known_fragments_still_translate_framework_text() {
+        // Han 词边界规则不能过度失效：边界干净的固定文案仍需在 En 下翻译。
+        assert_eq!(
+            localize_line_for(
+                "未启用自动保存。运行 `rayman autosave start` 开启。".into(),
+                ActiveLanguage::En,
+                false,
+            ),
+            "Autosave is disabled. Run `rayman autosave start` to enable it."
+        );
+        // 「秒」作为独立时间单位（前后非 Han）仍翻译。
+        assert_eq!(
+            localize_line_for("最近触发 3 秒 前".into(), ActiveLanguage::En, false),
+            "最近触发 3 seconds 前"
         );
     }
 

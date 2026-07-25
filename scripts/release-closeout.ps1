@@ -238,6 +238,12 @@ try {
     }
 
     if ($reuse) {
+        # The stored binding pins CLI/SKILL/script/tool bytes, but not which `rayman` this
+        # shell resolves on PATH — that is runtime state the binding cannot capture. Re-run
+        # the cheap PATH-identity check (no rebuild, no repository audit) so a reused
+        # closeout still fails when the effective PATH `rayman` differs from -CliPath, just
+        # like the non-reuse branch below.
+        & (Join-Path $PSScriptRoot 'verify-release-contract.ps1') -CliPath $CliPath -ReferenceCliPath $CliPath -SkillPath $SkillPath -RequirePath
         Write-Output 'RAYMAN_RELEASE_PHASE {"phase":"audit_and_source_fresh","status":"reused_exact_binding"}'
     } else {
         Write-Output 'RAYMAN_RELEASE_PHASE {"phase":"audit_and_source_fresh","status":"start"}'

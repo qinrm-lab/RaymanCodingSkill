@@ -764,8 +764,16 @@ fn reap_journalless_restore_transaction(ws_dir: &Path, path: &Path) -> Result<bo
         Ok(_) => return Ok(false),
     }
     if directory_contains_file(&path.join("backups"))? {
+        // Fail closed: the backups/ subtree can be the only copy of content a publish
+        // already overwrote, and without a journal there is no way to know which entries
+        // those are, so we never guess. But name the concrete recovery path — this branch
+        // otherwise blocks every save/restore/autosave until the user acts, and the old
+        // message did not say how. Recovery is manual by design (not auto-reaped) so the
+        // user decides what in backups/ is still needed before it is discarded.
         bail!(
-            "orphan restore transaction 没有 journal 却仍存有备份文件，无从判断该回滚哪些目标；已保留供人工恢复: {}",
+            "orphan restore transaction 没有 journal 却仍存有备份文件，无从判断该回滚哪些目标；\
+             已保留供人工恢复。恢复步骤：检查该目录 backups/ 子目录中的原件、取回仍需要的文件，\
+             再删除整个目录以解除对 save/restore/autosave 的阻塞：{}",
             display_path(path)
         );
     }

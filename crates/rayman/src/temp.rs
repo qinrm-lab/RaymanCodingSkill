@@ -125,7 +125,12 @@ fn lease_path(root: &Path, id: &str, create: bool) -> Result<Option<PathBuf>> {
 }
 
 fn path_text(path: &Path) -> String {
-    path.display().to_string()
+    // Strip the Windows `\\?\` verbatim prefix that canonicalize() always emits: these
+    // strings are handed to pytest as --basetemp/cache_dir, exported as TMP/TEMP/TMPDIR/
+    // PYTHONPYCACHEPREFIX, and printed by `temp scratch`. Verbatim-prefixed paths disable
+    // normalization in downstream tools and are surprising in output. The self-comparison in
+    // verify_pytest_lease normalizes both sides through this same function.
+    display_path(path)
 }
 
 /// Create a unique pytest lease and prove every directory can be traversed,
@@ -213,11 +218,11 @@ pub fn verify_pytest_lease(root: &Path, id: &str) -> Result<PytestLease> {
     let pycache_dir = lease_root.join("pycache");
     if lease.schema != "rayman.pytest-lease.v1"
         || lease.id != id
-        || Path::new(&lease.root) != lease_root
-        || Path::new(&lease.basetemp) != basetemp
-        || Path::new(&lease.cache_dir) != cache_dir
-        || Path::new(&lease.temp_dir) != temp_dir
-        || Path::new(&lease.pycache_dir) != pycache_dir
+        || lease.root != path_text(&lease_root)
+        || lease.basetemp != path_text(&basetemp)
+        || lease.cache_dir != path_text(&cache_dir)
+        || lease.temp_dir != path_text(&temp_dir)
+        || lease.pycache_dir != path_text(&pycache_dir)
         || lease.environment.get("TMP") != Some(&path_text(&temp_dir))
         || lease.environment.get("TEMP") != Some(&path_text(&temp_dir))
         || lease.environment.get("TMPDIR") != Some(&path_text(&temp_dir))
@@ -436,6 +441,42 @@ mod tests {
         assert!(verify_pytest_lease(dir.path(), &first.id).is_err());
         assert!(verify_pytest_lease(dir.path(), "../outside").is_err());
         assert!(Path::new(&second.root).is_dir());
+    }
+
+    #[test]
+    fn pytest_lease_paths_do_not_leak_the_windows_verbatim_prefix() {
+        // Regression: path_text used raw Path::display(), so canonicalize()'s `\\?\` prefix
+        // leaked into pytest --basetemp/cache_dir, TMP/TEMP/TMPDIR/PYTHONPYCACHEPREFIX, and
+        // scratch output. On non-Windows the prefix never appears, so this also proves the
+        // normalization is a no-op there; on Windows it proves the strip + verify consistency.
+        let dir = tempfile::tempdir().unwrap();
+        let lease = create_pytest_lease(dir.path(), "verbatim").unwrap();
+        for value in [
+            &lease.root,
+            &lease.basetemp,
+            &lease.cache_dir,
+            &lease.temp_dir,
+            &lease.pycache_dir,
+        ] {
+            assert!(
+                !value.starts_with(r"\\?\"),
+                "verbatim prefix leaked: {value}"
+            );
+        }
+        for value in lease.environment.values() {
+            assert!(
+                !value.starts_with(r"\\?\"),
+                "verbatim prefix leaked into env: {value}"
+            );
+        }
+        for argument in &lease.pytest_args {
+            assert!(
+                !argument.contains(r"\\?\"),
+                "verbatim prefix leaked into pytest_args: {argument}"
+            );
+        }
+        // Normalizing the stored strings must keep the manifest self-comparison consistent.
+        assert_eq!(verify_pytest_lease(dir.path(), &lease.id).unwrap(), lease);
     }
 
     #[test]

@@ -62,8 +62,16 @@ foreach ($required in @('--must-proof KIND::TEXT', 'goal handoff start', 'Unboun
     }
 }
 
-$frontmatter = @($skill -split "`n")[1..2]
-if ($frontmatter.Count -ne 2 -or -not $frontmatter[0].StartsWith('name: ') -or -not $frontmatter[1].StartsWith('description: ')) {
+$skillLines = $skill -split "`n"
+$frontmatter = @($skillLines)[1..2]
+# Enforce the whole block, not just the two keys: line 0 must open the frontmatter and
+# line 3 must close it, so extra keys after description cannot slip through while the
+# error still claims the block holds only name and description.
+if ($skillLines[0].TrimEnd("`r") -ne '---' -or
+    $frontmatter.Count -ne 2 -or
+    -not $frontmatter[0].StartsWith('name: ') -or
+    -not $frontmatter[1].StartsWith('description: ') -or
+    $skillLines[3].TrimEnd("`r") -ne '---') {
     throw 'SKILL.md frontmatter must contain only name and description.'
 }
 

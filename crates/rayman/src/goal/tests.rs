@@ -288,6 +288,69 @@ fn close_success_requires_evidence_for_must_requirements() {
     assert_eq!(closed.status, GoalStatus::Success);
 }
 
+fn record_non_code_must_receipt(store: &GoalStore, root: &Path, goal: &Goal) {
+    store
+        .record_validation_receipt(
+            &goal.id,
+            "req_1",
+            ValidationReceiptSubmission {
+                evidence: "non-code validation passed".into(),
+                command: "echo validation-ok".into(),
+                receipt: successful_receipt(root, goal, "req_1", "echo validation-ok", &[], true),
+                impacts: Vec::new(),
+                non_code: true,
+            },
+        )
+        .unwrap();
+}
+
+#[test]
+fn close_success_rejects_open_lane() {
+    // 回归：close 曾在 status 仍为 Active 时跑 current_schema_error，其中 lane-closed
+    // 不变量以 status==Success 为前提，故永不触发——开着 lane 也能 close 成 success。
+    let dir = tempfile::tempdir().unwrap();
+    let store = GoalStore::new(dir.path());
+    let goal = store.start("task", &[("do it".into(), true)]).unwrap();
+    record_non_code_must_receipt(&store, dir.path(), &goal);
+    store
+        .open_lane(&goal.id, "lane1", LaneMode::AdvisoryReadOnly, Vec::new())
+        .unwrap();
+
+    let error = store.close(&goal.id, "success").unwrap_err().to_string();
+    assert!(error.contains("lane"), "unexpected error: {error}");
+    assert_eq!(
+        store.get(&goal.id).unwrap().unwrap().status,
+        GoalStatus::Active,
+        "拒绝 close 后目标必须仍为 active"
+    );
+
+    // 关闭 lane 后同一目标应能正常 close 成 success。
+    store.close_lane(&goal.id, "lane1").unwrap();
+    assert_eq!(
+        store.close(&goal.id, "success").unwrap().status,
+        GoalStatus::Success
+    );
+}
+
+#[test]
+fn close_success_rejects_incomplete_required_work_package() {
+    // 回归：required work package 未完成不变量同样以 status==Success 为前提。
+    let dir = tempfile::tempdir().unwrap();
+    let store = GoalStore::new(dir.path());
+    let goal = store.start("task", &[("do it".into(), true)]).unwrap();
+    record_non_code_must_receipt(&store, dir.path(), &goal);
+    store
+        .add_work_package(&goal.id, "wp1", "stage one", None, Vec::new(), true)
+        .unwrap();
+
+    let error = store.close(&goal.id, "success").unwrap_err().to_string();
+    assert!(error.contains("work package"), "unexpected error: {error}");
+    assert_eq!(
+        store.get(&goal.id).unwrap().unwrap().status,
+        GoalStatus::Active
+    );
+}
+
 #[test]
 fn start_rejects_empty_must_contract() {
     let dir = tempfile::tempdir().unwrap();

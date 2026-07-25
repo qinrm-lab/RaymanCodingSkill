@@ -5,6 +5,13 @@ use crate::cli::{CodexHookAction, CodexHookCmd};
 pub(crate) fn run(json_output: bool, command: &CodexHookCmd) -> Result<()> {
     let report = match &command.action {
         CodexHookAction::Stop => {
+            // The block/allow decision travels only in the stdout JSON
+            // ({"decision":"block",...} vs {"continue":true}); the process always exits 0.
+            // This mirrors Claude Code's Stop-hook I/O contract, which we assume Codex
+            // honors — there is no separate published Codex contract in this repo, so
+            // `codex-hook install` asks the operator to review the exact hook in the Codex
+            // hooks file and restart Codex rather than inferring it works. A runner that
+            // gated on exit code instead of parsing stdout would not see the block.
             let response = rayman::codex_hook::run_stop_from_stdin();
             println!("{}", serde_json::to_string(&response)?);
             return Ok(());
