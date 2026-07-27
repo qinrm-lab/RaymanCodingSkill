@@ -56,6 +56,9 @@ if (($skill -split "`n").Count -gt 100 -or ($claude -split "`n").Count -gt 60) {
 if (-not $agents.Contains('references/workflow-contract.md', [StringComparison]::Ordinal)) {
     throw 'AGENTS.md must route non-trivial workflow claims to the shared reference.'
 }
+if (-not $agents.Contains('Do not permit direct or indirect skill-invocation cycles.', [StringComparison]::Ordinal)) {
+    throw 'AGENTS.md must prohibit direct and indirect skill-invocation cycles.'
+}
 foreach ($required in @('--must-proof KIND::TEXT', 'goal handoff start', 'Unbound `rayman check`', 'checkpoint save')) {
     if (-not $workflow.Contains($required, [StringComparison]::OrdinalIgnoreCase)) {
         throw "Shared workflow reference is missing required contract text: $required"

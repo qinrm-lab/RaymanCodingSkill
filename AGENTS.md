@@ -29,6 +29,11 @@ contract.
 - Do not install, publish, push, commit, delete, or overwrite user-managed
   state without the user's explicit authorization.
 - Preserve unrelated work in a dirty checkout. Do not reset or discard it.
+- Do not permit direct or indirect skill-invocation cycles. When one skill
+  routes work to another, refuse to invoke any skill already active in that
+  invocation chain; end the handoff and return control to the original task
+  context. Supporting skills must not call back into their caller to satisfy
+  their own trigger or lifecycle.
 
 ## Shared workflow authority
 
