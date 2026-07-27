@@ -280,14 +280,20 @@ fn run_workspace(root: &Path, json: bool, cmd: WorkspaceCmd) -> Result<()> {
         WorkspaceAction::Inspect => {
             let activation = workspace::activation_status(root)?;
             let source = source_state::inspect(root);
+            let state_write = rayman::state_paths::state_write_probe(root);
             if json {
-                print(&json!({ "activation": activation, "source": source }));
+                print(&json!({
+                    "activation": activation,
+                    "source": source,
+                    "state_write": state_write,
+                }));
             } else {
                 println!(
                     "RaymanCodingSkill workspace activation: {} (active={}, config_present={})",
                     activation.status, activation.active, activation.config_present
                 );
                 print_source_state(&source);
+                print_state_write_probe(&state_write);
             }
             return Ok(());
         }
@@ -334,6 +340,24 @@ fn print_source_state(source: &source_state::SourceState) {
     );
     if let Some(error) = &source.error {
         println!("    source error: {error}");
+    }
+}
+
+/// Sandboxed hosts deny state writes with ACL errors that otherwise surface
+/// mid-transaction; the probe line lets an agent escalate before starting one.
+pub(crate) fn print_state_write_probe(probe: &rayman::state_paths::StateWriteProbe) {
+    if probe.probed && probe.writable {
+        match probe.error.as_deref() {
+            None => println!("  状态写探针: 可写"),
+            Some(error) => println!("  状态写探针: 可写；清理探针失败: {}", error),
+        }
+    } else if !probe.state_dir_present {
+        println!("  状态写探针: 状态目录不存在，未探测");
+    } else {
+        println!(
+            "  状态写探针: 写入被拒或探测失败（权限或 ACL）: {}",
+            probe.error.as_deref().unwrap_or("")
+        );
     }
 }
 

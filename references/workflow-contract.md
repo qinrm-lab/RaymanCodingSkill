@@ -88,6 +88,29 @@ overwriting user-managed state still require user authority.
 - Give concurrent pytest runs independent managed leases and traversable temp
   roots.
 
+## Sandbox and permission boundaries
+
+Restricted host sandboxes (for example the Codex Windows restricted token)
+can deny writes even inside the workspace. Known boundaries: state lock files
+under `.RaymanCodingSkill/`, `.git` writes, spawning `git`, the user-profile
+checkpoint root, and user-profile toolchain caches such as the Cargo advisory
+database all surface as ACL / `os error 5` denials. Treat them as environment
+boundaries, not lock contention and not source defects.
+
+- Probe before long work: `rayman doctor` and `rayman workspace inspect`
+  report a state-write probe. When it reports a permission denial, run known
+  state-writing commands (goal/checkpoint/autosave transactions, git
+  stage/commit, installers, repository gates) with escalated host permission
+  from the first attempt instead of probe-fail-retry loops.
+- Escalation cannot fix every host defect. A broken host patch tool or an
+  over-long command line fails identically when escalated: fall back to
+  `git apply` unified diffs, split over-long command lines, note the quirk
+  once, and stop retrying the broken tool.
+- Gates fail closed on environment permission boundaries. Never stitch a
+  partial pass; rerun the entire gate with sufficient permission.
+- `rayman checkpoint save` and autosave default to a user-profile root. In a
+  workspace-only sandbox pass `--dir` under the workspace or escalate.
+
 ## Validation integrity
 
 `goal validate` runs one program plus argv from the workspace root. Shell

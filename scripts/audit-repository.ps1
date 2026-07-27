@@ -656,11 +656,20 @@ if ($DependencyPolicyOnly) {
 }
 Push-Location $repoRoot
 try {
+    # Fail fast on environment permission boundaries: the isolated advisory-DB
+    # copy, the MSRV toolchain, and the user-profile llvm-tools component are
+    # exactly the operations a restricted sandbox denies. Probing them first
+    # costs seconds instead of aborting the audit tens of minutes in.
+    Write-AuditPhase -Name 'environment_preflight' -Status 'start'
+    Invoke-IsolatedCargoDenyChecks -CargoDenyIdentity $nativeApplications.CargoDeny
+    Invoke-NativeChecked $nativeApplications.Rustup.Path @('run', $MsrvToolchain, 'rustc', '--version')
+    Invoke-NativeChecked $nativeApplications.Rustup.Path @('component', 'add', 'llvm-tools-preview')
+    Write-AuditPhase -Name 'environment_preflight' -Status 'pass'
+
     Write-AuditPhase -Name 'root_quality' -Status 'start'
     Invoke-NativeChecked $nativeApplications.Cargo.Path @('fmt', '--all', '--check')
     Invoke-NativeChecked $nativeApplications.Cargo.Path @('clippy', '--locked', '--workspace', '--all-targets', '--all-features', '--', '-D', 'warnings')
     Invoke-NativeChecked $nativeApplications.Cargo.Path @('test', '--locked', '--workspace', '--all-targets')
-    Invoke-IsolatedCargoDenyChecks -CargoDenyIdentity $nativeApplications.CargoDeny
     Write-AuditPhase -Name 'root_quality' -Status 'pass'
 
     # MSRV is mandatory. rustup run fails explicitly when the declared toolchain
@@ -675,7 +684,7 @@ try {
     # a fresh managed root, resolve that exact Application, and invoke it by its
     # captured path. An arbitrary PATH copy is never accepted as coverage proof.
     Write-AuditPhase -Name 'cli_coverage' -Status 'start'
-    Invoke-NativeChecked $nativeApplications.Rustup.Path @('component', 'add', 'llvm-tools-preview')
+    # llvm-tools-preview is guaranteed by environment_preflight above.
     $coverageToolRoot = New-ManagedAuditDirectory -Label "cargo-llvm-cov-$CoverageToolVersion"
     $originalPathForCoverage = $env:PATH
     try {

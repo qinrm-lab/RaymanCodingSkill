@@ -31,6 +31,14 @@ is orphan state and does not authorize automatic use.
   the Codex host integration. Preserve unrelated handlers.
 - Claude Code uses the repository `CLAUDE.md` entrypoint; this installer does
   not claim a global Claude deployment.
+- Under the Codex Windows restricted-token sandbox, the built-in
+  `apply_patch` tool and its `apply_patch.bat` shim are unreliable
+  (WindowsApps ACL; escalation does not help). Apply patches with
+  `git apply` unified diffs instead of retrying that tool.
+- Request escalated permissions upfront for rayman state writes, git
+  stage/commit, repository gates, and installer runs; over-long command
+  lines fail to spawn under the sandbox wrapper, so split them. Details:
+  the sandbox and permission boundaries section of the workflow reference.
 
 ## Working flow
 

@@ -117,6 +117,102 @@ pub fn ensure_real_directory(path: &Path) -> Result<()> {
     crate::file_io::ensure_real_directory_labeled(path, "受管状态目录")
 }
 
+/// Result of the non-destructive state-write capability probe.
+#[derive(Debug, serde::Serialize)]
+pub struct StateWriteProbe {
+    pub state_dir_present: bool,
+    pub probed: bool,
+    pub writable: bool,
+    pub path: Option<String>,
+    pub error: Option<String>,
+}
+
+/// Probe whether this process can write workspace state right now.
+///
+/// Restricted host sandboxes deny `.RaymanCodingSkill/` lock and state writes
+/// with ACL errors that otherwise surface only mid-transaction. The probe
+/// writes and removes one transient file inside an existing state root; a
+/// workspace without a state root is reported unprobed instead of mutated.
+pub fn state_write_probe(root: &Path) -> StateWriteProbe {
+    match managed_state_root(root, false) {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            return StateWriteProbe {
+                state_dir_present: false,
+                probed: false,
+                writable: false,
+                path: None,
+                error: None,
+            };
+        }
+        Err(error) => {
+            return StateWriteProbe {
+                state_dir_present: true,
+                probed: false,
+                writable: false,
+                path: None,
+                error: Some(format!("{error:#}")),
+            };
+        }
+    }
+    // Probe inside the managed `tmp` entry: `state audit` allows it, so a
+    // probe file leaked by a failed cleanup can never fail that gate, and the
+    // verified directory chain rejects link/reparse ancestors.
+    let tmp = match managed_state_dir(root, Path::new("tmp"), true) {
+        Ok(Some(tmp)) => tmp,
+        Ok(None) => {
+            return StateWriteProbe {
+                state_dir_present: true,
+                probed: true,
+                writable: false,
+                path: None,
+                error: Some("managed tmp directory unavailable".into()),
+            };
+        }
+        Err(error) => {
+            return StateWriteProbe {
+                state_dir_present: true,
+                probed: true,
+                writable: false,
+                path: None,
+                error: Some(format!("{error:#}")),
+            };
+        }
+    };
+    // The probe file name stays unique per process to avoid concurrent
+    // clobbering; the reported path is the stable directory so identical
+    // inspections stay byte-identical across runs and languages. CREATE_NEW
+    // (create_new) never follows a pre-planted link at the final component.
+    let probe = tmp.join(format!(".rayman-state-probe-{}.tmp", std::process::id()));
+    let write = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&probe)
+        .and_then(|mut file| {
+            use std::io::Write;
+            file.write_all(b"rayman-state-probe")
+        });
+    match write {
+        Ok(()) => {
+            let cleanup = fs::remove_file(&probe);
+            StateWriteProbe {
+                state_dir_present: true,
+                probed: true,
+                writable: true,
+                path: Some(tmp.display().to_string()),
+                error: cleanup.err().map(|error| error.to_string()),
+            }
+        }
+        Err(error) => StateWriteProbe {
+            state_dir_present: true,
+            probed: true,
+            writable: false,
+            path: Some(tmp.display().to_string()),
+            error: Some(error.to_string()),
+        },
+    }
+}
+
 fn canonical_workspace_root(root: &Path) -> Result<PathBuf> {
     let workspace = root
         .canonicalize()
@@ -189,6 +285,80 @@ mod tests {
             managed_state_file(workspace.path(), Path::new("context/index.json"), true).unwrap();
         assert!(path.ends_with(".RaymanCodingSkill/context/index.json"));
         assert!(path.parent().unwrap().is_dir());
+    }
+
+    #[test]
+    fn state_write_probe_reports_a_writable_state_root_and_cleans_up() {
+        let workspace = tempfile::tempdir().unwrap();
+        fs::create_dir(workspace.path().join(STATE_DIR_NAME)).unwrap();
+
+        let probe = state_write_probe(workspace.path());
+        assert!(probe.state_dir_present);
+        assert!(probe.probed);
+        assert!(probe.writable);
+        assert!(probe.error.is_none());
+        // The probe works inside the state-audit-allowed `tmp` entry and must
+        // leave it empty; nothing else may appear at the state root.
+        let tmp = workspace.path().join(STATE_DIR_NAME).join("tmp");
+        assert!(fs::read_dir(&tmp).unwrap().next().is_none());
+        let root_entries: Vec<String> = fs::read_dir(workspace.path().join(STATE_DIR_NAME))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(root_entries, ["tmp"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn state_write_probe_refuses_a_planted_link_at_the_probe_path() {
+        use std::os::unix::fs::symlink;
+
+        let workspace = tempfile::tempdir().unwrap();
+        let tmp = workspace.path().join(STATE_DIR_NAME).join("tmp");
+        fs::create_dir_all(&tmp).unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let victim = outside.path().join("victim.txt");
+        fs::write(&victim, "user data").unwrap();
+        symlink(
+            &victim,
+            tmp.join(format!(".rayman-state-probe-{}.tmp", std::process::id())),
+        )
+        .unwrap();
+
+        let probe = state_write_probe(workspace.path());
+        assert!(probe.probed);
+        assert!(!probe.writable, "planted link must fail the probe closed");
+        assert!(probe.error.is_some());
+        assert_eq!(fs::read(&victim).unwrap(), b"user data");
+    }
+
+    #[test]
+    fn state_write_probe_skips_a_workspace_without_a_state_root() {
+        let workspace = tempfile::tempdir().unwrap();
+
+        let probe = state_write_probe(workspace.path());
+        assert!(!probe.state_dir_present);
+        assert!(!probe.probed);
+        assert!(!probe.writable);
+        assert!(!workspace.path().join(STATE_DIR_NAME).exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn state_write_probe_reports_a_denied_state_root_without_failing() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let workspace = tempfile::tempdir().unwrap();
+        let state = workspace.path().join(STATE_DIR_NAME);
+        fs::create_dir(&state).unwrap();
+        fs::set_permissions(&state, fs::Permissions::from_mode(0o555)).unwrap();
+
+        let probe = state_write_probe(workspace.path());
+        fs::set_permissions(&state, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(probe.state_dir_present);
+        assert!(probe.probed);
+        assert!(!probe.writable);
+        assert!(probe.error.is_some());
     }
 
     #[test]

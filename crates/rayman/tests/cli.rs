@@ -959,6 +959,57 @@ fn doctor_rejects_an_earlier_windows_path_wrapper() {
 }
 
 #[test]
+fn doctor_and_workspace_inspect_report_the_state_write_probe() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "SKILL.md", "ordinary workspace canonical skill\n");
+    let skill_hash = rayman::hash::sha256_file(&root.join("SKILL.md")).unwrap();
+    write(
+        root,
+        ".RaymanCodingSkill/workspace_skill.yaml",
+        &format!(
+            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v14\ncli_version: 2.8.0\n"
+        ),
+    );
+    let binary = std::fs::canonicalize(BIN).unwrap();
+    let binary_dir = binary.parent().unwrap();
+
+    let doctor = run_with_path(root, &["--format", "json", "doctor"], &[binary_dir], None);
+    assert_eq!(
+        doctor.status, 0,
+        "stdout={} stderr={}",
+        doctor.stdout, doctor.stderr
+    );
+    let report: Value = serde_json::from_str(&doctor.stdout).unwrap();
+    assert_eq!(report["state_write"]["state_dir_present"], true);
+    assert_eq!(report["state_write"]["probed"], true);
+    assert_eq!(report["state_write"]["writable"], true);
+
+    let inspect = run_raw(root, &["--format", "json", "workspace", "inspect"]);
+    assert_eq!(inspect.status, 0, "{}", inspect.stderr);
+    let inspect: Value = serde_json::from_str(&inspect.stdout).unwrap();
+    assert_eq!(inspect["state_write"]["probed"], true);
+    assert_eq!(inspect["state_write"]["writable"], true);
+
+    let inspect_en = run_raw(root, &["--language", "en", "workspace", "inspect"]);
+    assert_eq!(inspect_en.status, 0, "{}", inspect_en.stderr);
+    assert!(
+        inspect_en.stdout.contains("state-write probe: writable"),
+        "stdout={}",
+        inspect_en.stdout
+    );
+
+    // A workspace without a state root must be reported unprobed, not mutated.
+    let bare = tempfile::tempdir().unwrap();
+    let bare_inspect = run_raw(bare.path(), &["--format", "json", "workspace", "inspect"]);
+    assert_eq!(bare_inspect.status, 0, "{}", bare_inspect.stderr);
+    let bare_inspect: Value = serde_json::from_str(&bare_inspect.stdout).unwrap();
+    assert_eq!(bare_inspect["state_write"]["state_dir_present"], false);
+    assert_eq!(bare_inspect["state_write"]["probed"], false);
+    assert!(!bare.path().join(".RaymanCodingSkill").exists());
+}
+
+#[test]
 fn goal_evidence_changed_unknown_path_records_impact_without_writing_project_map_cache() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();

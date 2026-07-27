@@ -16,6 +16,7 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
     let path_matches_running = path_hash.as_deref() == Some(running_hash.as_str());
 
     let activation = rayman::workspace::activation_status(root)?;
+    let state_write = rayman::state_paths::state_write_probe(root);
     let skill_path = activation
         .skill_file
         .as_deref()
@@ -40,6 +41,7 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
     let identity_ready = path_matches_running && activation.active && metadata_matches;
     let report = json!({
         "workspace_activation": &activation,
+        "state_write": &state_write,
         "contract": rayman::CLI_CONTRACT,
         "version": rayman::CLI_VERSION,
         "running": {
@@ -83,6 +85,7 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
         println!("  当前二进制: {}", running.display());
         println!("  PATH 命令一致: {path_matches_running}");
         println!("  workspace activation: {}", activation.status);
+        crate::print_state_write_probe(&state_write);
         println!(
             "  仓库源码产物: 未由 doctor 检查；交接/CI 由 `{}` 验证",
             crate::SOURCE_FRESH_VERIFIER

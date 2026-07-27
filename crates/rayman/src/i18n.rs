@@ -2,6 +2,11 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use clap::ValueEnum;
 pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
+    "无法写入 checkpoint 根目录（默认在用户目录）: {}；受限沙箱下用 --dir 指定工作区内目录，或以主机权限重试",
+    "  状态写探针: 写入被拒或探测失败（权限或 ACL）: {}",
+    "  状态写探针: 可写；清理探针失败: {}",
+    "  状态写探针: 状态目录不存在，未探测",
+    "  状态写探针: 可写",
     "RaymanCodingSkill 工作区未显式激活（status={}）：运行 `rayman workspace activate --skill-file <canonical-SKILL.md> --yes`；历史 .RaymanCodingSkill 状态不会自动激活 skill",
     "finish 要求当前稳定 authority receipt；先运行 `rayman goal validate {goal_id} --req <req> --message <evidence> --command <project-gate> --changed <path> --authority --repeat 2`",
     "`rayman audit` 已退役；工作区门禁使用 `rayman check --profile standard`，任务交付使用 `rayman finish --goal <id>`，状态卫生使用 `rayman state audit --check`",
@@ -2234,6 +2239,25 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
 ];
 
 const MESSAGE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
+    (
+        "无法写入 checkpoint 根目录（默认在用户目录）",
+        "cannot write the checkpoint root (defaults to the user profile)",
+    ),
+    (
+        "指定工作区内目录，或以主机权限重试",
+        "to pick a directory inside the workspace, or retry with host permission",
+    ),
+    (
+        "写入被拒或探测失败（权限或 ACL）",
+        "write denied or probe failed (permission or ACL)",
+    ),
+    (
+        "状态目录不存在，未探测",
+        "state directory absent, not probed",
+    ),
+    ("受限沙箱下用", "under a restricted sandbox use"),
+    ("状态写探针", "state-write probe"),
+    ("可写", "writable"),
     (
         "运行 `rayman context refresh`",
         "run `rayman context refresh`",

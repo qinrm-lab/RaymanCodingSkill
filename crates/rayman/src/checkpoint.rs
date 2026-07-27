@@ -470,6 +470,30 @@ fn activation_provenance(root: &Path) -> ActivationProvenance {
     }
 }
 
+/// A restricted sandbox usually denies the user-profile default root; keep the
+/// denial but add the workspace-local `--dir` and host-permission way out.
+fn annotate_default_root_denial(
+    error: anyhow::Error,
+    using_default_root: bool,
+    requested_root: &Path,
+) -> anyhow::Error {
+    if !using_default_root {
+        return error;
+    }
+    let denied = error.chain().any(|cause| {
+        cause
+            .downcast_ref::<std::io::Error>()
+            .is_some_and(|io_error| io_error.kind() == std::io::ErrorKind::PermissionDenied)
+    });
+    if !denied {
+        return error;
+    }
+    error.context(format!(
+        "无法写入 checkpoint 根目录（默认在用户目录）: {}；受限沙箱下用 --dir 指定工作区内目录，或以主机权限重试",
+        display_path(requested_root)
+    ))
+}
+
 fn save_with_purpose(
     root: &Path,
     override_dir: Option<&Path>,
@@ -483,21 +507,35 @@ fn save_with_purpose(
         .with_context(|| format!("无法规范化工作区根: {}", display_path(root)))?;
     let activation = activation_provenance(&root);
 
-    let ckpt_root = checkpoints_root(override_dir)?;
-    ensure_real_directory_chain(&ckpt_root)?;
-    fs::create_dir_all(&ckpt_root)
-        .with_context(|| format!("无法创建 checkpoint 目录: {}", display_path(&ckpt_root)))?;
-    ensure_real_directory_chain(&ckpt_root)?;
-    ensure_real_directory(&ckpt_root)?;
-    let ckpt_root = ckpt_root
-        .canonicalize()
-        .with_context(|| format!("无法规范化 checkpoint 目录: {}", display_path(&ckpt_root)))?;
-    let ws_dir = ckpt_root.join(workspace_key(&root));
-    ensure_real_directory_chain(&ws_dir)?;
-    fs::create_dir_all(&ws_dir)
-        .with_context(|| format!("无法创建工作区 checkpoint 目录: {}", display_path(&ws_dir)))?;
-    ensure_real_directory(&ws_dir)?;
-    let _lock = CheckpointLock::acquire(&ws_dir)?;
+    let requested_root = checkpoints_root(override_dir)?;
+    let (ckpt_root, ws_dir, _lock) = (|| -> Result<(PathBuf, PathBuf, CheckpointLock)> {
+        ensure_real_directory_chain(&requested_root)?;
+        fs::create_dir_all(&requested_root).with_context(|| {
+            format!(
+                "无法创建 checkpoint 目录: {}",
+                display_path(&requested_root)
+            )
+        })?;
+        ensure_real_directory_chain(&requested_root)?;
+        ensure_real_directory(&requested_root)?;
+        let ckpt_root = requested_root.canonicalize().with_context(|| {
+            format!(
+                "无法规范化 checkpoint 目录: {}",
+                display_path(&requested_root)
+            )
+        })?;
+        let ws_dir = ckpt_root.join(workspace_key(&root));
+        ensure_real_directory_chain(&ws_dir)?;
+        fs::create_dir_all(&ws_dir).with_context(|| {
+            format!("无法创建工作区 checkpoint 目录: {}", display_path(&ws_dir))
+        })?;
+        ensure_real_directory(&ws_dir)?;
+        let lock = CheckpointLock::acquire(&ws_dir)?;
+        Ok((ckpt_root, ws_dir, lock))
+    })()
+    .map_err(|error| {
+        annotate_default_root_denial(error, override_dir.is_none(), &requested_root)
+    })?;
     // A saver must never snapshot a workspace left halfway through a crashed
     // restore.  Recovery runs under the same per-workspace lock as restore.
     recover_orphaned_restore_transactions(&root, &ws_dir)?;
@@ -972,6 +1010,38 @@ pub use restore::*;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod default_root_denial_tests {
+    use super::*;
+
+    fn denied_error() -> anyhow::Error {
+        anyhow::Error::from(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "os error 5",
+        ))
+        .context("create checkpoint root failed")
+    }
+
+    #[test]
+    fn default_root_permission_denial_gains_the_dir_hint() {
+        let annotated = annotate_default_root_denial(denied_error(), true, Path::new("probe-root"));
+        let text = format!("{annotated:#}");
+        assert!(text.contains("--dir"), "hint missing: {text}");
+        assert!(text.contains("受限沙箱"), "hint missing: {text}");
+        assert!(text.contains("os error 5"), "cause dropped: {text}");
+    }
+
+    #[test]
+    fn override_dir_and_non_permission_errors_stay_unchanged() {
+        let annotated = annotate_default_root_denial(denied_error(), false, Path::new("x"));
+        assert!(!format!("{annotated:#}").contains("--dir"));
+
+        let annotated =
+            annotate_default_root_denial(anyhow::anyhow!("other failure"), true, Path::new("x"));
+        assert!(!format!("{annotated:#}").contains("--dir"));
+    }
+}
 
 #[cfg(test)]
 mod recovery_only_tests {

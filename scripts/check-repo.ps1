@@ -12,7 +12,11 @@ Set-Location -LiteralPath $repoRoot
 
 & (Join-Path $PSScriptRoot 'check-agent-instructions.ps1')
 & (Join-Path $PSScriptRoot 'release-closeout.ps1') -SelfTest
-& (Join-Path $PSScriptRoot 'audit-repository.ps1') -SelfTest
+# Runs the audit script self-test, then the isolated-advisory-DB dependency
+# policy checks. Doing this before the multi-minute fmt/clippy/test stages
+# fails fast under restricted sandboxes and never locks the user-profile
+# advisory database.
+& (Join-Path $PSScriptRoot 'audit-repository.ps1') -DependencyPolicyOnly
 
 function Resolve-NativeApplication {
     param([Parameter(Mandatory = $true)][string]$Name)
@@ -54,10 +58,6 @@ Invoke-NativeChecked -Application $cargo -Arguments @(
 )
 Invoke-NativeChecked -Application $cargo -Arguments @(
     'test', '--manifest-path', 'evals/Cargo.toml', '--locked', '--all-targets'
-)
-Invoke-NativeChecked -Application $cargo -Arguments @('deny', 'check', '--config', 'deny.toml')
-Invoke-NativeChecked -Application $cargo -Arguments @(
-    'deny', '--manifest-path', 'evals/Cargo.toml', 'check', '--config', 'evals/deny.toml'
 )
 $raymanName = if ($IsWindows) { 'rayman.exe' } else { 'rayman' }
 $rayman = Join-Path $repoRoot "target/debug/$raymanName"

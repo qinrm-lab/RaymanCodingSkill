@@ -53,6 +53,8 @@ contract.
   source-stale implementation.
 - Checkpoint save is lossless by default. Pruning requires explicit user
   authorization or an already confirmed retention policy.
+- Sandbox and permission boundary handling (ACL denials, probe-first,
+  upfront escalation) is defined in the shared workflow reference.
 
 ## Compatibility boundary
 
