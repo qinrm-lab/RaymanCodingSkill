@@ -34,6 +34,11 @@
       "reason": "Clap command schemas are intentionally centralized so main dispatch, the Codex Stop hook, and focused command adapters share one parsed contract; CLI integration tests and the full repository gate cover all consumers."
     },
     {
+      "path": "crates/rayman/src/codex_host.rs",
+      "kind": "high_fan_in",
+      "reason": "Codex host capability detection is intentionally centralized so doctor, goal preparation, and hook-facing diagnostics report one conservative read-only contract; focused codex_host tests, CLI integration tests, and the full repository gate cover all consumers."
+    },
+    {
       "path": "crates/rayman/src/workspace.rs",
       "kind": "high_fan_in",
       "reason": "Workspace activation and source identity are intentionally centralized as the shared fail-closed boundary; workspace unit tests, CLI integration tests, and the full repository gate cover every consumer."
