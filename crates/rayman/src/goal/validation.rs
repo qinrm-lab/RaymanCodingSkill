@@ -205,6 +205,14 @@ fn normalized_script_name(command: &ParsedValidationCommand) -> Option<String> {
     )
 }
 
+fn release_installer_invocation(command: &ParsedValidationCommand) -> bool {
+    normalized_script_name(command).as_deref() == Some("install-rayman.ps1")
+        && !command
+            .args
+            .iter()
+            .any(|argument| argument.eq_ignore_ascii_case("-SelfTest"))
+}
+
 pub fn validation_proof_kind(command: &str) -> Result<ProofKind> {
     let parsed = parse_validation_command(command)?;
     let executable = executable_name(&parsed);
@@ -226,10 +234,10 @@ pub fn validation_proof_kind(command: &str) -> Result<ProofKind> {
         return Ok(ProofKind::RepositoryGate);
     }
     if script == "install-rayman.ps1" {
-        return Ok(if has_arg("-SelfTest") {
-            ProofKind::Test
-        } else {
+        return Ok(if release_installer_invocation(&parsed) {
             ProofKind::Installation
+        } else {
+            ProofKind::Test
         });
     }
     if script == "check-agent-instructions.ps1"
@@ -1063,6 +1071,12 @@ fn validation_matches_expectation(
     if pytest_invocation(command) {
         return matches!(expectation, ValidationExpectation::PythonTest);
     }
+    if release_installer_invocation(command) {
+        return matches!(
+            expectation,
+            ValidationExpectation::RustBuildOrTest | ValidationExpectation::CargoManifestValidation
+        );
+    }
     if powershell_script(command).is_some_and(|script| {
         Path::new(script)
             .file_name()
@@ -1188,21 +1202,23 @@ fn cargo_option_values<'a>(
 }
 
 pub(super) fn command_is_workspace_wide(_root: &Path, command: &ParsedValidationCommand) -> bool {
-    powershell_script(command).is_some_and(|script| {
-        Path::new(script)
-            .file_name()
-            .and_then(|name| name.to_str())
-            .is_some_and(|name| {
-                matches!(
-                    name.to_ascii_lowercase().as_str(),
-                    "check-repo.ps1" | "audit-repository.ps1" | "verify-release-contract.ps1"
-                )
-            })
-    }) || (cargo_subcommand(command).is_some()
-        && command
-            .args
-            .iter()
-            .any(|argument| matches!(argument.as_str(), "--workspace" | "--all")))
+    release_installer_invocation(command)
+        || powershell_script(command).is_some_and(|script| {
+            Path::new(script)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| {
+                    matches!(
+                        name.to_ascii_lowercase().as_str(),
+                        "check-repo.ps1" | "audit-repository.ps1" | "verify-release-contract.ps1"
+                    )
+                })
+        })
+        || (cargo_subcommand(command).is_some()
+            && command
+                .args
+                .iter()
+                .any(|argument| matches!(argument.as_str(), "--workspace" | "--all")))
         || (pytest_invocation(command) && pytest_path_arguments(command).is_empty())
 }
 

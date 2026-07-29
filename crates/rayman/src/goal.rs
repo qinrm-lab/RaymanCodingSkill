@@ -1984,3 +1984,7 @@ fn goal_from_legacy(legacy: LegacyGoal) -> Goal {
 #[cfg(test)]
 #[path = "goal/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "goal/installer_tests.rs"]
+mod installer_tests;

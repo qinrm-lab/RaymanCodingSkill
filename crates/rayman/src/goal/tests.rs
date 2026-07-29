@@ -2977,16 +2977,3 @@ fn with_locked_goal_holds_the_goal_lock_for_the_entire_operation() {
     assert!(started.elapsed() >= std::time::Duration::from_millis(100));
     worker.join().unwrap();
 }
-
-#[test]
-fn installer_self_test_is_classified_as_test_without_weakening_installation() {
-    assert_eq!(
-        validation_proof_kind("pwsh -NoProfile -File scripts/install-rayman.ps1 -SelfTest")
-            .unwrap(),
-        ProofKind::Test
-    );
-    assert_eq!(
-        validation_proof_kind("pwsh -NoProfile -File scripts/install-rayman.ps1 -Yes").unwrap(),
-        ProofKind::Installation
-    );
-}
