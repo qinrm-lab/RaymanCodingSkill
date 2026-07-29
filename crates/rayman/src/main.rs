@@ -408,6 +408,7 @@ fn run_state_audit(root: &Path, json: bool, check: bool) -> Result<()> {
         "tmp",
         "workspace_skill.yaml",
         "quality.json",
+        "release-closeout-evidence.json",
     ];
     let state = root.join(".RaymanCodingSkill");
     let mut retired = Vec::new();
@@ -509,7 +510,8 @@ fn audit_allowed_state_entry(root: &Path, name: &str) -> Result<()> {
         | "autosave.json"
         | "autosave.lock"
         | "workspace_skill.yaml"
-        | "quality.json" => {
+        | "quality.json"
+        | "release-closeout-evidence.json" => {
             let path = rayman::state_paths::managed_state_file(root, Path::new(name), false)?;
             match std::fs::symlink_metadata(&path) {
                 Ok(_) => Ok(()),
@@ -1890,6 +1892,21 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join(".RaymanCodingSkill/pending.json")).unwrap();
 
+        assert!(run_state_audit(dir.path(), false, true).is_err());
+    }
+
+    #[test]
+    fn state_audit_accepts_release_evidence_only_as_an_ordinary_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = dir.path().join(".RaymanCodingSkill");
+        std::fs::create_dir_all(&state).unwrap();
+        let evidence = state.join("release-closeout-evidence.json");
+        std::fs::write(&evidence, "{}\n").unwrap();
+
+        assert!(run_state_audit(dir.path(), false, true).is_ok());
+
+        std::fs::remove_file(&evidence).unwrap();
+        std::fs::create_dir(&evidence).unwrap();
         assert!(run_state_audit(dir.path(), false, true).is_err());
     }
 
