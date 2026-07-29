@@ -683,6 +683,8 @@ pub enum MessageId {
     CheckpointStatus,
     GoalCreated,
     HandoffCreated,
+    HostPatchUnusable,
+    HostPatchFix,
     Count,
 }
 
@@ -708,6 +710,19 @@ const CATALOG: &[CatalogEntry] = &[
         id: MessageId::HandoffCreated,
         zh_cn: "已创建交接目标 {}，来源 {}，commit {}",
         en: "Created handoff goal {} from {} at commit {}",
+    },
+    // Explicit pairs rather than fragment translation: this text names host
+    // config keys and must stay byte-stable in both locales, because an agent
+    // reads it to decide whether to stop retrying the host patch tool.
+    CatalogEntry {
+        id: MessageId::HostPatchUnusable,
+        zh_cn: "  宿主补丁工具: 不可用（sandbox={}）；`unelevated` 沙箱无法表达分裂可写根、分裂读限制或 deny-read，内置 apply_patch 在读取目标文件前就被拒绝",
+        en: "  Host patch tool: unusable (sandbox={}); the `unelevated` sandbox cannot express split writable roots, split filesystem reads, or deny-read, so the built-in apply_patch is refused before it reads the target file",
+    },
+    CatalogEntry {
+        id: MessageId::HostPatchFix,
+        zh_cn: "    修复: 把 Codex 配置改为 `[windows] sandbox = \"elevated\"` 并重启 Codex；在此之前用 `git apply` 从文件应用补丁，不要重试该工具",
+        en: "    Fix: set `[windows] sandbox = \"elevated\"` in the Codex config and restart Codex; until then apply patches with `git apply` from a file and stop retrying the tool",
     },
 ];
 
@@ -3208,6 +3223,43 @@ mod tests {
             false,
         );
         assert_eq!(dynamic, "warning: user title 中文目标🙂");
+    }
+
+    /// `println!` is overridden to re-localize every rendered line, so a typed
+    /// catalog message is translated a second time on its way out. These two
+    /// carry host config keys and command names an operator must type
+    /// verbatim; a later fragment-catalog entry matching one of them would
+    /// silently rewrite the instruction. Pin the tokens in both locales.
+    #[test]
+    fn host_patch_messages_survive_the_second_localization_pass() {
+        const VERBATIM: &[&str] = &[
+            "unelevated",
+            "elevated",
+            "apply_patch",
+            "git apply",
+            "[windows] sandbox",
+        ];
+        for language in [ActiveLanguage::ZhCn, ActiveLanguage::En] {
+            for (id, arguments) in [
+                (MessageId::HostPatchUnusable, vec!["unelevated".to_string()]),
+                (MessageId::HostPatchFix, Vec::new()),
+            ] {
+                let rendered = message_for(id, &arguments, language);
+                let round_tripped = localize_line_for(rendered.clone(), language, false);
+                assert_eq!(
+                    rendered, round_tripped,
+                    "{id:?} changed on the second pass under {language:?}"
+                );
+                for token in VERBATIM {
+                    if rendered.contains(token) {
+                        assert!(
+                            round_tripped.contains(token),
+                            "{id:?} lost `{token}` under {language:?}: {round_tripped}"
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]

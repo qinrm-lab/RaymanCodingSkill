@@ -208,19 +208,10 @@ pub fn run_stop_from_stdin() -> StopHookResponse {
     }
 }
 
-fn default_codex_home() -> Result<PathBuf> {
-    if let Some(path) = env::var_os("CODEX_HOME").filter(|value| !value.is_empty()) {
-        return Ok(PathBuf::from(path));
-    }
-    let home = env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
-        .ok_or_else(|| anyhow::anyhow!("cannot resolve Codex home"))?;
-    Ok(PathBuf::from(home).join(".codex"))
-}
-
 fn hooks_path(codex_home: Option<&Path>) -> Result<PathBuf> {
     let home = codex_home
         .map(Path::to_path_buf)
-        .map_or_else(default_codex_home, Ok)?;
+        .map_or_else(crate::codex_host::default_codex_home, Ok)?;
     let home = if home.is_absolute() {
         home
     } else {

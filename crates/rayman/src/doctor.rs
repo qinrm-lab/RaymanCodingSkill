@@ -17,6 +17,7 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
 
     let activation = rayman::workspace::activation_status(root)?;
     let state_write = rayman::state_paths::state_write_probe(root);
+    let host_patch = rayman::codex_host::patch_probe(None);
     let skill_path = activation
         .skill_file
         .as_deref()
@@ -42,6 +43,7 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
     let report = json!({
         "workspace_activation": &activation,
         "state_write": &state_write,
+        "host_patch": &host_patch,
         "contract": rayman::CLI_CONTRACT,
         "version": rayman::CLI_VERSION,
         "running": {
@@ -86,6 +88,7 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
         println!("  PATH 命令一致: {path_matches_running}");
         println!("  workspace activation: {}", activation.status);
         crate::print_state_write_probe(&state_write);
+        crate::print_host_patch_probe(&host_patch);
         println!(
             "  仓库源码产物: 未由 doctor 检查；交接/CI 由 `{}` 验证",
             crate::SOURCE_FRESH_VERIFIER

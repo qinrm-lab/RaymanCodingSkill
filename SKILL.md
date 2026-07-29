@@ -32,9 +32,15 @@ is orphan state and does not authorize automatic use.
 - Claude Code uses the repository `CLAUDE.md` entrypoint; this installer does
   not claim a global Claude deployment.
 - Under the Codex Windows restricted-token sandbox, the built-in
-  `apply_patch` tool and its `apply_patch.bat` shim are unreliable
-  (WindowsApps ACL; escalation does not help). Apply patches with
-  `git apply` unified diffs instead of retrying that tool.
+  `apply_patch` tool has two distinct failure modes with distinct fixes.
+  `cannot enforce split writable root sets` (or split read / deny-read
+  restrictions) is a host configuration defect, not a patch defect: the
+  `unelevated` sandbox cannot express the managed profile's read-only
+  `.git`/`.agents`/`.codex` carve-outs. Report it and ask for Codex
+  `[windows] sandbox = "elevated"`, which supports all three. `Access is
+  denied.` from `apply_patch.bat` is the separate WindowsApps shim ACL.
+  Escalation fixes neither. Until the host is fixed, patch via
+  `git apply` and stop retrying the tool.
 - Request escalated permissions upfront for rayman state writes, git
   stage/commit, repository gates, and installer runs; over-long command
   lines fail to spawn under the sandbox wrapper, so split them. Details:

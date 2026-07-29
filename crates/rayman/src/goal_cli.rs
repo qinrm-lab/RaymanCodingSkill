@@ -12,6 +12,10 @@ pub fn run_show(store: &goal::GoalStore, json: bool, id: String) -> Result<()> {
             "{} [{}/{}] {}",
             goal.id, goal.lifecycle, goal.status, goal.title
         );
+        // Text only: the JSON form is the goal document and callers parse that
+        // shape. Repeating the host defect here is what survives compaction,
+        // because `goal show` is the command an agent reruns to reorient.
+        crate::print_host_patch_probe(&rayman::codex_host::patch_probe(None));
         for req in goal.requirements {
             println!(
                 "  {} [{}/{}] {}{}",

@@ -8,6 +8,7 @@ pub const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub mod autosave;
 pub mod checkpoint;
 pub mod codex_hook;
+pub mod codex_host;
 pub mod context;
 pub mod goal;
 pub mod hash;

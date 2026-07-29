@@ -46,7 +46,17 @@ fn main() {
     let json = i18n::configure(cli.language, matches!(cli.format, Format::Json));
     if let Err(error) = run(cli) {
         if json {
-            match serde_json::to_string_pretty(&json!({ "error": error.to_string() })) {
+            // `error.to_string()` is only the outermost context, so JSON callers
+            // used to lose the underlying cause (for example the `os error 5`
+            // behind a checkpoint lock failure) that the text path prints via
+            // `{:#}`. Emit the same full chain, plus the causes as structured
+            // data, so a machine reader is never told strictly less.
+            let causes = error.chain().map(ToString::to_string).collect::<Vec<_>>();
+            let payload = json!({
+                "error": format!("{error:#}"),
+                "causes": causes,
+            });
+            match serde_json::to_string_pretty(&payload) {
                 Ok(text) => eprintln!("{text}"),
                 Err(_) => eprintln!("{{\"error\":\"{}\"}}", error),
             }
@@ -281,11 +291,13 @@ fn run_workspace(root: &Path, json: bool, cmd: WorkspaceCmd) -> Result<()> {
             let activation = workspace::activation_status(root)?;
             let source = source_state::inspect(root);
             let state_write = rayman::state_paths::state_write_probe(root);
+            let host_patch = rayman::codex_host::patch_probe(None);
             if json {
                 print(&json!({
                     "activation": activation,
                     "source": source,
                     "state_write": state_write,
+                    "host_patch": host_patch,
                 }));
             } else {
                 println!(
@@ -294,6 +306,7 @@ fn run_workspace(root: &Path, json: bool, cmd: WorkspaceCmd) -> Result<()> {
                 );
                 print_source_state(&source);
                 print_state_write_probe(&state_write);
+                print_host_patch_probe(&host_patch);
             }
             return Ok(());
         }
@@ -320,6 +333,9 @@ fn run_workspace(root: &Path, json: bool, cmd: WorkspaceCmd) -> Result<()> {
         for issue in &report.issues {
             println!("  issue: {issue}");
         }
+        // Text only: `workspace status` JSON is the activation report itself and
+        // callers parse that shape. The agent-facing surface is the text one.
+        print_host_patch_probe(&rayman::codex_host::patch_probe(None));
     }
     Ok(())
 }
@@ -341,6 +357,27 @@ fn print_source_state(source: &source_state::SourceState) {
     if let Some(error) = &source.error {
         println!("    source error: {error}");
     }
+}
+
+/// A structurally broken host patch tool is otherwise rediagnosed from scratch
+/// after every context compaction, so every read-only status command repeats it.
+pub(crate) fn print_host_patch_probe(probe: &rayman::codex_host::HostPatchProbe) {
+    if probe.patch_tool_usable {
+        return;
+    }
+    // The probe's own `reason`/`fix` strings stay stable English in JSON for
+    // machine consumers; the human line is rendered from the typed catalog.
+    println!(
+        "{}",
+        i18n::message(
+            i18n::MessageId::HostPatchUnusable,
+            &[probe
+                .sandbox_mode
+                .clone()
+                .unwrap_or_else(|| "unknown".into())],
+        )
+    );
+    println!("{}", i18n::message(i18n::MessageId::HostPatchFix, &[]));
 }
 
 /// Sandboxed hosts deny state writes with ACL errors that otherwise surface

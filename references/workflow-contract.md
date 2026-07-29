@@ -103,13 +103,31 @@ boundaries, not lock contention and not source defects.
   stage/commit, installers, repository gates) with escalated host permission
   from the first attempt instead of probe-fail-retry loops.
 - Escalation cannot fix every host defect. A broken host patch tool or an
-  over-long command line fails identically when escalated: fall back to
-  `git apply` unified diffs, split over-long command lines, note the quirk
-  once, and stop retrying the broken tool.
+  over-long command line fails identically when escalated: split over-long
+  command lines, record the boundary once in the goal environment notes, and
+  stop retrying the broken tool.
+- Separate host misconfiguration from a broken tool. A Codex `unelevated`
+  Windows sandbox refuses whole classes of profile — split writable roots,
+  split filesystem reads, deny-read — so `apply_patch` fails before reading
+  the target. That is fixed by `[windows] sandbox = "elevated"`, not by a
+  workaround; surface it to the user as a one-line host fix and keep working
+  through the fallback meanwhile.
+- Apply patches from a file, never from stdin or a shell here-string: host
+  quoting mangles them into `corrupt patch`. Write UTF-8 (no BOM) with LF
+  endings to managed temp, then `git apply --whitespace=nowarn <file>`.
+  Re-read the target immediately before generating a hunk, and prefer a
+  whole-file rewrite over hand-computed `@@` line counts.
 - Gates fail closed on environment permission boundaries. Never stitch a
   partial pass; rerun the entire gate with sufficient permission.
 - `rayman checkpoint save` and autosave default to a user-profile root. In a
-  workspace-only sandbox pass `--dir` under the workspace or escalate.
+  workspace-only sandbox pass `--dir` under the workspace or escalate. Adding
+  that root to the host's writable roots fixes it once for every session.
+- An operator pause ("stop now, I am shutting down") has no representation in
+  the goal contract: `paused_for_user` is reachable only from a recorded
+  human/external blocker. With the Stop guard active and agent-owned work
+  remaining, a bare pause request is therefore refused. Record the remaining
+  work as pending, hand back a resume command, and say plainly that the guard,
+  not the request, is what is still open.
 
 ## Validation integrity
 
