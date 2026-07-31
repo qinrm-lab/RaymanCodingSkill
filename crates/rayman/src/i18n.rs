@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use clap::ValueEnum;
 pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
+    "验证命令不能启动 shell；PowerShell 脚本请用 `pwsh -NoProfile -File <script>.ps1 [参数...]` 这一种形式",
     "工具 {detail}",
     "Cargo 拓扑权威确认（standard/release 就绪的硬前提）",
     "autosave 计划任务注册与注销",
@@ -1138,6 +1139,10 @@ const MESSAGE_PREFIX_CATALOG: &[(&str, &str)] = &[
     (
         "环境未就绪: {}；无法确认 Cargo 拓扑",
         "environment is not ready: {}; Cargo topology cannot be confirmed",
+    ),
+    (
+        "验证命令不能启动 shell；PowerShell 脚本请用 `pwsh -NoProfile -File <script>.ps1 [参数...]` 这一种形式",
+        "a validation command must not launch a shell; record a PowerShell script only as `pwsh -NoProfile -File <script>.ps1 [args...]`",
     ),
     (
         "已安装身份契约不一致：{}",

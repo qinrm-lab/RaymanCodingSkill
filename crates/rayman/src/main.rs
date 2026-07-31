@@ -425,6 +425,7 @@ fn run_state_audit(root: &Path, json: bool, check: bool) -> Result<()> {
         "autosave.json",
         "autosave.lock",
         "tmp",
+        "checkpoints",
         "workspace_skill.yaml",
         "quality.json",
         "release-closeout-evidence.json",
@@ -519,7 +520,11 @@ fn audit_allowed_state_entry(root: &Path, name: &str) -> Result<()> {
             }
             Ok(())
         }
-        "context" | "tmp" => {
+        // `checkpoints` appears whenever `checkpoint save --dir` targets the
+        // workspace, which is exactly what the workflow reference tells an agent
+        // to do inside a workspace-only sandbox. Leaving it off the allowlist made
+        // that documented remedy break `state audit --check` for good.
+        "context" | "tmp" | "checkpoints" => {
             let Some(_) = rayman::state_paths::managed_state_dir(root, Path::new(name), false)?
             else {
                 bail!("目录在枚举后消失");

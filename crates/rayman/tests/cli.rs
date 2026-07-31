@@ -4846,3 +4846,57 @@ fn temp_scratch_paths_do_not_leak_the_windows_verbatim_prefix() {
     );
     assert!(path.contains("patchwork"), "{path}");
 }
+
+/// The state-audit allowlist is hand-maintained and has now drifted from what
+/// the CLI itself writes three times: the pending lock, the autosave lock, and
+/// `checkpoints/` from the `--dir` remedy the workflow reference prescribes for
+/// a workspace-only sandbox. Drive the real commands instead of restating the
+/// list, so the next writer that lands in `.RaymanCodingSkill/` fails here.
+#[test]
+fn state_audit_stays_clean_after_the_commands_that_write_state() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(
+        root,
+        "src/lib.rs",
+        "pub fn a() {}
+",
+    );
+    write(
+        root,
+        "Cargo.toml",
+        "[package]
+name = \"sa\"
+version = \"0.1.0\"
+edition = \"2021\"
+",
+    );
+    run_json(root, &["context", "refresh"]);
+    assert_eq!(run(root, &["state", "audit", "--check"]).status, 0);
+
+    let started = run_json(root, &["goal", "start", "state writers", "--must", "work"]);
+    let id = started["id"].as_str().unwrap().to_string();
+    run_json(
+        root,
+        &["goal", "pending", "add", "leftover", "-m", "detail"],
+    );
+    let checkpoints = root.join(".RaymanCodingSkill/checkpoints");
+    let saved = run(
+        root,
+        &["checkpoint", "save", "--dir", checkpoints.to_str().unwrap()],
+    );
+    assert_eq!(saved.status, 0, "stderr={}", saved.stderr);
+
+    let audit = run(root, &["state", "audit", "--check"]);
+    assert_eq!(
+        audit.status, 0,
+        "state written by ordinary commands must not read as retired: {}{}",
+        audit.stdout, audit.stderr
+    );
+    assert!(
+        !audit.stdout.contains("retired entries"),
+        "{}",
+        audit.stdout
+    );
+    assert!(!id.is_empty());
+}

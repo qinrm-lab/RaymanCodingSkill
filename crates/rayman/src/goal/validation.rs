@@ -94,6 +94,16 @@ pub fn parse_validation_command(command: &str) -> Result<ParsedValidationCommand
         || executable.ends_with(".bat")
         || executable.ends_with(".ps1");
     if is_shell_host {
+        // Naming only what is forbidden sent a real session down a dead end: it
+        // read "no shell" as "a PowerShell repository gate cannot be recorded at
+        // all", invented a workaround, and finally concluded the CLI could not
+        // express its own documented gate. The accepted form has to be in the
+        // message, because that is where the reader is standing.
+        if is_powershell {
+            bail!(
+                "验证命令不能启动 shell；PowerShell 脚本请用 `pwsh -NoProfile -File <script>.ps1 [参数...]` 这一种形式"
+            );
+        }
         bail!("验证命令不能启动 shell；请直接提供要执行的程序及参数");
     }
 
