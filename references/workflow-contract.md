@@ -124,11 +124,28 @@ boundaries, not lock contention and not source defects.
   call for the whole session, a `%LOCALAPPDATA%\OpenAI\Codex\bin\...` target
   works. The only fix is to run Codex from the non-MSIX install; report that
   and fall back to `git apply` meanwhile.
+- A third `apply_patch` signature exists and neither fix above applies to it:
+  `windows sandbox failed: helper_unknown_error: setup refresh had errors`,
+  observed on a host already set to `sandbox = "elevated"`. Treat any
+  `apply_patch` failure that names the sandbox helper as a host boundary,
+  report it once, and move to the fallback rather than re-attempting.
 - Apply patches from a file, never from stdin or a shell here-string: host
   quoting mangles them into `corrupt patch`. Write UTF-8 (no BOM) with LF
   endings to managed temp, then `git apply --whitespace=nowarn <file>`.
   Re-read the target immediately before generating a hunk, and prefer a
   whole-file rewrite over hand-computed `@@` line counts.
+- "Managed temp" means the directory `rayman temp scratch <label>` prints —
+  nothing else is guaranteed writable. A restricted sandbox denies ordinary
+  scratch locations such as `C:\tmp` or `%TEMP%` with
+  `Access to the path '...' is denied`, which reads like a permission bug but
+  is only the wrong directory.
+- The `git apply` fallback does not exist in a workspace that is not a Git
+  worktree, and rayman supports such workspaces. There, re-read the target,
+  rewrite the **whole file** through the host's file-write tool, and re-read it
+  again to confirm. Do not splice a multi-line region with regex or
+  exact-string replacement: a near-miss silently produces syntactically broken
+  source that only the compiler catches, and the failed build then has to be
+  separated from the real work.
 - Gates fail closed on environment permission boundaries. Never stitch a
   partial pass; rerun the entire gate with sufficient permission.
 - `rayman checkpoint save` and autosave default to a user-profile root. In a

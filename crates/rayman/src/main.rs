@@ -208,10 +208,15 @@ fn run(cli: Cli) -> Result<()> {
             }
             TempAction::Scratch { label } => {
                 let dir = temp::scratch_dir(&root, &label)?;
+                // This path is meant to be pasted into another command, so it
+                // must not carry the Windows `\\?\` verbatim prefix that many
+                // tools and shells refuse. Pytest lease paths were normalized
+                // for exactly this reason; scratch was the remaining leak.
+                let path = rayman::pathfmt::display_path(&dir);
                 if json {
-                    print(&json!({ "path": dir.display().to_string() }));
+                    print(&json!({ "path": path }));
                 } else {
-                    println!("{}", dir.display());
+                    println!("{path}");
                 }
             }
             TempAction::PytestLease { label } => {

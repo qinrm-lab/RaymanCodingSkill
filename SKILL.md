@@ -47,8 +47,14 @@ is orphan state and does not authorize automatic use.
   `~/.codex/tmp/arg0/*/apply_patch.bat` to see which build the session is
   bound to; a `WindowsApps` target fails every call, a
   `%LOCALAPPDATA%\OpenAI\Codex\bin\...` target works. The fix is to run
-  Codex from the non-MSIX install. Escalation fixes neither mode. Until the
-  host is fixed, patch via `git apply` and stop retrying the tool.
+  Codex from the non-MSIX install. A third signature,
+  `windows sandbox failed: helper_unknown_error: setup refresh had errors`,
+  occurs even on an `elevated` host. Escalation fixes none of them. Until the
+  host is fixed, fall back as the workflow reference describes: write the
+  patch into the directory `rayman temp scratch <label>` prints — `C:\tmp` and
+  `%TEMP%` are outside the writable roots — then `git apply`; in a workspace
+  that is not a Git worktree, rewrite the whole file and re-read it instead of
+  splicing regions. Stop retrying the tool.
 - Request escalated permissions upfront for rayman state writes, git
   stage/commit, repository gates, and installer runs; over-long command
   lines fail to spawn under the sandbox wrapper, so split them. Details:

@@ -4813,3 +4813,36 @@ fn handoff_start_rejects_a_retired_source_goal() {
         retired.stderr
     );
 }
+
+/// `temp scratch` prints a path meant to be pasted into another command — the
+/// workflow contract points patch files at it. A Windows `\?\` verbatim
+/// prefix makes many tools refuse it; pytest lease paths were normalized for
+/// that reason and scratch was the remaining leak.
+#[test]
+fn temp_scratch_paths_do_not_leak_the_windows_verbatim_prefix() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(
+        root,
+        "src/lib.rs",
+        "pub fn a() {}
+",
+    );
+    run_json(root, &["context", "refresh"]);
+
+    let text = run(root, &["temp", "scratch", "patchwork"]);
+    assert_eq!(text.status, 0, "stderr={}", text.stderr);
+    assert!(
+        !text.stdout.contains(r"\?\"),
+        "text output leaked the verbatim prefix: {}",
+        text.stdout
+    );
+
+    let json = run_json(root, &["temp", "scratch", "patchwork"]);
+    let path = json["path"].as_str().unwrap();
+    assert!(
+        !path.contains(r"\?\"),
+        "json output leaked the verbatim prefix: {path}"
+    );
+    assert!(path.contains("patchwork"), "{path}");
+}
