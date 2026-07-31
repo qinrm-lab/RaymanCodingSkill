@@ -976,13 +976,16 @@ try {
                     # the caller's process environment — a shell started before the
                     # persistent PATH was updated never inherits it. Make the
                     # destination resolvable for the verification only, and report it.
+                    # Restore the caller's PATH *before* probing. The source-fresh
+                    # verification above prepends the build output directory, which
+                    # itself contains a rayman.exe; probing the augmented PATH would
+                    # always find that one and never take the branch below.
+                    $env:PATH = $originalPath
                     $existingRayman = @(Get-Command 'rayman' -All -ErrorAction SilentlyContinue)
                     if ($existingRayman.Count -eq 0) {
                         $script:processPathOnly = $true
                         $env:PATH = $resolvedBinDirectory +
                             [IO.Path]::PathSeparator + $originalPath
-                    } else {
-                        $env:PATH = $originalPath
                     }
                 }
 
