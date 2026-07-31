@@ -101,9 +101,25 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
         );
     }
     if cmd.check && !identity_ready {
-        bail!(
-            "已安装身份契约不一致：请使用仓库 release 二进制同步安装，并更新 .RaymanCodingSkill/workspace_skill.yaml 的 skill_sha256"
-        );
+        // Naming one cause when three are independent sent readers at the wrong
+        // repair: the usual failure is simply that this process has no `rayman`
+        // on PATH (the installer updates the persistent PATH, which an already
+        // running shell never inherits), and the old text told them to edit
+        // skill_sha256 instead.
+        let mut causes = Vec::new();
+        if !path_matches_running {
+            causes.push(if path_candidate.is_none() {
+                "PATH 上找不到 rayman：安装器只改持久化 PATH，已经开着的终端不会继承；新开一个终端，或先把安装目录加进本进程 PATH"
+            } else {
+                "PATH 上的 rayman 与当前运行的二进制不是同一份：用仓库 release 二进制重新安装"
+            });
+        }
+        if !activation.active {
+            causes.push("workspace 未激活：运行 `rayman workspace activate --skill-file <canonical-SKILL.md> --yes`");
+        } else if !metadata_matches {
+            causes.push("workspace SKILL.md 与记录的 skill_sha256 不一致：SKILL.md 改动后需重新 activate 重绑");
+        }
+        bail!("已安装身份契约不一致：{}", causes.join("；"));
     }
     Ok(())
 }

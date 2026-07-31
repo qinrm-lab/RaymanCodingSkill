@@ -1512,9 +1512,15 @@ impl GoalStore {
                 "只有 current goal 可以归档；已迁移的 archived goal 可用 --migrate-unreceipted 幂等刷新 proof"
             );
         }
-        if goal.status != GoalStatus::Success {
+        // `active` must still be closed first: stating `partial`/`blocked` is
+        // the honest record of what actually happened, and archiving is only
+        // the retirement of an already-stated outcome. Abandoned work used to
+        // have no disposal path — `archive` demanded success and `supersede`
+        // demanded a replacement that was already gate-ready success — so real
+        // sessions simply stopped recording anything.
+        if goal.status == GoalStatus::Active {
             bail!(
-                "只有 success goal 可以归档；active/partial/blocked 必须完成或由 replacement 承接"
+                "active goal 不能直接归档；先 `rayman goal close {id} --status partial`（或 blocked）如实记录结果，再归档"
             );
         }
         if let Some(error) = goal.current_schema_error() {
@@ -1524,7 +1530,12 @@ impl GoalStore {
         let mut proof_fingerprint = current_fingerprint.clone();
         let mut migration = None;
         let mut receipt_policy = Some(RECEIPT_POLICY_V2.to_string());
-        if !goal.loaded_from_legacy {
+        // Receipt integrity is a *success* contract: it exists so an archived
+        // success can later serve as lifecycle-only authority. A goal retired as
+        // partial/blocked makes no such claim and is refused by every consumer
+        // of archived evidence, so demanding success receipts from it only
+        // stranded abandoned work with nowhere to go.
+        if !goal.loaded_from_legacy && goal.status == GoalStatus::Success {
             let gaps = goal_success_receipt_gaps(&goal, &self.root, &current_fingerprint);
             if !gaps.is_empty() {
                 if migrate_unreceipted && pre_receipt_migration_eligible(&goal) {

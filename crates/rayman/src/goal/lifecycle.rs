@@ -796,8 +796,19 @@ impl Goal {
                 }
             }
             GoalLifecycle::Archived => {
-                if self.status != GoalStatus::Success {
-                    Some("只有 success goal 可以 archived".into())
+                // Archiving retires a record from readiness; it asserts nothing
+                // about completion. A goal that was honestly closed `partial` or
+                // `blocked` may therefore be retired too — otherwise abandoned
+                // work has no disposal path at all, because `supersede` needs a
+                // replacement that is already gate-ready success. Every consumer
+                // of an archived record (lifecycle-only authority, replacement
+                // authorization, historical-receipt quarantine) additionally
+                // requires `status == Success`, so this can never mint evidence.
+                if !matches!(
+                    self.status,
+                    GoalStatus::Success | GoalStatus::Partial | GoalStatus::Blocked
+                ) {
+                    Some("只有 success/partial/blocked goal 可以 archived".into())
                 } else if self
                     .lifecycle_reason
                     .as_deref()

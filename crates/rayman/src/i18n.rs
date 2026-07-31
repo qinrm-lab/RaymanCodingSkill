@@ -15,7 +15,11 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "后台继续必须绑定 immediate human consultation，并同时记录非空 background-mechanism、background-authority-evidence 与 background-isolation-evidence",
     "human/external blocker 必须包含 attempts、evidence-path、minimum-input、recommended、alternative、risk、resume-command 与 auto-resume-condition",
     "current goal 缺少开工 baseline；不能作为当前成功证据，请用新的 baseline-bound goal supersede，或将已完成记录显式 archive",
-    "已安装身份契约不一致：请使用仓库 release 二进制同步安装，并更新 .RaymanCodingSkill/workspace_skill.yaml 的 skill_sha256",
+    "已安装身份契约不一致：{}",
+    "PATH 上找不到 rayman：安装器只改持久化 PATH，已经开着的终端不会继承；新开一个终端，或先把安装目录加进本进程 PATH",
+    "PATH 上的 rayman 与当前运行的二进制不是同一份：用仓库 release 二进制重新安装",
+    "workspace 未激活：运行 `rayman workspace activate --skill-file <canonical-SKILL.md> --yes`",
+    "workspace SKILL.md 与记录的 skill_sha256 不一致：SKILL.md 改动后需重新 activate 重绑",
     "最终 checkpoint 失败，active 状态已尝试回滚但计划任务重注册失败：checkpoint={checkpoint_error}; register={register_error}",
     "未知 pending kind: {value}（可用: machine_actionable | human_input | external_wait | destructive_boundary | hard_gate | repair_exhausted）",
     "RaymanCodingSkill v2：多语言的上下文索引 / 目标 / 检查 / 恢复工作流\nMultilingual context / goal / check / recovery workflow",
@@ -373,7 +377,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "pytest lease 清理探针失败: {}",
     "skill_file 不可读取 {}: {error}",
     "skill_file 路径不能包含换行",
-    "只有 success goal 可以 archived",
+    "只有 success/partial/blocked goal 可以 archived",
     "无法哈希 skill_file {}: {error}",
     "无法复查 autosave 独占锁: {}",
     "无法定位当前 rayman 二进制",
@@ -1093,6 +1097,34 @@ const MESSAGE_PREFIX_CATALOG: &[(&str, &str)] = &[
     (
         "实际变更 {} 个文件但缺少首次修改前的 goal plan receipt",
         "{} files changed but the goal lacks a plan receipt recorded before the first modification",
+    ),
+    (
+        "已安装身份契约不一致：{}",
+        "installed identity contract is inconsistent: {}",
+    ),
+    (
+        "PATH 上找不到 rayman：安装器只改持久化 PATH，已经开着的终端不会继承；新开一个终端，或先把安装目录加进本进程 PATH",
+        "rayman is not on PATH: the installer only updates the persistent PATH, which an already open terminal never inherits; open a new terminal, or prepend the install directory to this process PATH",
+    ),
+    (
+        "PATH 上的 rayman 与当前运行的二进制不是同一份：用仓库 release 二进制重新安装",
+        "the rayman on PATH is not the binary that is running: reinstall from the repository release binary",
+    ),
+    (
+        "workspace 未激活：运行 `rayman workspace activate --skill-file <canonical-SKILL.md> --yes`",
+        "workspace is not activated: run `rayman workspace activate --skill-file <canonical-SKILL.md> --yes`",
+    ),
+    (
+        "workspace SKILL.md 与记录的 skill_sha256 不一致：SKILL.md 改动后需重新 activate 重绑",
+        "workspace SKILL.md does not match the recorded skill_sha256: re-run activate to rebind after editing SKILL.md",
+    ),
+    (
+        "只有 success/partial/blocked goal 可以 archived",
+        "only success, partial, or blocked goals can be archived",
+    ),
+    (
+        "active goal 不能直接归档；先 `rayman goal close {id} --status partial`（或 blocked）如实记录结果，再归档",
+        "an active goal cannot be archived directly; first record the real outcome with `rayman goal close {id} --status partial` (or blocked), then archive it",
     ),
     (
         "legacy goal {} 仍为 current（status={}）；legacy 记录不能生成当前 receipt，请显式 archive 历史 success，或新建 current-schema replacement 后 supersede",
@@ -2260,10 +2292,6 @@ const MESSAGE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     (
         "`scripts/verify-release-contract.ps1 -RequireSourceFresh` 验证",
         "verification with `scripts/verify-release-contract.ps1 -RequireSourceFresh`",
-    ),
-    (
-        "已安装身份契约不一致：请使用仓库 release 二进制同步安装，并更新 .RaymanCodingSkill/workspace_skill.yaml 的 skill_sha256",
-        "Installed identity mismatch: install the repository release binary and update skill_sha256 in .RaymanCodingSkill/workspace_skill.yaml",
     ),
     (
         "查询 autosave 计划任务失败，不能把未知状态当作未注册",

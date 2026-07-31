@@ -3059,3 +3059,85 @@ fn close_lane_refuses_a_retired_goal() {
         "unexpected error: {error}"
     );
 }
+
+/// Abandoned work had no disposal path: `archive` demanded success and
+/// `supersede` demanded a replacement that was already gate-ready success, so
+/// a goal whose baseline no longer matched reality could only be left dangling.
+/// Two consecutive real sessions stopped recording anything because of it.
+#[test]
+fn an_honestly_closed_goal_can_be_retired_without_ever_claiming_success() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let store = GoalStore::new(root);
+
+    {
+        let status = "partial";
+        let goal = store
+            .start(status, &[("abandoned work".into(), true)])
+            .unwrap();
+        // An active goal must still state its real outcome first.
+        let active = store.archive(&goal.id, "abandoned", false).unwrap_err();
+        assert!(
+            active.to_string().contains("active goal 不能直接归档"),
+            "unexpected error: {active}"
+        );
+
+        store.close(&goal.id, status).unwrap();
+        let archived = store
+            .archive(&goal.id, "abandoned: baseline drifted", false)
+            .map_err(|e| format!("archive failed for {status}: {e:#}"))
+            .unwrap();
+
+        assert_eq!(archived.lifecycle, GoalLifecycle::Archived);
+        assert_ne!(archived.status, GoalStatus::Success);
+        // The retired record must stay schema-valid, or it becomes exactly the
+        // unremovable state this change exists to eliminate.
+        assert!(
+            archived.current_schema_error().is_none(),
+            "archived record must remain valid: {:?}",
+            archived.current_schema_error()
+        );
+
+        // `blocked` follows the same rule; the invariant is what both share.
+        let mut as_blocked = archived.clone();
+        as_blocked.status = GoalStatus::Blocked;
+        assert!(as_blocked.current_schema_error().is_none());
+        // `active` never becomes a valid archived record.
+        let mut as_active = archived.clone();
+        as_active.status = GoalStatus::Active;
+        assert!(as_active.current_schema_error().is_some());
+    }
+}
+
+/// Retiring a non-success goal must never become a completion or authority
+/// bypass: every consumer of an archived record also requires success.
+#[test]
+fn a_retired_non_success_goal_is_never_accepted_as_evidence() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let store = GoalStore::new(root);
+    let goal = store.start("abandoned", &[("work".into(), true)]).unwrap();
+    store.close(&goal.id, "partial").unwrap();
+    let archived = store
+        .archive(&goal.id, "abandoned: baseline drifted", false)
+        .unwrap();
+
+    let all = store.list().unwrap();
+    let fingerprint = workspace_fingerprint(root).unwrap();
+    let verdict = goal_gate_verdict(&archived, &all, root, Some(&fingerprint));
+    // A retired record leaves readiness entirely rather than satisfying it.
+    assert_ne!(archived.status, GoalStatus::Success);
+    assert!(
+        verdict.blockers.is_empty(),
+        "a retired record must not block the workspace: {:?}",
+        verdict.blockers
+    );
+    // Every consumer of an archived record additionally requires success, so a
+    // retired partial can never stand in for one. `quarantine_invalid_history`
+    // is the cheapest of those gates to exercise directly.
+    let quarantined = store.quarantine_invalid_history(&goal.id, "probe");
+    assert!(
+        quarantined.is_err(),
+        "a retired non-success record must not be usable as historical evidence"
+    );
+}
