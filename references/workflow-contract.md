@@ -113,6 +113,17 @@ boundaries, not lock contention and not source defects.
   the target. That is fixed by `[windows] sandbox = "elevated"`, not by a
   workaround; surface it to the user as a one-line host fix and keep working
   through the fallback meanwhile.
+- `Access is denied.` from `apply_patch.bat` is a second, unrelated failure.
+  Codex generates that shim as a direct absolute-path invocation of its own
+  executable; when the running Codex is the MSIX/Store build the target sits
+  under `C:\Program Files\WindowsApps\`, which Windows refuses to start by
+  path regardless of the caller — an ordinary interactive user is denied
+  too, so this is neither an ACL to repair nor a sandbox effect, and
+  escalation cannot help. Diagnose it by reading the newest
+  `~/.codex/tmp/arg0/*/apply_patch.bat`: a `WindowsApps` target fails every
+  call for the whole session, a `%LOCALAPPDATA%\OpenAI\Codex\bin\...` target
+  works. The only fix is to run Codex from the non-MSIX install; report that
+  and fall back to `git apply` meanwhile.
 - Apply patches from a file, never from stdin or a shell here-string: host
   quoting mangles them into `corrupt patch`. Write UTF-8 (no BOM) with LF
   endings to managed temp, then `git apply --whitespace=nowarn <file>`.

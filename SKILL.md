@@ -38,9 +38,17 @@ is orphan state and does not authorize automatic use.
   `unelevated` sandbox cannot express the managed profile's read-only
   `.git`/`.agents`/`.codex` carve-outs. Report it and ask for Codex
   `[windows] sandbox = "elevated"`, which supports all three. `Access is
-  denied.` from `apply_patch.bat` is the separate WindowsApps shim ACL.
-  Escalation fixes neither. Until the host is fixed, patch via
-  `git apply` and stop retrying the tool.
+  denied.` from `apply_patch.bat` is a different defect with a different fix:
+  Codex writes that shim as a direct absolute-path call to its own
+  executable, and an MSIX/Store install lives under
+  `C:\Program Files\WindowsApps\`, which Windows refuses to launch by path at
+  all — not an ACL to repair, and it fails the same way for an ordinary
+  interactive user. Read the newest
+  `~/.codex/tmp/arg0/*/apply_patch.bat` to see which build the session is
+  bound to; a `WindowsApps` target fails every call, a
+  `%LOCALAPPDATA%\OpenAI\Codex\bin\...` target works. The fix is to run
+  Codex from the non-MSIX install. Escalation fixes neither mode. Until the
+  host is fixed, patch via `git apply` and stop retrying the tool.
 - Request escalated permissions upfront for rayman state writes, git
   stage/commit, repository gates, and installer runs; over-long command
   lines fail to spawn under the sandbox wrapper, so split them. Details:
