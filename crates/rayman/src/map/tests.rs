@@ -1062,3 +1062,44 @@ fn nested_pyproject_imports_resolve_against_the_package_root() {
             .any(|check| check == "python -m pytest packages/api")
     );
 }
+
+/// Package source/test counts used to include every indexed language, so one
+/// `tests/*.py` inside a Cargo package satisfied `package_has_test_anchor` and
+/// silenced `multi_source_project_without_tests` — the only *blocking* quality
+/// error — on a package with zero Rust tests.
+#[test]
+fn package_counts_ignore_files_the_package_toolchain_never_builds() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        &root.join("Cargo.toml"),
+        "[package]\nname = \"rusty\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    );
+    for module in ["a", "b", "c"] {
+        write(
+            &root.join(format!("src/{module}.rs")),
+            &format!("pub fn {module}() {{}}\n"),
+        );
+    }
+
+    // A foreign-language test file must not count as this package's test anchor.
+    write(
+        &root.join("tests/test_smoke.py"),
+        "def test_smoke():\n    pass\n",
+    );
+
+    crate::context::refresh(root).unwrap();
+    let map = build(root).unwrap();
+    let package = map
+        .packages
+        .iter()
+        .find(|package| package.name == "rusty")
+        .expect("the Cargo package must be mapped");
+
+    assert_eq!(package.source_files, 3, "only .rs sources count");
+    assert_eq!(
+        package.test_files, 0,
+        "a .py test is not a Rust test anchor"
+    );
+    assert!(!package_has_test_anchor(&map, package));
+}

@@ -653,6 +653,13 @@ impl GoalStore {
         let Some(mut goal) = Self::load_goal_file(&path)? else {
             bail!("目标不存在: {id}");
         };
+        // `open_lane` and every sibling work-package/progress mutator refuse a
+        // retired record; without the same guard here the lane ledger of a
+        // superseded goal could still be rewritten, and lane state feeds the
+        // lifecycle proof.
+        if goal.lifecycle != GoalLifecycle::Current {
+            bail!("只有 current 目标可以关闭 lane");
+        }
         let current = workspace_baseline(&self.root)?;
         let Some(lane) = goal.lanes.iter_mut().find(|lane| lane.id == lane_id) else {
             bail!("lane 不存在: {lane_id}");

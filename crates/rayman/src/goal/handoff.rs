@@ -254,7 +254,12 @@ pub fn handoff_contract_error(
     current_fingerprint: &str,
 ) -> Option<String> {
     let handoff = goal.handoff.as_ref()?;
-    if handoff.contract_sha256 != handoff_contract_sha256(handoff).ok()? {
+    // `None` from this function means "the contract is valid", so a `?` on a
+    // hashing failure reported a passing contract instead of a blocked one.
+    let Ok(expected_contract) = handoff_contract_sha256(handoff) else {
+        return Some("handoff contract hash could not be computed".into());
+    };
+    if handoff.contract_sha256 != expected_contract {
         return Some("handoff contract hash is invalid".into());
     }
     if handoff.workspace_identity != workspace_identity(root)

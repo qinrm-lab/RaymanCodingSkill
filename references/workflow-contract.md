@@ -83,8 +83,9 @@ overwriting user-managed state still require user authority.
 - `goal lane` coordinates scoped-writer, advisory read-only, and
   final-reviewer work. Read-only and final-reviewer lanes are zero-write
   brackets that reject any workspace change, so a drifted one is discharged by
-  reverting or by `supersede`/`archive`, not by a partial close. Lane records
-  never replace validation.
+  reverting or by `supersede`, not by a partial close. (`archive` cannot
+  discharge it: archiving requires success, and an open lane blocks success.)
+  Lane records never replace validation.
 - Give concurrent pytest runs independent managed leases and traversable temp
   roots.
 

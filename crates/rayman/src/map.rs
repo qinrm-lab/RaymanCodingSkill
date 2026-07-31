@@ -720,10 +720,18 @@ fn package_collects_path(package: &PackageEntry, path: &str) -> bool {
     }
 }
 
+/// Does this package have a local validation anchor for *its own* sources?
+///
+/// The discovered-test fallback used to accept any test file under the package
+/// root regardless of language, so a `tests/*.py` inside a Cargo package
+/// counted as an anchor for Rust sources that `cargo test` would never touch.
+/// Both halves now agree with `package_collects_path`.
 fn package_has_test_anchor(map: &ProjectMap, package: &PackageEntry) -> bool {
     package.test_files > 0
         || map.tests.iter().any(|test| {
-            test.test_count > 0 && path_is_under_package(&test.path, &package.root_path)
+            test.test_count > 0
+                && path_is_under_package(&test.path, &package.root_path)
+                && package_collects_path(package, &test.path)
         })
 }
 
@@ -874,22 +882,7 @@ fn cargo_metadata_at(
         }
     }
     packages.sort_by(|left, right| left.root_path.cmp(&right.root_path));
-    for package in &mut packages {
-        package.source_files = 0;
-        package.test_files = 0;
-    }
-    for file in &index.files {
-        if !matches!(file.kind.as_str(), "source" | "test") {
-            continue;
-        }
-        if let Some(position) = package_index_for_path(&packages, &file.path) {
-            if file.kind == "source" {
-                packages[position].source_files += 1;
-            } else {
-                packages[position].test_files += 1;
-            }
-        }
-    }
+    count_package_files(&mut packages, index);
 
     let by_manifest: BTreeMap<String, &PackageEntry> = packages
         .iter()
@@ -1123,6 +1116,23 @@ fn count_kinds(index: &ContextIndex) -> (usize, usize, usize, usize, usize, usiz
     )
 }
 
+/// Does the root Cargo workspace explicitly exclude the package owning `path`?
+///
+/// `exclude = ["evals"]` means `cargo test --workspace` never compiles a line
+/// of it, yet a workspace-wide command used to be accepted as covering changes
+/// there — a receipt claiming validation of code the command provably never
+/// built. Parsing lives here, next to the other workspace-manifest rules, so
+/// the validation layer cannot drift from it.
+pub(crate) fn path_is_excluded_from_root_cargo_workspace(root: &Path, path: &str) -> bool {
+    let Ok(text) = std::fs::read_to_string(root.join("Cargo.toml")) else {
+        return false;
+    };
+    let normalized = path.replace('\\', "/");
+    parse_workspace_array(&text, "exclude")
+        .iter()
+        .any(|pattern| path_matches_workspace_exclude_pattern(&normalized, pattern))
+}
+
 fn read_workspace_info(root: &Path, index: &ContextIndex) -> Result<WorkspaceInfo> {
     let Some(entry) = index.files.iter().find(|file| file.path == "Cargo.toml") else {
         return Ok(WorkspaceInfo::default());
@@ -1255,19 +1265,39 @@ fn discover_packages(
     }
 
     packages.sort_by(|a, b| a.root_path.cmp(&b.root_path));
+    count_package_files(&mut packages, index);
+    Ok(packages)
+}
+
+/// Attribute indexed source/test files to their owning package.
+///
+/// The cargo-metadata path and this heuristic path each used to carry their own
+/// copy of this loop, so a fix applied to one silently left the other counting
+/// differently. Counting *every* language meant one `tests/*.py` inside a Cargo
+/// package satisfied `package_has_test_anchor` and silenced
+/// `multi_source_project_without_tests` — the only blocking quality error — on
+/// a package with no Rust tests at all.
+fn count_package_files(packages: &mut [PackageEntry], index: &ContextIndex) {
+    for package in packages.iter_mut() {
+        package.source_files = 0;
+        package.test_files = 0;
+    }
     for file in &index.files {
-        if file.kind != "source" && file.kind != "test" {
+        if !matches!(file.kind.as_str(), "source" | "test") {
             continue;
         }
-        if let Some(index) = package_index_for_path(&packages, &file.path) {
-            if file.kind == "source" {
-                packages[index].source_files += 1;
-            } else {
-                packages[index].test_files += 1;
-            }
+        let Some(position) = package_index_for_path(packages, &file.path) else {
+            continue;
+        };
+        if !package_collects_path(&packages[position], &file.path) {
+            continue;
+        }
+        if file.kind == "source" {
+            packages[position].source_files += 1;
+        } else {
+            packages[position].test_files += 1;
         }
     }
-    Ok(packages)
 }
 
 fn infer_package_dependencies(

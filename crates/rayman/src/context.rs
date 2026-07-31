@@ -38,7 +38,9 @@ pub struct FileEntry {
     pub lines: usize,
     #[serde(default)]
     pub symbols: Vec<Symbol>,
-    /// 读取/哈希失败不能伪装成空文件；当前索引因此为 incomplete。
+    /// 本进程从不写入这个字段：`build_entry` 在读取/哈希失败时直接返回 `Err`，
+    /// `refresh` 把错误向上抛，索引根本不会落盘。字段只用于**读取**外部写入或
+    /// 被篡改的索引文件——发现它有值就说明那份索引不可信，必须拒绝。
     #[serde(default)]
     pub read_error: Option<String>,
 }
@@ -230,8 +232,26 @@ fn between(text: &str, start: &str, end: &str) -> Option<String> {
     Some(rest[..stop].to_string())
 }
 
-/// 超过此大小的文件只做流式 hash，不进内存做文本解析。
+/// 超过此大小的文件只做流式 hash 与流式行数统计，不进内存做符号解析。
 const MAX_TEXT_BYTES: u64 = 8 * 1024 * 1024;
+
+/// Count lines without holding the file in memory. Matches `str::lines()`:
+/// a trailing newline does not add an empty final line.
+fn count_lines_streaming(path: &Path) -> Result<usize> {
+    use std::io::{BufRead, BufReader};
+
+    let mut reader = BufReader::new(std::fs::File::open(path)?);
+    let mut buffer = Vec::new();
+    let mut lines = 0usize;
+    loop {
+        buffer.clear();
+        if reader.read_until(b'\n', &mut buffer)? == 0 {
+            break;
+        }
+        lines += 1;
+    }
+    Ok(lines)
+}
 
 fn build_entry(root: &Path, path: &Path, size: u64, mtime: u128) -> Result<FileEntry> {
     ensure_source_file(root, path)?;
@@ -242,14 +262,20 @@ fn build_entry(root: &Path, path: &Path, size: u64, mtime: u128) -> Result<FileE
         .unwrap_or("")
         .to_ascii_lowercase();
     // 读取或哈希失败不能归约为空内容：refresh 必须拒绝写出可能被误判为完整的索引。
-    let (bytes, streamed_hash) = if size > MAX_TEXT_BYTES {
+    let (bytes, streamed_hash, streamed_lines) = if size > MAX_TEXT_BYTES {
         let hash = sha256_file(path)
             .with_context(|| format!("上下文索引无法哈希文件: {}", display_path(path)))?;
-        (Vec::new(), Some(hash))
+        // Reporting 0 lines here inverted the `large_file` quality gate: the
+        // rule blocks above a line threshold, so the very largest files were
+        // the only ones it could never fire on. Line count is streamed instead;
+        // symbols stay empty because that needs the whole text in memory.
+        let lines = count_lines_streaming(path)
+            .with_context(|| format!("上下文索引无法统计文件行数: {}", display_path(path)))?;
+        (Vec::new(), Some(hash), Some(lines))
     } else {
         let bytes = std::fs::read(path)
             .with_context(|| format!("上下文索引无法读取文件: {}", display_path(path)))?;
-        (bytes, None)
+        (bytes, None, None)
     };
     let after = std::fs::metadata(path)
         .with_context(|| format!("上下文索引无法复查文件元数据: {}", display_path(path)))?;
@@ -259,7 +285,7 @@ fn build_entry(root: &Path, path: &Path, size: u64, mtime: u128) -> Result<FileE
     }
     let sha256 = streamed_hash.unwrap_or_else(|| sha256_bytes(&bytes));
     let text = String::from_utf8_lossy(&bytes);
-    let lines = text.lines().count();
+    let lines = streamed_lines.unwrap_or_else(|| text.lines().count());
     let kind = classify(&rel, &extension);
     let symbols = if kind == "source" || kind == "test" {
         extract_symbols(&text)
@@ -712,6 +738,38 @@ mod tests {
     fn touch(path: &Path, body: &str) {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, body).unwrap();
+    }
+
+    /// Files above `MAX_TEXT_BYTES` are hashed without being read into memory.
+    /// Reporting them as 0 lines inverted the `large_file` quality gate, which
+    /// blocks above a line threshold: the very largest files were the only
+    /// ones it could never fire on.
+    #[test]
+    fn oversized_files_report_their_real_line_count() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let line = "pub fn filler() {} // padding to exceed the in-memory limit\n";
+        let repeats = (MAX_TEXT_BYTES as usize / line.len()) + 64;
+        touch(&root.join("src/huge.rs"), &line.repeat(repeats));
+        touch(&root.join("src/small.rs"), "pub fn a() {}\npub fn b() {}\n");
+
+        let (index, _) = refresh(root).unwrap();
+        let huge = index
+            .files
+            .iter()
+            .find(|file| file.path == "src/huge.rs")
+            .unwrap();
+        assert!(huge.size > MAX_TEXT_BYTES, "fixture must exceed the limit");
+        assert_eq!(huge.lines, repeats, "line count must be streamed, not zero");
+        // Symbols still need the whole text in memory, so they stay empty.
+        assert!(huge.symbols.is_empty());
+
+        let small = index
+            .files
+            .iter()
+            .find(|file| file.path == "src/small.rs")
+            .unwrap();
+        assert_eq!(small.lines, 2, "the in-memory path is unchanged");
     }
 
     #[test]

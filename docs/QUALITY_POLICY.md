@@ -1,6 +1,8 @@
 # Strict quality policy
 
-`standard` reports maintainability warnings but does not promote them. `strict` and `release` always promote the built-in `large_file` and `high_fan_in` kinds. A workspace policy at `.RaymanCodingSkill/quality.json` is additive: `block_warning_kinds` can promote more known warning kinds, but an empty or partial list cannot remove built-in defaults.
+`standard` reports maintainability warnings but does not promote them, and it
+does not read the workspace policy file at all: promotions, exemptions, and
+threshold overrides apply to `strict`/`release` only. `strict` and `release` always promote the built-in `large_file` and `high_fan_in` kinds. A workspace policy at `.RaymanCodingSkill/quality.json` is additive: `block_warning_kinds` can promote more known warning kinds, but an empty or partial list cannot remove built-in defaults.
 
 The policy file is the one indexed file under `.RaymanCodingSkill/`. Its content hash participates in context freshness and workspace fingerprints; after editing it, run `rayman context refresh` and regenerate validation evidence.
 

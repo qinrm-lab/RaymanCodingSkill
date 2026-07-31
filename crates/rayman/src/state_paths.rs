@@ -181,8 +181,14 @@ pub fn state_write_probe(root: &Path) -> StateWriteProbe {
     };
     // The probe file name stays unique per process to avoid concurrent
     // clobbering; the reported path is the stable directory so identical
-    // inspections stay byte-identical across runs and languages. CREATE_NEW
-    // (create_new) never follows a pre-planted link at the final component.
+    // inspections stay byte-identical across runs and languages.
+    //
+    // `create_new` maps to POSIX `O_CREAT|O_EXCL`, which refuses a pre-planted
+    // symlink at the final component even when it dangles. Win32 `CREATE_NEW`
+    // gives no such guarantee — it resolves a reparse point first and can fail
+    // with ALREADY_EXISTS pointing elsewhere. That is why the probe is only a
+    // diagnostic: the authority for state-path safety is `managed_state_*`,
+    // which verifies links and reparse points explicitly.
     let probe = tmp.join(format!(".rayman-state-probe-{}.tmp", std::process::id()));
     let write = fs::OpenOptions::new()
         .write(true)

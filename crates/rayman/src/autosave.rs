@@ -164,9 +164,10 @@ pub fn task_name(root: &Path) -> String {
     format!("RaymanCheckpoint-{}", checkpoint::workspace_key(root))
 }
 
-/// 工作是否“全部完成”：至少有一个 current 目标，所有 current 目标都满足
-/// standard goal/receipt freshness 合同，且没有待完成项。Archived/superseded
-/// records are retained as history but do not keep autosave alive.
+/// 工作是否“全部完成”：至少有一个 current 目标，且**存储里的每一个目标**
+/// ——包括 archived/superseded 记录——都通过同一份 `goal_gate_verdict`，
+/// 没有待完成项。退休记录并不被跳过：它们同样必须无 blocker，否则一条损坏的
+/// 历史记录会让自动快照永远停不下来，这一点与只看 current 目标的直觉不同。
 /// 没有任何 current 目标时返回 false（无从判断完成，交给显式 `stop`）。
 /// 任何状态文件读不出来都按“未完成”处理：损坏的 active 目标被当成不存在
 /// 会导致自动快照在工作进行中自停并注销。

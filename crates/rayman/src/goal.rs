@@ -238,7 +238,9 @@ pub struct ValidationReceipt {
     /// a current standard/release claim.
     #[serde(default)]
     pub invocation_sha256: String,
-    /// Present only for cargo test/nextest executions.  A zero-test or
+    /// Present for executed test commands — `cargo test` and pytest alike.
+    /// (`nextest` never reaches this field: it has no independent list proof
+    /// and `validate_test_execution_mode` rejects it outright.) A zero-test or
     /// compile-only invocation cannot satisfy a test receipt.
     #[serde(default)]
     pub passed_tests: Option<u64>,
@@ -706,6 +708,16 @@ impl GoalStore {
             requirement.kind == RequirementKind::Must && !requirement.text.trim().is_empty()
         }) {
             bail!("新目标至少需要一个非空 --must 需求");
+        }
+        // `any` alone let a second, blank requirement through, and
+        // `current_schema_error` — which every gate re-runs on read — rejects
+        // an empty requirement text. The store would report the goal created
+        // while no reader would ever accept it.
+        if requirements
+            .iter()
+            .any(|requirement| requirement.text.trim().is_empty())
+        {
+            bail!("goal 包含空的 requirement id 或文本");
         }
         let goals_dir =
             state_paths::managed_state_dir(&self.root, Path::new(GOALS_RELATIVE), true)?
@@ -1222,7 +1234,7 @@ impl GoalStore {
             .find(|requirement| requirement.id == req_id)
             .ok_or_else(|| anyhow::anyhow!("需求不存在: {req_id}"))?
             .proof_kind;
-        let actual_proof = validation_proof_kind(&command)?;
+        let actual_proof = validation_proof_kind(&self.root, &command)?;
         if !proof_kind_matches(required_proof, actual_proof) {
             bail!(
                 "validation proof kind mismatch: requirement={} command={}",

@@ -320,20 +320,22 @@ fn validate_doctor_identity(
 /// contract identifier. Reading it avoids duplicating a brittle v4/v5 literal in
 /// the standalone evaluator while still rejecting a stale binary's different JSON.
 fn expected_rayman_contract(repo_root: &Path) -> Result<String> {
-    let source = read_regular_text(
-        &repo_root.join("crates/rayman/src/main.rs"),
-        "rayman 发布契约源码",
-    )?;
+    // The constant lives in `lib.rs` and is declared `pub const`. Reading
+    // `main.rs` for a bare `const` matched neither, so this gate returned an
+    // error on every real-backend run instead of ever binding a contract.
+    const SOURCE_RELATIVE: &str = "crates/rayman/src/lib.rs";
+    let source = read_regular_text(&repo_root.join(SOURCE_RELATIVE), "rayman 发布契约源码")?;
     source
         .lines()
         .find_map(|line| {
-            line.trim()
-                .strip_prefix("const CLI_CONTRACT: &str = \"")
+            let line = line.trim();
+            let line = line.strip_prefix("pub ").unwrap_or(line);
+            line.strip_prefix("const CLI_CONTRACT: &str = \"")
                 .and_then(|rest| rest.strip_suffix("\";"))
                 .map(str::to_string)
         })
         .filter(|contract| !contract.is_empty())
-        .ok_or_else(|| anyhow::anyhow!("无法从 crates/rayman/src/main.rs 读取 CLI_CONTRACT"))
+        .ok_or_else(|| anyhow::anyhow!("无法从 {SOURCE_RELATIVE} 读取 CLI_CONTRACT"))
 }
 
 fn expected_rayman_version(repo_root: &Path) -> Result<String> {
@@ -1254,8 +1256,8 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let repo = temp.path();
         write(
-            &repo.join("crates/rayman/src/main.rs"),
-            "const CLI_CONTRACT: &str = \"rayman-cli-contract-next\";\n",
+            &repo.join("crates/rayman/src/lib.rs"),
+            "pub const CLI_CONTRACT: &str = \"rayman-cli-contract-next\";\n",
         );
         write(
             &repo.join("Cargo.toml"),
@@ -1267,6 +1269,28 @@ mod tests {
             "rayman-cli-contract-next"
         );
         assert_eq!(expected_rayman_version(repo).unwrap(), "9.8.7");
+    }
+
+    /// The fixture test above only ever proved the parser. It kept passing
+    /// after `CLI_CONTRACT` moved out of `main.rs` and gained `pub`, so the
+    /// real-backend release-binding gate returned an error on every run and
+    /// nothing noticed. Bind against the actual repository sources.
+    #[test]
+    fn expected_contract_and_version_resolve_against_the_real_repository() {
+        let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("evals lives one level below the repository root");
+
+        let contract = expected_rayman_contract(repo).expect("CLI_CONTRACT must be readable");
+        assert!(
+            contract.starts_with("rayman-cli-contract-v"),
+            "unexpected contract token: {contract}"
+        );
+        let version = expected_rayman_version(repo).expect("workspace version must be readable");
+        assert!(
+            version.split('.').count() == 3,
+            "unexpected version: {version}"
+        );
     }
 
     #[test]

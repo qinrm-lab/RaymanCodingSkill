@@ -398,6 +398,20 @@ pub(crate) fn print_state_write_probe(probe: &rayman::state_paths::StateWritePro
     }
 }
 
+/// `.<allowed-state-file>.rayman.lock` — the advisory lock `acquire_state_lock`
+/// puts beside a state file. The kernel releases the lock on exit, so the file
+/// is deliberately never deleted; leaving it off the allowlist made
+/// `state audit --check` (and therefore the whole repository audit, which runs
+/// it) fail permanently in any workspace that had used `goal pending add`,
+/// while the contract forbids deleting state to make the gate pass.
+fn is_managed_state_lock(name: &str) -> bool {
+    name.strip_prefix('.')
+        .and_then(|rest| rest.strip_suffix(".rayman.lock"))
+        .is_some_and(|target| STATE_LOCK_TARGETS.contains(&target))
+}
+
+const STATE_LOCK_TARGETS: &[&str] = &["pending.json", "autosave.json"];
+
 fn run_state_audit(root: &Path, json: bool, check: bool) -> Result<()> {
     const V2_ALLOWED: &[&str] = &[
         "goals",
@@ -421,7 +435,8 @@ fn run_state_audit(root: &Path, json: bool, check: bool) -> Result<()> {
                     match entry {
                         Ok(entry) => {
                             let name = entry.file_name().to_string_lossy().to_string();
-                            if !V2_ALLOWED.contains(&name.as_str()) {
+                            if !V2_ALLOWED.contains(&name.as_str()) && !is_managed_state_lock(&name)
+                            {
                                 retired.push(name);
                             } else if let Err(error) = audit_allowed_state_entry(root, &name) {
                                 errors
@@ -505,6 +520,19 @@ fn audit_allowed_state_entry(root: &Path, name: &str) -> Result<()> {
                 bail!("目录在枚举后消失");
             };
             Ok(())
+        }
+        name if is_managed_state_lock(name) => {
+            let path = rayman::state_paths::managed_state_file(root, Path::new(name), false)?;
+            match std::fs::symlink_metadata(&path) {
+                Ok(metadata) if metadata.file_type().is_file() => Ok(()),
+                Ok(_) => bail!("状态锁不是安全普通文件: {}", path.display()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    bail!("文件在枚举后消失: {}", path.display())
+                }
+                Err(error) => {
+                    Err(error).with_context(|| format!("无法检查状态锁: {}", path.display()))
+                }
+            }
         }
         "pending.json"
         | "autosave.json"
@@ -1311,8 +1339,13 @@ fn task_proof_blockers(
     blockers
 }
 
-/// 一次性只读就绪检查：聚合上下文新鲜度、资产扫描、待完成项。
-/// 有硬阻塞（上下文缺失/陈旧、存在待完成项）时以非零码退出，便于脚本/agent 门禁。
+/// 一次性就绪检查：聚合激活状态、源码状态、上下文新鲜度、资产扫描、待完成项、
+/// 项目地图、质量档位与（绑定 `--goal` 时）任务门禁。任一硬阻塞都以非零码退出，
+/// 便于脚本/agent 门禁。
+///
+/// 只在不带 `--refresh-context` 时是只读的：带上该标志（`finish` 总是带）会重建
+/// 并落盘上下文索引。阻塞项远不止上下文与待完成项两类——完整清单见下方各
+/// `blockers.push` 分支与 `goal_gate_verdict`。
 fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
     let activation = workspace::activation_status(root)?;
     let refresh_report = if cmd.refresh_context {
@@ -1907,6 +1940,30 @@ mod tests {
 
         std::fs::remove_file(&evidence).unwrap();
         std::fs::create_dir(&evidence).unwrap();
+        assert!(run_state_audit(dir.path(), false, true).is_err());
+    }
+
+    /// `goal pending add` leaves `.pending.json.rayman.lock` behind by design,
+    /// and `scripts/audit-repository.ps1` runs `state audit --check`, so this
+    /// omission made an ordinary documented command permanently red-line the
+    /// repository audit.
+    #[test]
+    fn state_audit_accepts_the_state_locks_the_cli_itself_creates() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = dir.path().join(".RaymanCodingSkill");
+        std::fs::create_dir_all(&state).unwrap();
+        for lock in [".pending.json.rayman.lock", ".autosave.json.rayman.lock"] {
+            std::fs::write(state.join(lock), "").unwrap();
+        }
+        assert!(run_state_audit(dir.path(), false, true).is_ok());
+
+        // Only locks for known state targets are allowed, and only as files.
+        std::fs::write(state.join(".secrets.rayman.lock"), "").unwrap();
+        assert!(run_state_audit(dir.path(), false, true).is_err());
+        std::fs::remove_file(state.join(".secrets.rayman.lock")).unwrap();
+
+        std::fs::remove_file(state.join(".pending.json.rayman.lock")).unwrap();
+        std::fs::create_dir(state.join(".pending.json.rayman.lock")).unwrap();
         assert!(run_state_audit(dir.path(), false, true).is_err());
     }
 

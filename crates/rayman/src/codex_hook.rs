@@ -236,10 +236,18 @@ fn hooks_path(codex_home: Option<&Path>) -> Result<PathBuf> {
     Ok(path)
 }
 
+/// Build the hook command line the host will run.
+///
+/// The caller canonicalizes the executable, which on Windows yields a `\\?\`
+/// verbatim path. Any shell-mediated spawn — and the hooks-file schema this
+/// mirrors runs `type: "command"` entries through a shell — fails on that
+/// prefix with "The system cannot find the path specified", and because the
+/// guard reports its decision in stdout and always exits 0, a hook that never
+/// launched is indistinguishable from one that allowed the turn. Strip the
+/// prefix so the recorded command is one the host can actually start.
 fn hook_command(executable: &Path) -> Result<String> {
-    let text = executable
-        .to_str()
-        .ok_or_else(|| anyhow::anyhow!("rayman executable path is not Unicode"))?;
+    let launchable = crate::pathfmt::display_path(executable);
+    let text = launchable.as_str();
     #[cfg(windows)]
     {
         if text.contains(['\r', '\n', '"', '%', '!', '&', '|', '<', '>', '^', '$', '`']) {
@@ -490,6 +498,26 @@ mod tests {
             })
             .unwrap();
         assert!(!evaluate_stop(root.path()).blocks_stop());
+    }
+
+    /// `codex-hook install` canonicalizes the executable, which on Windows
+    /// produces a `\\?\` verbatim path. A shell-mediated spawn cannot start
+    /// that path, and since the guard always exits 0 and reports its decision
+    /// in stdout, a hook that never launched looks exactly like one that
+    /// allowed the turn.
+    #[test]
+    fn hook_command_never_carries_a_windows_verbatim_prefix() {
+        let command = hook_command(Path::new(r"\\?\C:\Users\a\bin\rayman.exe")).unwrap();
+        assert!(
+            !command.contains(r"\\?\"),
+            "verbatim prefix must be stripped: {command}"
+        );
+        assert!(command.contains(r"C:\Users\a\bin\rayman.exe"), "{command}");
+        assert!(command.ends_with("codex-hook stop"), "{command}");
+
+        let unc = hook_command(Path::new(r"\\?\UNC\server\share\rayman.exe")).unwrap();
+        assert!(!unc.contains(r"\\?\"), "{unc}");
+        assert!(unc.contains(r"\\server\share\rayman.exe"), "{unc}");
     }
 
     #[test]

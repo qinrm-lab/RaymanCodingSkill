@@ -11,7 +11,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "finish 要求当前稳定 authority receipt；先运行 `rayman goal validate {goal_id} --req <req> --message <evidence> --command <project-gate> --changed <path> --authority --repeat 2`",
     "`rayman audit` 已退役；工作区门禁使用 `rayman check --profile standard`，任务交付使用 `rayman finish --goal <id>`，状态卫生使用 `rayman state audit --check`",
     "legacy goal {} 仍为 current（status={}）；legacy 记录不能生成当前 receipt，请显式 archive 历史 success，或新建 current-schema replacement 后 supersede",
-    "authority gate 必须是受检的 check-repo/audit-repository/verify-release-contract 脚本、`cargo test --workspace|--all`，或无路径选择器的全工作区 pytest",
+    "authority gate 必须是受检的 check-repo/audit-repository/verify-release-contract 脚本、`cargo test --workspace|--all`，或无路径选择器的全工作区 pytest；且不得使用缩小运行范围的选择器",
     "后台继续必须绑定 immediate human consultation，并同时记录非空 background-mechanism、background-authority-evidence 与 background-isolation-evidence",
     "human/external blocker 必须包含 attempts、evidence-path、minimum-input、recommended、alternative、risk、resume-command 与 auto-resume-condition",
     "current goal 缺少开工 baseline；不能作为当前成功证据，请用新的 baseline-bound goal supersede，或将已完成记录显式 archive",
@@ -267,6 +267,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "read-only/reviewer lane {} 发生源码漂移",
     "superseded goal 必须记录 lifecycle_reason",
     "只有 active/current 目标可以打开 lane",
+    "只有 current 目标可以关闭 lane",
     "无法检查共享 quality policy {}: {error}",
     "  workspace SKILL 一致: {metadata_matches}",
     "lane {lane_id} 关闭被拒绝：{violation}",
@@ -790,12 +791,13 @@ fn localize_line_for(line: String, language: ActiveLanguage, json_output: bool) 
                 .find_map(|(index, character)| (!character.is_whitespace()).then_some(index))
                 .unwrap_or(remainder.len());
             let (remainder_indent, remainder_content) = remainder.split_at(remainder_indent_end);
-            let localized_content = localize_authored_message(remainder_content, language)
-                .unwrap_or_else(|| remainder_content.into());
-            return localize_known_fragments(
-                format!("{indentation}{target}{remainder_indent}{localized_content}"),
-                language,
-            );
+            let localized_content = match localize_authored_message(remainder_content, language) {
+                Some(localized) => localized,
+                // No authored template matched, so nothing here is known to be
+                // framework text; translate only what is provably static.
+                None => localize_known_fragments(remainder_content.into(), language),
+            };
+            return format!("{indentation}{target}{remainder_indent}{localized_content}");
         }
     }
     if let Some(localized) = localize_authored_message(content, language) {
@@ -1285,6 +1287,10 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "or full-workspace pytest without path selectors",
     ),
     (
+        "且不得使用缩小运行范围的选择器",
+        "and must not narrow the run with any selector",
+    ),
+    (
         "验证脚本不在当前工作区的受检文件集合中",
         "validation script is outside the inspected file set of the current workspace",
     ),
@@ -1616,6 +1622,7 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     ),
     ("目标可以完成", "goals may complete"),
     ("目标可以打开", "goals may open"),
+    ("目标可以关闭", "goals may close"),
     ("不接受", "does not accept"),
     ("检测到源码漂移", "detected source drift"),
     (
@@ -1782,9 +1789,7 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     ("最近完整", "latest complete"),
     ("完整", "complete"),
     ("初始", "initial"),
-    ("默认", "default"),
     ("确认", "confirm"),
-    ("同名", "same-named"),
     ("探针", "probe"),
     ("平台", "platform"),
     (
@@ -1872,20 +1877,14 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "未证明重复稳定执行或摘要无效",
         "stable repeated execution is unproven or the digest is invalid",
     ),
-    ("未完整转移到", "was not fully transferred to"),
     (
         "未显式绑定被替代目标",
         "does not explicitly bind the superseded goal",
     ),
     ("未规范化或未绑定", "is not normalized or bound"),
-    ("来源不可区分", "source is not distinguishable"),
     ("计划任务已注册", "scheduled task registered"),
     ("计划任务未注册", "scheduled task not registered"),
     ("遗留计划任务已注销", "legacy scheduled task unregistered"),
-    (
-        "已存最后一次快照并停止自动保存",
-        "saved the final checkpoint and stopped autosave",
-    ),
     (
         "状态已尝试回滚但计划任务重注册失败",
         "state rollback was attempted but scheduled-task registration failed",
@@ -1921,14 +1920,6 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "unable to create an exclusive scheduled-task XML temporary file",
     ),
     (
-        "无法校验原子复制临时文件",
-        "unable to verify the atomic-copy temporary file",
-    ),
-    (
-        "无法同步原子复制临时文件",
-        "unable to sync the atomic-copy temporary file",
-    ),
-    (
         "无法读取原子复制源元数据",
         "unable to read atomic-copy source metadata",
     ),
@@ -1942,12 +1933,7 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     ),
     ("无法原子替换文件", "unable to atomically replace the file"),
     ("无法保留复制权限", "unable to preserve copied permissions"),
-    (
-        "无法复制到临时文件",
-        "unable to copy into the temporary file",
-    ),
     ("无法同步父目录", "unable to sync the parent directory"),
-    ("无法写入临时文件", "unable to write the temporary file"),
     (
         "无法独占创建计划任务 XML",
         "unable to exclusively create scheduled-task XML",
@@ -2181,10 +2167,8 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     ("项目地图", "project map"),
     ("项目拓扑", "project topology"),
     ("直接依赖方", "direct dependents"),
-    ("直接依赖", "direct dependencies"),
     ("依赖方", "dependents"),
     ("依赖", "dependencies"),
-    ("汇总", "summary"),
     ("风险", "risk"),
     ("错误", "error"),
     ("范围内", "range"),
@@ -2199,13 +2183,7 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     ("自身", "itself"),
     ("全部", "all"),
     ("每", "every "),
-    ("最近一次", "latest"),
-    ("最近错误", "latest error"),
     ("外部边界", "external boundary"),
-    (
-        "之类的查询不是证据",
-        "queries of this kind are not evidence",
-    ),
     ("中", " in "),
     ("与", " and "),
     ("或", " or "),
@@ -2217,13 +2195,11 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     ("完成", "complete"),
     ("删除", "removed"),
     ("保留", "kept"),
-    ("恢复", "restore"),
     ("覆盖", "overwrite"),
     ("检查", "inspect"),
     ("写入", "write"),
     ("读取", "read"),
     ("创建", "create"),
-    ("打开", "open"),
     ("解析", "parse"),
     ("计算", "compute"),
     ("规范化", "canonicalize"),
@@ -2719,14 +2695,63 @@ const MESSAGE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     ("秒", "seconds"),
 ];
 
+/// Fragment translation is a last resort: it rewrites an already-formatted line
+/// that matched no authored template, so it cannot tell framework text from a
+/// goal title, requirement or path the user wrote.
+///
+/// Han-word-boundary protection alone was not enough — it only saved fragments
+/// glued to other ideographs, so `延迟 秒 精度` still became `延迟 seconds 精度`
+/// and `计时器(秒)` became `计时器(seconds)`. The line is now rewritten only when
+/// **every** ideograph in it is accounted for by the catalog. Any leftover Han is
+/// text this build does not author, which means it is user content, and a
+/// partly-translated line is worth far less than an intact one.
 fn localize_known_fragments(mut line: String, language: ActiveLanguage) -> String {
-    if language != ActiveLanguage::En {
+    if language != ActiveLanguage::En || !line_han_is_fully_known(&line) {
         return line;
     }
     for &(chinese, english) in MESSAGE_FRAGMENT_CATALOG {
         line = replace_fragment_outside_han_words(&line, chinese, english);
     }
     line
+}
+
+/// Every catalog key, longest first, so removing one never strands part of a
+/// longer entry.
+fn sorted_fragment_keys() -> &'static [&'static str] {
+    static KEYS: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
+    KEYS.get_or_init(|| {
+        let mut keys = MESSAGE_FRAGMENT_CATALOG
+            .iter()
+            .chain(MESSAGE_PREFIX_CATALOG)
+            .chain(TEMPLATE_FRAGMENT_CATALOG)
+            .map(|&(chinese, _)| chinese)
+            .filter(|chinese| chinese.chars().any(is_han))
+            .collect::<Vec<_>>();
+        keys.sort_by(|left, right| {
+            right
+                .chars()
+                .count()
+                .cmp(&left.chars().count())
+                .then(left.cmp(right))
+        });
+        keys
+    })
+}
+
+fn line_han_is_fully_known(line: &str) -> bool {
+    if !line.chars().any(is_han) {
+        return true;
+    }
+    let mut remaining = line.to_string();
+    for key in sorted_fragment_keys() {
+        if remaining.contains(key) {
+            remaining = remaining.replace(key, " ");
+            if !remaining.chars().any(is_han) {
+                return true;
+            }
+        }
+    }
+    !remaining.chars().any(is_han)
 }
 
 /// 翻译已知固定片段，但**不触碰被表意文字夹在词中间的出现**。localize 是对已格式化
@@ -2738,8 +2763,14 @@ fn localize_known_fragments(mut line: String, language: ActiveLanguage) -> Strin
 fn replace_fragment_outside_han_words(line: &str, chinese: &str, english: &str) -> String {
     let mut result = String::with_capacity(line.len());
     let mut rest = line;
+    let mut consumed = 0usize;
     while let Some(position) = rest.find(chinese) {
-        let before = rest[..position].chars().next_back();
+        // The lookbehind must come from the original line: `rest` has already
+        // been advanced past the previous match, so a second occurrence sitting
+        // immediately after the first would otherwise see an empty prefix and
+        // be treated as unembedded.
+        let absolute = consumed + position;
+        let before = line[..absolute].chars().next_back();
         let after_index = position + chinese.len();
         let after = rest[after_index..].chars().next();
         let embedded_in_han_word = before.is_some_and(is_han) || after.is_some_and(is_han);
@@ -2750,6 +2781,7 @@ fn replace_fragment_outside_han_words(line: &str, chinese: &str, english: &str) 
             english
         });
         rest = &rest[after_index..];
+        consumed += after_index;
     }
     result.push_str(rest);
     result
@@ -2877,6 +2909,31 @@ mod tests {
             ),
             "  req_1 [must/open] 支持启动 秒级精度"
         );
+        // Han-word-boundary protection alone missed every case where the
+        // neighbour was punctuation, a digit or a space, which is most real
+        // titles. A line carrying Han this build does not author is left alone.
+        for title in [
+            "goal_x [current/active] 延迟 秒 精度",
+            "goal_x [current/active] 计时器(秒)",
+            "goal_x [current/active] 5秒 超时",
+        ] {
+            assert_eq!(
+                localize_line_for(title.into(), ActiveLanguage::En, false),
+                title,
+                "user content must survive the en locale intact"
+            );
+        }
+        // Known and accepted residual: a dynamic value whose ideographs are
+        // *exactly* a catalog fragment is indistinguishable from framework text
+        // on an already-formatted line, so it is still translated.
+        assert_eq!(
+            localize_line_for(
+                "goal_x [current/active] 秒".into(),
+                ActiveLanguage::En,
+                false
+            ),
+            "goal_x [current/active] seconds"
+        );
     }
 
     #[test]
@@ -2890,10 +2947,21 @@ mod tests {
             ),
             "Autosave is disabled. Run `rayman autosave start` to enable it."
         );
-        // 「秒」作为独立时间单位（前后非 Han）仍翻译。
+        // A line whose ideographs are *entirely* catalog fragments is framework
+        // text, so it still gets rewritten.
         assert_eq!(
-            localize_line_for("最近触发 3 秒 前".into(), ActiveLanguage::En, false),
-            "最近触发 3 seconds 前"
+            localize_line_for("等待锁超过 3 秒".into(), ActiveLanguage::En, false),
+            "lock wait exceeded 3 seconds"
+        );
+        // Production messages that embed 秒 are authored templates, so they are
+        // translated through the template path with their dynamic values intact.
+        assert_eq!(
+            localize_line_for(
+                "等待 autosave 独占锁超过 2.5 秒".into(),
+                ActiveLanguage::En,
+                false
+            ),
+            "autosave lock wait exceeded 2.5 seconds"
         );
     }
 
@@ -3182,6 +3250,28 @@ mod tests {
             missing.is_empty() && stale.is_empty(),
             "runtime authored-message catalog drifted from production source\nmissing={missing:#?}\nstale={stale:#?}"
         );
+    }
+
+    /// The other two catalogs already assert this; `TEMPLATE_FRAGMENT_CATALOG`
+    /// did not, so a repeated Chinese key silently shadowed a later entry —
+    /// including one key mapped to two different English strings, one of which
+    /// was therefore unreachable.
+    #[test]
+    fn template_fragment_catalog_has_no_shadowed_entries() {
+        let mut chinese = std::collections::BTreeSet::new();
+        for (zh_cn, en) in TEMPLATE_FRAGMENT_CATALOG {
+            assert!(!zh_cn.trim().is_empty());
+            // An empty English value is legitimate here: Chinese measure words
+            // such as 个 simply disappear in English.
+            assert!(
+                !contains_han(en),
+                "English template fragment contains Han text: {en}"
+            );
+            assert!(
+                chinese.insert(*zh_cn),
+                "duplicate Chinese template fragment: {zh_cn}"
+            );
+        }
     }
 
     #[test]

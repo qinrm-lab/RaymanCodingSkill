@@ -2977,3 +2977,85 @@ fn with_locked_goal_holds_the_goal_lock_for_the_entire_operation() {
     assert!(started.elapsed() >= std::time::Duration::from_millis(100));
     worker.join().unwrap();
 }
+
+/// `start_with_specs` used `any`, so one valid must let a blank sibling
+/// through. `current_schema_error` — which every gate re-runs on read —
+/// rejects empty requirement text, so the store reported a goal created that
+/// no reader would ever accept and no command could retire.
+#[test]
+fn goal_start_rejects_a_requirement_the_read_path_would_reject() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = GoalStore::new(dir.path());
+
+    let error = store
+        .start(
+            "mixed",
+            &[("real work".into(), true), ("   ".into(), false)],
+        )
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("空的 requirement"),
+        "unexpected error: {error}"
+    );
+    assert!(store.list().unwrap().is_empty(), "nothing may be persisted");
+
+    let goal = store.start("clean", &[("real work".into(), true)]).unwrap();
+    assert!(goal.current_schema_error().is_none());
+}
+
+/// The non-executing-mode guard was an exact-literal list, so pytest's `--co`
+/// alias and its several collect/plan-only modes produced a "successful"
+/// receipt that ran no tests at all.
+#[test]
+fn pytest_collect_only_aliases_cannot_produce_a_test_receipt() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    for mode in [
+        "--collect-only",
+        "--co",
+        "--setup-only",
+        "--setup-plan",
+        "--fixtures",
+        "--markers",
+    ] {
+        let command = format!("pytest {mode}");
+        let parsed = validation::parse_validation_command(&command).unwrap();
+        assert!(
+            validation::validate_command_security(root, &parsed).is_err(),
+            "{mode} must not be accepted as an executing test command"
+        );
+    }
+    // A real run stays acceptable.
+    let parsed = validation::parse_validation_command("pytest -q").unwrap();
+    assert!(validation::validate_command_security(root, &parsed).is_ok());
+}
+
+/// `close_lane` was the only lane mutator with no lifecycle guard, so the lane
+/// ledger of a superseded goal could still be rewritten.
+#[test]
+fn close_lane_refuses_a_retired_goal() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    std::fs::write(root.join("a.txt"), "a").unwrap();
+    let store = GoalStore::new(root);
+    let goal = store.start("lanes", &[("work".into(), true)]).unwrap();
+    store
+        .open_lane(&goal.id, "lane1", LaneMode::Writer, vec!["a.txt".into()])
+        .unwrap();
+
+    // Retire the record the same way `supersede`/`archive` persist it, without
+    // standing up a gate-ready replacement just to reach the guard.
+    let path = root
+        .join(".RaymanCodingSkill/goals")
+        .join(format!("{}.json", goal.id));
+    let mut raw: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    raw["lifecycle"] = serde_json::json!("archived");
+    std::fs::write(&path, serde_json::to_string(&raw).unwrap()).unwrap();
+
+    let error = store.close_lane(&goal.id, "lane1").unwrap_err();
+    assert!(
+        error.to_string().contains("关闭 lane"),
+        "unexpected error: {error}"
+    );
+}

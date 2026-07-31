@@ -40,7 +40,9 @@ pub(super) fn acquire_state_lock(target: &Path) -> Result<StateLock> {
     let lock_path = parent.join(format!(".{name}.rayman.lock"));
 
     match fs::symlink_metadata(&lock_path) {
-        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.file_type().is_file() => {
+        // Use the shared predicate: a bare `is_symlink()` check misses Windows
+        // reparse points, which every other managed-state path already refuses.
+        Ok(metadata) if crate::file_io::is_link_or_reparse(&metadata) || !metadata.is_file() => {
             bail!("状态锁不是安全普通文件: {}", lock_path.display());
         }
         Ok(_) => {}
@@ -58,7 +60,7 @@ pub(super) fn acquire_state_lock(target: &Path) -> Result<StateLock> {
         .with_context(|| format!("无法打开状态锁（权限或 ACL 拒绝）: {}", lock_path.display()))?;
     let metadata = fs::symlink_metadata(&lock_path)
         .with_context(|| format!("无法复查状态锁: {}", lock_path.display()))?;
-    if metadata.file_type().is_symlink() || !metadata.file_type().is_file() {
+    if crate::file_io::is_link_or_reparse(&metadata) || !metadata.is_file() {
         bail!("状态锁被替换为非普通文件: {}", lock_path.display());
     }
 

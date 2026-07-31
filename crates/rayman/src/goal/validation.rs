@@ -194,29 +194,78 @@ fn test_invocation(command: &ParsedValidationCommand) -> bool {
     cargo_test_invocation(command) || pytest_invocation(command)
 }
 
-fn normalized_script_name(command: &ParsedValidationCommand) -> Option<String> {
-    let path = powershell_script(command)?;
-    Some(
-        Path::new(path)
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or(path)
-            .to_ascii_lowercase(),
+/// Resolve a recognized repository gate script by **identity**, not by file name.
+///
+/// Matching on the bare basename was a forgery hole: an ordinary two-line
+/// `exit 0` file committed anywhere in the workspace under the name
+/// `install-rayman.ps1` / `verify-release-contract.ps1` / `check-repo.ps1`
+/// minted the corresponding typed proof, so a release handoff (whose three
+/// stages are exactly `installation`, `repository_gate` and `source_fresh`)
+/// could be closed to success without building, auditing or installing
+/// anything. `validate_authority_command` always resolved the real path; every
+/// other consumer of a gate-script name now shares this one resolution.
+///
+/// Returns the canonical script name so callers keep matching on a stable
+/// token instead of re-deriving paths.
+fn trusted_gate_script(root: &Path, command: &ParsedValidationCommand) -> Option<&'static str> {
+    let script = powershell_script(command)?;
+    let lexical = if Path::new(script).is_absolute() {
+        PathBuf::from(script)
+    } else {
+        root.join(script)
+    };
+    let canonical_root = root.canonicalize().ok()?;
+    let canonical_script = lexical.canonicalize().ok()?;
+    let relative = canonical_script.strip_prefix(&canonical_root).ok()?;
+    match normalized_path_text(&relative.to_string_lossy()).as_str() {
+        "check-repo.ps1" | "scripts/check-repo.ps1" => Some("check-repo.ps1"),
+        "audit-repository.ps1" | "scripts/audit-repository.ps1" => Some("audit-repository.ps1"),
+        "verify-release-contract.ps1" | "scripts/verify-release-contract.ps1" => {
+            Some("verify-release-contract.ps1")
+        }
+        "release-closeout.ps1" | "scripts/release-closeout.ps1" => Some("release-closeout.ps1"),
+        "install-rayman.ps1" | "scripts/install-rayman.ps1" => Some("install-rayman.ps1"),
+        "check-agent-instructions.ps1" | "scripts/check-agent-instructions.ps1" => {
+            Some("check-agent-instructions.ps1")
+        }
+        _ => None,
+    }
+}
+
+/// Workspace-wide project gates: the three scripts whose contract is "this run
+/// covered the whole repository". Kept separate from the installer and the
+/// documentation checker, which cover much less.
+fn trusted_workspace_gate_script(root: &Path, command: &ParsedValidationCommand) -> bool {
+    matches!(
+        trusted_gate_script(root, command),
+        Some("check-repo.ps1" | "audit-repository.ps1" | "verify-release-contract.ps1")
     )
 }
 
-fn release_installer_invocation(command: &ParsedValidationCommand) -> bool {
-    normalized_script_name(command).as_deref() == Some("install-rayman.ps1")
+/// PowerShell binds any unambiguous switch **prefix**, so `-Self` runs the
+/// installer's self-test branch — which builds and installs nothing — while an
+/// exact `-SelfTest` comparison never sees it. Every prefix of `-selftest`
+/// therefore counts as the self-test switch. Over-matching is the safe
+/// direction: it only ever *denies* an installation/build claim.
+fn is_installer_self_test_switch(argument: &str) -> bool {
+    let lowered = argument.to_ascii_lowercase();
+    // `-SelfTest:$false` and friends carry the value after a colon.
+    let name = lowered.split(':').next().unwrap_or(lowered.as_str());
+    name.len() >= 2 && "-selftest".starts_with(name)
+}
+
+fn release_installer_invocation(root: &Path, command: &ParsedValidationCommand) -> bool {
+    trusted_gate_script(root, command) == Some("install-rayman.ps1")
         && !command
             .args
             .iter()
-            .any(|argument| argument.eq_ignore_ascii_case("-SelfTest"))
+            .any(|argument| is_installer_self_test_switch(argument))
 }
 
-pub fn validation_proof_kind(command: &str) -> Result<ProofKind> {
+pub fn validation_proof_kind(root: &Path, command: &str) -> Result<ProofKind> {
     let parsed = parse_validation_command(command)?;
     let executable = executable_name(&parsed);
-    let script = normalized_script_name(&parsed).unwrap_or_default();
+    let script = trusted_gate_script(root, &parsed).unwrap_or_default();
     let has_arg = |needle: &str| {
         parsed
             .args
@@ -228,13 +277,13 @@ pub fn validation_proof_kind(command: &str) -> Result<ProofKind> {
         return Ok(ProofKind::SourceFresh);
     }
     if matches!(
-        script.as_str(),
+        script,
         "check-repo.ps1" | "audit-repository.ps1" | "release-closeout.ps1"
     ) {
         return Ok(ProofKind::RepositoryGate);
     }
     if script == "install-rayman.ps1" {
-        return Ok(if release_installer_invocation(&parsed) {
+        return Ok(if release_installer_invocation(root, &parsed) {
             ProofKind::Installation
         } else {
             ProofKind::Test
@@ -351,20 +400,30 @@ fn validate_test_execution_mode(command: &ParsedValidationCommand) -> Result<()>
     if !test_invocation(command) {
         return Ok(());
     }
+    // Exact literals only covered the spellings someone happened to think of.
+    // pytest accepts `--co` for `--collect-only` and has several other modes
+    // that collect or plan without executing, each of which would otherwise
+    // produce a "successful" zero-test receipt.
     const NON_EXECUTING: &[&str] = &[
         "--no-run",
         "--list",
         "--collect-only",
+        "--co",
+        "--setup-only",
+        "--setup-plan",
+        "--fixtures",
+        "--fixtures-per-test",
+        "--markers",
+        "--collect-in-virtualenv",
         "--help",
         "-h",
         "--version",
         "-V",
     ];
-    if let Some(flag) = command
-        .args
-        .iter()
-        .find(|arg| NON_EXECUTING.iter().any(|candidate| arg == candidate))
-    {
+    if let Some(flag) = command.args.iter().find(|arg| {
+        let name = arg.split('=').next().unwrap_or(arg);
+        NON_EXECUTING.contains(&name)
+    }) {
         bail!("测试验证命令包含非执行模式 {flag}；receipt 必须实际运行至少一个测试");
     }
     if matches!(cargo_subcommand(command), Some(("nextest", _))) {
@@ -900,7 +959,7 @@ pub fn validation_has_current_receipt(
 ) -> bool {
     if !proof_kind_matches(
         requirement.proof_kind,
-        validation_proof_kind(&validation.command)
+        validation_proof_kind(root, &validation.command)
             .ok()
             .unwrap_or_default(),
     ) {
@@ -1062,6 +1121,7 @@ fn cargo_subcommand(command: &ParsedValidationCommand) -> Option<(&str, Option<&
 }
 
 fn validation_matches_expectation(
+    root: &Path,
     command: &ParsedValidationCommand,
     expectation: ValidationExpectation,
 ) -> bool {
@@ -1071,23 +1131,13 @@ fn validation_matches_expectation(
     if pytest_invocation(command) {
         return matches!(expectation, ValidationExpectation::PythonTest);
     }
-    if release_installer_invocation(command) {
+    if release_installer_invocation(root, command) {
         return matches!(
             expectation,
             ValidationExpectation::RustBuildOrTest | ValidationExpectation::CargoManifestValidation
         );
     }
-    if powershell_script(command).is_some_and(|script| {
-        Path::new(script)
-            .file_name()
-            .and_then(|name| name.to_str())
-            .is_some_and(|name| {
-                matches!(
-                    name.to_ascii_lowercase().as_str(),
-                    "check-repo.ps1" | "audit-repository.ps1" | "verify-release-contract.ps1"
-                )
-            })
-    }) {
+    if trusted_workspace_gate_script(root, command) {
         return true;
     }
     let rustc_build = executable_name(command) == "rustc"
@@ -1201,25 +1251,120 @@ fn cargo_option_values<'a>(
     values
 }
 
-pub(super) fn command_is_workspace_wide(_root: &Path, command: &ParsedValidationCommand) -> bool {
-    release_installer_invocation(command)
-        || powershell_script(command).is_some_and(|script| {
-            Path::new(script)
-                .file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| {
-                    matches!(
-                        name.to_ascii_lowercase().as_str(),
-                        "check-repo.ps1" | "audit-repository.ps1" | "verify-release-contract.ps1"
-                    )
-                })
-        })
+/// Cargo options that consume the following argument, so their value is never
+/// mistaken for a positional test-name filter.
+const CARGO_VALUE_OPTIONS: &[&str] = &[
+    "--manifest-path",
+    "--target",
+    "--target-dir",
+    "--profile",
+    "--config",
+    "--color",
+    "--message-format",
+    "--jobs",
+    "-j",
+    "--features",
+    "-F",
+    "--out-dir",
+    "--unit-graph",
+    "--keep-going",
+];
+
+/// libtest options (after `--`) that consume the following argument.
+const LIBTEST_VALUE_OPTIONS: &[&str] = &[
+    "--test-threads",
+    "--logfile",
+    "--format",
+    "--color",
+    "--skip",
+    "--shuffle-seed",
+];
+
+/// Does this cargo invocation run **less** than the whole selected workspace?
+///
+/// The contract calls the authority gate "selector-free", but the only check
+/// used to be "does `--workspace` or `--all` appear". That let
+/// `cargo test --workspace <filter>` — which skips every other test and exits 0
+/// while the real suite is red — stand in for the whole suite, and let
+/// `cargo build --workspace --exclude <pkg>` claim coverage of a package it
+/// never compiled.
+///
+/// Target-kind selectors (`--lib`, `--tests`, `--all-targets`, ...) are
+/// deliberately *not* treated as narrowing: they choose target kinds across the
+/// entire workspace, and the repository's own gate runs
+/// `cargo test --locked --workspace --all-targets`.
+fn cargo_command_is_narrowed(command: &ParsedValidationCommand) -> bool {
+    let Some((subcommand, _)) = cargo_subcommand(command) else {
+        return false;
+    };
+    // Skip `+toolchain` and the subcommand itself.
+    let mut index = 0;
+    if command.args.first().is_some_and(|arg| arg.starts_with('+')) {
+        index += 1;
+    }
+    if command.args.get(index).map(String::as_str) == Some(subcommand) {
+        index += 1;
+    }
+    let mut after_separator = false;
+    while let Some(argument) = command.args.get(index) {
+        index += 1;
+        if argument == "--" {
+            after_separator = true;
+            continue;
+        }
+        let value_options = if after_separator {
+            LIBTEST_VALUE_OPTIONS
+        } else {
+            CARGO_VALUE_OPTIONS
+        };
+        if argument.starts_with('-') && argument.len() > 1 {
+            let name = argument.split('=').next().unwrap_or(argument);
+            if !after_separator
+                && matches!(
+                    name,
+                    "-p" | "--package" | "--exclude" | "--bench" | "--example"
+                )
+            {
+                return true; // selects a subset of the workspace
+            }
+            if after_separator && matches!(name, "--skip" | "--exact" | "--ignored") {
+                return true; // libtest-side filtering
+            }
+            if !argument.contains('=') && value_options.contains(&name) {
+                index += 1; // consume the option value
+            }
+            continue;
+        }
+        // A bare positional is a test-name filter on either side of `--`.
+        return true;
+    }
+    false
+}
+
+/// pytest options that select a subset of the collected tests.
+fn pytest_command_is_narrowed(command: &ParsedValidationCommand) -> bool {
+    if !pytest_path_arguments(command).is_empty() {
+        return true;
+    }
+    pytest_arguments(command).iter().any(|argument| {
+        let name = argument.split('=').next().unwrap_or(argument);
+        matches!(
+            name,
+            "-k" | "-m" | "--deselect" | "--ignore" | "--ignore-glob" | "--lf" | "--last-failed"
+        )
+    })
+}
+
+pub(super) fn command_is_workspace_wide(root: &Path, command: &ParsedValidationCommand) -> bool {
+    release_installer_invocation(root, command)
+        || trusted_workspace_gate_script(root, command)
         || (cargo_subcommand(command).is_some()
             && command
                 .args
                 .iter()
-                .any(|argument| matches!(argument.as_str(), "--workspace" | "--all")))
-        || (pytest_invocation(command) && pytest_path_arguments(command).is_empty())
+                .any(|argument| matches!(argument.as_str(), "--workspace" | "--all"))
+            && !cargo_command_is_narrowed(command))
+        || (pytest_invocation(command) && !pytest_command_is_narrowed(command))
 }
 
 /// Authority receipts are stronger than ordinary validation receipts: the
@@ -1230,41 +1375,20 @@ pub fn validate_authority_command(root: &Path, command: &str) -> Result<()> {
     let parsed = parse_validation_command(command)?;
     validate_command_security(root, &parsed)?;
 
-    let trusted_script = powershell_script(&parsed).is_some_and(|script| {
-        let lexical = if Path::new(script).is_absolute() {
-            PathBuf::from(script)
-        } else {
-            root.join(script)
-        };
-        let Ok(canonical_root) = root.canonicalize() else {
-            return false;
-        };
-        let Ok(canonical_script) = lexical.canonicalize() else {
-            return false;
-        };
-        let Ok(relative) = canonical_script.strip_prefix(canonical_root) else {
-            return false;
-        };
-        matches!(
-            normalized_path_text(&relative.to_string_lossy()).as_str(),
-            "check-repo.ps1"
-                | "audit-repository.ps1"
-                | "verify-release-contract.ps1"
-                | "scripts/check-repo.ps1"
-                | "scripts/audit-repository.ps1"
-                | "scripts/verify-release-contract.ps1"
-        )
-    });
+    let trusted_script = trusted_workspace_gate_script(root, &parsed);
+    // "Selector-free" is part of the contract, not decoration: a filtered run
+    // exits 0 while the rest of the suite is red.
     let workspace_cargo_test = matches!(cargo_subcommand(&parsed), Some(("test", _)))
         && parsed
             .args
             .iter()
-            .any(|argument| matches!(argument.as_str(), "--workspace" | "--all"));
-    let workspace_pytest = pytest_invocation(&parsed) && pytest_path_arguments(&parsed).is_empty();
+            .any(|argument| matches!(argument.as_str(), "--workspace" | "--all"))
+        && !cargo_command_is_narrowed(&parsed);
+    let workspace_pytest = pytest_invocation(&parsed) && !pytest_command_is_narrowed(&parsed);
 
     if !trusted_script && !workspace_cargo_test && !workspace_pytest {
         bail!(
-            "authority gate 必须是受检的 check-repo/audit-repository/verify-release-contract 脚本、`cargo test --workspace|--all`，或无路径选择器的全工作区 pytest"
+            "authority gate 必须是受检的 check-repo/audit-repository/verify-release-contract 脚本、`cargo test --workspace|--all`，或无路径选择器的全工作区 pytest；且不得使用缩小运行范围的选择器"
         );
     }
     Ok(())
@@ -1278,7 +1402,7 @@ fn validation_matches_impact(
     let Some(expectation) = validation_expectation_for_path(&impact.changed_path) else {
         return true;
     };
-    if !validation_matches_expectation(command, expectation) {
+    if !validation_matches_expectation(root, command, expectation) {
         return false;
     }
     // 未建模生态只做"非探针"这一条下限判断，不再往下走 Rust/pytest/cargo 的
@@ -1287,6 +1411,17 @@ fn validation_matches_impact(
         return true;
     }
     if command_is_workspace_wide(root, command) {
+        // "Workspace-wide" is a Cargo claim, and Cargo never builds a package
+        // the root manifest excludes. Treating `--workspace` (or the installer,
+        // which is a `cargo build -p` wrapper) as covering an excluded package
+        // accepted a receipt for code the command provably never compiled.
+        let cargo_driven =
+            cargo_subcommand(command).is_some() || release_installer_invocation(root, command);
+        if cargo_driven
+            && crate::map::path_is_excluded_from_root_cargo_workspace(root, &impact.changed_path)
+        {
+            return false;
+        }
         return true;
     }
     if executable_name(command) == "rustc" {
@@ -1510,8 +1645,17 @@ pub(super) fn goal_success_receipt_gaps_for_policy(
             ));
             continue;
         };
+        // The typed proof kind must be enforced here too, not only in the
+        // readiness gate: this is the predicate `close --status success` uses,
+        // and a write path weaker than the read path persists — and reports —
+        // a success the tool's own validator rejects.
         if !requirement.validations.iter().any(|validation| {
-            validation_has_receipt_for_fingerprint(
+            proof_kind_matches(
+                requirement.proof_kind,
+                validation_proof_kind(root, &validation.command)
+                    .ok()
+                    .unwrap_or_default(),
+            ) && validation_has_receipt_for_fingerprint(
                 validation,
                 root,
                 fingerprint,
