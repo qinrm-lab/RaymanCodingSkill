@@ -1423,10 +1423,25 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
                 Ok(project_map) => {
                     map_summary = Some(map::summary(&project_map));
                     if !map::topology_is_authoritative(root, &project_map) {
-                        standard_blockers.push(format!(
-                            "Cargo workspace 拓扑未获 cargo metadata 权威确认: {}",
-                            project_map.topology_provenance
-                        ));
+                        // Still fail closed — unproven topology is unproven — but
+                        // lead with the repair when the cause is the operator's
+                        // environment rather than the repository. The actionable
+                        // half used to be buried at the tail of a provenance string.
+                        standard_blockers.push(
+                            if map::topology_blocked_by_missing_cargo(
+                                &project_map.topology_provenance,
+                            ) {
+                                format!(
+                                    "环境未就绪: {}；无法确认 Cargo 拓扑",
+                                    rayman::toolchain::unreachable_tool_advice("cargo")
+                                )
+                            } else {
+                                format!(
+                                    "Cargo workspace 拓扑未获 cargo metadata 权威确认: {}",
+                                    project_map.topology_provenance
+                                )
+                            },
+                        );
                     }
                     let quality = if cmd.profile == CheckProfile::Release {
                         let config = map::load_quality_config(root, "strict")?;

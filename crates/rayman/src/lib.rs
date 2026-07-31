@@ -16,6 +16,7 @@ pub mod map;
 pub mod source_state;
 pub mod state_paths;
 pub mod temp;
+pub mod toolchain;
 pub mod walk;
 pub mod workspace;
 

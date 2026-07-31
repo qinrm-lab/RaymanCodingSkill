@@ -8,7 +8,7 @@ use crate::cli::DoctorCmd;
 pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> {
     let running = std::env::current_exe().context("无法定位当前 rayman 二进制")?;
     let running_hash = rayman::hash::sha256_file(&running)?;
-    let path_candidate = find_path_rayman();
+    let path_candidate = rayman::toolchain::resolve_program("rayman");
     let path_hash = path_candidate
         .as_deref()
         .map(rayman::hash::sha256_file)
@@ -18,6 +18,7 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
     let activation = rayman::workspace::activation_status(root)?;
     let state_write = rayman::state_paths::state_write_probe(root);
     let host_patch = rayman::codex_host::patch_probe(None);
+    let toolchain = rayman::toolchain::toolchain_probe(root);
     let skill_path = activation
         .skill_file
         .as_deref()
@@ -44,6 +45,7 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
         "workspace_activation": &activation,
         "state_write": &state_write,
         "host_patch": &host_patch,
+        "toolchain": &toolchain,
         "contract": rayman::CLI_CONTRACT,
         "version": rayman::CLI_VERSION,
         "running": {
@@ -89,6 +91,7 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
         println!("  workspace activation: {}", activation.status);
         crate::print_state_write_probe(&state_write);
         crate::print_host_patch_probe(&host_patch);
+        print_toolchain(&toolchain);
         println!(
             "  仓库源码产物: 未由 doctor 检查；交接/CI 由 `{}` 验证",
             crate::SOURCE_FRESH_VERIFIER
@@ -124,32 +127,22 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
     Ok(())
 }
 
-#[cfg(windows)]
-fn find_path_rayman() -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")?;
-    let extensions = std::env::var_os("PATHEXT")
-        .map(|raw| {
-            raw.to_string_lossy()
-                .split(';')
-                .map(str::trim)
-                .filter(|extension| !extension.is_empty())
-                .map(str::to_string)
-                .collect::<Vec<_>>()
-        })
-        .filter(|extensions| !extensions.is_empty())
-        .unwrap_or_else(|| vec![".COM".into(), ".EXE".into(), ".BAT".into(), ".CMD".into()]);
-    std::env::split_paths(&path).find_map(|dir| {
-        extensions
-            .iter()
-            .map(|extension| dir.join(format!("rayman{extension}")))
-            .find(|candidate| candidate.is_file())
-    })
-}
-
-#[cfg(not(windows))]
-fn find_path_rayman() -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path)
-        .map(|dir| dir.join("rayman"))
-        .find(|candidate| candidate.is_file())
+/// Reachability is reported before any gate that depends on it, so a missing
+/// toolchain is diagnosed here instead of surfacing later as an unexplained
+/// workspace blocker.
+fn print_toolchain(probes: &[rayman::toolchain::ToolProbe]) {
+    for probe in probes {
+        let state = match (probe.found, probe.relevant) {
+            (true, _) => probe.path.clone().unwrap_or_else(|| "已找到".into()),
+            (false, true) => format!("不可达（{}）", probe.required_for),
+            (false, false) => "不可达（本工作区不需要）".into(),
+        };
+        // Indentation stays outside the localized template (authored messages
+        // are matched with the line's indentation stripped), and the whole
+        // dynamic tail is one placeholder so the template re-matches its own
+        // rendering unambiguously.
+        let detail = format!("{}: {state}", probe.name);
+        let line = format!("工具 {detail}");
+        println!("  {line}");
+    }
 }

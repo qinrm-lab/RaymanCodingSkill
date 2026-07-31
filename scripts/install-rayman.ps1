@@ -24,6 +24,9 @@ if ($AddToUserPath -and -not $IsWindows) {
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $artifactName = if ($IsWindows) { 'rayman.exe' } else { 'rayman' }
+# Set under StrictMode before any read: true only when nothing resolved `rayman`
+# and the destination was made reachable for the post-install verification.
+$script:processPathOnly = $false
 if ([string]::IsNullOrWhiteSpace($BinDirectory)) {
     $BinDirectory = if ($IsWindows) {
         Join-Path $env:LOCALAPPDATA 'Rayman/bin'
@@ -965,7 +968,22 @@ try {
                 } else {
                     # Without an authorized persistent PATH change, installation is valid
                     # only when this shell already resolves the destination first.
-                    $env:PATH = $originalPath
+                    #
+                    # One exception, and only one: when nothing resolves `rayman` at
+                    # all, -RequirePath cannot be masking a competing CLI, because
+                    # there is nothing to mask. Failing here would discard a
+                    # byte-verified installation for a reason that lives entirely in
+                    # the caller's process environment — a shell started before the
+                    # persistent PATH was updated never inherits it. Make the
+                    # destination resolvable for the verification only, and report it.
+                    $existingRayman = @(Get-Command 'rayman' -All -ErrorAction SilentlyContinue)
+                    if ($existingRayman.Count -eq 0) {
+                        $script:processPathOnly = $true
+                        $env:PATH = $resolvedBinDirectory +
+                            [IO.Path]::PathSeparator + $originalPath
+                    } else {
+                        $env:PATH = $originalPath
+                    }
                 }
 
                 & './scripts/verify-release-contract.ps1' `
@@ -1059,6 +1077,9 @@ if ($SkipCodexStopHook) {
 }
 if ($AddToUserPath) {
     Write-Host "  Persistent user PATH: verified with '$resolvedBinDirectory' first in the user segment"
+} elseif ($script:processPathOnly) {
+    Write-Host "  Persistent PATH: unchanged. Nothing resolved 'rayman' in this shell, so the destination was made resolvable for verification only."
+    Write-Host "  ACTION: this terminal still cannot run 'rayman'. Open a new terminal, or prepend '$resolvedBinDirectory' to this process PATH."
 } else {
     Write-Host '  Persistent PATH: unchanged; current effective PATH identity was verified'
 }

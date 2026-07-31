@@ -819,6 +819,15 @@ fn cargo_metadata_topology(
     cargo_metadata_at(root, index, None)
 }
 
+/// Marker inside a heuristic-fallback provenance meaning "the tool could not be
+/// run at all", as opposed to "the tool ran and the topology is untrustworthy".
+pub const TOPOLOGY_TOOL_UNAVAILABLE: &str = "cargo_unavailable";
+
+/// Was this provenance produced because cargo itself could not be executed?
+pub fn topology_blocked_by_missing_cargo(provenance: &str) -> bool {
+    provenance.contains(TOPOLOGY_TOOL_UNAVAILABLE)
+}
+
 fn cargo_metadata_at(
     root: &Path,
     index: &ContextIndex,
@@ -832,10 +841,16 @@ fn cargo_metadata_at(
     // "cargo 跑不起来"与"拓扑不可信"会产出同一个 BLOCKED，但含义完全不同：前者
     // 装上 cargo 就能解除，后者要修 manifest。诊断里必须分得开，否则用户看到的是
     // 一条无从下手的"拓扑未获权威确认"。
-    let output = command
-        .current_dir(root)
-        .output()
-        .context("无法执行 cargo metadata（cargo 是否在 PATH 中？）")?;
+    // Tag the "cargo is not reachable" case so callers can separate an
+    // environment boundary from a damaged manifest. Both fail closed, but only
+    // one of them is fixed by the operator's PATH rather than by the repository.
+    let output = command.current_dir(root).output().map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            anyhow::anyhow!("{TOPOLOGY_TOOL_UNAVAILABLE}: cargo 不在本进程 PATH 中")
+        } else {
+            anyhow::Error::new(error).context("无法执行 cargo metadata（cargo 是否在 PATH 中？）")
+        }
+    })?;
     if !output.status.success() {
         bail!(
             "cargo metadata 失败: {}",

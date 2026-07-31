@@ -1103,3 +1103,20 @@ fn package_counts_ignore_files_the_package_toolchain_never_builds() {
     );
     assert!(!package_has_test_anchor(&map, package));
 }
+
+/// "cargo could not be run" and "the topology is untrustworthy" both fail
+/// closed, but only one of them is fixed by the operator's PATH. `check` used
+/// to emit the same opaque blocker for both, with the actionable half buried at
+/// the tail of a provenance string.
+#[test]
+fn a_missing_cargo_is_reported_as_an_environment_boundary() {
+    assert!(topology_blocked_by_missing_cargo(&format!(
+        "heuristic_fallback: {TOPOLOGY_TOOL_UNAVAILABLE}: cargo 不在本进程 PATH 中"
+    )));
+    // A manifest that cargo itself rejected is a repository defect, not a PATH
+    // problem, and must not be relabelled as one.
+    assert!(!topology_blocked_by_missing_cargo(
+        "heuristic_fallback: cargo metadata 失败: error: failed to parse manifest"
+    ));
+    assert!(!topology_blocked_by_missing_cargo("cargo_metadata"));
+}

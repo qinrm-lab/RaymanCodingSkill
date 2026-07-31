@@ -2,6 +2,16 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use clap::ValueEnum;
 pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
+    "工具 {detail}",
+    "Cargo 拓扑权威确认（standard/release 就绪的硬前提）",
+    "autosave 计划任务注册与注销",
+    "{TOPOLOGY_TOOL_UNAVAILABLE}: cargo 不在本进程 PATH 中",
+    "{name} 不在本进程 PATH 中：安装器/工具链只改持久化 PATH，已经开着的终端不会继承；新开一个终端，或先把它的安装目录加进本进程 PATH",
+    "不可达（{}）",
+    "不可达（本工作区不需要）",
+    "已找到",
+    "源码状态、跟踪文件枚举与 clean-worktree 判定",
+    "环境未就绪: {}；无法确认 Cargo 拓扑",
     "无法写入 checkpoint 根目录（默认在用户目录）: {}；受限沙箱下用 --dir 指定工作区内目录，或以主机权限重试",
     "  状态写探针: 写入被拒或探测失败（权限或 ACL）: {}",
     "  状态写探针: 可写；清理探针失败: {}",
@@ -1097,6 +1107,37 @@ const MESSAGE_PREFIX_CATALOG: &[(&str, &str)] = &[
     (
         "实际变更 {} 个文件但缺少首次修改前的 goal plan receipt",
         "{} files changed but the goal lacks a plan receipt recorded before the first modification",
+    ),
+    ("工具 {detail}", "tool {detail}"),
+    (
+        "Cargo 拓扑权威确认（standard/release 就绪的硬前提）",
+        "authoritative Cargo topology (a hard precondition for standard/release readiness)",
+    ),
+    (
+        "autosave 计划任务注册与注销",
+        "autosave scheduled-task registration and removal",
+    ),
+    (
+        "{TOPOLOGY_TOOL_UNAVAILABLE}: cargo 不在本进程 PATH 中",
+        "{TOPOLOGY_TOOL_UNAVAILABLE}: cargo is not on this process PATH",
+    ),
+    (
+        "{name} 不在本进程 PATH 中：安装器/工具链只改持久化 PATH，已经开着的终端不会继承；新开一个终端，或先把它的安装目录加进本进程 PATH",
+        "{name} is not on this process PATH: installers and toolchains only update the persistent PATH, which an already open terminal never inherits; open a new terminal, or prepend its install directory to this process PATH",
+    ),
+    ("不可达（{}）", "unreachable ({})"),
+    (
+        "不可达（本工作区不需要）",
+        "unreachable (not needed by this workspace)",
+    ),
+    ("已找到", "found"),
+    (
+        "源码状态、跟踪文件枚举与 clean-worktree 判定",
+        "source state, tracked-file enumeration, and clean-worktree decisions",
+    ),
+    (
+        "环境未就绪: {}；无法确认 Cargo 拓扑",
+        "environment is not ready: {}; Cargo topology cannot be confirmed",
     ),
     (
         "已安装身份契约不一致：{}",
