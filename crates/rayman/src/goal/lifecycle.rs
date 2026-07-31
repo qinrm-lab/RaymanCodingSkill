@@ -413,6 +413,10 @@ pub(super) fn quarantined_history_eligible(goal: &Goal) -> bool {
         })
 }
 
+pub(super) fn integrity_quarantine_eligible(goal: &Goal) -> bool {
+    goal.lifecycle == GoalLifecycle::Archived && completed_current_schema_history(goal)
+}
+
 pub(super) fn historical_success_fingerprint(
     goal: &Goal,
     root: &Path,
@@ -1045,6 +1049,26 @@ impl Goal {
                 Some("lifecycle_proof 使用了无效的 legacy quarantine".into())
             };
         }
+        if proof.receipt_policy.as_deref() == Some(RECEIPT_POLICY_INTEGRITY_QUARANTINED) {
+            return if proof.migration.as_deref() == Some(INTEGRITY_QUARANTINE_MIGRATION)
+                && integrity_quarantine_eligible(self)
+            {
+                None
+            } else {
+                Some("lifecycle_proof 使用了无效的 receipt integrity quarantine".into())
+            };
+        }
+        if proof.receipt_policy.as_deref() == Some(VERIFIED_REPLACEMENT_TRANSFER_POLICY) {
+            return if self.lifecycle == GoalLifecycle::Superseded
+                && self.status == GoalStatus::Success
+                && !self.loaded_from_legacy
+                && proof.migration.is_none()
+            {
+                None
+            } else {
+                Some("verified replacement transfer 只允许无额外 migration 的 superseded current-schema success".into())
+            };
+        }
         let policy = match proof.receipt_policy.as_deref() {
             None if goal_created_before(self, RECEIPT_POLICY_V2_ROLLOUT_AT) => {
                 ReceiptValidationPolicy::LegacyV1
@@ -1463,14 +1487,15 @@ pub fn supersession_error(
             replacement.lifecycle
         ));
     }
-    if replacement
-        .lifecycle_proof
-        .as_ref()
-        .and_then(|proof| proof.receipt_policy.as_deref())
-        == Some(RECEIPT_POLICY_QUARANTINED)
-    {
+    if matches!(
+        replacement
+            .lifecycle_proof
+            .as_ref()
+            .and_then(|proof| proof.receipt_policy.as_deref()),
+        Some(RECEIPT_POLICY_QUARANTINED | RECEIPT_POLICY_INTEGRITY_QUARANTINED)
+    ) {
         return Some(format!(
-            "superseded_by archived 目标 {replacement_id} 是 untrusted legacy quarantine，不能作为完成证明"
+            "superseded_by archived 目标 {replacement_id} 是 untrusted history quarantine，不能作为完成证明"
         ));
     }
     if !replacement.is_current_schema() {
@@ -1517,7 +1542,11 @@ pub fn supersession_error(
             goal.id
         ));
     }
-    if goal.status != GoalStatus::Success {
+    let must_transfer_required = goal.status != GoalStatus::Success
+        || (!goal.loaded_from_legacy
+            && historical_success_fingerprint(goal, root, ReceiptValidationPolicy::CurrentV2)
+                .is_none());
+    if must_transfer_required {
         let replacement_must = replacement
             .requirements
             .iter()
@@ -1535,7 +1564,7 @@ pub fn supersession_error(
             .collect::<Vec<_>>();
         if !missing.is_empty() {
             return Some(format!(
-                "非 success goal 的 must 未完整转移到 replacement: {}",
+                "未证明完成的 goal，其 must 未完整转移到 replacement: {}",
                 missing.join(" | ")
             ));
         }

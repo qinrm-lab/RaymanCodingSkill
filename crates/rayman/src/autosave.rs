@@ -745,18 +745,23 @@ fn scheduler_output_text(stdout: &[u8], stderr: &[u8]) -> String {
 }
 
 fn scheduler_reports_not_found(exit_code: Option<i32>, detail: &str) -> bool {
-    // HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND), raw ERROR_FILE_NOT_FOUND,
+    // HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND/ERROR_PATH_NOT_FOUND), their raw values,
     // and the stable English/Chinese schtasks diagnostics.  Generic exit 1 is
     // deliberately insufficient because access denied and service failures use
     // the same process exit code.
-    if matches!(exit_code, Some(2) | Some(-2_147_024_894)) {
+    if matches!(
+        exit_code,
+        Some(2) | Some(3) | Some(-2_147_024_894) | Some(-2_147_024_893)
+    ) {
         return true;
     }
     let detail = detail.to_ascii_lowercase();
     [
         "the system cannot find the file specified",
+        "the system cannot find the path specified",
         "cannot find the task",
         "找不到指定的文件",
+        "找不到指定的路径",
         "找不到任务",
         "指定的任务不存在",
     ]
@@ -1537,5 +1542,28 @@ mod tests {
         assert!(stop(root, "error").is_err());
         assert_eq!(fs::read_to_string(&path).unwrap(), "{ not json");
         assert!(status(root).is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn scheduler_not_found_classification_accepts_path_missing_but_not_generic_failures() {
+        assert!(scheduler_reports_not_found(
+            Some(1),
+            "ERROR: The system cannot find the path specified."
+        ));
+        assert!(scheduler_reports_not_found(
+            Some(1),
+            "错误: 系统找不到指定的路径。"
+        ));
+        assert!(scheduler_reports_not_found(Some(3), ""));
+        assert!(scheduler_reports_not_found(Some(-2_147_024_893), ""));
+        assert!(!scheduler_reports_not_found(
+            Some(1),
+            "ERROR: Access is denied."
+        ));
+        assert!(!scheduler_reports_not_found(
+            Some(1),
+            "ERROR: The Task Scheduler service is not available."
+        ));
     }
 }

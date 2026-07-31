@@ -6,6 +6,8 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "工具 {detail}",
     "Cargo 拓扑权威确认（standard/release 就绪的硬前提）",
     "autosave 计划任务注册与注销",
+    "找不到指定的路径",
+    "未知 proof kind: {other}",
     "{TOPOLOGY_TOOL_UNAVAILABLE}: cargo 不在本进程 PATH 中",
     "{name} 不在本进程 PATH 中：安装器/工具链只改持久化 PATH，已经开着的终端不会继承；新开一个终端，或先把它的安装目录加进本进程 PATH",
     "不可达（{}）",
@@ -52,7 +54,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "验证命令第 {run_index}/{repeat} 次修改了工作区内容；不会写入 receipt。before={} after={}",
     "恢复会用快照覆盖工作区里的同名文件。确认请加 --yes：rayman checkpoint restore --yes",
     "`rayman context task{suffix}` 已退役；使用 `rayman prepare --goal <id>` 或 `rayman goal show <id>`",
-    "superseded_by archived 目标 {replacement_id} 是 untrusted legacy quarantine，不能作为完成证明",
+    "superseded_by archived 目标 {replacement_id} 是 untrusted history quarantine，不能作为完成证明",
     "workspace_skill.yaml 第 {line_number} 行包含不受支持的缩进；激活合同只接受顶层标量",
     "无法为原子写入创建独占临时文件（连续 {MAX_TEMP_NAME_ATTEMPTS} 个名称已存在）: {}",
     "无法为原子复制创建独占临时文件（连续 {MAX_TEMP_NAME_ATTEMPTS} 个名称已存在）: {}",
@@ -172,7 +174,8 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "required work package {} 未完成或缺少 progress receipt",
     "无法执行 cargo metadata（cargo 是否在 PATH 中？）",
     "无自动保存状态，也没有已注册的计划任务。",
-    "非 success goal 的 must 未完整转移到 replacement: {}",
+    "未证明完成的 goal，其 must 未完整转移到 replacement: {}",
+    "verified replacement transfer 只允许无额外 migration 的 superseded current-schema success",
     "--authority 要求 --repeat >= 2，以证明稳定固定点",
     "progress 命令修改了源码快照；不会写入 receipt",
     "superseded_by 目标 {replacement_id} 合约无效: {error}",
@@ -220,6 +223,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "lane ledger id、baseline 或 authority 标记无效",
     "lifecycle-only authority goal 缺少 lifecycle proof",
     "lifecycle_proof 使用了无效的 legacy quarantine",
+    "lifecycle_proof 使用了无效的 receipt integrity quarantine",
     "pytest lease manifest 与受管路径不一致: {id}",
     "pytest summary 出现在 stderr，来源不可区分",
     "pytest 成功退出但缺少可验证的终端汇总",
@@ -1181,12 +1185,20 @@ const MESSAGE_PREFIX_CATALOG: &[(&str, &str)] = &[
         "only successful goals can be archived",
     ),
     (
-        "superseded_by archived 目标 {replacement_id} 是 untrusted legacy quarantine，不能作为完成证明",
-        "superseded_by archived goal {replacement_id} is an untrusted legacy quarantine and cannot prove completion",
+        "superseded_by archived 目标 {replacement_id} 是 untrusted history quarantine，不能作为完成证明",
+        "superseded_by archived goal {replacement_id} is an untrusted history quarantine and cannot prove completion",
     ),
     (
-        "非 success goal 的 must 未完整转移到 replacement: {}",
-        "the non-successful goal's must requirements were not fully transferred to the replacement: {}",
+        "lifecycle_proof 使用了无效的 receipt integrity quarantine",
+        "lifecycle_proof uses an invalid receipt-integrity quarantine",
+    ),
+    (
+        "未证明完成的 goal，其 must 未完整转移到 replacement: {}",
+        "the unproven goal's must requirements were not fully transferred to the replacement: {}",
+    ),
+    (
+        "verified replacement transfer 只允许无额外 migration 的 superseded current-schema success",
+        "verified replacement transfer allows only a superseded current-schema success without an additional migration",
     ),
     (
         "lane {} delta_paths 未规范化",
@@ -1484,6 +1496,8 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     ("任务仍可能在运行", "the task may still be running"),
     ("任务未找到", "task not found"),
     ("找不到指定的文件", "the specified file was not found"),
+    ("找不到指定的路径", "the specified path was not found"),
+    ("未知 proof kind", "unknown proof kind"),
     ("指定的任务不存在", "the specified task does not exist"),
     ("找不到任务", "task not found"),
     ("已存初始快照", "saved initial checkpoint"),
@@ -3206,6 +3220,9 @@ mod tests {
             let entry = entry.expect("read production source entry");
             let path = entry.path();
             if path.is_dir() {
+                if path.file_name().and_then(|value| value.to_str()) == Some("tests") {
+                    continue;
+                }
                 production_rs_files(&path, files);
             } else if path.extension().and_then(|value| value.to_str()) == Some("rs")
                 && path.file_name().and_then(|value| value.to_str()) != Some("i18n.rs")
@@ -3214,6 +3231,20 @@ mod tests {
                 files.push(path);
             }
         }
+    }
+
+    #[test]
+    fn production_source_discovery_excludes_nested_test_modules() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("src");
+        std::fs::create_dir_all(source.join("tests")).unwrap();
+        std::fs::write(source.join("production.rs"), "fn production() {}\n").unwrap();
+        std::fs::write(source.join("tests/workflow.rs"), "fn test_only() {}\n").unwrap();
+
+        let mut files = Vec::new();
+        production_rs_files(&source, &mut files);
+
+        assert_eq!(files, vec![source.join("production.rs")]);
     }
 
     #[test]
