@@ -80,9 +80,24 @@ pub fn workspace_walk(root: &Path) -> WorkspaceWalk {
         .hidden(false) // 不因“隐藏”自动跳过；由下面的 filter/ignore 精确控制
         .follow_links(false)
         .git_ignore(true)
-        .git_global(false)
+        // core.excludesFile（全局忽略）是 git 自己的忽略来源之一。不认它，会让
+        // `git status` 干净、`git check-ignore` 命中的文件（`*.log`、`.idea/`
+        // 这类主流全局配置）进入索引、goal baseline 与 checkpoint 快照——这些
+        // 文件不断变化又永远无法被 receipt 声明，于是 `goal close --status
+        // success` 变得不可满足。
+        .git_global(true)
         .git_exclude(true)
         .require_git(false) // 即使工作区还不是 git 仓库，也尊重 .gitignore
+        // **不要**打开 `parents`：git 只在同一个工作树内部向上找 .gitignore，
+        // 到工作树顶层就停；而 `ignore` crate 会一路走到盘符根，把工作区之外
+        // 的 .gitignore 也应用上（`require_git(false)` 还会关掉它自身的 .git
+        // 边界短路）。那比 git 更严格——恰好是反方向的错误：工作区上层目录里
+        // 任何一个 .gitignore（嵌套 checkout、本身是 dotfiles 仓库的项目目录）
+        // 都会让 `git status` 明明列为 `??` 的未提交文件从快照里消失，而
+        // manifest 仍写 status=complete、errors=[]，正是本模块声称要防的
+        // "谎称遍历完整"。代价是：工作区若是某个 git 仓库的子目录，仓库根的
+        // .gitignore 不会被认——`ignore` 没有"到工作树顶层为止"的选项，宁可
+        // 少忽略也不能静默丢用户的东西。
         .parents(false);
     let tracked = tracked_paths(root);
     let owned_root = root.to_path_buf();
@@ -132,23 +147,20 @@ pub fn workspace_walk(root: &Path) -> WorkspaceWalk {
             Ok(entry) => match entry.file_type() {
                 Some(file_type) if file_type.is_dir() => {}
                 Some(file_type) if file_type.is_file() => {
-                    // 目录层判定不够：一个 vendor 名目录只要含任何被跟踪内容就整体
-                    // 保留，会把它旁边的未跟踪构建产物一起拖进索引与 goal baseline，
-                    // 产物每次构建都变，差量门禁因此不可满足。所以 vendor 名目录**之内**
-                    // 还要逐文件看跟踪状态；未跟踪的构建产物与被 gitignore 忽略的文件
-                    // 属同一类，静默排除是一致的。
-                    let path = entry.into_path();
-                    let keep = match (&tracked, path.strip_prefix(&owned_root)) {
-                        (Some(tracked), Ok(relative)) => {
-                            let relative = relative.to_string_lossy().replace('\\', "/");
-                            !is_under_vendor_directory(&relative)
-                                || tracked.files_cmp.contains(&tracked_cmp_key(&relative))
-                        }
-                        _ => true,
-                    };
-                    if keep {
-                        report.files.push(path);
-                    }
+                    // 判据是 git 自己的判据，不是文件所在目录的名字。
+                    //
+                    // 能走到这里的文件都没有被任何 gitignore 来源忽略，也就是
+                    // `git status` 会显示为已跟踪或 `??` 的内容。此前这里在
+                    // vendor 名目录**之内**额外要求"必须被跟踪"，于是用户刚写好
+                    // 还没 add 的 `build/new-script.ps1` 被静默丢弃：
+                    // `checkpoint save` 会跳过它却照样报告成功——正是本模块声称
+                    // 要防的"谎称遍历完整"，而且丢的是未提交的工作。
+                    //
+                    // 未跟踪的构建产物仍然应当排除，但那要靠 gitignore（git 也
+                    // 会把它们列成 `??` 抱怨），而不是靠名字猜测。目录层的
+                    // vendor 剪枝保持不变：不含任何被跟踪内容的 vendor 目录整棵
+                    // 都不会进来。
+                    report.files.push(entry.into_path());
                 }
                 // `follow_links(false)` means a symlink (or other special
                 // entry) is neither a dir nor a file here. Silently skipping
@@ -272,7 +284,6 @@ struct TrackedPaths {
     /// 原样大小写，用于补回缺失文件时拼接真实路径。
     files: BTreeSet<String>,
     /// 比较键集合（见 [`tracked_cmp_key`]）。
-    files_cmp: BTreeSet<String>,
     directories_cmp: BTreeSet<String>,
 }
 
@@ -281,7 +292,6 @@ fn tracked_paths(root: &Path) -> Option<TrackedPaths> {
         .or_else(|| git_ls_files(root, &["ls-files", "-z"]))?;
 
     let mut files = BTreeSet::new();
-    let mut files_cmp = BTreeSet::new();
     let mut directories_cmp = BTreeSet::new();
     for entry in listing.split(|byte| *byte == 0) {
         if entry.is_empty() {
@@ -300,12 +310,10 @@ fn tracked_paths(root: &Path) -> Option<TrackedPaths> {
             prefix.push_str(component);
             directories_cmp.insert(tracked_cmp_key(&prefix));
         }
-        files_cmp.insert(tracked_cmp_key(&path));
         files.insert(path);
     }
     Some(TrackedPaths {
         files,
-        files_cmp,
         directories_cmp,
     })
 }
@@ -318,15 +326,6 @@ fn git_ls_files(root: &Path, args: &[&str]) -> Option<Vec<u8>> {
         .output()
         .ok()?;
     output.status.success().then_some(output.stdout)
-}
-
-/// 该工作区相对路径是否位于某个 vendor 名目录之下。
-fn is_under_vendor_directory(relative: &str) -> bool {
-    let mut components: Vec<&str> = relative.split('/').collect();
-    components.pop(); // 只看祖先目录，不看文件名本身
-    components
-        .iter()
-        .any(|component| name_matches(VENDOR_FALLBACK_IGNORE, component))
 }
 
 fn append_indexed_state_policy(root: &Path, report: &mut WorkspaceWalk) {
@@ -497,24 +496,30 @@ mod tests {
         );
     }
 
-    /// 目录层判定不够：vendor 名目录只要含任何被跟踪内容就整体保留，会把旁边的
-    /// 未跟踪构建产物一起拖进索引与 goal baseline，产物每次构建都变，差量门禁
-    /// 因此不可满足。跟踪判据必须落到文件层。
+    /// vendor 名目录**之内**的判据是 gitignore，不是"是否已被 git add"。
+    ///
+    /// 两个方向都必须成立：被 gitignore 的构建产物不得进索引（否则产物每次构建
+    /// 都产生无法声明的 unplanned 差量，goal 门禁不可满足）；而未跟踪**且未被
+    /// 忽略**的文件是用户刚写、还没 add 的工作，静默丢弃它会让 `checkpoint save`
+    /// 漏掉未提交内容却照样报成功——本模块声称要防的"谎称遍历完整"。
     #[test]
-    fn vendor_pruning_keeps_tracked_files_and_drops_untracked_artifacts_in_the_same_directory() {
+    fn vendor_directory_contents_follow_gitignore_not_staging_state() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         fs::create_dir_all(root.join("build")).unwrap();
         fs::write(root.join("build/deploy.ps1"), "Write-Host x").unwrap();
         fs::write(root.join("README.md"), "# x").unwrap();
+        // 产物被显式忽略，这是排除它们的唯一判据。
+        fs::write(root.join(".gitignore"), "build/out/\nbuild/*.tmp\n").unwrap();
 
         git(root, &["init", "--quiet"]);
-        git(root, &["add", "build/deploy.ps1", "README.md"]);
+        git(root, &["add", "build/deploy.ps1", "README.md", ".gitignore"]);
 
-        // 构建产物：与被跟踪脚本同处一个 build/ 目录，但从未 git add。
         fs::create_dir_all(root.join("build/out")).unwrap();
         fs::write(root.join("build/out/bundle.bin"), "artifact").unwrap();
         fs::write(root.join("build/cache.tmp"), "artifact").unwrap();
+        // 刚写好、还没 add 的用户脚本：git status 会显示为 `??`。
+        fs::write(root.join("build/new-script.ps1"), "Write-Host new").unwrap();
 
         let keys: Vec<String> = workspace_files_checked(root)
             .unwrap()
@@ -528,11 +533,15 @@ mod tests {
         );
         assert!(
             !keys.iter().any(|key| key.starts_with("build/out")),
-            "untracked artifacts beside it must not be indexed: {keys:?}"
+            "gitignored artifacts must stay out of the index: {keys:?}"
         );
         assert!(
             !keys.contains(&"build/cache.tmp".to_string()),
-            "untracked artifacts beside it must not be indexed: {keys:?}"
+            "gitignored artifacts must stay out of the index: {keys:?}"
+        );
+        assert!(
+            keys.contains(&"build/new-script.ps1".to_string()),
+            "untracked but un-ignored work must never be dropped silently: {keys:?}"
         );
     }
 

@@ -218,6 +218,13 @@ pub struct SaveOutcome {
     pub total_bytes: u64,
     pub pruned: usize,
     pub purpose: CheckpointPurpose,
+    /// Conditions the save proceeded through rather than failed on.
+    ///
+    /// `salvage-save` deliberately runs even when an orphaned restore
+    /// transaction cannot be rolled back, but swallowing that silently would
+    /// record a workspace captured mid-restore as an ordinary complete
+    /// snapshot with nothing anywhere to say so.
+    pub warnings: Vec<String>,
 }
 
 /// 列出时的单条快照信息。
@@ -547,7 +554,23 @@ fn save_with_purpose(
     })?;
     // A saver must never snapshot a workspace left halfway through a crashed
     // restore.  Recovery runs under the same per-workspace lock as restore.
-    recover_orphaned_restore_transactions(&root, &ws_dir)?;
+    //
+    // `salvage-save` is the one exception, and deliberately so: it is the
+    // documented emergency capture, it is already marked recovery-only and can
+    // never count as completion evidence. An orphan whose rollback is refused
+    // because the user has since edited a published file can never be recovered
+    // automatically, so letting it block salvage-save left the operator with no
+    // way to preserve the very workspace this tool exists to preserve.
+    let mut warnings = Vec::new();
+    match recover_orphaned_restore_transactions(&root, &ws_dir) {
+        Ok(()) => {}
+        Err(error) if purpose == CheckpointPurpose::RecoveryOnly => {
+            warnings.push(format!(
+                "orphan restore transaction 未能回滚，本次抢救快照可能捕获了恢复中途的工作区: {error:#}"
+            ));
+        }
+        Err(error) => return Err(error),
+    }
 
     let timestamp = crate::timefmt::now_iso();
     let id = fs_safe_id(&timestamp);
@@ -652,6 +675,7 @@ fn save_with_purpose(
         total_bytes: manifest.total_bytes,
         pruned,
         purpose,
+        warnings,
     })
 }
 

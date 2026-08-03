@@ -1050,6 +1050,17 @@ impl GoalStore {
             bail!("目标不存在: {id}");
         };
         if goal.lifecycle == GoalLifecycle::Archived && migrate_unreceipted {
+            // Same one-way rule `mark_current` enforces: this branch is the only
+            // other lifecycle_proof rewriter, and it would re-bless a quarantined
+            // record as trusted history — overwriting the `[invalid proof: ...]`
+            // reason and swapping the retained historical fingerprint for the
+            // current one. The sibling receipt-policy branch already refuses any
+            // record that carries an explicit policy.
+            if is_quarantined(&goal) {
+                bail!(
+                    "目标 {id} 已隔离为 untrusted history；隔离是单向降级，审计记录必须保留，不能用 migration 刷新为可信历史"
+                );
+            }
             if !pre_receipt_migration_eligible(&goal) {
                 bail!("只有符合 rollout 前条件的 schema-v2 success goal 可以刷新 migration proof");
             }
@@ -1532,12 +1543,7 @@ impl GoalStore {
         // quarantine 是单向 evidence 降级：mark_current 会清空 lifecycle_proof
         // 与 lifecycle_reason，等于抹掉隔离标记和 `[invalid proof: ...]` 审计
         // 痕迹，再经 close/archive 重铸为可信历史。这里必须拒绝。
-        if goal.lifecycle_proof.as_ref().is_some_and(|proof| {
-            matches!(
-                proof.receipt_policy.as_deref(),
-                Some(RECEIPT_POLICY_QUARANTINED | RECEIPT_POLICY_INTEGRITY_QUARANTINED)
-            )
-        }) {
+        if is_quarantined(&goal) {
             bail!(
                 "目标 {id} 已隔离为 untrusted history；隔离是单向降级，审计记录必须保留，不能恢复为 current"
             );
@@ -1550,6 +1556,20 @@ impl GoalStore {
         write_json(&path, &goal)?;
         Ok(goal)
     }
+}
+
+/// Is this record an explicitly untrusted, quarantined history?
+///
+/// One predicate for every path that could undo the downgrade. It used to be
+/// inlined in `mark_current` alone, which is how `archive --migrate-unreceipted`
+/// — the only other lifecycle_proof rewriter — kept its escape.
+fn is_quarantined(goal: &Goal) -> bool {
+    goal.lifecycle_proof.as_ref().is_some_and(|proof| {
+        matches!(
+            proof.receipt_policy.as_deref(),
+            Some(RECEIPT_POLICY_QUARANTINED | RECEIPT_POLICY_INTEGRITY_QUARANTINED)
+        )
+    })
 }
 
 fn goal_from_legacy(legacy: LegacyGoal) -> Goal {

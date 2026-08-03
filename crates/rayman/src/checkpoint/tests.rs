@@ -460,6 +460,49 @@ fn committed_orphan(
     transaction
 }
 
+/// 恢复 goal 账本到一个刚修复过的工作区：`.RaymanCodingSkill/goals/` 不存在，
+/// 而 restore 正是要重建它的那个操作。预事务取锁一度要求该目录已存在，于是
+/// 文档化的"抢救→修复→恢复"流程整条失效（exit 1，零文件恢复），逃生路径只有
+/// 未文档化的手动 mkdir。restore 的其余步骤会自建目标父目录，取锁这一步也必须。
+#[test]
+fn restore_recreates_the_managed_state_directories_it_locks() {
+    let ws = tempfile::tempdir().unwrap();
+    let store = tempfile::tempdir().unwrap();
+    let root = ws.path();
+    write(&root.join("README.md"), "docs");
+    write(
+        &root.join(".RaymanCodingSkill/goals/goal_probe.json"),
+        "{\"id\":\"goal_probe\"}",
+    );
+    write(&root.join(".RaymanCodingSkill/pending.json"), "[]");
+    let saved = save(root, Some(store.path()), DEFAULT_KEEP).unwrap();
+    let manifest = verify_snapshot(&saved.path).unwrap();
+    assert!(
+        manifest
+            .files
+            .iter()
+            .any(|file| file.path == ".RaymanCodingSkill/goals/goal_probe.json"),
+        "快照必须包含 goal 记录，否则本测试没有意义: {:?}",
+        manifest.files.iter().map(|f| &f.path).collect::<Vec<_>>()
+    );
+
+    // 文档化的修复动作只重建 workspace_skill.yaml，goals/ 不会回来。
+    fs::remove_dir_all(root.join(".RaymanCodingSkill")).unwrap();
+    assert!(!root.join(".RaymanCodingSkill/goals").exists());
+
+    let outcome = restore(root, Some(store.path()), Some(&saved.id))
+        .expect("restore 必须自建它要加锁的受管状态目录");
+    assert_eq!(outcome.failed, 0);
+    assert_eq!(
+        fs::read_to_string(root.join(".RaymanCodingSkill/goals/goal_probe.json")).unwrap(),
+        "{\"id\":\"goal_probe\"}"
+    );
+    assert_eq!(
+        fs::read_to_string(root.join(".RaymanCodingSkill/pending.json")).unwrap(),
+        "[]"
+    );
+}
+
 /// 相对 `--dir` 必须锚在工作区根，而不是进程 cwd：autosave 把这个相对字符串
 /// 原样存进状态，计划任务却以工作区根为工作目录运行，从子目录跑一次手动 save
 /// 就会把 store 劈成两个，`checkpoint list` 互相看不见对方的快照。

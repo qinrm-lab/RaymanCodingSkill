@@ -120,7 +120,8 @@ fn restore_impl_with_options(
     // validate→rename window where restore could overwrite bytes it had just
     // verified as unchanged. Hold the writers' own locks for the whole
     // transaction.
-    let _state_locks = acquire_managed_state_locks(&root, &files)?;
+    let _state_locks =
+        acquire_managed_state_locks(&root, files.iter().map(|file| file.path.clone()))?;
 
     let mut transaction = create_restore_transaction(&root, &ws_dir, &files)?;
     let operation = (|| -> Result<()> {
@@ -174,13 +175,16 @@ fn ensure_manifest_paths_preserve_case(id: &str, tree: &Path, manifest: &Manifes
         if let Some(actual) = names.resolve(tree, &relative)?
             && actual != expected.path
         {
-            folded.push(format!("{} 实为 {}", expected.path, actual));
+            // Anchored on a leading static: a template whose statics are
+            // `["", " 实为 ", ""]` matches *any* line containing that fragment,
+            // so registering it as an authored message let the en localizer
+            // rewrite user-authored Chinese that merely happened to contain it.
+            folded.push(format!("manifest 记录 {} 实为 {}", expected.path, actual));
         }
     }
     if !folded.is_empty() {
         bail!(
-            "拒绝恢复 checkpoint {}：它由旧版本 Rayman 生成，manifest 记录的是大小写折叠后的比较键而非真实文件名，\
-             按它恢复出的文件名大小写不可信（{}）；请用当前版本重新 `rayman checkpoint save` 后再恢复",
+            "拒绝恢复 checkpoint {}：它由旧版本 Rayman 生成，manifest 记录的是大小写折叠后的比较键而非真实文件名，按它恢复出的文件名大小写不可信（{}）；请用当前版本重新 `rayman checkpoint save` 后再恢复",
             id,
             folded.join("；")
         );
@@ -271,19 +275,35 @@ impl TreeNameIndex {
 /// — see the lock-order note at the top of the restore.
 fn acquire_managed_state_locks(
     root: &Path,
-    files: &[FileIntegrity],
+    paths: impl IntoIterator<Item = String>,
 ) -> Result<Vec<crate::state_lock::StateLock>> {
     let state_prefix = format!("{}/", crate::state_paths::STATE_DIR_NAME);
     let mut targets: Vec<PathBuf> = Vec::new();
-    for file in files {
-        let Some(relative) = file.path.strip_prefix(&state_prefix) else {
+    for path in paths {
+        let Some(relative) = path.strip_prefix(&state_prefix) else {
             continue;
         };
         // Only files an independent writer serializes on: pending.json and the
         // per-goal records. Context index/project map have no such writer.
-        if relative == "pending.json" || relative.starts_with("goals/") {
-            targets.push(root.join(manifest_relative_path(&file.path)?));
+        if relative != "pending.json" && !relative.starts_with("goals/") {
+            continue;
         }
+        let verified = manifest_relative_path(&path)?;
+        let Ok(under_state) = verified.strip_prefix(crate::state_paths::STATE_DIR_NAME) else {
+            continue;
+        };
+        // Resolve through the managed-state helper *creating parents*, exactly
+        // like the writers whose locks these are. Locking a bare `root.join(..)`
+        // instead required `.RaymanCodingSkill/goals/` to already exist — while
+        // restore is precisely the operation that recreates it — so restoring a
+        // goal ledger into a freshly repaired workspace aborted before the
+        // transaction was even created, restoring nothing. The rest of the
+        // restore creates its destination parents itself; this step must too.
+        targets.push(crate::state_paths::managed_state_file(
+            root,
+            under_state,
+            true,
+        )?);
     }
     targets.sort();
     targets.dedup();
@@ -653,8 +673,14 @@ fn rollback_restore_entry(
                 && !same_file_content(current, &entry.expected)
                 && !same_file_content(current, original)
             {
+                // Refusing is right — the user's edit must not be destroyed —
+                // but this bail is permanent: the bytes will never again equal
+                // `expected` or `original`, and orphan recovery runs at the head
+                // of every save and restore. Spell out the escape, exactly like
+                // the journal-less branch does, instead of leaving the operator
+                // with a wedge and no documented way out.
                 bail!(
-                    "回滚目标已被第三方修改，拒绝覆盖: {}",
+                    "回滚目标已被第三方修改，拒绝覆盖: {}。原件仍在该 transaction 的 backups/ 子目录中；取回仍需要的内容后删除整个 transaction 目录即可解除对 save/restore/autosave 的阻塞，salvage-save 不受阻塞",
                     display_path(&destination)
                 );
             }
@@ -780,6 +806,21 @@ pub(super) fn recover_orphaned_restore_transactions(root: &Path, ws_dir: &Path) 
             // still enforced by `validate_restore_journal` above.
             RestorePhase::Committed => {}
             RestorePhase::Preparing | RestorePhase::Publishing | RestorePhase::RollingBack => {
+                // Rollback republishes managed state files from `backups/`, which
+                // is the same write the forward path takes the writers' per-file
+                // locks for. Running it under the checkpoint lock alone let an
+                // unattended autosave tick revert a goal record a foreground
+                // `goal validate`/`close` was holding the lock to write. Scope
+                // the locks to this orphan so the caller can still take them for
+                // its own transaction afterwards.
+                let _state_locks = acquire_managed_state_locks(
+                    root,
+                    transaction
+                        .journal
+                        .entries
+                        .iter()
+                        .map(|entry| entry.expected.path.clone()),
+                )?;
                 rollback_restore_transaction(root, &mut transaction).with_context(|| {
                     format!(
                         "orphan restore transaction 自动回滚不完整，已保留并拒绝继续: {}",
@@ -833,9 +874,7 @@ fn reap_journalless_restore_transaction(ws_dir: &Path, path: &Path) -> Result<bo
         // message did not say how. Recovery is manual by design (not auto-reaped) so the
         // user decides what in backups/ is still needed before it is discarded.
         bail!(
-            "orphan restore transaction 没有 journal 却仍存有备份文件，无从判断该回滚哪些目标；\
-             已保留供人工恢复。恢复步骤：检查该目录 backups/ 子目录中的原件、取回仍需要的文件，\
-             再删除整个目录以解除对 save/restore/autosave 的阻塞：{}",
+            "orphan restore transaction 没有 journal 却仍存有备份文件，无从判断该回滚哪些目标；已保留供人工恢复。恢复步骤：检查该目录 backups/ 子目录中的原件、取回仍需要的文件，再删除整个目录以解除对 save/restore/autosave 的阻塞：{}",
             display_path(path)
         );
     }

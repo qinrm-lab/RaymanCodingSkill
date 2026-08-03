@@ -596,8 +596,15 @@ fn project_map_path(root: &Path, create_parents: bool) -> Result<PathBuf> {
 
 /// Cargo 本身是 manifest 的权威解释器。能运行时绝不从逐行字符串启发式推断
 /// workspace/package/path-dependency；只在非 Cargo 或 metadata 不可用时降级并标记来源。
-/// 每个仓库最多尝试多少个子目录 manifest，避免 fixture 众多的仓库触发子进程风暴。
-const MAX_NESTED_METADATA_MANIFESTS: usize = 8;
+/// 每个仓库最多对多少个嵌套 manifest 跑 `cargo metadata`，避免 fixture 众多的
+/// 仓库触发子进程风暴。
+///
+/// 超限不再静默退化成非权威拓扑：那会让整类仓库永久拿不到权威拓扑
+/// （standard/release 的硬前提）却给不出任何可执行的解除路径。上限提高到 32
+/// 是因为 8 对真实 monorepo 太小；不再尝试"跳过已被上一次调用覆盖的 manifest"
+/// 这类优化——`cargo_metadata_at` 的返回里混有启发式包，据此去重会把 cargo
+/// 从未解析过的 manifest 当成已解析（见循环内注释）。
+const MAX_NESTED_METADATA_MANIFESTS: usize = 32;
 
 /// 根目录没有 Cargo.toml 时，对索引到的 Cargo manifest 逐个尝试 `cargo metadata`。
 ///
@@ -620,12 +627,24 @@ fn nested_cargo_metadata_topology(
         .filter(|path| is_cargo_manifest_path(path))
         .collect();
     manifests.sort_unstable();
-    if manifests.is_empty() || manifests.len() > MAX_NESTED_METADATA_MANIFESTS {
+    if manifests.is_empty() {
         return None;
+    }
+
+    if manifests.len() > MAX_NESTED_METADATA_MANIFESTS {
+        return Some(Err(anyhow::anyhow!(
+            "嵌套 Cargo manifest 超过 {MAX_NESTED_METADATA_MANIFESTS} 个，已停止逐个解析；把它们纳入同一个 workspace（根 Cargo.toml 的 `[workspace] members`），或把 fixture manifest 排除出索引"
+        )));
     }
 
     let mut packages: Vec<PackageEntry> = Vec::new();
     let mut dependencies: Vec<PackageDependency> = Vec::new();
+    // Every manifest is resolved by its own `cargo metadata` run. Skipping the
+    // ones an earlier run "already returned" looked like a free optimization,
+    // but `cargo_metadata_at` also appends heuristically-discovered packages, so
+    // the skip-set was seeded with manifests cargo had never parsed: one
+    // invocation marked the whole repo covered, and a manifest cargo rejects
+    // sailed through as authoritative `cargo_metadata` topology.
     for manifest in manifests {
         let (found, deps) = match cargo_metadata_at(root, index, Some(manifest)) {
             Ok(result) => result,
@@ -927,24 +946,11 @@ fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
                 )
             }
         }
-    } else if index
-        .files
-        .iter()
-        .any(|file| is_cargo_manifest_path(&file.path))
-    {
-        // 索引里有 Cargo manifest 但没能从中取得权威拓扑（数量超过
-        // MAX_NESTED_METADATA_MANIFESTS，未尝试）。必须与"这个仓库根本
-        // 没有 Cargo 包"区分开：后者可以照常 ready，前者只能 fail-closed，否则
-        // 一个损坏到解析不出任何包的 Cargo.toml 会让仓库看起来无 Cargo 包而蒙混过关。
-        let workspace = read_workspace_info(root, index)?;
-        let packages = discover_packages(root, index, &workspace)?;
-        let dependencies = infer_package_dependencies(root, index, &packages, &workspace)?;
-        (
-            packages,
-            dependencies,
-            "heuristic_fallback: nested cargo metadata unavailable".to_string(),
-        )
     } else {
+        // `nested_cargo_metadata_topology` returns `None` only when the index
+        // holds no Cargo manifest at all — every other outcome, including the
+        // invocation cap, now comes back as `Some(Err)` with an actionable
+        // message. A repo with no Cargo package is legitimately ready.
         let workspace = read_workspace_info(root, index)?;
         let packages = discover_packages(root, index, &workspace)?;
         let dependencies = infer_package_dependencies(root, index, &packages, &workspace)?;

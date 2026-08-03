@@ -24,6 +24,7 @@ pub fn run_checkpoint(root: &std::path::Path, json: bool, cmd: CheckpointCmd) ->
                     "pruned": outcome.pruned,
                     "purpose": outcome.purpose,
                     "retention_applied": keep.is_some(),
+                    "warnings": outcome.warnings,
                 }));
             } else {
                 println!(
@@ -43,6 +44,9 @@ pub fn run_checkpoint(root: &std::path::Path, json: bool, cmd: CheckpointCmd) ->
                     }
                 );
                 println!("  位置: {}", rayman::pathfmt::display_path(&outcome.path));
+                for warning in &outcome.warnings {
+                    println!("  警告: {warning}");
+                }
             }
         }
         CheckpointAction::Prune { keep, yes } => {
@@ -71,6 +75,7 @@ pub fn run_checkpoint(root: &std::path::Path, json: bool, cmd: CheckpointCmd) ->
                     "pruned": outcome.pruned,
                     "purpose": outcome.purpose,
                     "authoritative": false,
+                    "warnings": outcome.warnings,
                 }));
             } else {
                 println!(
@@ -78,6 +83,9 @@ pub fn run_checkpoint(root: &std::path::Path, json: bool, cmd: CheckpointCmd) ->
                     outcome.id, outcome.file_count
                 );
                 println!("  位置: {}", rayman::pathfmt::display_path(&outcome.path));
+                for warning in &outcome.warnings {
+                    println!("  警告: {warning}");
+                }
             }
         }
         CheckpointAction::List => {

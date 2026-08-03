@@ -1120,11 +1120,14 @@ pub(super) fn workspace_identity(root: &Path) -> String {
     crate::hash::sha256_bytes(canonical.to_string_lossy().as_bytes())
 }
 
-/// must 转移比较键。typed proof 义务是不可变合约的一部分（transfer_goal_contract
-/// 哈希包含 proof_kind），文本同名的普通 must 不得顶替 typed must，否则卡在
-/// installation/repository_gate 等 typed 阶段的目标可以被一条 generic receipt
-/// 洗掉义务。`None` 与 `Some(Generic)` 在校验语义里等价（见 proof_kind_matches），
-/// 共用一键。
+/// must 转移比较键。typed proof 义务是不可变合约的一部分（自 v3 起
+/// transfer_goal_contract_sha256 与 replacement_contract_sha256 都把 proof_kind
+/// 计入哈希——在那之前这条注释是错的，两个哈希都只覆盖 id/text/kind，所以事后
+/// 剥掉 predecessor 的 `--must-proof` 不会破坏任何被 pin 住的哈希，而这里的实时
+/// 比较随即就会接受它先前拒绝的普通 must）。文本同名的普通 must 不得顶替 typed
+/// must，否则卡在 installation/repository_gate 等 typed 阶段的目标可以被一条
+/// generic receipt 洗掉义务。`None` 与 `Some(Generic)` 在校验语义里等价
+/// （见 proof_kind_matches），共用一键。
 pub(super) fn must_transfer_key(requirement: &Requirement) -> (&'static str, String) {
     (
         requirement.proof_kind.unwrap_or_default().as_str(),
@@ -1148,9 +1151,15 @@ pub(super) fn must_transfer_multiset<'a>(
     result
 }
 
+/// v3 adds `proof_kind`. v2 hashed only id/text/kind, so the hash whose whole
+/// purpose is pinning "the exact mandatory contract of the named unfinished
+/// goals" did not pin their typed proof obligations: stripping `--must-proof`
+/// from a predecessor after the fact left every pinned hash intact, and the
+/// live must-transfer comparison — which does key on proof_kind — then matched
+/// a plain replacement it had previously refused.
 pub(super) fn transfer_goal_contract_sha256(goal: &Goal) -> String {
     let mut hasher = Sha256::new();
-    lifecycle_hash_str(&mut hasher, "rayman.transfer-goal-contract.v2");
+    lifecycle_hash_str(&mut hasher, "rayman.transfer-goal-contract.v3");
     hasher.update(goal.schema_version.to_le_bytes());
     lifecycle_hash_str(&mut hasher, &goal.id);
     lifecycle_hash_str(&mut hasher, &goal.title);
@@ -1177,13 +1186,20 @@ pub(super) fn transfer_goal_contract_sha256(goal: &Goal) -> String {
         lifecycle_hash_str(&mut hasher, &requirement.id);
         lifecycle_hash_str(&mut hasher, &requirement.text);
         lifecycle_hash_str(&mut hasher, requirement.kind.as_str());
+        lifecycle_hash_str(
+            &mut hasher,
+            requirement.proof_kind.unwrap_or_default().as_str(),
+        );
     }
     format!("{:x}", hasher.finalize())
 }
 
+/// v2 adds `proof_kind`, for the same reason as
+/// [`transfer_goal_contract_sha256`]: a replacement's own typed obligations
+/// must be pinned by the proof that certifies it.
 pub(super) fn replacement_contract_sha256(goal: &Goal) -> String {
     let mut hasher = Sha256::new();
-    lifecycle_hash_str(&mut hasher, "rayman.lifecycle-only-replacement-contract.v1");
+    lifecycle_hash_str(&mut hasher, "rayman.lifecycle-only-replacement-contract.v2");
     hasher.update(goal.schema_version.to_le_bytes());
     lifecycle_hash_str(&mut hasher, &goal.id);
     lifecycle_hash_str(&mut hasher, &goal.title);
@@ -1197,6 +1213,10 @@ pub(super) fn replacement_contract_sha256(goal: &Goal) -> String {
         lifecycle_hash_str(&mut hasher, &requirement.id);
         lifecycle_hash_str(&mut hasher, &requirement.text);
         lifecycle_hash_str(&mut hasher, requirement.kind.as_str());
+        lifecycle_hash_str(
+            &mut hasher,
+            requirement.proof_kind.unwrap_or_default().as_str(),
+        );
         lifecycle_hash_str(&mut hasher, requirement.status.as_str());
         lifecycle_hash_optional_str(&mut hasher, requirement.evidence.as_deref());
     }

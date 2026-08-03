@@ -2,6 +2,249 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use clap::ValueEnum;
 pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
+    "  警告: {warning}",
+    "orphan restore transaction 未能回滚，本次抢救快照可能捕获了恢复中途的工作区: {error:#}",
+    "--supersedes 不能包含重复目标",
+    "active goal 不能直接归档；先 `rayman goal close {id} --status partial`（或 blocked）如实记录结果，再归档",
+    "archived goal 已有显式 receipt policy；拒绝降级或重复迁移",
+    "authority goal 不存在: {authority_goal_id}",
+    "authority goal 必须是同 workspace、current-policy 且包含同命令 direct-authority 的有效 archived success",
+    "authority goal 缺少 lifecycle proof",
+    "authority receipt invocation hash 无效",
+    "authority receipt 与 requirement/command/scope 合同不匹配",
+    "authority receipt 必须包含至少两次完整稳定执行",
+    "authority receipt 未证明同一 workspace fingerprint 上的重复稳定 PASS",
+    "checkpoint manifest 不是受支持的 v3 schema: schema={:?} version={}",
+    "checkpoint manifest 含不安全相对路径: {text}",
+    "checkpoint restore 失败且回滚不完整；已保留 transaction {} 供恢复: {operation_error:#}; rollback: {rollback_error:#}",
+    "checkpoint restore 失败，工作区已回滚，但无法清理 transaction {}: {operation_error:#}; cleanup: {cleanup_error:#}",
+    "checkpoint restore 失败，工作区已完整回滚: {operation_error:#}",
+    "checkpoint {} 是 recovery-only；修复并重新激活工作区后，显式加 --allow-recovery-only 才能恢复",
+    "checkpoint 不是完整快照（状态：{:?}）",
+    "checkpoint 使用旧 v2 content-only manifest，缺少权限完整性证明，不能安全恢复；请用当前 Rayman 新建 v3 checkpoint",
+    "checkpoint 完整性记录含无效 Unix mode: {}",
+    "checkpoint 完整性记录缺少 Unix mode 权限证明，不能在 Unix 安全恢复: {}",
+    "checkpoint 完整性记录缺少 readonly 权限证明（旧 content-only manifest），请新建 v3 checkpoint: {}",
+    "checkpoint 已完整恢复，但无法清理 restore transaction {}",
+    "checkpoint 总字节数溢出",
+    "checkpoint 文件完整性不匹配: {}",
+    "checkpoint 缺少 manifest",
+    "checkpoint 缺少 manifest: {}",
+    "checkpoint 路径不是普通文件: {}",
+    "checkpoint 路径不是有效 UTF-8: {}",
+    "checkpoint 路径为空",
+    "checkpoint 路径含不安全组件: {}",
+    "checkpoint 路径组件不是目录: {}",
+    "context schema/workspace identity 不匹配",
+    "context 索引包含读取失败条目: {}",
+    "context 索引包含重复路径: {}",
+    "goal plan --extend 拒绝事后补票；已有未计划变更: {}",
+    "goal plan --extend 拒绝已发生变化的新路径: {added}",
+    "goal plan --extend 至少需要一个变更路径",
+    "goal plan --extend 要求恰好一个基础聚合 plan receipt",
+    "goal plan 是首次修改前的一次性聚合合同，不能追加或拆分；请在变更前一次列出完整路径",
+    "goal plan 至少需要一个变更路径",
+    "lifecycle-only replacement 必须保持 pristine 且只能包含 open must",
+    "lifecycle-only replacement 至少需要一个 --supersedes 目标",
+    "live lifecycle authority 未证明当前源码上的重复稳定仓库 gate",
+    "manifest file_count={} 与完整性条目数={} 不一致",
+    "manifest total_bytes={} 与文件完整性总和={} 不一致",
+    "manifest 包含重复路径: {}",
+    "manifest 含无效 SHA-256: {}",
+    "orphan restore transaction 无法安全加载，已保留并拒绝继续: {}",
+    "orphan restore transaction 没有 journal 却仍存有备份文件，无从判断该回滚哪些目标；已保留供人工恢复。恢复步骤：检查该目录 backups/ 子目录中的原件、取回仍需要的文件，再删除整个目录以解除对 save/restore/autosave 的阻塞：{}",
+    "orphan restore transaction 自动回滚不完整，已保留并拒绝继续: {}",
+    "pre-receipt migration 与 receipt-policy migration 不能同时使用",
+    "replacement must 必须与 --supersedes 目标 must（含 typed proof 义务）的精确并集一致",
+    "replacement、authority goal 与被转移目标必须彼此不同",
+    "restore journal committed 阶段条目状态不完整",
+    "restore journal original/expected 路径不一致: {} != {}",
+    "restore journal preparing 阶段含 publish_attempted 条目",
+    "restore journal schema/version 不受支持: schema={:?} version={}",
+    "restore journal 包含重复新建目录: {}",
+    "restore journal 包含重复路径: {}",
+    "restore journal 发布条目尚未预备目标: {}",
+    "restore journal 回滚完成条目从未发布: {}",
+    "restore journal 工作区不匹配: recorded={:?} current={:?}",
+    "restore journal 新建目录不是任何恢复目标的祖先: {}",
+    "restore journal 新建目录路径未规范化: {}",
+    "restore journal 路径未规范化: {}",
+    "restore staging 完整性不匹配: {}",
+    "restore transaction 发布索引越界: {index}",
+    "restore transaction 回滚索引越界: {index}",
+    "restore transaction 目标尚未预备: {}",
+    "restore transaction 缺少 journal.json",
+    "restore 新建目录 journal 条目丢失",
+    "restore 新建目录逃逸工作区: {}",
+    "restore 目录只有创建意图且非空，无法证明所有权，拒绝删除 {}（{error}）；确认目录内容后手动删除它，再删除 transaction 目录 {} 以解除阻塞",
+    "restore 目标在备份后发生变化，拒绝覆盖: {}",
+    "restore 目标备份完整性不匹配: {}",
+    "review receipt 必须绑定已记录的 goal plan",
+    "reviewer 与 summary 都不能为空",
+    "validation --changed 超出 goal plan: {}",
+    "validation receipt 与 immutable goal/requirement contract 不匹配",
+    "validation receipt 与命令/影响路径不匹配",
+    "validation 拒绝未计划的实际变更: {}",
+    "{path}: 无法持久化回滚完成状态: {error:#}",
+    "manifest 记录 {} 实为 {}",
+    "上下文文件在索引验证后发生变化: {} (size {} != {} or sha256 {} != {})",
+    "上下文索引不是 ready（当前: {}）。先运行 `rayman context refresh`。{}",
+    "上下文索引拒绝不安全相对路径: {}",
+    "上下文索引拒绝链接/reparse 路径: {}",
+    "上下文索引拒绝非普通文件: {}",
+    "上下文索引文件不属于工作区: {} under {}",
+    "上下文索引文件逃逸工作区: {} -> {}",
+    "上下文索引无法哈希文件: {}",
+    "上下文索引无法复查文件元数据: {}",
+    "上下文索引无法统计文件行数: {}",
+    "上下文索引无法读取文件: {}",
+    "上下文索引无法读取文件元数据: {}",
+    "上下文索引条目含不安全路径: {}",
+    "上下文索引缺失。先运行 `rayman context refresh`。",
+    "上下文索引读取期间文件发生变化: {}",
+    "上下文索引路径组件不是目录: {}",
+    "不安全的 checkpoint 目标路径: {}",
+    "不安全的 checkpoint 相对路径: {}",
+    "不能 supersede 目标 {id}: {error}",
+    "历史 goal 不满足 receipt_integrity_v1；拒绝刷新 lifecycle proof",
+    "历史 lifecycle proof 的 workspace fingerprint 非法，不能生成可核验隔离记录",
+    "历史目标缺少旧 lifecycle proof，不能证明该归档证据曾经失效",
+    "原子替换目标不是安全普通文件: {}",
+    "原本不存在的 restore 目标在发布前出现，拒绝覆盖: {}",
+    "发现不安全的 orphan restore transaction，已保留并拒绝继续: {}",
+    "只允许隔离已归档的 success 历史；current/未完成目标不能隐藏",
+    "只有 active/current 目标可以记录 plan receipt",
+    "只有 active/success 的 current-schema 目标可以记录 review receipt",
+    "只有 current goal 可以归档；已迁移的 archived goal 可用 --migrate-unreceipted 幂等刷新 proof",
+    "只有 current goal 可以被 supersede",
+    "只有 current-schema active/current 目标可以扩展 plan",
+    "只有 must 已完整结束的 current-schema archived success 可以隔离",
+    "只有 receipt-policy-v2 rollout 前的 schema-v2 success goal 可以迁移 v1 proof",
+    "只有符合 rollout 前条件的 schema-v2 success goal 可以刷新 migration proof",
+    "回滚后目标完整性不匹配: {}",
+    "回滚备份完整性不匹配: {}",
+    "回滚目标不是安全普通文件: {}",
+    "回滚目标已被第三方修改，拒绝覆盖: {}。原件仍在该 transaction 的 backups/ 子目录中；取回仍需要的内容后删除整个 transaction 目录即可解除对 save/restore/autosave 的阻塞，salvage-save 不受阻塞",
+    "完整 checkpoint manifest 含有跳过项或错误记录",
+    "完整性记录含无效 SHA-256: {}",
+    "工作区已偏离 goal 开工 baseline；拒绝事后补 plan。baseline={} current={}",
+    "工作区遍历失败: {error:#}",
+    "归档 success 的 lifecycle proof 仍然有效；拒绝把有效证据降级为 quarantine",
+    "归档原因不能为空",
+    "恢复前源文件完整性发生变化: {}",
+    "恢复后目标文件完整性不匹配: {}",
+    "恢复目标不是普通文件: {}",
+    "恢复目标是目录而非文件: {}",
+    "找不到 checkpoint: {id}",
+    "拒绝关闭为 blocked：必须先记录至少一个带完整解决方案包的 human/external pending，且不能仍有 agent-owned pending",
+    "拒绝关闭为 success：handoff contract invalid: {error}",
+    "拒绝关闭为 success：legacy goal 不能生成当前 receipt；只可归档已是 success 的历史记录",
+    "拒绝关闭为 success：必须先用 goal validate 写入当前且相关的 receipt: {}",
+    "拒绝关闭为 success：目标合约无效: {error}",
+    "拒绝写入 lifecycle-only replacement proof: {error}",
+    "拒绝写入 lifecycle-only replacement: {error}",
+    "拒绝恢复 checkpoint {}：它由旧版本 Rayman 生成，manifest 记录的是大小写折叠后的比较键而非真实文件名，按它恢复出的文件名大小写不可信（{}）；请用当前版本重新 `rayman checkpoint save` 后再恢复",
+    "拒绝恢复 recovery-only checkpoint {}：当前激活合同尚未修复",
+    "拒绝恢复非完整 checkpoint {}（状态：{:?}）",
+    "拒绝清理不属于工作区 checkpoint 的 transaction: {}",
+    "拒绝链接/reparse checkpoint 路径组件: {}",
+    "拒绝链接/reparse 恢复目标: {}",
+    "拒绝链接/reparse 路径: {}",
+    "拒绝非普通文件: {}",
+    "文件在读取期间变更或变为链接: {}",
+    "新目标至少需要一个非空 --must 需求",
+    "无效的 restore 新建目录 {}: {error:#}",
+    "无法临时解除原子替换目标只读属性: {}",
+    "无法列出 checkpoint 树目录: {}",
+    "无法列出 checkpoint 目录: {}",
+    "无法创建 restore backups: {}",
+    "无法创建 restore staging: {}",
+    "无法创建 restore transaction 目录: {}",
+    "无法创建恢复目标目录: {}",
+    "无法创建目标状态目录",
+    "无法删除本次 restore 新建目录 {}: {error}",
+    "无法删除本次新增 restore 文件: {}",
+    "无法发布 restore 文件: {}",
+    "无法同步目录: {}",
+    "无法回滚 restore 目标: {}",
+    "无法备份 restore 目标: {}",
+    "无法复查 restore 目标: {}",
+    "无法复查已验证上下文文件元数据: {}",
+    "无法复查文件元数据: {}",
+    "无法安全读取 context 状态: {error:#}",
+    "无法扫描 restore transaction: {}",
+    "无法扫描目录: {}",
+    "无法持久化 restore journal: {}",
+    "无法检查 orphan restore transaction: {}",
+    "无法检查 restore journal: {}",
+    "无法检查 restore 目标: {}",
+    "无法检查回滚目标: {}",
+    "无法检查目录条目: {}",
+    "无法清理 restore transaction: {}",
+    "无法清理旧 checkpoint: {}",
+    "无法清理没有 journal 的 orphan restore transaction: {}",
+    "无法规范化上下文文件: {}",
+    "无法解析 goal 文件: current schema: {current_error}; legacy schema: {legacy_error}",
+    "无法读取 checkpoint 树条目: {}",
+    "无法读取 checkpoint 目录条目: {}",
+    "无法读取 checkpoint 路径: {}",
+    "无法读取 checkpoint 路径组件: {}",
+    "无法读取 restore transaction 条目: {}",
+    "无法读取原子替换目标权限: {}",
+    "无法读取已验证上下文文件: {}",
+    "无法读取已验证上下文文件元数据: {}",
+    "无法读取恢复目标: {}",
+    "无法读取恢复目标目录: {}",
+    "无法读取文件元数据: {}",
+    "无法读取目录条目: {}",
+    "无法预备 restore staging 文件: {}",
+    "替代目标 {replacement_id} lifecycle={}，必须先恢复为 current",
+    "替代目标 {replacement_id} 合约无效: {error}",
+    "替代目标 {replacement_id} 必须是 current schema；legacy success 只能显式 archive",
+    "替代目标不存在: {id}",
+    "替代目标不存在: {replacement_id}",
+    "替代目标合约无效: {error}",
+    "替代目标必须是未授权的 current/active current-schema goal",
+    "未知 review_priority: {left}",
+    "未知 review_priority: {right}",
+    "未知 review_priority: {}",
+    "未知历史 receipt policy；当前只支持 {RECEIPT_POLICY_V1}",
+    "未知的关闭状态: {status}（可用: success | partial | blocked）",
+    "本次新增 restore 目标已被第三方修改，拒绝删除: {}",
+    "没有可恢复的 checkpoint",
+    "没有完整且已验证的 checkpoint",
+    "测试注入：第 {} 个 restore 文件发布失败 ({})",
+    "目录",
+    "目标 success receipt 未通过当前或历史完整性复核: {}。仅对应 rollout 前历史可显式使用 --migrate-unreceipted 或 --migrate-receipt-policy {RECEIPT_POLICY_V1}",
+    "目标 {id} lifecycle={}，不能关闭；先用 `goal current {id}` 恢复为 current",
+    "目标 {id} lifecycle={}，不能写入 receipt；先用 `goal current {id}` 恢复为 current",
+    "目标 {id} lifecycle={}，不能追加证据；先用 `goal current {id}` 恢复为 current",
+    "目标 {id} 不是当前 schema，不能写入可验证 receipt；请新建目标",
+    "目标 {id} 不是当前 schema，不能记录 plan receipt",
+    "目标 {id} 已关闭为 success，不能再追加人工证据；请用 `goal validate` 写入带 receipt 的验证，或先 supersede/archive",
+    "目标 {id} 已关闭为 success，不能降级为 {status}；请用新的 baseline-bound goal supersede，或将该记录 archive",
+    "目标 {id} 已隔离为 untrusted history；隔离是单向降级，审计记录必须保留，不能恢复为 current",
+    "目标 {id} 已隔离为 untrusted history；隔离是单向降级，审计记录必须保留，不能用 migration 刷新为可信历史",
+    "目标 {id} 缺少开工 baseline，无法核对实际变更；请用新的 baseline-bound goal supersede，或将已完成记录显式 archive",
+    "目标不能 supersede 自己",
+    "目标包含多个 plan receipt；拒绝继续使用可拆分绕过的计划状态",
+    "目标合约无效，不能 supersede: {error}",
+    "目标合约无效，不能归档: {error}",
+    "目标合约无效，不能迁移 historical policy: {error}",
+    "目标合约无效，不能隔离 historical receipt: {error}",
+    "目标已满足当前 receipt policy，不需要降级迁移",
+    "目标已经是 untrusted history quarantine，不能重复隔离",
+    "目标标题不能为空",
+    "目标状态目录不存在",
+    "目标缺少开工 baseline，不能扩展 plan",
+    "目标缺少开工 baseline；请新建目标后在首次修改前执行 goal plan",
+    "被转移目标 {predecessor_id} 合约无效: {error}",
+    "被转移目标 {predecessor_id} 必须是 current 非 success current-schema goal",
+    "被转移目标不存在: {predecessor_id}",
+    "隔离原因不能为空",
+    "需求不存在: {req_id}",
+    "非法目标 id: {id}（只允许字母、数字、下划线和连字符）",
+    "验证证据说明不能为空",
     "验证命令不能启动 shell；PowerShell 脚本请用 `pwsh -NoProfile -File <script>.ps1 [参数...]` 这一种形式",
     "工具 {detail}",
     "Cargo 拓扑权威确认（standard/release 就绪的硬前提）",
@@ -159,6 +402,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "replacement must 与被转移目标 must（含 typed proof 义务）的精确并集不一致",
     "{name} 在 PATH 上只有本进程无法启动的 {} —— rayman 用 `Command::new` 直接创建进程，Windows 只会补 `.exe`，不解析 PATHEXT；请把真正的 {name}.exe 所在目录加进 PATH（或改用提供 .exe 的安装方式）",
     "自动停止失败: {error:#}",
+    "嵌套 Cargo manifest 超过 {MAX_NESTED_METADATA_MANIFESTS} 个，已停止逐个解析；把它们纳入同一个 workspace（根 Cargo.toml 的 `[workspace] members`），或把 fixture manifest 排除出索引",
     "skill_file 路径不能以引号开头或结尾（激活合同按未加引号的标量写入）: {recorded_path}",
     "当前工作区没有可恢复的 standard 快照；另有 {other} 份 recovery-only/partial 快照，用 `rayman checkpoint list` 查看。",
     "状态锁正被另一个 rayman 进程占用: {}",
@@ -1363,6 +1607,978 @@ const MESSAGE_PREFIX_CATALOG: &[(&str, &str)] = &[
 // evidence text are reinserted byte-for-byte after the static template is translated.
 const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     (
+        "警告: {warning}",
+        "warning: {warning}",
+    ),
+    (
+        "orphan restore transaction 未能回滚，本次抢救快照可能捕获了恢复中途的工作区: {error:#}",
+        "the orphan restore transaction could not be rolled back, so this salvage snapshot may have captured a workspace mid-restore: {error:#}",
+    ),
+    (
+        "lifecycle-only authority goal 缺少 lifecycle proof",
+        "the lifecycle-only authority goal has no lifecycle proof",
+    ),
+    (
+        "资产扫描无法读取文件元数据: {}",
+        "the asset scan could not read the file's metadata: {}",
+    ),
+    (
+        "authority goal 不存在: {authority_goal_id}",
+        "authority goal does not exist: {authority_goal_id}",
+    ),
+    (
+        "authority goal 必须是同 workspace、current-policy 且包含同命令 direct-authority 的有效 archived success",
+        "the authority goal must be a valid archived success in the same workspace, on the current policy, holding a direct-authority receipt for the same command",
+    ),
+    (
+        "authority goal 缺少 lifecycle proof",
+        "the authority goal has no lifecycle proof",
+    ),
+    (
+        "authority receipt invocation hash 无效",
+        "the authority receipt's invocation hash is invalid",
+    ),
+    (
+        "checkpoint 缺少 manifest",
+        "the checkpoint has no manifest",
+    ),
+    (
+        "checkpoint 缺少 manifest: {}",
+        "the checkpoint has no manifest: {}",
+    ),
+    (
+        "checkpoint 路径不是普通文件: {}",
+        "the checkpoint path is not an ordinary file: {}",
+    ),
+    (
+        "checkpoint 路径为空",
+        "the checkpoint path is empty",
+    ),
+    (
+        "context schema/workspace identity 不匹配",
+        "the context schema or workspace identity does not match",
+    ),
+    (
+        "lifecycle-only replacement 至少需要一个 --supersedes 目标",
+        "a lifecycle-only replacement requires at least one --supersedes goal",
+    ),
+    (
+        "manifest 包含重复路径: {}",
+        "the manifest contains a duplicate path: {}",
+    ),
+    (
+        "restore journal original/expected 路径不一致: {} != {}",
+        "restore journal original/expected paths disagree: {} != {}",
+    ),
+    (
+        "restore journal 包含重复路径: {}",
+        "the restore journal contains a duplicate path: {}",
+    ),
+    (
+        "restore journal 工作区不匹配: recorded={:?} current={:?}",
+        "restore journal workspace mismatch: recorded={:?} current={:?}",
+    ),
+    (
+        "restore transaction 缺少 journal.json",
+        "the restore transaction has no journal.json",
+    ),
+    (
+        "review receipt 必须绑定已记录的 goal plan",
+        "a review receipt must be bound to a recorded goal plan",
+    ),
+    (
+        "reviewer 与 summary 都不能为空",
+        "neither reviewer nor summary may be empty",
+    ),
+    (
+        "validation receipt 与 immutable goal/requirement contract 不匹配",
+        "the validation receipt does not match the immutable goal/requirement contract",
+    ),
+    (
+        "上下文索引拒绝链接/reparse 路径: {}",
+        "the context index refuses a link/reparse path: {}",
+    ),
+    (
+        "上下文索引文件逃逸工作区: {} -> {}",
+        "context index file escapes the workspace: {} -> {}",
+    ),
+    (
+        "上下文索引无法哈希文件: {}",
+        "the context index could not hash the file: {}",
+    ),
+    (
+        "上下文索引无法复查文件元数据: {}",
+        "the context index could not re-check the file's metadata: {}",
+    ),
+    (
+        "上下文索引无法读取文件: {}",
+        "the context index could not read the file: {}",
+    ),
+    (
+        "上下文索引无法读取文件元数据: {}",
+        "the context index could not read the file's metadata: {}",
+    ),
+    (
+        "只有 active/current 目标可以记录 plan receipt",
+        "only an active/current goal can record a plan receipt",
+    ),
+    (
+        "只有 active/success 的 current-schema 目标可以记录 review receipt",
+        "only an active/success current-schema goal can record a review receipt",
+    ),
+    (
+        "回滚目标不是安全普通文件: {}",
+        "the rollback target is not a safe ordinary file: {}",
+    ),
+    (
+        "恢复目标不是普通文件: {}",
+        "the restore target is not an ordinary file: {}",
+    ),
+    (
+        "拒绝关闭为 success：handoff contract invalid: {error}",
+        "refusing to close as success: handoff contract invalid: {error}",
+    ),
+    (
+        "拒绝关闭为 success：目标合约无效: {error}",
+        "refusing to close as success: the goal contract is invalid: {error}",
+    ),
+    (
+        "拒绝写入 lifecycle-only replacement proof: {error}",
+        "refusing to write the lifecycle-only replacement proof: {error}",
+    ),
+    (
+        "拒绝写入 lifecycle-only replacement: {error}",
+        "refusing to write the lifecycle-only replacement: {error}",
+    ),
+    (
+        "拒绝链接/reparse 恢复目标: {}",
+        "refusing a link/reparse restore target: {}",
+    ),
+    (
+        "拒绝链接/reparse 路径: {}",
+        "refusing a link/reparse path: {}",
+    ),
+    (
+        "无法列出 checkpoint 树目录: {}",
+        "could not list the checkpoint tree directory: {}",
+    ),
+    (
+        "无法列出 checkpoint 目录: {}",
+        "could not list the checkpoint directory: {}",
+    ),
+    (
+        "无法创建 restore backups: {}",
+        "could not create restore backups: {}",
+    ),
+    (
+        "无法创建 restore staging: {}",
+        "could not create restore staging: {}",
+    ),
+    (
+        "无法创建 restore transaction 目录: {}",
+        "could not create the restore transaction directory: {}",
+    ),
+    (
+        "无法创建恢复目标目录: {}",
+        "could not create the restore target directory: {}",
+    ),
+    (
+        "无法创建目标状态目录",
+        "could not create the goal state directory",
+    ),
+    (
+        "无法同步目录: {}",
+        "could not sync the directory: {}",
+    ),
+    (
+        "无法回滚 restore 目标: {}",
+        "could not roll back the restore target: {}",
+    ),
+    (
+        "无法复查 restore 目标: {}",
+        "could not re-check the restore target: {}",
+    ),
+    (
+        "无法复查文件元数据: {}",
+        "could not re-check the file's metadata: {}",
+    ),
+    (
+        "无法安全读取 context 状态: {error:#}",
+        "could not read the context state safely: {error:#}",
+    ),
+    (
+        "无法检查 orphan restore transaction: {}",
+        "could not inspect the orphan restore transaction: {}",
+    ),
+    (
+        "无法检查 restore journal: {}",
+        "could not inspect the restore journal: {}",
+    ),
+    (
+        "无法检查 restore 目标: {}",
+        "could not inspect the restore target: {}",
+    ),
+    (
+        "无法检查回滚目标: {}",
+        "could not inspect the rollback target: {}",
+    ),
+    (
+        "无法清理 restore transaction: {}",
+        "could not clean up the restore transaction: {}",
+    ),
+    (
+        "无法清理没有 journal 的 orphan restore transaction: {}",
+        "could not clean up the journal-less orphan restore transaction: {}",
+    ),
+    (
+        "无法解析 goal 文件: current schema: {current_error}; legacy schema: {legacy_error}",
+        "could not parse the goal file: current schema: {current_error}; legacy schema: {legacy_error}",
+    ),
+    (
+        "无法读取 checkpoint 路径: {}",
+        "could not read the checkpoint path: {}",
+    ),
+    (
+        "无法读取恢复目标: {}",
+        "could not read the restore target: {}",
+    ),
+    (
+        "无法读取恢复目标目录: {}",
+        "could not read the restore target directory: {}",
+    ),
+    (
+        "无法读取文件元数据: {}",
+        "could not read the file's metadata: {}",
+    ),
+    (
+        "未知 review_priority: {left}",
+        "unknown review_priority: {left}",
+    ),
+    (
+        "未知 review_priority: {right}",
+        "unknown review_priority: {right}",
+    ),
+    (
+        "未知 review_priority: {}",
+        "unknown review_priority: {}",
+    ),
+    (
+        "未知的关闭状态: {status}（可用: success | partial | blocked）",
+        "unknown close status: {status} (available: success | partial | blocked)",
+    ),
+    (
+        "没有完整且已验证的 checkpoint",
+        "there is no complete, verified checkpoint",
+    ),
+    (
+        "目标 {id} 已隔离为 untrusted history；隔离是单向降级，审计记录必须保留，不能恢复为 current",
+        "goal {id} is quarantined as untrusted history; the quarantine is a one-way downgrade, the audit record must be retained, and it cannot be restored to current",
+    ),
+    (
+        "目标标题不能为空",
+        "the goal title must not be empty",
+    ),
+    (
+        "目标状态目录不存在",
+        "the goal state directory does not exist",
+    ),
+    (
+        "被转移目标 {predecessor_id} 合约无效: {error}",
+        "transferred goal {predecessor_id} has an invalid contract: {error}",
+    ),
+    (
+        "被转移目标不存在: {predecessor_id}",
+        "transferred goal does not exist: {predecessor_id}",
+    ),
+    (
+        "需求不存在: {req_id}",
+        "requirement does not exist: {req_id}",
+    ),
+    (
+        "非法目标 id: {id}（只允许字母、数字、下划线和连字符）",
+        "illegal goal id: {id} (only letters, digits, underscores and hyphens are allowed)",
+    ),
+    (
+        "--supersedes 不能包含重复目标",
+        "--supersedes must not contain duplicate goals",
+    ),
+    (
+        "archived goal 已有显式 receipt policy；拒绝降级或重复迁移",
+        "archived goal already has an explicit receipt policy; refusing to downgrade or migrate twice",
+    ),
+    (
+        "authority receipt 与 requirement/command/scope 合同不匹配",
+        "authority receipt does not match the requirement/command/scope contract",
+    ),
+    (
+        "authority receipt 必须包含至少两次完整稳定执行",
+        "authority receipt must contain at least two complete stable runs",
+    ),
+    (
+        "authority receipt 未证明同一 workspace fingerprint 上的重复稳定 PASS",
+        "authority receipt did not prove a repeated stable PASS on one workspace fingerprint",
+    ),
+    (
+        "checkpoint manifest 不是受支持的 v3 schema: schema={:?} version={}",
+        "checkpoint manifest is not a supported v3 schema: schema={:?} version={}",
+    ),
+    (
+        "checkpoint manifest 含不安全相对路径: {text}",
+        "checkpoint manifest contains an unsafe relative path: {text}",
+    ),
+    (
+        "checkpoint restore 失败且回滚不完整；已保留 transaction {} 供恢复: {operation_error:#}; rollback: {rollback_error:#}",
+        "checkpoint restore failed and the rollback is incomplete; transaction {} was kept for recovery: {operation_error:#}; rollback: {rollback_error:#}",
+    ),
+    (
+        "checkpoint restore 失败，工作区已回滚，但无法清理 transaction {}: {operation_error:#}; cleanup: {cleanup_error:#}",
+        "checkpoint restore failed and the workspace was rolled back, but transaction {} could not be cleaned up: {operation_error:#}; cleanup: {cleanup_error:#}",
+    ),
+    (
+        "checkpoint restore 失败，工作区已完整回滚: {operation_error:#}",
+        "checkpoint restore failed; the workspace was rolled back completely: {operation_error:#}",
+    ),
+    (
+        "checkpoint {} 是 recovery-only；修复并重新激活工作区后，显式加 --allow-recovery-only 才能恢复",
+        "checkpoint {} is recovery-only; repair and re-activate the workspace, then pass --allow-recovery-only explicitly to restore it",
+    ),
+    (
+        "checkpoint 不是完整快照（状态：{:?}）",
+        "checkpoint is not a complete snapshot (status: {:?})",
+    ),
+    (
+        "checkpoint 使用旧 v2 content-only manifest，缺少权限完整性证明，不能安全恢复；请用当前 Rayman 新建 v3 checkpoint",
+        "checkpoint uses the old v2 content-only manifest and lacks permission integrity proof, so it cannot be restored safely; create a v3 checkpoint with the current Rayman",
+    ),
+    (
+        "checkpoint 完整性记录含无效 Unix mode: {}",
+        "checkpoint integrity record has an invalid Unix mode: {}",
+    ),
+    (
+        "checkpoint 完整性记录缺少 Unix mode 权限证明，不能在 Unix 安全恢复: {}",
+        "checkpoint integrity record lacks Unix mode permission proof and cannot be restored safely on Unix: {}",
+    ),
+    (
+        "checkpoint 完整性记录缺少 readonly 权限证明（旧 content-only manifest），请新建 v3 checkpoint: {}",
+        "checkpoint integrity record lacks readonly permission proof (old content-only manifest); create a v3 checkpoint: {}",
+    ),
+    (
+        "checkpoint 已完整恢复，但无法清理 restore transaction {}",
+        "the checkpoint was restored completely, but restore transaction {} could not be cleaned up",
+    ),
+    (
+        "checkpoint 总字节数溢出",
+        "checkpoint total byte count overflowed",
+    ),
+    (
+        "checkpoint 文件完整性不匹配: {}",
+        "checkpoint file integrity mismatch: {}",
+    ),
+    (
+        "checkpoint 路径不是有效 UTF-8: {}",
+        "checkpoint path is not valid UTF-8: {}",
+    ),
+    (
+        "checkpoint 路径含不安全组件: {}",
+        "checkpoint path contains an unsafe component: {}",
+    ),
+    (
+        "checkpoint 路径组件不是目录: {}",
+        "checkpoint path component is not a directory: {}",
+    ),
+    (
+        "context 索引包含读取失败条目: {}",
+        "context index contains an entry that failed to read: {}",
+    ),
+    (
+        "context 索引包含重复路径: {}",
+        "context index contains a duplicate path: {}",
+    ),
+    (
+        "goal plan --extend 拒绝事后补票；已有未计划变更: {}",
+        "goal plan --extend refuses a retroactive ticket; unplanned changes already exist: {}",
+    ),
+    (
+        "goal plan --extend 拒绝已发生变化的新路径: {added}",
+        "goal plan --extend refuses a new path that has already changed: {added}",
+    ),
+    (
+        "goal plan --extend 至少需要一个变更路径",
+        "goal plan --extend requires at least one changed path",
+    ),
+    (
+        "goal plan --extend 要求恰好一个基础聚合 plan receipt",
+        "goal plan --extend requires exactly one base aggregate plan receipt",
+    ),
+    (
+        "goal plan 是首次修改前的一次性聚合合同，不能追加或拆分；请在变更前一次列出完整路径",
+        "goal plan is a one-time aggregate contract taken before the first edit; it cannot be appended to or split. List every path once, before changing anything",
+    ),
+    (
+        "goal plan 至少需要一个变更路径",
+        "goal plan requires at least one changed path",
+    ),
+    (
+        "lifecycle-only replacement 必须保持 pristine 且只能包含 open must",
+        "a lifecycle-only replacement must stay pristine and may contain only open musts",
+    ),
+    (
+        "live lifecycle authority 未证明当前源码上的重复稳定仓库 gate",
+        "the live lifecycle authority did not prove a repeated stable repository gate on the current source",
+    ),
+    (
+        "manifest file_count={} 与完整性条目数={} 不一致",
+        "manifest file_count={} does not match the integrity entry count={}",
+    ),
+    (
+        "manifest total_bytes={} 与文件完整性总和={} 不一致",
+        "manifest total_bytes={} does not match the file integrity sum={}",
+    ),
+    (
+        "manifest 含无效 SHA-256: {}",
+        "manifest contains an invalid SHA-256: {}",
+    ),
+    (
+        "orphan restore transaction 无法安全加载，已保留并拒绝继续: {}",
+        "orphan restore transaction could not be loaded safely; it was kept and the run refuses to continue: {}",
+    ),
+    (
+        "orphan restore transaction 没有 journal 却仍存有备份文件，无从判断该回滚哪些目标；已保留供人工恢复。恢复步骤：检查该目录 backups/ 子目录中的原件、取回仍需要的文件，再删除整个目录以解除对 save/restore/autosave 的阻塞：{}",
+        "orphan restore transaction has no journal yet still holds backup files, so there is no way to tell which targets to roll back; it was kept for manual recovery. Recovery steps: inspect the originals under that directory's backups/, take back whatever you still need, then delete the whole directory to unblock save/restore/autosave: {}",
+    ),
+    (
+        "orphan restore transaction 自动回滚不完整，已保留并拒绝继续: {}",
+        "orphan restore transaction could not be rolled back completely; it was kept and the run refuses to continue: {}",
+    ),
+    (
+        "pre-receipt migration 与 receipt-policy migration 不能同时使用",
+        "pre-receipt migration and receipt-policy migration cannot be used together",
+    ),
+    (
+        "replacement must 必须与 --supersedes 目标 must（含 typed proof 义务）的精确并集一致",
+        "the replacement musts must equal the exact union of the --supersedes goals' musts (including typed proof obligations)",
+    ),
+    (
+        "replacement、authority goal 与被转移目标必须彼此不同",
+        "the replacement, the authority goal and the transferred goals must all differ",
+    ),
+    (
+        "restore journal committed 阶段条目状态不完整",
+        "restore journal committed-phase entry states are incomplete",
+    ),
+    (
+        "restore journal preparing 阶段含 publish_attempted 条目",
+        "restore journal preparing phase contains a publish_attempted entry",
+    ),
+    (
+        "restore journal schema/version 不受支持: schema={:?} version={}",
+        "restore journal schema/version is unsupported: schema={:?} version={}",
+    ),
+    (
+        "restore journal 包含重复新建目录: {}",
+        "restore journal contains a duplicate created directory: {}",
+    ),
+    (
+        "restore journal 发布条目尚未预备目标: {}",
+        "restore journal publish entry has no prepared destination: {}",
+    ),
+    (
+        "restore journal 回滚完成条目从未发布: {}",
+        "restore journal rollback-complete entry was never published: {}",
+    ),
+    (
+        "restore journal 新建目录不是任何恢复目标的祖先: {}",
+        "restore journal created directory is not an ancestor of any restore target: {}",
+    ),
+    (
+        "restore journal 新建目录路径未规范化: {}",
+        "restore journal created-directory path is not normalized: {}",
+    ),
+    (
+        "restore journal 路径未规范化: {}",
+        "restore journal path is not normalized: {}",
+    ),
+    (
+        "restore staging 完整性不匹配: {}",
+        "restore staging integrity mismatch: {}",
+    ),
+    (
+        "restore transaction 发布索引越界: {index}",
+        "restore transaction publish index out of range: {index}",
+    ),
+    (
+        "restore transaction 回滚索引越界: {index}",
+        "restore transaction rollback index out of range: {index}",
+    ),
+    (
+        "restore transaction 目标尚未预备: {}",
+        "restore transaction destination is not prepared: {}",
+    ),
+    (
+        "restore 新建目录 journal 条目丢失",
+        "restore created-directory journal entry is missing",
+    ),
+    (
+        "restore 新建目录逃逸工作区: {}",
+        "restore created directory escapes the workspace: {}",
+    ),
+    (
+        "restore 目录只有创建意图且非空，无法证明所有权，拒绝删除 {}（{error}）；确认目录内容后手动删除它，再删除 transaction 目录 {} 以解除阻塞",
+        "the restore directory only has a creation intent and is not empty, so ownership cannot be proven and it will not be deleted: {} ({error}). Check its contents, delete it by hand, then delete transaction directory {} to clear the block",
+    ),
+    (
+        "restore 目标在备份后发生变化，拒绝覆盖: {}",
+        "the restore target changed after it was backed up; refusing to overwrite: {}",
+    ),
+    (
+        "restore 目标备份完整性不匹配: {}",
+        "restore target backup integrity mismatch: {}",
+    ),
+    (
+        "validation --changed 超出 goal plan: {}",
+        "validation --changed goes beyond the goal plan: {}",
+    ),
+    (
+        "validation receipt 与命令/影响路径不匹配",
+        "the validation receipt does not match the command/impact paths",
+    ),
+    (
+        "validation 拒绝未计划的实际变更: {}",
+        "validation refuses unplanned actual changes: {}",
+    ),
+    (
+        "{path}: 无法持久化回滚完成状态: {error:#}",
+        "{path}: could not persist the rollback-complete state: {error:#}",
+    ),
+    (
+        "manifest 记录 {} 实为 {}",
+        "manifest recorded {}, which is actually {}",
+    ),
+    (
+        "上下文文件在索引验证后发生变化: {} (size {} != {} or sha256 {} != {})",
+        "context file changed after index verification: {} (size {} != {} or sha256 {} != {})",
+    ),
+    (
+        "上下文索引不是 ready（当前: {}）。先运行 `rayman context refresh`。{}",
+        "the context index is not ready (current: {}). Run `rayman context refresh` first.{}",
+    ),
+    (
+        "上下文索引拒绝不安全相对路径: {}",
+        "the context index refuses an unsafe relative path: {}",
+    ),
+    (
+        "上下文索引拒绝非普通文件: {}",
+        "the context index refuses a non-ordinary file: {}",
+    ),
+    (
+        "上下文索引文件不属于工作区: {} under {}",
+        "context index file does not belong to the workspace: {} under {}",
+    ),
+    (
+        "上下文索引无法统计文件行数: {}",
+        "the context index could not count the file's lines: {}",
+    ),
+    (
+        "上下文索引条目含不安全路径: {}",
+        "context index entry contains an unsafe path: {}",
+    ),
+    (
+        "上下文索引缺失。先运行 `rayman context refresh`。",
+        "the context index is missing. Run `rayman context refresh` first.",
+    ),
+    (
+        "上下文索引读取期间文件发生变化: {}",
+        "context index file changed while it was being read: {}",
+    ),
+    (
+        "上下文索引路径组件不是目录: {}",
+        "context index path component is not a directory: {}",
+    ),
+    (
+        "不安全的 checkpoint 目标路径: {}",
+        "unsafe checkpoint destination path: {}",
+    ),
+    (
+        "不安全的 checkpoint 相对路径: {}",
+        "unsafe checkpoint relative path: {}",
+    ),
+    (
+        "不能 supersede 目标 {id}: {error}",
+        "cannot supersede goal {id}: {error}",
+    ),
+    (
+        "历史 goal 不满足 receipt_integrity_v1；拒绝刷新 lifecycle proof",
+        "the historical goal does not satisfy receipt_integrity_v1; refusing to refresh the lifecycle proof",
+    ),
+    (
+        "历史 lifecycle proof 的 workspace fingerprint 非法，不能生成可核验隔离记录",
+        "the historical lifecycle proof has an invalid workspace fingerprint, so no verifiable quarantine record can be issued",
+    ),
+    (
+        "历史目标缺少旧 lifecycle proof，不能证明该归档证据曾经失效",
+        "the historical goal has no old lifecycle proof, so there is no way to prove the archived evidence ever became invalid",
+    ),
+    (
+        "原子替换目标不是安全普通文件: {}",
+        "the atomic replacement target is not a safe ordinary file: {}",
+    ),
+    (
+        "原本不存在的 restore 目标在发布前出现，拒绝覆盖: {}",
+        "a restore target that did not exist appeared before publishing; refusing to overwrite: {}",
+    ),
+    (
+        "发现不安全的 orphan restore transaction，已保留并拒绝继续: {}",
+        "found an unsafe orphan restore transaction; it was kept and the run refuses to continue: {}",
+    ),
+    (
+        "只允许隔离已归档的 success 历史；current/未完成目标不能隐藏",
+        "only an archived success history may be quarantined; current or unfinished goals cannot be hidden",
+    ),
+    (
+        "只有 current goal 可以归档；已迁移的 archived goal 可用 --migrate-unreceipted 幂等刷新 proof",
+        "only a current goal can be archived; an already migrated archived goal can be refreshed idempotently with --migrate-unreceipted",
+    ),
+    (
+        "只有 current goal 可以被 supersede",
+        "only a current goal can be superseded",
+    ),
+    (
+        "只有 current-schema active/current 目标可以扩展 plan",
+        "only a current-schema active/current goal can extend its plan",
+    ),
+    (
+        "只有 must 已完整结束的 current-schema archived success 可以隔离",
+        "only a current-schema archived success whose musts are fully finished can be quarantined",
+    ),
+    (
+        "只有 receipt-policy-v2 rollout 前的 schema-v2 success goal 可以迁移 v1 proof",
+        "only a schema-v2 success goal from before the receipt-policy-v2 rollout can migrate a v1 proof",
+    ),
+    (
+        "只有符合 rollout 前条件的 schema-v2 success goal 可以刷新 migration proof",
+        "only a schema-v2 success goal that meets the pre-rollout conditions can refresh its migration proof",
+    ),
+    (
+        "回滚后目标完整性不匹配: {}",
+        "target integrity mismatch after rollback: {}",
+    ),
+    (
+        "回滚备份完整性不匹配: {}",
+        "rollback backup integrity mismatch: {}",
+    ),
+    (
+        "回滚目标已被第三方修改，拒绝覆盖: {}。原件仍在该 transaction 的 backups/ 子目录中；取回仍需要的内容后删除整个 transaction 目录即可解除对 save/restore/autosave 的阻塞，salvage-save 不受阻塞",
+        "the rollback target was modified by a third party; refusing to overwrite: {}. The originals are still under that transaction's backups/ directory; take back whatever you still need, then delete the whole transaction directory to unblock save/restore/autosave. salvage-save is never blocked by it",
+    ),
+    (
+        "完整 checkpoint manifest 含有跳过项或错误记录",
+        "a complete checkpoint manifest contains skipped items or error records",
+    ),
+    (
+        "完整性记录含无效 SHA-256: {}",
+        "integrity record contains an invalid SHA-256: {}",
+    ),
+    (
+        "工作区已偏离 goal 开工 baseline；拒绝事后补 plan。baseline={} current={}",
+        "the workspace has drifted from the goal's starting baseline; refusing a retroactive plan. baseline={} current={}",
+    ),
+    (
+        "工作区遍历失败: {error:#}",
+        "workspace traversal failed: {error:#}",
+    ),
+    (
+        "归档 success 的 lifecycle proof 仍然有效；拒绝把有效证据降级为 quarantine",
+        "the archived success still has a valid lifecycle proof; refusing to downgrade valid evidence to a quarantine",
+    ),
+    (
+        "归档原因不能为空",
+        "the archive reason must not be empty",
+    ),
+    (
+        "恢复前源文件完整性发生变化: {}",
+        "source file integrity changed before the restore: {}",
+    ),
+    (
+        "恢复后目标文件完整性不匹配: {}",
+        "target file integrity mismatch after the restore: {}",
+    ),
+    (
+        "恢复目标是目录而非文件: {}",
+        "the restore target is a directory, not a file: {}",
+    ),
+    (
+        "找不到 checkpoint: {id}",
+        "checkpoint not found: {id}",
+    ),
+    (
+        "拒绝关闭为 blocked：必须先记录至少一个带完整解决方案包的 human/external pending，且不能仍有 agent-owned pending",
+        "refusing to close as blocked: record at least one human/external pending with a complete resolution package first, and no agent-owned pending may remain",
+    ),
+    (
+        "拒绝关闭为 success：legacy goal 不能生成当前 receipt；只可归档已是 success 的历史记录",
+        "refusing to close as success: a legacy goal cannot produce a current receipt; only an already-success historical record can be archived",
+    ),
+    (
+        "拒绝关闭为 success：必须先用 goal validate 写入当前且相关的 receipt: {}",
+        "refusing to close as success: write a current and relevant receipt with goal validate first: {}",
+    ),
+    (
+        "拒绝恢复 checkpoint {}：它由旧版本 Rayman 生成，manifest 记录的是大小写折叠后的比较键而非真实文件名，按它恢复出的文件名大小写不可信（{}）；请用当前版本重新 `rayman checkpoint save` 后再恢复",
+        "refusing to restore checkpoint {}: it was produced by an older Rayman whose manifest recorded case-folded comparison keys instead of real file names, so the restored file-name case is untrustworthy ({}); re-run `rayman checkpoint save` with the current version and restore from that",
+    ),
+    (
+        "拒绝恢复 recovery-only checkpoint {}：当前激活合同尚未修复",
+        "refusing to restore recovery-only checkpoint {}: the current activation contract is not repaired yet",
+    ),
+    (
+        "拒绝恢复非完整 checkpoint {}（状态：{:?}）",
+        "refusing to restore a non-complete checkpoint {} (status: {:?})",
+    ),
+    (
+        "拒绝清理不属于工作区 checkpoint 的 transaction: {}",
+        "refusing to clean up a transaction that does not belong to this workspace's checkpoint: {}",
+    ),
+    (
+        "拒绝链接/reparse checkpoint 路径组件: {}",
+        "refusing a link/reparse checkpoint path component: {}",
+    ),
+    (
+        "拒绝非普通文件: {}",
+        "refusing a non-ordinary file: {}",
+    ),
+    (
+        "文件在读取期间变更或变为链接: {}",
+        "the file changed or became a link while it was being read: {}",
+    ),
+    (
+        "新目标至少需要一个非空 --must 需求",
+        "a new goal requires at least one non-empty --must requirement",
+    ),
+    (
+        "无效的 restore 新建目录 {}: {error:#}",
+        "invalid restore created directory {}: {error:#}",
+    ),
+    (
+        "无法临时解除原子替换目标只读属性: {}",
+        "could not temporarily clear the read-only attribute on the atomic replacement target: {}",
+    ),
+    (
+        "无法删除本次 restore 新建目录 {}: {error}",
+        "could not delete the directory this restore created: {} ({error})",
+    ),
+    (
+        "无法删除本次新增 restore 文件: {}",
+        "could not delete the file this restore added: {}",
+    ),
+    (
+        "无法发布 restore 文件: {}",
+        "could not publish the restore file: {}",
+    ),
+    (
+        "无法备份 restore 目标: {}",
+        "could not back up the restore target: {}",
+    ),
+    (
+        "无法复查已验证上下文文件元数据: {}",
+        "could not re-check the verified context file's metadata: {}",
+    ),
+    (
+        "无法扫描 restore transaction: {}",
+        "could not scan restore transactions: {}",
+    ),
+    (
+        "无法扫描目录: {}",
+        "could not scan the directory: {}",
+    ),
+    (
+        "无法持久化 restore journal: {}",
+        "could not persist the restore journal: {}",
+    ),
+    (
+        "无法检查目录条目: {}",
+        "could not inspect the directory entry: {}",
+    ),
+    (
+        "无法清理旧 checkpoint: {}",
+        "could not clean up the old checkpoint: {}",
+    ),
+    (
+        "无法规范化上下文文件: {}",
+        "could not canonicalize the context file: {}",
+    ),
+    (
+        "无法读取 checkpoint 树条目: {}",
+        "could not read the checkpoint tree entry: {}",
+    ),
+    (
+        "无法读取 checkpoint 目录条目: {}",
+        "could not read the checkpoint directory entry: {}",
+    ),
+    (
+        "无法读取 checkpoint 路径组件: {}",
+        "could not read the checkpoint path component: {}",
+    ),
+    (
+        "无法读取 restore transaction 条目: {}",
+        "could not read the restore transaction entry: {}",
+    ),
+    (
+        "无法读取原子替换目标权限: {}",
+        "could not read the atomic replacement target's permissions: {}",
+    ),
+    (
+        "无法读取已验证上下文文件: {}",
+        "could not read the verified context file: {}",
+    ),
+    (
+        "无法读取已验证上下文文件元数据: {}",
+        "could not read the verified context file's metadata: {}",
+    ),
+    (
+        "无法读取目录条目: {}",
+        "could not read the directory entry: {}",
+    ),
+    (
+        "无法预备 restore staging 文件: {}",
+        "could not prepare the restore staging file: {}",
+    ),
+    (
+        "替代目标 {replacement_id} lifecycle={}，必须先恢复为 current",
+        "replacement goal {replacement_id} has lifecycle={}; restore it to current first",
+    ),
+    (
+        "替代目标 {replacement_id} 合约无效: {error}",
+        "replacement goal {replacement_id} has an invalid contract: {error}",
+    ),
+    (
+        "替代目标 {replacement_id} 必须是 current schema；legacy success 只能显式 archive",
+        "replacement goal {replacement_id} must be current schema; a legacy success can only be archived explicitly",
+    ),
+    (
+        "替代目标不存在: {id}",
+        "replacement goal does not exist: {id}",
+    ),
+    (
+        "替代目标不存在: {replacement_id}",
+        "replacement goal does not exist: {replacement_id}",
+    ),
+    (
+        "替代目标合约无效: {error}",
+        "the replacement goal has an invalid contract: {error}",
+    ),
+    (
+        "替代目标必须是未授权的 current/active current-schema goal",
+        "the replacement goal must be an unauthorized current/active current-schema goal",
+    ),
+    (
+        "未知历史 receipt policy；当前只支持 {RECEIPT_POLICY_V1}",
+        "unknown historical receipt policy; only {RECEIPT_POLICY_V1} is supported",
+    ),
+    (
+        "本次新增 restore 目标已被第三方修改，拒绝删除: {}",
+        "a restore target this run added was modified by a third party; refusing to delete it: {}",
+    ),
+    (
+        "没有可恢复的 checkpoint",
+        "there is no restorable checkpoint",
+    ),
+    (
+        "测试注入：第 {} 个 restore 文件发布失败 ({})",
+        "test injection: restore file {} failed to publish ({})",
+    ),
+    (
+        "目标 success receipt 未通过当前或历史完整性复核: {}。仅对应 rollout 前历史可显式使用 --migrate-unreceipted 或 --migrate-receipt-policy {RECEIPT_POLICY_V1}",
+        "the goal's success receipts did not pass current or historical integrity review: {}. Only the corresponding pre-rollout history may explicitly use --migrate-unreceipted or --migrate-receipt-policy {RECEIPT_POLICY_V1}",
+    ),
+    (
+        "目标 {id} lifecycle={}，不能关闭；先用 `goal current {id}` 恢复为 current",
+        "goal {id} has lifecycle={} and cannot be closed; restore it with `goal current {id}` first",
+    ),
+    (
+        "目标 {id} lifecycle={}，不能写入 receipt；先用 `goal current {id}` 恢复为 current",
+        "goal {id} has lifecycle={} and cannot take receipts; restore it with `goal current {id}` first",
+    ),
+    (
+        "目标 {id} lifecycle={}，不能追加证据；先用 `goal current {id}` 恢复为 current",
+        "goal {id} has lifecycle={} and cannot take more evidence; restore it with `goal current {id}` first",
+    ),
+    (
+        "目标 {id} 不是当前 schema，不能写入可验证 receipt；请新建目标",
+        "goal {id} is not current schema and cannot take a verifiable receipt; create a new goal",
+    ),
+    (
+        "目标 {id} 不是当前 schema，不能记录 plan receipt",
+        "goal {id} is not current schema and cannot record a plan receipt",
+    ),
+    (
+        "目标 {id} 已关闭为 success，不能再追加人工证据；请用 `goal validate` 写入带 receipt 的验证，或先 supersede/archive",
+        "goal {id} is already closed as success and cannot take more manual evidence; write a receipt-backed validation with `goal validate`, or supersede/archive it first",
+    ),
+    (
+        "目标 {id} 已关闭为 success，不能降级为 {status}；请用新的 baseline-bound goal supersede，或将该记录 archive",
+        "goal {id} is already closed as success and cannot be downgraded to {status}; supersede it with a new baseline-bound goal, or archive the record",
+    ),
+    (
+        "目标 {id} 已隔离为 untrusted history；隔离是单向降级，审计记录必须保留，不能用 migration 刷新为可信历史",
+        "goal {id} is quarantined as untrusted history; the quarantine is a one-way downgrade, the audit record must be retained, and a migration must not refresh it into trusted history",
+    ),
+    (
+        "目标 {id} 缺少开工 baseline，无法核对实际变更；请用新的 baseline-bound goal supersede，或将已完成记录显式 archive",
+        "goal {id} has no starting baseline, so its actual changes cannot be checked; supersede it with a new baseline-bound goal, or archive the finished record explicitly",
+    ),
+    (
+        "目标不能 supersede 自己",
+        "a goal cannot supersede itself",
+    ),
+    (
+        "目标包含多个 plan receipt；拒绝继续使用可拆分绕过的计划状态",
+        "the goal holds several plan receipts; refusing to keep using a plan state that can be bypassed by splitting",
+    ),
+    (
+        "目标合约无效，不能 supersede: {error}",
+        "the goal contract is invalid and cannot be superseded: {error}",
+    ),
+    (
+        "目标合约无效，不能归档: {error}",
+        "the goal contract is invalid and cannot be archived: {error}",
+    ),
+    (
+        "目标合约无效，不能迁移 historical policy: {error}",
+        "the goal contract is invalid and cannot migrate a historical policy: {error}",
+    ),
+    (
+        "目标合约无效，不能隔离 historical receipt: {error}",
+        "the goal contract is invalid and cannot quarantine a historical receipt: {error}",
+    ),
+    (
+        "目标已满足当前 receipt policy，不需要降级迁移",
+        "the goal already satisfies the current receipt policy; no downgrade migration is needed",
+    ),
+    (
+        "目标已经是 untrusted history quarantine，不能重复隔离",
+        "the goal is already an untrusted history quarantine and cannot be quarantined again",
+    ),
+    (
+        "目标缺少开工 baseline，不能扩展 plan",
+        "the goal has no starting baseline and cannot extend its plan",
+    ),
+    (
+        "目标缺少开工 baseline；请新建目标后在首次修改前执行 goal plan",
+        "the goal has no starting baseline; create a new goal and run goal plan before the first edit",
+    ),
+    (
+        "被转移目标 {predecessor_id} 必须是 current 非 success current-schema goal",
+        "transferred goal {predecessor_id} must be a current, non-success, current-schema goal",
+    ),
+    (
+        "隔离原因不能为空",
+        "the quarantine reason must not be empty",
+    ),
+    (
+        "验证证据说明不能为空",
+        "the validation evidence note must not be empty",
+    ),
+    (
         "无法确定用户数据目录",
         "unable to determine the user data directory",
     ),
@@ -1394,6 +2610,18 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "stop state write failed and scheduled-task re-registration failed: ",
     ),
     ("自动停止失败", "auto-stop failed"),
+    (
+        "嵌套 Cargo manifest 超过",
+        "nested Cargo manifests exceed",
+    ),
+    (
+        "个，已停止逐个解析；把它们纳入同一个 workspace（根 Cargo.toml 的",
+        "mutually independent packages; per-manifest resolution stopped. Put them in one workspace (the root Cargo.toml's",
+    ),
+    (
+        "），或把 fixture manifest 排除出索引",
+        "), or exclude the fixture manifests from the index",
+    ),
     (
         "路径不能以引号开头或结尾（激活合同按未加引号的标量写入）",
         "path must not start or end with a quote (the activation contract is written as an unquoted scalar)",
@@ -2029,10 +3257,6 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     (
         "自动保存状态损坏或不可读取",
         "autosave state is corrupt or unreadable",
-    ),
-    (
-        "状态正在被另一个 rayman 进程修改",
-        "state is being modified by another rayman process",
     ),
     (
         "完成要求同包且绑定当前源码快照的",
@@ -3348,6 +4572,36 @@ mod tests {
         literals
     }
 
+    /// The production half of a source file: everything before its test module.
+    ///
+    /// Splitting on the first `#[cfg(test)]` truncated at a test-only `use`
+    /// (goal.rs:19 is one), leaving ~98% of several files unscanned — which is
+    /// why both coverage gates passed while `goal show`/`goal close` printed
+    /// untranslated Chinese under `--language en`. Only a `#[cfg(test)] mod`
+    /// ends the production region; an attribute on any other item does not.
+    fn production_source(source: &str) -> &str {
+        const MARKER: &str = "#[cfg(test)]";
+        let mut offset = 0usize;
+        while let Some(found) = source[offset..].find(MARKER) {
+            let at = offset + found;
+            let rest = source[at + MARKER.len()..].trim_start();
+            if rest.starts_with("mod ") {
+                return &source[..at];
+            }
+            offset = at + MARKER.len();
+        }
+        source
+    }
+
+    #[test]
+    fn production_source_stops_at_the_test_module_not_at_a_test_only_use() {
+        let source = "#[cfg(test)]\nuse crate::x;\nconst A: &str = \"keep\";\n#[cfg(test)]\nmod tests {\n    const B: &str = \"drop\";\n}\n";
+        let production = production_source(source);
+        assert!(production.contains("keep"), "{production}");
+        assert!(!production.contains("drop"), "{production}");
+        assert_eq!(production_source("fn plain() {}\n"), "fn plain() {}\n");
+    }
+
     fn production_rs_files(directory: &std::path::Path, files: &mut Vec<std::path::PathBuf>) {
         for entry in std::fs::read_dir(directory).expect("read production source directory") {
             let entry = entry.expect("read production source entry");
@@ -3390,7 +4644,7 @@ mod tests {
 
         for path in files {
             let source = std::fs::read_to_string(&path).expect("read production Rust source");
-            let production = source.split("#[cfg(test)]").next().unwrap_or(&source);
+            let production = production_source(&source);
             let lines = production.lines().collect::<Vec<_>>();
             for literal in rust_string_literals(production) {
                 if !contains_han(&literal.text) {
@@ -3473,7 +4727,7 @@ mod tests {
         let mut scanned = std::collections::BTreeSet::new();
         for path in files {
             let source = std::fs::read_to_string(&path).expect("read production Rust source");
-            let production = source.split("#[cfg(test)]").next().unwrap_or(&source);
+            let production = production_source(&source);
             for literal in rust_string_literals(production) {
                 if contains_han(&literal.text) {
                     scanned.insert(normalized_catalog_template(&literal.text));

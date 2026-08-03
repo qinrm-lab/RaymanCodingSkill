@@ -124,12 +124,27 @@ pub(super) fn infer_test_candidates(
     // 一样限制在测试文件自己的包前缀内，不做全仓同名匹配。
     if !imported && !stem.is_empty() {
         let scope = stem_scope_prefix(&file.path);
+        // A top-level `tests/` has no prefix to narrow by, and an empty prefix
+        // is a repo-wide match — the exact thing this scoping exists to stop,
+        // on the most common pytest layout. Fall back to package membership:
+        // a root-level test never speaks for a source that belongs to some
+        // *other* package.
+        let foreign_roots: Vec<String> = if scope.is_empty() {
+            nested_package_roots(index)
+        } else {
+            Vec::new()
+        };
         covered.extend(
             index
                 .files
                 .iter()
                 .filter(|entry| entry.kind == "source" && entry.path.ends_with(".py"))
                 .filter(|entry| entry.path.starts_with(&scope))
+                .filter(|entry| {
+                    !foreign_roots
+                        .iter()
+                        .any(|root| entry.path.starts_with(root.as_str()))
+                })
                 .filter(|entry| {
                     Path::new(&entry.path)
                         .file_stem()
@@ -160,9 +175,22 @@ pub(super) fn infer_test_candidates(
     }
 }
 
-/// 测试文件的包前缀：`pkg/tests/test_x.py` → `pkg/`，顶层 `tests/` → 全仓
-/// 根包（无更好锚点），其余按测试文件所在目录。与 Rust 侧 test_source_root_for
-/// 的包域约束对应；Python 无 src/ 布局约定，所以只按前缀收窄。
+/// 每个**嵌套**包（自带 pyproject.toml，非仓库根）的路径前缀。
+///
+/// 顶层 `tests/` 没有可收窄的前缀，此时用"不属于别的包"来代替前缀匹配。
+fn nested_package_roots(index: &ContextIndex) -> Vec<String> {
+    index
+        .files
+        .iter()
+        .filter_map(|entry| entry.path.strip_suffix("/pyproject.toml"))
+        .map(|root| format!("{root}/"))
+        .collect()
+}
+
+/// 测试文件的包前缀：`pkg/tests/test_x.py` → `pkg/`，顶层 `tests/` → 空前缀
+/// （由 [`nested_package_roots`] 兜底：只排除属于其他包的候选），其余按测试
+/// 文件所在目录。与 Rust 侧 test_source_root_for 的包域约束对应；Python 无
+/// src/ 布局约定，所以只按前缀收窄。
 fn stem_scope_prefix(path: &str) -> String {
     if let Some(index) = path.find("/tests/") {
         return path[..index + 1].to_string();
