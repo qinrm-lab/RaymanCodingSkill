@@ -321,8 +321,22 @@ pub fn quality_report_with_config(map: &ProjectMap, config: &QualityConfig) -> Q
             && !super::package_has_test_anchor(map, package)
     });
     let has_supported_package = blocking_package.is_some();
+    // advisory 半边不能与同一张 map 自相矛盾：一个自带测试锚（inline #[test]）
+    // 的受支持包会让 test_files==0 而 tests 非空，此前的全仓计数照样告警且
+    // 声称"未检测到任何 Cargo/pyproject 包"。把已被测试锚覆盖的包源文件从
+    // 计数里扣除——advisory 只应度量未被任何已建模、有锚的包覆盖的源文件。
+    let anchored_sources: usize = map
+        .packages
+        .iter()
+        .filter(|package| {
+            super::package_collects_own_sources(package)
+                && super::package_has_test_anchor(map, package)
+        })
+        .map(|package| package.source_files)
+        .sum();
+    let unanchored_sources = map.source_files.saturating_sub(anchored_sources);
     if has_supported_package
-        || (map.source_files >= config.multi_source_no_test_min_sources && map.test_files == 0)
+        || (unanchored_sources >= config.multi_source_no_test_min_sources && map.test_files == 0)
     {
         findings.push(QualityFinding {
             severity: if has_supported_package {
@@ -340,8 +354,8 @@ pub fn quality_report_with_config(map: &ProjectMap, config: &QualityConfig) -> Q
                     package.name, package.source_files
                 ),
                 None => format!(
-                    "{} source files but no indexed test files; no Cargo or pyproject package detected with enough of its own sources, so this heuristic is advisory only — verify test coverage manually",
-                    map.source_files
+                    "{} source files outside test-anchored modeled packages but no indexed test files; no blocking Cargo or pyproject package, so this heuristic is advisory only — verify test coverage manually",
+                    unanchored_sources
                 ),
             },
             recommendation: "add at least one test target or record why this workspace has no executable tests".into(),

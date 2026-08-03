@@ -344,6 +344,40 @@ fn close_success_requires_receipts_for_done_should_requirements() {
     );
 }
 
+/// close --status success 必须校验 handoff 契约：此前只有读门禁
+/// （goal_gate_verdict）查 handoff_contract_error，漂移/损坏契约的
+/// release-handoff 目标能以 exit 0 关成 success，再被 check 永久拦下。
+#[test]
+fn close_success_rejects_an_invalid_handoff_contract() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = GoalStore::new(dir.path());
+    let goal = store
+        .start("release handoff", &[("ship".into(), true)])
+        .unwrap();
+    record_non_code_must_receipt(&store, dir.path(), &goal);
+
+    let path = dir
+        .path()
+        .join(GOALS_DIR)
+        .join(format!("{}.json", goal.id));
+    let mut tampered = GoalStore::load_goal_file(&path).unwrap().unwrap();
+    tampered.handoff = Some(HandoffContract {
+        source_goal_id: "goal_missing".into(),
+        source_goal_contract_sha256: "a".repeat(64),
+        source_authority_sha256: "b".repeat(64),
+        git_commit: "c".repeat(40),
+        workspace_identity: lifecycle::workspace_identity(dir.path()),
+        workspace_fingerprint: workspace_fingerprint(dir.path()).unwrap(),
+        created_at: now_iso(),
+        stages: Vec::new(),
+        contract_sha256: "d".repeat(64),
+    });
+    write_json(&path, &tampered).unwrap();
+
+    let error = store.close(&goal.id, "success").unwrap_err().to_string();
+    assert!(error.contains("handoff contract"), "{error}");
+}
+
 fn record_non_code_must_receipt(store: &GoalStore, root: &Path, goal: &Goal) {
     store
         .record_validation_receipt(
@@ -1139,6 +1173,9 @@ fn lifecycle_only_replacement_rebinds_only_a_verified_maintenance_cycle_path() {
 
     fs::write(root.join(current_cycle), "{\"snapshot\":\"drifted\"}\n").unwrap();
     assert!(verify_maintenance_cycle_rebind_artifact(root, &rebind).is_err());
+    // 读侧复验器必须与写侧一致地把 rebind 工件哈希当 fatal：工件可位于不进
+    // workspace fingerprint 的路径（gitignored），授权后被改写只有这里能翻红。
+    assert!(replacement_authority_error(&authorized, root, &fingerprint).is_some());
 }
 
 #[test]

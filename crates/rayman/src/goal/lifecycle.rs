@@ -1389,6 +1389,14 @@ pub fn replacement_authority_error(goal: &Goal, root: &Path, fingerprint: &str) 
         || validate_authority_command(root, &live.command).is_err()
         || replacement_authority_effective_command(&live.command, live.command_rebind.as_ref())
             .is_err()
+        // 写路径（main.rs 的 live 运行前后与 authorize_replacement）都把
+        // rebind 工件哈希当作 fatal 校验；读侧复验器承诺"不信任序列化结论"，
+        // 若独漏这一项，工件（可位于 gitignored、不进 workspace fingerprint
+        // 的路径）在授权后被改写也不会翻红。
+        || live
+            .command_rebind
+            .as_ref()
+            .is_some_and(|rebind| verify_maintenance_cycle_rebind_artifact(root, rebind).is_err())
         || live.runs.iter().any(|run| {
             run.exit_code != 0
                 || run.workspace_fingerprint_before != fingerprint

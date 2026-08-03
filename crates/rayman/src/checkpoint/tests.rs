@@ -460,6 +460,81 @@ fn committed_orphan(
     transaction
 }
 
+/// 崩溃点落在"Planned 目录记录落盘"与"Created 记录落盘"之间：目录已由本事务
+/// `create_dir` 出来，journal 里却还是 Planned。回滚此前无条件拒绝删除这种目录，
+/// 于是孤儿事务永远回滚不完，之后每一次 save/restore/autosave tick 都在工作区锁
+/// 下报错，且没有任何自愈路径。空目录必须安全回收；非空目录仍然保留，并且错误
+/// 里要指出 transaction 目录，用户才知道怎么解除阻塞。
+#[test]
+fn planned_created_directory_orphan_is_reclaimed_when_empty() {
+    fn planned_orphan(root: &Path, ws_dir: &Path, manifest: &Manifest, suffix: &str) -> PathBuf {
+        let transaction = ws_dir.join(format!(
+            "{RESTORE_TRANSACTION_PREFIX}{}-planned-{suffix}",
+            std::process::id()
+        ));
+        fs::create_dir(&transaction).unwrap();
+        fs::create_dir(transaction.join("staged")).unwrap();
+        fs::create_dir(transaction.join("backups")).unwrap();
+        let journal = RestoreJournal {
+            schema: RESTORE_JOURNAL_SCHEMA.to_string(),
+            version: RESTORE_JOURNAL_VERSION,
+            workspace_root: display_path(&root.canonicalize().unwrap()),
+            phase: RestorePhase::Preparing,
+            entries: manifest
+                .files
+                .iter()
+                .map(|expected| RestoreTransactionEntry {
+                    expected: expected.clone(),
+                    original: None,
+                    destination_prepared: false,
+                    publish_attempted: false,
+                    rollback_complete: false,
+                })
+                .collect(),
+            created_directories: vec![RestoreCreatedDirectory {
+                path: "nested".into(),
+                state: RestoreDirectoryState::Planned,
+            }],
+        };
+        crate::file_io::write_json(&transaction.join(RESTORE_JOURNAL_NAME), &journal).unwrap();
+        transaction
+    }
+
+    let ws = tempfile::tempdir().unwrap();
+    let store = tempfile::tempdir().unwrap();
+    let root = ws.path();
+    write(&root.join("nested/new.txt"), "checkpoint-new");
+    let saved = save(root, Some(store.path()), DEFAULT_KEEP).unwrap();
+    let manifest = verify_snapshot(&saved.path).unwrap();
+    let ws_dir = workspace_dir(root, Some(store.path())).unwrap();
+
+    // 空目录：本事务刚建的，安全回收，阻塞解除。
+    fs::remove_file(root.join("nested/new.txt")).unwrap();
+    let transaction = planned_orphan(root, &ws_dir, &manifest, "empty");
+    recover_orphaned_restore_transactions(root, &ws_dir).unwrap();
+    assert!(!transaction.exists(), "空的 Planned 孤儿必须能被清理");
+    assert!(!root.join("nested").exists());
+    save(root, Some(store.path()), DEFAULT_KEEP).expect("孤儿清理后保存必须恢复正常");
+
+    // 非空目录：无法证明所有权，保留并给出可执行的解除指引。
+    write(&root.join("nested/other.txt"), "third-party");
+    let transaction = planned_orphan(root, &ws_dir, &manifest, "nonempty");
+    let error = format!(
+        "{:#}",
+        recover_orphaned_restore_transactions(root, &ws_dir).unwrap_err()
+    );
+    assert!(
+        error.contains("且非空") && error.contains("以解除阻塞"),
+        "非空目录必须给出可执行的解除指引: {error}"
+    );
+    assert!(transaction.exists(), "非空目录的孤儿必须保留供人工处置");
+    assert_eq!(
+        fs::read_to_string(root.join("nested/other.txt")).unwrap(),
+        "third-party",
+        "第三方内容不得被删除"
+    );
+}
+
 /// 没有 journal 的孤儿 = 事务还没开始发布任何文件（journal 在任何落盘之前写入），
 /// 或者清理 `remove_dir_all` 只删到一半。
 ///

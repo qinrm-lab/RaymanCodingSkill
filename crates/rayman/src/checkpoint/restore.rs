@@ -536,10 +536,19 @@ fn rollback_restore_transaction(root: &Path, transaction: &mut RestoreTransactio
         };
         let path = root.join(relative);
         if directory.state == RestoreDirectoryState::Planned && path.exists() {
-            errors.push(format!(
-                "restore 目录只有创建意图、无法证明所有权，拒绝删除 {}",
-                display_path(&path)
-            ));
+            // 崩溃点落在"Planned 落盘"与"Created 落盘"之间时，目录是本事务刚
+            // create_dir 出来的空目录：安全回收（remove_dir 天然拒绝非空目录，
+            // 不会误删第三方内容）。此前这里无条件拒绝，孤儿 journal 会让之后
+            // 每一次 save/restore/autosave 永久报错且不给任何解除路径。
+            match fs::remove_dir(&path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => errors.push(format!(
+                    "restore 目录只有创建意图且非空，无法证明所有权，拒绝删除 {}（{error}）；确认目录内容后手动删除它，再删除 transaction 目录 {} 以解除阻塞",
+                    display_path(&path),
+                    display_path(&transaction.path)
+                )),
+            }
             continue;
         }
         match fs::remove_dir(&path) {

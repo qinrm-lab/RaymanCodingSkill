@@ -585,10 +585,13 @@ const MAX_NESTED_METADATA_MANIFESTS: usize = 8;
 /// 又是 standard/release 的硬前提——结果是整类仓库被永久阻塞且没有任何解除路径。
 /// 只有当每个被发现的 manifest 都成功解析时才算权威；任何一个失败就退回启发式，
 /// 因为部分权威的拓扑仍然会漏掉包与依赖边。
+/// `None` = 没有（或超过上限的）嵌套 manifest，未尝试；`Some(Err)` = 尝试过但
+/// 至少一个 manifest 解析失败——错误必须随 provenance 透传，让
+/// [`TOPOLOGY_TOOL_UNAVAILABLE`] 标记在嵌套路径与根路径一致地存活。
 fn nested_cargo_metadata_topology(
     root: &Path,
     index: &ContextIndex,
-) -> Option<(Vec<PackageEntry>, Vec<PackageDependency>)> {
+) -> Option<Result<(Vec<PackageEntry>, Vec<PackageDependency>)>> {
     let mut manifests: Vec<&str> = index
         .files
         .iter()
@@ -603,7 +606,10 @@ fn nested_cargo_metadata_topology(
     let mut packages: Vec<PackageEntry> = Vec::new();
     let mut dependencies: Vec<PackageDependency> = Vec::new();
     for manifest in manifests {
-        let (found, deps) = cargo_metadata_at(root, index, Some(manifest)).ok()?;
+        let (found, deps) = match cargo_metadata_at(root, index, Some(manifest)) {
+            Ok(result) => result,
+            Err(error) => return Some(Err(error)),
+        };
         packages.extend(found);
         dependencies.extend(deps);
     }
@@ -636,7 +642,7 @@ fn nested_cargo_metadata_topology(
             &right.manifest_path,
         )
     });
-    Some((packages, dependencies))
+    Some(Ok((packages, dependencies)))
 }
 
 fn cargo_metadata_topology(
@@ -882,14 +888,31 @@ fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
                 )
             }
         }
-    } else if let Some((packages, dependencies)) = nested_cargo_metadata_topology(root, index) {
-        (packages, dependencies, "cargo_metadata".to_string())
+    } else if let Some(attempt) = nested_cargo_metadata_topology(root, index) {
+        match attempt {
+            Ok((packages, dependencies)) => (packages, dependencies, "cargo_metadata".to_string()),
+            Err(error) => {
+                // 与根 manifest 分支同构地透传错误文本：cargo_unavailable 标记
+                // 决定 check 给出的是环境修复建议还是仓库缺陷诊断。此前这里
+                // 吞掉错误换成固定字符串，"缺 cargo"被误诊为仓库损坏。
+                let workspace = read_workspace_info(root, index)?;
+                let packages = discover_packages(root, index, &workspace)?;
+                let dependencies =
+                    infer_package_dependencies(root, index, &packages, &workspace)?;
+                (
+                    packages,
+                    dependencies,
+                    format!("heuristic_fallback: nested cargo metadata unavailable: {error:#}"),
+                )
+            }
+        }
     } else if index
         .files
         .iter()
         .any(|file| file.path.ends_with("Cargo.toml"))
     {
-        // 索引里有 Cargo manifest 但没能从中取得权威拓扑。必须与"这个仓库根本
+        // 索引里有 Cargo manifest 但没能从中取得权威拓扑（数量超过
+        // MAX_NESTED_METADATA_MANIFESTS，未尝试）。必须与"这个仓库根本
         // 没有 Cargo 包"区分开：后者可以照常 ready，前者只能 fail-closed，否则
         // 一个损坏到解析不出任何包的 Cargo.toml 会让仓库看起来无 Cargo 包而蒙混过关。
         let workspace = read_workspace_info(root, index)?;

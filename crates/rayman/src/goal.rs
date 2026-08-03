@@ -994,6 +994,17 @@ impl GoalStore {
                     gaps.join("; ")
                 );
             }
+            // handoff 契约（fingerprint、clean-git-at-commit、source goal、stage
+            // 绑定）此前只在读门禁（goal_gate_verdict）校验：写路径不查，漂移的
+            // release-handoff 目标能以 exit 0 关成 success，然后被 check 永久拦下。
+            if candidate.handoff.is_some() {
+                let all_goals = self.list()?;
+                if let Some(error) =
+                    handoff_contract_error(&candidate, &all_goals, &self.root, &fingerprint)
+                {
+                    bail!("拒绝关闭为 success：handoff contract invalid: {error}");
+                }
+            }
             goal = candidate;
         } else {
             // success 是终态。允许降级会抹掉一次已完成的记录，而且是绕过"已关闭

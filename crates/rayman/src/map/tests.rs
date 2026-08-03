@@ -679,6 +679,71 @@ fn quality_report_downgrades_missing_tests_without_supported_package() {
     }));
 }
 
+/// 自带测试锚（inline #[test]）的受支持包不得触发 no-tests 告警：此前全仓
+/// 计数在 test_files==0 时照样告警，并声称"未检测到任何 Cargo/pyproject 包"，
+/// 与同一张 map 里记录的包和 inline 测试自相矛盾。
+#[test]
+fn inline_tested_package_does_not_trigger_the_no_tests_warning() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        root.join("Cargo.toml").as_path(),
+        "[package]\nname = \"inline-tested\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    );
+    for name in ["a", "b", "c"] {
+        write(
+            root.join(format!("src/{name}.rs")).as_path(),
+            &format!(
+                "pub fn {name}() -> i32 {{ 1 }}\n#[cfg(test)]\nmod tests {{\n    #[test]\n    fn works() {{ assert_eq!(super::{name}(), 1); }}\n}}\n"
+            ),
+        );
+    }
+    write(
+        root.join("src/lib.rs").as_path(),
+        "pub mod a;\npub mod b;\npub mod c;\n",
+    );
+    context::refresh(root).unwrap();
+
+    let map = build_readonly(root).unwrap();
+    assert_eq!(map.test_files, 0);
+    assert!(!map.tests.is_empty(), "inline 测试必须被建模");
+    let quality = quality_report(&map);
+    assert!(
+        !quality
+            .findings
+            .iter()
+            .any(|finding| finding.kind == "multi_source_project_without_tests"),
+        "findings={:?}",
+        quality.findings
+    );
+}
+
+/// 嵌套 manifest 解析失败时，真实错误文本必须透传进 provenance（与根路径
+/// 同构）；此前被吞成固定字符串，cargo_unavailable 标记在此路径丢失，
+/// "缺 cargo"被误诊为仓库缺陷。
+#[test]
+fn nested_manifest_failure_propagates_the_real_error_into_provenance() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(root.join("pkg/Cargo.toml").as_path(), "[package\nbroken = \n");
+    write(root.join("pkg/src/lib.rs").as_path(), "pub fn x() {}\n");
+    context::refresh(root).unwrap();
+
+    let map = build_readonly(root).unwrap();
+    assert!(
+        map.topology_provenance
+            .starts_with("heuristic_fallback: nested cargo metadata unavailable:"),
+        "{}",
+        map.topology_provenance
+    );
+    assert!(
+        map.topology_provenance.trim_end().len()
+            > "heuristic_fallback: nested cargo metadata unavailable:".len(),
+        "错误文本必须透传: {}",
+        map.topology_provenance
+    );
+}
+
 #[test]
 fn quality_report_keeps_uncovered_public_api_as_warning() {
     let dir = tempfile::tempdir().unwrap();
