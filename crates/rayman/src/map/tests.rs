@@ -998,6 +998,49 @@ fn python_map_links_pyproject_imports_and_pytest_targets() {
     assert!(plan.ready, "{plan:?}");
 }
 
+/// 同名 stem 回退不得给测试从未 import 的文件铸造 import-graph/high 覆盖：
+/// import 命中时回退必须禁用（否则回退候选挂上 import_graph/high 假标签，
+/// 验证门禁据此接受假覆盖 receipt）；未命中时回退只在测试的包前缀内匹配。
+#[test]
+fn python_same_stem_files_in_other_packages_are_not_marked_covered() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        root.join("pyproject.toml").as_path(),
+        "[project]\nname = \"stems\"\n",
+    );
+    write(
+        root.join("app1/models.py").as_path(),
+        "def one():\n    return 1\n",
+    );
+    write(
+        root.join("app2/models.py").as_path(),
+        "def two():\n    return 2\n",
+    );
+    write(
+        root.join("tests/test_models.py").as_path(),
+        "from app1.models import one\ndef test_one():\n    assert one() == 1\n",
+    );
+    context::refresh(root).unwrap();
+
+    let map = build_readonly(root).unwrap();
+    let covered = impact_report(&map, "app1/models.py").unwrap();
+    assert!(covered.related_tests.iter().any(|test| {
+        test.path == "tests/test_models.py"
+            && test.basis == "python_import_graph"
+            && test.confidence == "high"
+    }));
+    let uncovered = impact_report(&map, "app2/models.py").unwrap();
+    assert!(
+        !uncovered
+            .related_tests
+            .iter()
+            .any(|test| test.path == "tests/test_models.py"),
+        "测试只 import 了 app1.models，app2/models.py 不得被标为已覆盖: {:?}",
+        uncovered.related_tests
+    );
+}
+
 #[test]
 fn python_plan_blocks_broad_source_change_without_pytest_anchor() {
     let dir = tempfile::tempdir().unwrap();

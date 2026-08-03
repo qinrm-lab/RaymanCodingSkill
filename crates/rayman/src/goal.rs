@@ -1266,6 +1266,11 @@ impl GoalStore {
                 .ok_or_else(|| anyhow::anyhow!("目标状态目录不存在"))?;
         let _store_lock = acquire_state_lock(&goals_dir.join(".store"))?;
         let path = self.goal_path(id)?;
+        // 单目标写者（evidence/validate/close/…）只持 per-goal 锁。这里在
+        // .store 锁之外还必须持有同一把 per-goal 锁，否则从 load 到 write_json
+        // 之间的并发单目标提交会被本函数的陈旧内存态覆盖（丢更新）。锁序固定
+        // 为 .store → per-goal；单目标写者不反向等待 .store，无死锁环。
+        let _goal_lock = acquire_state_lock(&path)?;
         let Some(mut replacement) = Self::load_goal_file(&path)? else {
             bail!("替代目标不存在: {id}");
         };
@@ -1319,10 +1324,10 @@ impl GoalStore {
             );
             predecessors.push(predecessor);
         }
-        if must_text_multiset(std::iter::once(&replacement))
-            != must_text_multiset(predecessors.iter())
+        if must_transfer_multiset(std::iter::once(&replacement))
+            != must_transfer_multiset(predecessors.iter())
         {
-            bail!("replacement must 必须与 --supersedes 目标 must 的精确并集一致");
+            bail!("replacement must 必须与 --supersedes 目标 must（含 typed proof 义务）的精确并集一致");
         }
         if let Some(error) = replacement_delta_scope_error(&predecessors, &source_delta_paths) {
             bail!("{error}");
@@ -1514,6 +1519,19 @@ impl GoalStore {
         let Some(mut goal) = Self::load_goal_file(&path)? else {
             bail!("目标不存在: {id}");
         };
+        // quarantine 是单向 evidence 降级：mark_current 会清空 lifecycle_proof
+        // 与 lifecycle_reason，等于抹掉隔离标记和 `[invalid proof: ...]` 审计
+        // 痕迹，再经 close/archive 重铸为可信历史。这里必须拒绝。
+        if goal.lifecycle_proof.as_ref().is_some_and(|proof| {
+            matches!(
+                proof.receipt_policy.as_deref(),
+                Some(RECEIPT_POLICY_QUARANTINED | RECEIPT_POLICY_INTEGRITY_QUARANTINED)
+            )
+        }) {
+            bail!(
+                "目标 {id} 已隔离为 untrusted history；隔离是单向降级，审计记录必须保留，不能恢复为 current"
+            );
+        }
         goal.lifecycle = GoalLifecycle::Current;
         goal.lifecycle_reason = None;
         goal.superseded_by = None;

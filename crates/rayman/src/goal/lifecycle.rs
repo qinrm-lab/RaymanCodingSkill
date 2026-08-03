@@ -1120,9 +1120,21 @@ pub(super) fn workspace_identity(root: &Path) -> String {
     crate::hash::sha256_bytes(canonical.to_string_lossy().as_bytes())
 }
 
-pub(super) fn must_text_multiset<'a>(
+/// must 转移比较键。typed proof 义务是不可变合约的一部分（transfer_goal_contract
+/// 哈希包含 proof_kind），文本同名的普通 must 不得顶替 typed must，否则卡在
+/// installation/repository_gate 等 typed 阶段的目标可以被一条 generic receipt
+/// 洗掉义务。`None` 与 `Some(Generic)` 在校验语义里等价（见 proof_kind_matches），
+/// 共用一键。
+pub(super) fn must_transfer_key(requirement: &Requirement) -> (&'static str, String) {
+    (
+        requirement.proof_kind.unwrap_or_default().as_str(),
+        normalized_requirement_text(&requirement.text),
+    )
+}
+
+pub(super) fn must_transfer_multiset<'a>(
     goals: impl IntoIterator<Item = &'a Goal>,
-) -> BTreeMap<String, usize> {
+) -> BTreeMap<(&'static str, String), usize> {
     let mut result = BTreeMap::new();
     for goal in goals {
         for requirement in goal
@@ -1130,9 +1142,7 @@ pub(super) fn must_text_multiset<'a>(
             .iter()
             .filter(|requirement| requirement.kind == RequirementKind::Must)
         {
-            *result
-                .entry(normalized_requirement_text(&requirement.text))
-                .or_default() += 1;
+            *result.entry(must_transfer_key(requirement)).or_default() += 1;
         }
     }
     result
@@ -1453,8 +1463,9 @@ pub fn replacement_authority_error(goal: &Goal, root: &Path, fingerprint: &str) 
         }
         predecessors.push(predecessor);
     }
-    if must_text_multiset(std::iter::once(goal)) != must_text_multiset(predecessors.iter()) {
-        return Some("replacement must 与被转移目标 must 的精确并集不一致".into());
+    if must_transfer_multiset(std::iter::once(goal)) != must_transfer_multiset(predecessors.iter())
+    {
+        return Some("replacement must 与被转移目标 must（含 typed proof 义务）的精确并集不一致".into());
     }
     if let Some(error) = replacement_delta_scope_error(&predecessors, &proof.source_delta_paths) {
         return Some(error);
@@ -1551,16 +1562,19 @@ pub fn supersession_error(
             .requirements
             .iter()
             .filter(|requirement| requirement.kind == RequirementKind::Must)
-            .map(|requirement| normalized_requirement_text(&requirement.text))
+            .map(must_transfer_key)
             .collect::<BTreeSet<_>>();
         let missing = goal
             .requirements
             .iter()
             .filter(|requirement| requirement.kind == RequirementKind::Must)
-            .filter(|requirement| {
-                !replacement_must.contains(&normalized_requirement_text(&requirement.text))
+            .filter(|requirement| !replacement_must.contains(&must_transfer_key(requirement)))
+            .map(|requirement| match requirement.proof_kind {
+                Some(kind) if kind != ProofKind::Generic => {
+                    format!("{} [proof:{}]", requirement.text, kind.as_str())
+                }
+                _ => requirement.text.clone(),
             })
-            .map(|requirement| requirement.text.as_str())
             .collect::<Vec<_>>();
         if !missing.is_empty() {
             return Some(format!(

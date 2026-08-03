@@ -87,7 +87,9 @@ pub fn workspace_walk(root: &Path) -> WorkspaceWalk {
     let tracked = tracked_paths(root);
     let owned_root = root.to_path_buf();
     let filter_root = owned_root.clone();
-    let filter_tracked = tracked.as_ref().map(|tracked| tracked.directories.clone());
+    let filter_tracked = tracked
+        .as_ref()
+        .map(|tracked| tracked.directories_cmp.clone());
     builder.filter_entry(move |entry| {
         // 只剪枝目录：名为 build/dist 的普通源码文件不应从索引里无声消失。
         if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
@@ -98,10 +100,10 @@ pub fn workspace_walk(root: &Path) -> WorkspaceWalk {
             return true;
         }
         let name = entry.file_name().to_string_lossy();
-        if STATE_IGNORE.contains(&name.as_ref()) {
+        if name_matches(STATE_IGNORE, &name) {
             return false;
         }
-        if !VENDOR_FALLBACK_IGNORE.contains(&name.as_ref()) {
+        if !name_matches(VENDOR_FALLBACK_IGNORE, &name) {
             return true;
         }
         match &filter_tracked {
@@ -110,7 +112,11 @@ pub fn workspace_walk(root: &Path) -> WorkspaceWalk {
                 .path()
                 .strip_prefix(&filter_root)
                 .ok()
-                .is_some_and(|rel| directories.contains(&rel.to_string_lossy().replace('\\', "/"))),
+                .is_some_and(|rel| {
+                    directories.contains(&tracked_cmp_key(
+                        &rel.to_string_lossy().replace('\\', "/"),
+                    ))
+                }),
             // 非 git 工作区或 git 不可用：无从判断跟踪状态，按名字兜底剪枝。
             None => false,
         }
@@ -132,7 +138,7 @@ pub fn workspace_walk(root: &Path) -> WorkspaceWalk {
                         (Some(tracked), Ok(relative)) => {
                             let relative = relative.to_string_lossy().replace('\\', "/");
                             !is_under_vendor_directory(&relative)
-                                || tracked.files.contains(&relative)
+                                || tracked.files_cmp.contains(&tracked_cmp_key(&relative))
                         }
                         _ => true,
                     };
@@ -164,10 +170,90 @@ pub fn workspace_walk(root: &Path) -> WorkspaceWalk {
             }),
         }
     }
+    // .gitignore 命中的条目在 ignore walker 内部就被丢弃，上面的逐文件跟踪
+    // rescue 根本看不到它们：被 `git add -f` 强制跟踪的忽略路径文件（模块顶部
+    // 文档里的 build/deploy.ps1 正是这一类）会同时从索引、goal 差量门禁和
+    // checkpoint 快照消失——恰是本模块声称要防的"谎称遍历完整"。这里按跟踪
+    // 清单补回遍历没见到的文件。判据仍是"是否被跟踪"，与顶部文档一致。
+    if let Some(tracked) = &tracked {
+        let walked_cmp: BTreeSet<String> = report
+            .files
+            .iter()
+            .filter_map(|path| path.strip_prefix(&owned_root).ok())
+            .map(|rel| tracked_cmp_key(&rel.to_string_lossy().replace('\\', "/")))
+            .collect();
+        for relative in &tracked.files {
+            // STATE_IGNORE 目录在遍历里是任意深度剪枝的（filter_entry 按目录名），
+            // 补回的豁免必须同样按任意深度匹配，否则嵌套的 .RaymanCodingSkill
+            // 运行时状态（被跟踪的子工作区状态）会被补回进索引。
+            if walked_cmp.contains(&tracked_cmp_key(relative))
+                || relative
+                    .split('/')
+                    .any(|component| name_matches(STATE_IGNORE, component))
+            {
+                continue;
+            }
+            // Windows 名字解析会剥掉每段结尾的 '.' 和 ' '：这样的索引条目 stat
+            // 会命中剥离后的真实文件，把幻影路径塞进索引与快照（真实文件本身
+            // 已由正常遍历收录）。这种名字在本盘面上不可能作为独立文件存在。
+            if cfg!(windows)
+                && relative
+                    .split('/')
+                    .any(|component| component.ends_with('.') || component.ends_with(' '))
+            {
+                continue;
+            }
+            let candidate = owned_root.join(relative);
+            match std::fs::symlink_metadata(&candidate) {
+                Ok(metadata) if is_link_or_reparse(&metadata) => {
+                    let kind = "符号链接";
+                    report.errors.push(WalkIssue {
+                        error: format!("{kind}不会被跟随，遍历不完整: {}", candidate.display()),
+                    });
+                }
+                Ok(metadata) if metadata.is_file() => report.files.push(candidate),
+                // 目录（子模块 gitlink 条目）：内容由 --recurse-submodules 单独列出。
+                Ok(_) => {}
+                // 已从盘面删除但仍在索引：遍历语义是枚举盘面，跳过与主循环一致。
+                // 同类：Windows 非法文件名（<>|" 等，ERROR_INVALID_NAME=123）在
+                // 本盘面上不可能存在，不算"遍历不完整"，否则一条坏索引条目会把
+                // context/checkpoint/goal 的所有遍历永久卡死。
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) if cfg!(windows) && error.raw_os_error() == Some(123) => {}
+                Err(error) => report.errors.push(WalkIssue {
+                    error: format!(
+                        "无法检查被跟踪文件 {}: {error}",
+                        candidate.display()
+                    ),
+                }),
+            }
+        }
+    }
     append_indexed_state_policy(root, &mut report);
     report.files.sort();
     report.files.dedup();
     report
+}
+
+/// 目录名与兜底清单的匹配。Windows 文件系统大小写不敏感，`Build` 与 `build`
+/// 是同一个目录，按字节精确比较会让判定随盘面大小写漂移；非 Windows 保持精确。
+fn name_matches(list: &[&str], name: &str) -> bool {
+    if cfg!(windows) {
+        list.iter().any(|candidate| candidate.eq_ignore_ascii_case(name))
+    } else {
+        list.contains(&name)
+    }
+}
+
+/// 跟踪路径的比较键。Windows 下文件系统与 git（core.ignorecase=true）都大小写
+/// 不敏感，盘面与索引的大小写漂移（重命名工具、解压、Explorer）不得让被跟踪
+/// 文件被误判为未跟踪而静默消失；非 Windows 保持字节精确。
+fn tracked_cmp_key(path: &str) -> String {
+    if cfg!(windows) {
+        path.to_lowercase()
+    } else {
+        path.to_string()
+    }
 }
 
 /// git 跟踪的路径集合与其祖先目录集合。
@@ -179,8 +265,11 @@ pub fn workspace_walk(root: &Path) -> WorkspaceWalk {
 /// 优先用 `--recurse-submodules`：子模块在普通 `ls-files` 里只是一条不带尾斜杠的
 /// 裸目录记录，其内容一条都不出现，于是挂在 vendor 名路径下的子模块会被整棵剪掉。
 struct TrackedPaths {
+    /// 原样大小写，用于补回缺失文件时拼接真实路径。
     files: BTreeSet<String>,
-    directories: BTreeSet<String>,
+    /// 比较键集合（见 [`tracked_cmp_key`]）。
+    files_cmp: BTreeSet<String>,
+    directories_cmp: BTreeSet<String>,
 }
 
 fn tracked_paths(root: &Path) -> Option<TrackedPaths> {
@@ -188,14 +277,15 @@ fn tracked_paths(root: &Path) -> Option<TrackedPaths> {
         .or_else(|| git_ls_files(root, &["ls-files", "-z"]))?;
 
     let mut files = BTreeSet::new();
-    let mut directories = BTreeSet::new();
+    let mut files_cmp = BTreeSet::new();
+    let mut directories_cmp = BTreeSet::new();
     for entry in listing.split(|byte| *byte == 0) {
         if entry.is_empty() {
             continue;
         }
         let path = String::from_utf8_lossy(entry).into_owned();
         // gitlink 条目本身就是一个被跟踪的目录，所以整条路径也要进目录集合。
-        directories.insert(path.clone());
+        directories_cmp.insert(tracked_cmp_key(&path));
         let mut components: Vec<&str> = path.split('/').collect();
         components.pop();
         let mut prefix = String::new();
@@ -204,11 +294,16 @@ fn tracked_paths(root: &Path) -> Option<TrackedPaths> {
                 prefix.push('/');
             }
             prefix.push_str(component);
-            directories.insert(prefix.clone());
+            directories_cmp.insert(tracked_cmp_key(&prefix));
         }
+        files_cmp.insert(tracked_cmp_key(&path));
         files.insert(path);
     }
-    Some(TrackedPaths { files, directories })
+    Some(TrackedPaths {
+        files,
+        files_cmp,
+        directories_cmp,
+    })
 }
 
 fn git_ls_files(root: &Path, args: &[&str]) -> Option<Vec<u8>> {
@@ -227,7 +322,7 @@ fn is_under_vendor_directory(relative: &str) -> bool {
     components.pop(); // 只看祖先目录，不看文件名本身
     components
         .iter()
-        .any(|component| VENDOR_FALLBACK_IGNORE.contains(component))
+        .any(|component| name_matches(VENDOR_FALLBACK_IGNORE, component))
 }
 
 fn append_indexed_state_policy(root: &Path, report: &mut WorkspaceWalk) {
@@ -598,5 +693,68 @@ mod tests {
                 .any(|path| relative_key(workspace.path(), path) == INDEXED_STATE_POLICY)
         );
         assert!(workspace_files_checked(workspace.path()).is_err());
+    }
+
+    /// 被 .gitignore 覆盖但被 `git add -f` 跟踪的文件曾在 ignore walker 内部
+    /// 就被丢弃——索引、goal 差量门禁和 checkpoint"完整"快照一起对它失明。
+    /// 判据必须是 git 跟踪状态（见模块顶部文档），补回逻辑锁死这一点。
+    #[test]
+    fn tracked_files_survive_gitignore_and_case_drift() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        git(root, &["init", "-q"]);
+        git(root, &["config", "user.email", "walk@test.local"]);
+        git(root, &["config", "user.name", "walk-test"]);
+        fs::write(root.join(".gitignore"), "deploy/\n").unwrap();
+        fs::create_dir_all(root.join("deploy")).unwrap();
+        fs::write(root.join("deploy/release.ps1"), "release").unwrap();
+        fs::write(root.join("deploy/untracked.log"), "noise").unwrap();
+        fs::write(root.join("README.md"), "# x").unwrap();
+        git(root, &["add", "README.md", ".gitignore"]);
+        git(root, &["add", "-f", "deploy/release.ps1"]);
+        git(root, &["commit", "-qm", "init"]);
+
+        let rels: Vec<String> = workspace_files_checked(root)
+            .unwrap()
+            .iter()
+            .map(|path| relative_key(root, path))
+            .collect();
+        assert!(
+            rels.contains(&"deploy/release.ps1".to_string()),
+            "被 .gitignore 覆盖但被跟踪的文件必须参与索引: {rels:?}"
+        );
+        assert!(
+            !rels.contains(&"deploy/untracked.log".to_string()),
+            "未跟踪的忽略文件仍然排除: {rels:?}"
+        );
+
+        // Windows：盘面大小写漂移（git core.ignorecase 视为无变化）不得让
+        // vendor 名目录下被跟踪的文件消失。
+        #[cfg(windows)]
+        {
+            fs::create_dir_all(root.join("build")).unwrap();
+            fs::write(root.join("build/TOOL.md"), "tool").unwrap();
+            git(root, &["add", "build/TOOL.md"]);
+            git(root, &["commit", "-qm", "vendor tracked"]);
+            fs::rename(root.join("build/TOOL.md"), root.join("build/tmp.md")).unwrap();
+            fs::rename(root.join("build/tmp.md"), root.join("build/tool.md")).unwrap();
+
+            let rels: Vec<String> = workspace_files_checked(root)
+                .unwrap()
+                .iter()
+                .map(|path| relative_key(root, path))
+                .collect();
+            assert!(
+                rels.iter().any(|rel| rel.eq_ignore_ascii_case("build/tool.md")),
+                "大小写漂移不得让被跟踪的 vendor 目录文件消失: {rels:?}"
+            );
+            assert_eq!(
+                rels.iter()
+                    .filter(|rel| rel.eq_ignore_ascii_case("build/tool.md"))
+                    .count(),
+                1,
+                "补回逻辑不得因大小写差异重复计入同一文件: {rels:?}"
+            );
+        }
     }
 }

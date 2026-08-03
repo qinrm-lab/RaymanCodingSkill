@@ -93,6 +93,17 @@ fn run(cli: Cli) -> Result<()> {
             | Command::Context(ContextCmd {
                 action: ContextAction::LegacyOs { .. } | ContextAction::LegacyTask { .. }
             })
+            // tick/status/stop 不能走顶层门禁：tick 由计划任务触发，激活一破
+            // （升级 CLI、SKILL.md 变动）就会在失败落盘之前 exit 1，autosave
+            // 的"每次结果必须持久化"契约失效，status 无法暴露死亡、stop 无法
+            // 注销任务。激活检查在 autosave 内部对目标工作区执行并记账。
+            // start 仍要求激活。
+            | Command::Autosave(AutosaveCmd {
+                action: AutosaveAction::Tick { .. }
+                    | AutosaveAction::Status
+                    | AutosaveAction::Stop { .. },
+                ..
+            })
     ) {
         workspace::require_active(&root)?;
     }

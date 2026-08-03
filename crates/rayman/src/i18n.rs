@@ -156,7 +156,16 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "goal {id} lane {lane_id} 已关闭：delta={} authoritative=false",
     "goal {} 需求 {} 没有 impact 快照；非代码变更可忽略",
     "lifecycle-only replacement 当前 delta 与授权 proof 不一致",
-    "replacement must 与被转移目标 must 的精确并集不一致",
+    "replacement must 与被转移目标 must（含 typed proof 义务）的精确并集不一致",
+    "停止状态写入失败且计划任务重注册失败：state={persist_error}; register={register_error}",
+    "workspace 未激活且没有自动保存状态，无需停止",
+    "workspace 未激活，跳过快照: {error:#}",
+    "workspace 未激活，最终快照已跳过: {activation_error:#}",
+    "workspace 未激活：已停止自动保存并注销计划任务 '{}'。最终快照已跳过；如需抢救快照，运行 `rayman checkpoint salvage-save`。",
+    "无法检查被跟踪文件 {}: {error}",
+    "需求 {} {gap}",
+    "需求 {} 缺少 evidence 文本",
+    "需求 {} 缺少验证 receipt",
     "注销计划任务失败（任务仍可能在运行）：{detail}",
     "独立 test list proof 失败（exit={}）；不会写入 receipt",
     "资产扫描: 干净（无过时候选、无未完成标记）。",
@@ -1309,6 +1318,42 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     (
         "无法确定用户数据目录",
         "unable to determine the user data directory",
+    ),
+    (
+        "未激活且没有自动保存状态，无需停止",
+        "is not activated and has no autosave state; nothing to stop",
+    ),
+    (
+        "停止状态写入失败且计划任务重注册失败：",
+        "stop state write failed and scheduled-task re-registration failed: ",
+    ),
+    (
+        "已隔离为 untrusted history；隔离是单向降级，审计记录必须保留，不能恢复为",
+        "is quarantined as untrusted history; the quarantine is a one-way downgrade, the audit record must be retained, and it cannot be restored to",
+    ),
+    (
+        "未激活，跳过快照",
+        "is not activated; the snapshot was skipped",
+    ),
+    (
+        "未激活，最终快照已跳过",
+        "is not activated; the final snapshot was skipped",
+    ),
+    (
+        "未激活：已停止自动保存并注销计划任务",
+        "is not activated: autosave stopped and its scheduled task was unregistered",
+    ),
+    (
+        "。最终快照已跳过；如需抢救快照，运行",
+        ". The final snapshot was skipped; to salvage a snapshot, run",
+    ),
+    (
+        "无法检查被跟踪文件",
+        "unable to inspect tracked file",
+    ),
+    (
+        "（含 typed proof 义务）",
+        " (including typed proof obligations) ",
     ),
     (
         "验证命令不允许 shell 控制符或命令替换",

@@ -1635,6 +1635,34 @@ pub(super) fn goal_success_receipt_gaps_for_policy(
     }
     for requirement in &goal.requirements {
         if requirement.kind != RequirementKind::Must {
+            // 读门禁（goal_gate_verdict）对所有需求种类检查 Done-无-receipt 与
+            // impact 相关性；非 Must 允许保持未完成，但一旦标记 Done，写路径
+            // 必须执行与读门禁相同的检查，否则 close/archive 会持久化一个
+            // 读门禁立刻拒绝的 success。
+            if requirement.status == RequirementStatus::Done {
+                if requirement
+                    .evidence
+                    .as_deref()
+                    .map(str::trim)
+                    .unwrap_or_default()
+                    .is_empty()
+                {
+                    gaps.push(format!("需求 {} 缺少 evidence 文本", requirement.id));
+                }
+                if requirement.validations.is_empty() {
+                    gaps.push(format!("需求 {} 缺少验证 receipt", requirement.id));
+                }
+            }
+            for gap in validation_relevance_gaps_for_fingerprint(
+                requirement,
+                goal,
+                root,
+                fingerprint,
+                enforce_current_security,
+                policy,
+            ) {
+                gaps.push(format!("需求 {} {gap}", requirement.id));
+            }
             continue;
         }
         if requirement.status != RequirementStatus::Done

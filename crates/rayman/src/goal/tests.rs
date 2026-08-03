@@ -288,6 +288,62 @@ fn close_success_requires_evidence_for_must_requirements() {
     assert_eq!(closed.status, GoalStatus::Success);
 }
 
+/// 写路径（close/archive 的 success 谓词）对非 Must 需求必须执行与读门禁
+/// （goal_gate_verdict）相同的 Done-无-receipt 检查；否则 `goal evidence`
+/// 标 Done 的 should 让 close 以 exit 0 报出一个 `check --goal` 立刻拒绝、
+/// Stop hook 拒绝收尾、且 success 终态无法降级的"成功"。
+#[test]
+fn close_success_requires_receipts_for_done_should_requirements() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = GoalStore::new(dir.path());
+    let goal = store
+        .start(
+            "ship with docs",
+            &[
+                ("implement parser".into(), true),
+                ("docs updated".into(), false),
+            ],
+        )
+        .unwrap();
+    record_non_code_must_receipt(&store, dir.path(), &goal);
+
+    // `goal evidence`：should 标 Done，evidence 有文本，validations 为空。
+    store
+        .record_evidence_with_context(&goal.id, "req_2", "docs reviewed", Vec::new(), Vec::new())
+        .unwrap();
+
+    let error = store.close(&goal.id, "success").unwrap_err().to_string();
+    assert!(
+        error.contains("req_2") && error.contains("缺少验证 receipt"),
+        "{error}"
+    );
+
+    store
+        .record_validation_receipt(
+            &goal.id,
+            "req_2",
+            ValidationReceiptSubmission {
+                evidence: "docs verified".into(),
+                command: "echo validation-ok".into(),
+                receipt: successful_receipt(
+                    dir.path(),
+                    &goal,
+                    "req_2",
+                    "echo validation-ok",
+                    &[],
+                    true,
+                ),
+                impacts: Vec::new(),
+                non_code: true,
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        store.close(&goal.id, "success").unwrap().status,
+        GoalStatus::Success
+    );
+}
+
 fn record_non_code_must_receipt(store: &GoalStore, root: &Path, goal: &Goal) {
     store
         .record_validation_receipt(
@@ -1687,6 +1743,28 @@ fn invalid_legacy_receipt_quarantine_preserves_history_without_minting_proof() {
     );
     assert_eq!(quarantined.lifecycle_proof_error(dir.path()), None);
 
+    // quarantine 是单向 evidence 降级：`goal current` 不得清掉隔离标记与
+    // `[invalid proof: ...]` 审计原因，否则一条命令就能把不可信历史重铸为
+    // 普通可信记录。
+    let error = store.mark_current(&historical.id).unwrap_err().to_string();
+    assert!(error.contains("不能恢复"), "{error}");
+    let untouched = GoalStore::load_goal_file(&path).unwrap().unwrap();
+    assert_eq!(
+        untouched
+            .lifecycle_proof
+            .as_ref()
+            .and_then(|proof| proof.receipt_policy.as_deref()),
+        Some(RECEIPT_POLICY_INTEGRITY_QUARANTINED)
+    );
+    assert!(
+        untouched
+            .lifecycle_reason
+            .as_deref()
+            .unwrap_or_default()
+            .contains("invalid proof"),
+        "隔离原因必须原样保留"
+    );
+
     // Records written by the earlier narrow quarantine policy remain readable
     // and untrusted after the generalized policy is introduced.
     let mut legacy_quarantine = quarantined.clone();
@@ -2137,6 +2215,34 @@ fn high_priority_review_becomes_stale_after_source_change() {
         )
         .unwrap();
     assert!(store.close(&goal.id, "success").is_err());
+}
+
+/// typed `--must-proof` 义务是不可变合约的一部分：supersede/replacement 的
+/// must 转移比较必须区分 proof_kind，文本同名的普通 must 不能顶替 typed must。
+/// `None` 与显式 `generic` 在校验语义（proof_kind_matches）里等价，共用一键。
+#[test]
+fn must_transfer_key_distinguishes_typed_proof_obligations() {
+    let requirement_with = |proof_kind: Option<ProofKind>| Requirement {
+        id: "req_1".into(),
+        text: "install the tool binary".into(),
+        kind: RequirementKind::Must,
+        proof_kind,
+        status: RequirementStatus::Open,
+        evidence: None,
+        validations: Vec::new(),
+        impacts: Vec::new(),
+    };
+    let plain = requirement_with(None);
+    let typed = requirement_with(Some(ProofKind::Installation));
+    let generic = requirement_with(Some(ProofKind::Generic));
+    assert_ne!(
+        lifecycle::must_transfer_key(&plain),
+        lifecycle::must_transfer_key(&typed)
+    );
+    assert_eq!(
+        lifecycle::must_transfer_key(&plain),
+        lifecycle::must_transfer_key(&generic)
+    );
 }
 
 #[path = "tests/workflow.rs"]

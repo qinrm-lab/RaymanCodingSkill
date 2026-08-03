@@ -117,12 +117,19 @@ pub(super) fn infer_test_candidates(
         .trim_start_matches("test_")
         .trim_end_matches("_test")
         .to_ascii_lowercase();
-    if !stem.is_empty() {
+    // stem 回退只在没有任何 import 命中时启用：一旦混进 import 命中的结果，
+    // 回退候选就会挂上 `python_import_graph`/high 标签（本模块自己的分类法
+    // 说 stem 候选是 `python_test_filename`/medium），验证门禁据此接受测试
+    // 从未 import 过的文件。且与 Rust 孪生启发式（test_source_root_for）
+    // 一样限制在测试文件自己的包前缀内，不做全仓同名匹配。
+    if !imported && !stem.is_empty() {
+        let scope = stem_scope_prefix(&file.path);
         covered.extend(
             index
                 .files
                 .iter()
                 .filter(|entry| entry.kind == "source" && entry.path.ends_with(".py"))
+                .filter(|entry| entry.path.starts_with(&scope))
                 .filter(|entry| {
                     Path::new(&entry.path)
                         .file_stem()
@@ -150,6 +157,24 @@ pub(super) fn infer_test_candidates(
         } else {
             "none".into()
         },
+    }
+}
+
+/// 测试文件的包前缀：`pkg/tests/test_x.py` → `pkg/`，顶层 `tests/` → 全仓
+/// 根包（无更好锚点），其余按测试文件所在目录。与 Rust 侧 test_source_root_for
+/// 的包域约束对应；Python 无 src/ 布局约定，所以只按前缀收窄。
+fn stem_scope_prefix(path: &str) -> String {
+    if let Some(index) = path.find("/tests/") {
+        return path[..index + 1].to_string();
+    }
+    if path.starts_with("tests/") {
+        return String::new();
+    }
+    match Path::new(path).parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => {
+            format!("{}/", parent.display()).replace('\\', "/")
+        }
+        _ => String::new(),
     }
 }
 

@@ -290,23 +290,38 @@ fn start_with_scheduler(
 
 /// 计划任务每次触发：存一次快照；未激活则自注销；开启 auto-stop 且完成则存最后一次并自停。
 pub fn tick(root: &Path) -> Result<ActionOutcome> {
+    tick_entry(root, &SystemTaskScheduler)
+}
+
+/// 免顶层门禁的入口在拿锁之前必须先探测受管状态根：AutosaveLock::acquire 以
+/// create_parents=true 打开锁文件，会在从未激活的目录里凭空创建
+/// `.RaymanCodingSkill/`——那既是 workspace 标记（劫持子目录的 workspace-root
+/// 解析），又会被后续命令误诊为 orphan_state。状态根不存在时不碰盘面。
+fn tick_entry(root: &Path, scheduler: &dyn TaskScheduler) -> Result<ActionOutcome> {
+    if state_paths::managed_state_root(root, false)?.is_none() {
+        return tick_without_state(root, scheduler);
+    }
     let _lock = AutosaveLock::acquire(root)?;
-    tick_with_scheduler(root, &SystemTaskScheduler)
+    tick_with_scheduler(root, scheduler)
+}
+
+/// 没有状态：不该有任务在跑，尽力注销遗留任务后退出，不创建任何状态。
+fn tick_without_state(root: &Path, scheduler: &dyn TaskScheduler) -> Result<ActionOutcome> {
+    let name = task_name(root);
+    let removed = scheduler.unregister(&name)?;
+    Ok(ActionOutcome {
+        message: if removed {
+            "无自动保存状态，遗留计划任务已注销。".into()
+        } else {
+            "无自动保存状态，也没有已注册的计划任务。".into()
+        },
+        state: None,
+    })
 }
 
 fn tick_with_scheduler(root: &Path, scheduler: &dyn TaskScheduler) -> Result<ActionOutcome> {
     let Some(mut state) = load_state(root)? else {
-        // 没有状态：不该有任务在跑，尽力注销后退出。
-        let name = task_name(root);
-        let removed = scheduler.unregister(&name)?;
-        return Ok(ActionOutcome {
-            message: if removed {
-                "无自动保存状态，遗留计划任务已注销。".into()
-            } else {
-                "无自动保存状态，也没有已注册的计划任务。".into()
-            },
-            state: None,
-        });
+        return tick_without_state(root, scheduler);
     };
     if !state.active {
         let removed = scheduler.unregister(&state.task_name)?;
@@ -318,6 +333,22 @@ fn tick_with_scheduler(root: &Path, scheduler: &dyn TaskScheduler) -> Result<Act
             },
             state: Some(state),
         });
+    }
+
+    // 激活检查在 tick 内部对真正要拍快照的 root 执行，而不是 main 的顶层门禁：
+    // 顶层门禁会让 tick 在失败落盘之前 exit 1（违背下面"每次结果必须持久化"的
+    // 契约），且它检查的是 cwd 工作区而非 --workspace 目标，会给激活破损的
+    // 工作区铸造 standard 快照。失败按 tick 失败记账后原样返回。
+    if let Err(error) = crate::workspace::require_active(root) {
+        let now = crate::timefmt::now_iso();
+        state.consecutive_failures = state.consecutive_failures.saturating_add(1);
+        state.last_error = Some(format!("workspace 未激活，跳过快照: {error:#}"));
+        state.last_error_at = Some(now.clone());
+        state.last_tick_at = Some(now);
+        if let Err(persist_error) = save_state(root, &state) {
+            return Err(error).context(format!("自动保存失败状态也未能写入: {persist_error:#}"));
+        }
+        return Err(error);
     }
 
     if state.auto_stop && work_is_complete(root) {
@@ -362,8 +393,16 @@ fn tick_with_scheduler(root: &Path, scheduler: &dyn TaskScheduler) -> Result<Act
 
 /// 显式停止（“全部完成”传 success，“出错”传 error 等）：存最后一次快照 + 注销任务。
 pub fn stop(root: &Path, status: &str) -> Result<ActionOutcome> {
+    stop_entry(root, status, &SystemTaskScheduler)
+}
+
+/// 见 [`tick_entry`]：状态根不存在时不得让锁创建它。
+fn stop_entry(root: &Path, status: &str, scheduler: &dyn TaskScheduler) -> Result<ActionOutcome> {
+    if state_paths::managed_state_root(root, false)?.is_none() {
+        crate::workspace::require_active(root)?;
+    }
     let _lock = AutosaveLock::acquire(root)?;
-    stop_with_scheduler(root, status, &SystemTaskScheduler)
+    stop_with_scheduler(root, status, scheduler)
 }
 
 fn stop_with_scheduler(
@@ -371,7 +410,49 @@ fn stop_with_scheduler(
     status: &str,
     scheduler: &dyn TaskScheduler,
 ) -> Result<ActionOutcome> {
-    let mut state = match load_state(root)? {
+    let loaded = load_state(root)?;
+    // 激活破损时 stop 仍必须能注销计划任务（否则 tick 永远失败下去、无路可停），
+    // 但不能给破损工作区铸造 standard 最终快照：跳过快照、如实记账。注销失败
+    // 则原样报错并保持 active 状态，与 finalize_state_with 的契约一致。
+    // 没有既存状态时不得走这条路径——在未激活目录里 save_state 会凭空创建
+    // 受管状态目录。
+    if let Err(activation_error) = crate::workspace::require_active(root) {
+        let Some(mut state) = loaded else {
+            return Err(activation_error).context("workspace 未激活且没有自动保存状态，无需停止");
+        };
+        let was_active = state.active;
+        let interval_min = state.interval_min;
+        let rollback_name = state.task_name.clone();
+        let _removed = scheduler.unregister(&state.task_name)?;
+        let now = crate::timefmt::now_iso();
+        state.active = false;
+        state.stopped_at = Some(now.clone());
+        state.stop_status = Some(status.to_string());
+        state.last_error = Some(format!(
+            "workspace 未激活，最终快照已跳过: {activation_error:#}"
+        ));
+        state.last_error_at = Some(now);
+        if let Err(persist_error) = save_state(root, &state) {
+            // 与 finalize_state_with 同约：持久化失败时必须恢复计划任务注册，
+            // 否则盘上 active=true 而任务已被注销，status 与下一次 stop 都在说谎。
+            if was_active
+                && let Err(register_error) = scheduler.register(root, &rollback_name, interval_min)
+            {
+                bail!(
+                    "停止状态写入失败且计划任务重注册失败：state={persist_error}; register={register_error}"
+                );
+            }
+            return Err(persist_error);
+        }
+        return Ok(ActionOutcome {
+            message: format!(
+                "workspace 未激活：已停止自动保存并注销计划任务 '{}'。最终快照已跳过；如需抢救快照，运行 `rayman checkpoint salvage-save`。",
+                state.task_name
+            ),
+            state: Some(state),
+        });
+    }
+    let mut state = match loaded {
         Some(state) => state,
         None => AutosaveState {
             active: false,
@@ -536,6 +617,11 @@ where
 
 /// 当前自动保存状态摘要。
 pub fn status(root: &Path) -> Result<ActionOutcome> {
+    // 见 tick_entry：状态根不存在（从未激活）时不得让锁创建它；
+    // 报激活错误与豁免顶层门禁之前的行为一致。
+    if state_paths::managed_state_root(root, false)?.is_none() {
+        crate::workspace::require_active(root)?;
+    }
     let _lock = AutosaveLock::acquire(root)?;
     status_with_scheduler(root, &SystemTaskScheduler)
 }
@@ -1011,6 +1097,7 @@ mod tests {
         let store = tempfile::tempdir().unwrap();
         let root = ws.path();
         touch(&root.join("src/main.rs"), "fn main() {}");
+        activate(root);
 
         // 直接写一个 active 状态（不触碰真实计划任务）。
         let state = AutosaveState {
@@ -1393,6 +1480,15 @@ mod tests {
         assert!(load_state(root).unwrap().unwrap().active);
     }
 
+    /// tick/stop 现在在内部检查目标工作区的激活状态（激活破损按失败记账/跳过
+    /// 最终快照），所以走真实 tick/stop 路径的测试必须先激活工作区，否则测试
+    /// 的本意（如 partial 快照上限）会被激活门禁静默架空。
+    fn activate(root: &Path) {
+        let skill = root.join("SKILL.md");
+        fs::write(&skill, "test skill\n").unwrap();
+        crate::workspace::activate(root, &skill).unwrap();
+    }
+
     fn active_state(root: &Path, store: Option<&Path>) -> AutosaveState {
         AutosaveState {
             active: true,
@@ -1420,6 +1516,7 @@ mod tests {
         let store = tempfile::tempdir().unwrap();
         let root = ws.path();
         touch(&root.join("src/main.rs"), "fn main() {}");
+        activate(root);
         save_state(root, &active_state(root, Some(store.path()))).unwrap();
 
         // goals 应为目录；同名普通文件让此后每次 checkpoint::save 都失败。
@@ -1460,6 +1557,7 @@ mod tests {
         let store = tempfile::tempdir().unwrap();
         let root = ws.path();
         touch(&root.join("src/main.rs"), "fn main() {}");
+        activate(root);
         let mut state = active_state(root, Some(store.path()));
         state.consecutive_failures = 7;
         state.last_error = Some("previous failure".into());
@@ -1476,6 +1574,92 @@ mod tests {
             .unwrap()
             .message;
         assert!(!message.contains("连续失败"), "{message}");
+    }
+
+    /// 免顶层门禁的入口不得在从未激活的目录里凭空创建 `.RaymanCodingSkill/`：
+    /// 那既是 workspace 标记（劫持子目录的 workspace-root 解析），又会被后续
+    /// 命令误诊为 orphan_state。status/stop 报激活错误，tick 只做遗留任务清理。
+    #[test]
+    fn exempted_entrypoints_do_not_mint_state_in_unactivated_dirs() {
+        let ws = tempfile::tempdir().unwrap();
+        let root = ws.path();
+
+        assert!(status(root).is_err());
+        assert!(stop_entry(root, "error", &AbsentScheduler).is_err());
+        let outcome = tick_entry(root, &AbsentScheduler).unwrap();
+        assert!(outcome.state.is_none());
+        assert!(
+            !root.join(".RaymanCodingSkill").exists(),
+            "免门禁入口不得创建受管状态目录"
+        );
+    }
+
+    /// 激活破损（SKILL.md 漂移、CLI 升级）时，tick 必须仍然把失败写进
+    /// autosave.json——计划任务的输出无人可见，`autosave status` 是唯一的
+    /// 发现渠道；同时不得给破损工作区铸造 standard 快照。
+    #[test]
+    fn tick_persists_failure_when_activation_is_broken() {
+        let ws = tempfile::tempdir().unwrap();
+        let store = tempfile::tempdir().unwrap();
+        let root = ws.path();
+        touch(&root.join("src/main.rs"), "fn main() {}");
+        activate(root);
+        save_state(root, &active_state(root, Some(store.path()))).unwrap();
+        fs::write(root.join("SKILL.md"), "drifted content\n").unwrap();
+
+        assert!(tick_with_scheduler(root, &AbsentScheduler).is_err());
+        let persisted = load_state(root).unwrap().unwrap();
+        assert_eq!(persisted.consecutive_failures, 1);
+        assert!(
+            persisted
+                .last_error
+                .as_deref()
+                .unwrap_or_default()
+                .contains("未激活"),
+            "{:?}",
+            persisted.last_error
+        );
+        assert!(persisted.last_error_at.is_some());
+        assert!(
+            checkpoint::list(root, Some(store.path())).unwrap().is_empty(),
+            "激活破损的工作区不得铸造 standard 快照"
+        );
+        let message = status_with_scheduler(root, &AbsentScheduler)
+            .unwrap()
+            .message;
+        assert!(message.contains("连续失败"), "{message}");
+    }
+
+    /// 激活破损时 stop 仍必须能注销计划任务并落盘停止状态（否则 tick 永远
+    /// 失败下去、无路可停），但最终快照跳过。
+    #[test]
+    fn stop_on_broken_activation_unregisters_without_minting_a_snapshot() {
+        let ws = tempfile::tempdir().unwrap();
+        let store = tempfile::tempdir().unwrap();
+        let root = ws.path();
+        touch(&root.join("src/main.rs"), "fn main() {}");
+        activate(root);
+        save_state(root, &active_state(root, Some(store.path()))).unwrap();
+        fs::write(root.join("SKILL.md"), "drifted content\n").unwrap();
+
+        let outcome = stop_with_scheduler(root, "error", &AbsentScheduler).unwrap();
+        let after = outcome.state.unwrap();
+        assert!(!after.active);
+        assert_eq!(after.stop_status.as_deref(), Some("error"));
+        assert!(
+            after
+                .last_error
+                .as_deref()
+                .unwrap_or_default()
+                .contains("最终快照已跳过"),
+            "{:?}",
+            after.last_error
+        );
+        assert!(!load_state(root).unwrap().unwrap().active);
+        assert!(
+            checkpoint::list(root, Some(store.path())).unwrap().is_empty(),
+            "激活破损的工作区不得铸造 standard 最终快照"
+        );
     }
 
     /// 计划任务 XML 必须独占创建在受管临时目录里，而不是 PID 可预测的 `%TEMP%`

@@ -109,11 +109,18 @@ pub struct PytestLease {
 }
 
 fn lease_relative(id: &str) -> Result<PathBuf> {
+    // 纯点 id 会塌缩：`Path::components()` 把非首位 `.` 归一化掉，
+    // `tmp/leases/.` 解析成 leases 根本身，release 的 remove_dir_all 会
+    // 删光所有兄弟 lease；下游 normal_components 守卫看到的是归一化之后
+    // 的路径，永远拦不住它。Windows 还会剥掉尾部 `.`（`a.` → `a`），
+    // 形成跨 lease 别名。两类都必须在 id 门口拒绝。
     if id.is_empty()
         || id.len() > 160
         || !id
             .chars()
             .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.'))
+        || !id.chars().any(|ch| ch.is_ascii_alphanumeric())
+        || id.ends_with('.')
     {
         anyhow::bail!("无效 pytest lease id: {id}");
     }
@@ -517,5 +524,18 @@ mod tests {
         assert_eq!(report.traversal_error_count, 1);
         assert!(cleanup(dir.path()).is_err());
         assert!(outside.path().exists(), "cleanup must not follow the link");
+    }
+
+    /// 纯点 id 会被 `Path::components()` 归一化塌缩到 leases 根（release 的
+    /// remove_dir_all 会删光所有兄弟 lease）；Windows 还会剥掉尾部 `.` 形成
+    /// 跨 lease 别名。两类都必须在 id 门口拒绝。
+    #[test]
+    fn lease_ids_that_collapse_or_alias_are_rejected() {
+        for bad in [".", "..", "...", "-", "_", "-_-", "a.", "alpha."] {
+            assert!(lease_relative(bad).is_err(), "must reject {bad:?}");
+        }
+        for good in ["alpha", "alpha-1.2_x", ".hidden1"] {
+            assert!(lease_relative(good).is_ok(), "must accept {good:?}");
+        }
     }
 }
