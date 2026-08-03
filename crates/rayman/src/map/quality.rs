@@ -574,7 +574,10 @@ pub(super) fn infer_risks(
         if file.kind == "source"
             && public_by_path.get(file.path.as_str()).copied().unwrap_or(0) > 0
             && !covered.contains(file.path.as_str())
-            && file.path != "src/main.rs"
+            // A crate binary root carries `pub` items that no integration test
+            // can import. Exempting only the literal root `src/main.rs` flagged
+            // the identical layout in every nested crate of a workspace.
+            && !is_crate_binary_root(&file.path)
         {
             risks.push(MapRisk {
                 severity: "warning".into(),
@@ -587,6 +590,15 @@ pub(super) fn infer_risks(
         }
     }
     risks
+}
+
+/// A Cargo binary crate root, at any nesting depth (`src/main.rs`,
+/// `crates/x/src/main.rs`, `src/bin/foo.rs`).
+fn is_crate_binary_root(path: &str) -> bool {
+    path == "src/main.rs"
+        || path.ends_with("/src/main.rs")
+        || path.starts_with("src/bin/")
+        || path.contains("/src/bin/")
 }
 
 fn large_file_warning_lines(kind: &str) -> usize {

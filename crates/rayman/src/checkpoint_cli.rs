@@ -31,11 +31,11 @@ pub fn run_checkpoint(root: &std::path::Path, json: bool, cmd: CheckpointCmd) ->
                     outcome.id,
                     outcome.file_count,
                     mb,
-                    if outcome.skipped_count > 0 {
-                        format!("，跳过 {}（锁定/无权限）", outcome.skipped_count)
-                    } else {
-                        String::new()
-                    },
+                    // `save` only ever returns a complete snapshot; anything
+                    // skipped makes it a partial one, which is reported as an
+                    // error instead of an outcome. Printing a skip count here
+                    // described a state this branch can never observe.
+                    String::new(),
                     match keep {
                         Some(_) =>
                             format!("，按显式 retention policy 清理旧快照 {} 个", outcome.pruned),

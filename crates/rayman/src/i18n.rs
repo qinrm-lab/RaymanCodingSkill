@@ -159,6 +159,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "replacement must 与被转移目标 must（含 typed proof 义务）的精确并集不一致",
     "{name} 在 PATH 上只有本进程无法启动的 {} —— rayman 用 `Command::new` 直接创建进程，Windows 只会补 `.exe`，不解析 PATHEXT；请把真正的 {name}.exe 所在目录加进 PATH（或改用提供 .exe 的安装方式）",
     "自动停止失败: {error:#}",
+    "skill_file 路径不能以引号开头或结尾（激活合同按未加引号的标量写入）: {recorded_path}",
     "当前工作区没有可恢复的 standard 快照；另有 {other} 份 recovery-only/partial 快照，用 `rayman checkpoint list` 查看。",
     "状态锁正被另一个 rayman 进程占用: {}",
     "停止状态写入失败且计划任务重注册失败：state={persist_error}; register={register_error}",
@@ -432,7 +433,6 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "等待 checkpoint 锁超过 {} 秒",
     "证据 `--message` 不能为空。",
     "资产扫描无法读取文件: {}",
-    "，跳过 {}（锁定/无权限）",
     "  依赖: outgoing={} incoming={}",
     "closed lane {} 关闭证明无效",
     "writer lane {} 越出允许路径",
@@ -1395,6 +1395,10 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     ),
     ("自动停止失败", "auto-stop failed"),
     (
+        "路径不能以引号开头或结尾（激活合同按未加引号的标量写入）",
+        "path must not start or end with a quote (the activation contract is written as an unquoted scalar)",
+    ),
+    (
         "当前工作区没有可恢复的 standard 快照；另有",
         "This workspace has no restorable standard snapshot; there are also",
     ),
@@ -2345,7 +2349,6 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     ("至少提供一个变更路径", "provide at least one changed path"),
     ("至少需要一个", "requires at least one"),
     ("使用", "use"),
-    ("先运行", "run first"),
     ("先审阅", "review first"),
     ("运行中", "running"),
     ("运行", "run"),
@@ -3585,6 +3588,29 @@ mod tests {
                         );
                     }
                 }
+            }
+        }
+    }
+
+    /// 同一个中文键不得在两个目录里映射到不同英文。
+    ///
+    /// `translate_authored_template` 把三个目录串起来按长度排序后逐个替换，
+    /// 先命中的那条会吃掉全部出现，另一条永远不可达——「先运行」曾同时映射到
+    /// "run first" 与 "run"，而没有任何测试能发现这种静默遮蔽。
+    #[test]
+    fn no_catalog_key_is_shadowed_by_a_different_translation() {
+        use std::collections::BTreeMap;
+        let mut seen: BTreeMap<&str, &str> = BTreeMap::new();
+        for &(chinese, english) in MESSAGE_FRAGMENT_CATALOG
+            .iter()
+            .chain(MESSAGE_PREFIX_CATALOG)
+            .chain(TEMPLATE_FRAGMENT_CATALOG)
+        {
+            if let Some(previous) = seen.insert(chinese, english) {
+                assert_eq!(
+                    previous, english,
+                    "跨目录重复键 {chinese:?} 映射到两个不同英文，后者永远不可达"
+                );
             }
         }
     }

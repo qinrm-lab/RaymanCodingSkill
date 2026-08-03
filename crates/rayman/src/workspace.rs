@@ -260,6 +260,15 @@ pub fn activate(root: &Path, skill_file: &Path) -> Result<WorkspaceActivationRep
     if recorded_path.contains(['\r', '\n']) {
         bail!("skill_file 路径不能包含换行");
     }
+    // The value is written unquoted, and `scalar` treats a leading or trailing
+    // quote as quoting syntax. Writing such a path produced an activation
+    // contract this program's own parser rejects, leaving the workspace stuck
+    // until `deactivate`. Refuse before writing rather than after.
+    if recorded_path.starts_with(['\'', '"']) || recorded_path.ends_with(['\'', '"']) {
+        bail!(
+            "skill_file 路径不能以引号开头或结尾（激活合同按未加引号的标量写入）: {recorded_path}"
+        );
+    }
     let config = format!(
         "skill: {SKILL_NAME}\nenabled: true\nskill_file: {recorded_path}\nskill_sha256: {hash}\ncli_contract: {}\ncli_version: {}\n",
         crate::CLI_CONTRACT,

@@ -22,6 +22,36 @@ fn is_managed_state_lock(name: &str) -> bool {
 /// file no code path creates and quietly widened what the audit accepts.
 const STATE_LOCK_TARGETS: &[&str] = &["pending.json"];
 
+/// `.<allowed-state-file>.rayman-<pid>-<counter>.tmp` — the scratch file
+/// `file_io` writes and renames for every atomic state write.
+///
+/// A crash between create and rename leaves one behind. It is an uncommitted
+/// partial write, not state, but it used to count as an unknown entry and
+/// permanently red-line `state audit --check` in a workspace that had merely
+/// been killed at the wrong moment — with no way out, since the contract
+/// forbids deleting state to make the gate pass. The base name must still be an
+/// allowlisted state file, so nothing arbitrary can hide behind the suffix.
+fn is_leaked_atomic_temp(name: &str, allowed: &[&str]) -> bool {
+    let Some(rest) = name.strip_prefix('.') else {
+        return false;
+    };
+    let Some(rest) = rest.strip_suffix(".tmp") else {
+        return false;
+    };
+    let Some((base, suffix)) = rest.split_once(".rayman-") else {
+        return false;
+    };
+    allowed.contains(&base)
+        && suffix
+            .split_once('-')
+            .is_some_and(|(pid, counter)| {
+                !pid.is_empty()
+                    && !counter.is_empty()
+                    && pid.chars().all(|c| c.is_ascii_digit())
+                    && counter.chars().all(|c| c.is_ascii_digit())
+            })
+}
+
 pub(crate) fn run_state_audit(root: &Path, json: bool, check: bool) -> Result<()> {
     const V2_ALLOWED: &[&str] = &[
         "goals",
@@ -46,6 +76,10 @@ pub(crate) fn run_state_audit(root: &Path, json: bool, check: bool) -> Result<()
                     match entry {
                         Ok(entry) => {
                             let name = entry.file_name().to_string_lossy().to_string();
+                            if is_leaked_atomic_temp(&name, V2_ALLOWED) {
+                                // An uncommitted partial write, not state.
+                                continue;
+                            }
                             if !V2_ALLOWED.contains(&name.as_str()) && !is_managed_state_lock(&name)
                             {
                                 retired.push(name);
@@ -223,6 +257,16 @@ mod tests {
         std::fs::write(state.join(".autosave.json.rayman.lock"), "").unwrap();
         assert!(run_state_audit(dir.path(), false, true).is_err());
         std::fs::remove_file(state.join(".autosave.json.rayman.lock")).unwrap();
+
+        // A crash-leaked atomic scratch file is an uncommitted partial write,
+        // not unknown state: it must not permanently red-line the gate. The
+        // base name still has to be an allowlisted state file.
+        std::fs::write(state.join(".pending.json.rayman-1234-7.tmp"), "").unwrap();
+        assert!(run_state_audit(dir.path(), false, true).is_ok());
+        std::fs::write(state.join(".secrets.rayman-1234-7.tmp"), "").unwrap();
+        assert!(run_state_audit(dir.path(), false, true).is_err());
+        std::fs::remove_file(state.join(".secrets.rayman-1234-7.tmp")).unwrap();
+        std::fs::remove_file(state.join(".pending.json.rayman-1234-7.tmp")).unwrap();
 
         // Only locks for known state targets are allowed, and only as files.
         std::fs::write(state.join(".secrets.rayman.lock"), "").unwrap();

@@ -78,7 +78,12 @@ function Get-CodexSkillResourcePlan {
                 throw "Install manifest path must be an ordinary forward-slash relative path: $candidate"
             }
         }
-        if ($sourceRelative -eq 'CLAUDE.md') {
+        # Both ends must be checked: a manifest entry can name any source and
+        # any destination, so guarding the source alone still allowed
+        # `{source: X, destination: CLAUDE.md}` to deploy a repository-scoped
+        # entrypoint globally. The enforcing twin check existed only in
+        # -SelfTest, which is not what runs during an install.
+        if ($sourceRelative -eq 'CLAUDE.md' -or $destinationRelative -eq 'CLAUDE.md') {
             throw 'CLAUDE.md is repository-scoped and must not be globally installed.'
         }
         $source = [IO.Path]::GetFullPath((Join-Path $repoRoot $sourceRelative))
