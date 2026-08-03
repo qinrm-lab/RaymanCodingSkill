@@ -261,7 +261,7 @@ pub fn impact_report(map: &ProjectMap, path: &str) -> Result<ImpactReport> {
             recommended_checks.push(package_test_command(map, package));
         }
     }
-    if path.ends_with("Cargo.toml") || path.ends_with("Cargo.lock") {
+    if is_cargo_manifest_path(&path) || is_cargo_lock_path(&path) {
         recommended_checks.push("cargo check --all".into());
         recommended_checks.push("cargo deny check".into());
         recommended_checks.push("cargo test --all".into());
@@ -533,14 +533,14 @@ fn path_has_supported_package(map: &ProjectMap, path: &str) -> bool {
 
 /// 该包的工具链是否能收集自己的源文件（即它是受支持生态）。
 fn package_collects_own_sources(package: &PackageEntry) -> bool {
-    package.manifest_path.ends_with("Cargo.toml")
-        || package.manifest_path.ends_with("pyproject.toml")
+    is_cargo_manifest_path(&package.manifest_path)
+        || is_python_manifest_path(&package.manifest_path)
 }
 
 fn package_collects_path(package: &PackageEntry, path: &str) -> bool {
-    if package.manifest_path.ends_with("Cargo.toml") {
+    if is_cargo_manifest_path(&package.manifest_path) {
         path.ends_with(".rs")
-    } else if package.manifest_path.ends_with("pyproject.toml") {
+    } else if is_python_manifest_path(&package.manifest_path) {
         path.ends_with(".py")
     } else {
         false
@@ -560,6 +560,27 @@ fn package_has_test_anchor(map: &ProjectMap, package: &PackageEntry) -> bool {
                 && path_is_under_package(&test.path, &package.root_path)
                 && package_collects_path(package, &test.path)
         })
+}
+
+/// 路径是否**就是**一个 Cargo manifest。
+///
+/// 裸 `ends_with("Cargo.toml")` 会把 `old-Cargo.toml`、`backup.Cargo.toml`
+/// 这类归档/改名文件当成 manifest，而 cargo 自己拒绝 `--manifest-path
+/// old-Cargo.toml`：于是没有根 manifest 的仓库被永久判为非权威拓扑
+/// （standard/release 硬阻塞），有根 manifest 的仓库则被塞进幻影包。
+/// 判据与 Python 侧的 `pyproject.toml` 精确匹配保持一致。
+fn is_cargo_manifest_path(path: &str) -> bool {
+    path == "Cargo.toml" || path.ends_with("/Cargo.toml")
+}
+
+/// 与 [`is_cargo_manifest_path`] 同判据的 Python manifest 版本（原本只有
+/// python.rs 的发现逻辑是精确的，包判定这一侧仍在用裸后缀匹配）。
+fn is_python_manifest_path(path: &str) -> bool {
+    path == "pyproject.toml" || path.ends_with("/pyproject.toml")
+}
+
+fn is_cargo_lock_path(path: &str) -> bool {
+    path == "Cargo.lock" || path.ends_with("/Cargo.lock")
 }
 
 fn is_evals_dependency_policy_path(path: &str) -> bool {
@@ -596,7 +617,7 @@ fn nested_cargo_metadata_topology(
         .files
         .iter()
         .map(|file| file.path.as_str())
-        .filter(|path| path.ends_with("Cargo.toml"))
+        .filter(|path| is_cargo_manifest_path(path))
         .collect();
     manifests.sort_unstable();
     if manifests.is_empty() || manifests.len() > MAX_NESTED_METADATA_MANIFESTS {
@@ -909,7 +930,7 @@ fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
     } else if index
         .files
         .iter()
-        .any(|file| file.path.ends_with("Cargo.toml"))
+        .any(|file| is_cargo_manifest_path(&file.path))
     {
         // 索引里有 Cargo manifest 但没能从中取得权威拓扑（数量超过
         // MAX_NESTED_METADATA_MANIFESTS，未尝试）。必须与"这个仓库根本
@@ -933,7 +954,7 @@ fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
     // 本地 crate 名来自实际发现的 package，而不是硬编码本工具自己的名字。
     let local_crates: BTreeSet<String> = packages
         .iter()
-        .filter(|package| package.manifest_path.ends_with("Cargo.toml"))
+        .filter(|package| is_cargo_manifest_path(&package.manifest_path))
         .map(|package| package.name.replace('-', "_"))
         .collect();
     let dependencies = infer_dependencies(&text_by_path, &path_set, &local_crates);
@@ -1111,7 +1132,7 @@ fn discover_packages(
 ) -> Result<Vec<PackageEntry>> {
     let mut packages = Vec::new();
     for file in &index.files {
-        if !file.path.ends_with("Cargo.toml") {
+        if !is_cargo_manifest_path(&file.path) {
             continue;
         }
         let text = String::from_utf8_lossy(&context::read_verified_file(root, file)?).into_owned();

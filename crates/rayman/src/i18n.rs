@@ -157,6 +157,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "goal {} 需求 {} 没有 impact 快照；非代码变更可忽略",
     "lifecycle-only replacement 当前 delta 与授权 proof 不一致",
     "replacement must 与被转移目标 must（含 typed proof 义务）的精确并集不一致",
+    "{name} 在 PATH 上只有本进程无法启动的 {} —— rayman 用 `Command::new` 直接创建进程，Windows 只会补 `.exe`，不解析 PATHEXT；请把真正的 {name}.exe 所在目录加进 PATH（或改用提供 .exe 的安装方式）",
     "停止状态写入失败且计划任务重注册失败：state={persist_error}; register={register_error}",
     "workspace 未激活且没有自动保存状态，无需停止",
     "workspace 未激活，跳过快照: {error:#}",
@@ -808,6 +809,15 @@ fn localize_line_for(line: String, language: ActiveLanguage, json_output: bool) 
         .unwrap_or(line.len());
     let (indentation, content) = line.split_at(indentation_end);
 
+    // A whole-line authored template is strictly more specific than a prefix
+    // match: it accounts for every static part of the line, not just its head.
+    // Trying the prefix first left each line's tail to fragment guessing, and a
+    // prefix whose English already absorbed the tail's meaning then said it
+    // twice — `handoff/CI verifies it with verification with ...` on every en
+    // `doctor` run.
+    if let Some(localized) = localize_authored_message(content, language) {
+        return format!("{indentation}{localized}");
+    }
     for &(chinese, english) in MESSAGE_PREFIX_CATALOG {
         let (source, target) = match language {
             ActiveLanguage::ZhCn => (english, chinese),
@@ -827,9 +837,6 @@ fn localize_line_for(line: String, language: ActiveLanguage, json_output: bool) 
             };
             return format!("{indentation}{target}{remainder_indent}{localized_content}");
         }
-    }
-    if let Some(localized) = localize_authored_message(content, language) {
-        return format!("{indentation}{localized}");
     }
     localize_known_fragments(line, language)
 }
@@ -942,11 +949,37 @@ fn translate_authored_template(template: &str) -> String {
 }
 
 fn localize_authored_message(content: &str, language: ActiveLanguage) -> Option<String> {
+    localize_authored_message_within(content, language, 0)
+}
+
+/// Authored messages compose: `doctor` and `check` pass other framework-authored
+/// Chinese (a toolchain state, a required_for reason, a blocker) *through* a
+/// placeholder. Reinserting captures byte-for-byte therefore left framework text
+/// untranslated in en output even though every individual message is covered by
+/// the catalog and the coverage test passes.
+///
+/// A capture is re-localized only when it matches an authored template in full
+/// and that template translates Han-free — user content (goal titles,
+/// requirement text, paths) matches no template and is still reinserted
+/// verbatim. `depth` bounds the recursion in case a template ever degenerates to
+/// a capture as long as its input.
+fn localize_authored_message_within(
+    content: &str,
+    language: ActiveLanguage,
+    depth: usize,
+) -> Option<String> {
+    const MAX_COMPOSED_DEPTH: usize = 4;
     if language != ActiveLanguage::En || !contains_han_text(content) {
         return None;
     }
     let mut best: Option<(usize, String)> = None;
     for template in AUTHORED_MESSAGE_TEMPLATES {
+        // Callers hand us the line with its indentation already split off, but
+        // authored templates keep the leading spaces of the source literal
+        // (`"  仓库源码产物: …"`). Matching the raw template therefore never fired
+        // for any indented message, which silently routed all of them to prefix
+        // + fragment guessing. Indentation is re-attached by the caller.
+        let template = template.trim_start();
         let Some(captures) = match_authored_template(template, content) else {
             continue;
         };
@@ -954,6 +987,17 @@ fn localize_authored_message(content: &str, language: ActiveLanguage) -> Option<
         if contains_han_text(&translated) {
             continue;
         }
+        let captures = if depth >= MAX_COMPOSED_DEPTH {
+            captures
+        } else {
+            captures
+                .iter()
+                .map(|capture| {
+                    localize_authored_message_within(capture, language, depth + 1)
+                        .unwrap_or_else(|| capture.clone())
+                })
+                .collect()
+        };
         let Some(rendered) = render_translated_template(&translated, &captures) else {
             continue;
         };
@@ -1318,6 +1362,25 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     (
         "无法确定用户数据目录",
         "unable to determine the user data directory",
+    ),
+    (
+        "在 PATH 上只有本进程无法启动的",
+        "is on PATH only as a file this process cannot launch:",
+    ),
+    (
+        "—— rayman 用 `Command::new` 直接创建进程，Windows 只会补 `.exe`，不解析 PATHEXT；请把真正的",
+        "— rayman spawns with `Command::new`, and Windows only appends `.exe` there, never consulting PATHEXT; put the real",
+    ),
+    (
+        "所在目录加进 PATH（或改用提供 .exe 的安装方式）",
+        "directory on PATH (or install a variant that ships a .exe)",
+    ),
+    // 整模板键：前缀条目已把句尾的「验证」语义并进 "verifies it with"，模板里
+    // 残留的「验证」再被单独翻译一次就成了 "verifies it with verification with"。
+    // 键更长者优先替换，所以整模板键必须存在才能压住前缀条目。
+    (
+        "仓库源码产物: 未由 doctor 检查；交接/CI 由 `{}` 验证",
+        "Repository source artifact: not checked by doctor; handoff/CI verifies it with `{}`",
     ),
     (
         "未激活且没有自动保存状态，无需停止",
@@ -2848,15 +2911,20 @@ fn localize_known_fragments(mut line: String, language: ActiveLanguage) -> Strin
     line
 }
 
-/// Every catalog key, longest first, so removing one never strands part of a
-/// longer entry.
+/// Every key this rewriter can actually apply, longest first, so removing one
+/// never strands part of a longer entry.
+///
+/// It must list exactly the catalog [`localize_known_fragments`] rewrites with
+/// — no more. Counting coverage from all three catalogs while rewriting from
+/// only one declared a line "fully known" that the rewriter could translate
+/// just part of, which is how a user goal title made of common words
+/// (`先运行 测试`) came out as the half-translated hybrid `run 测试` — the exact
+/// data corruption the full-line gate exists to prevent.
 fn sorted_fragment_keys() -> &'static [&'static str] {
     static KEYS: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
     KEYS.get_or_init(|| {
         let mut keys = MESSAGE_FRAGMENT_CATALOG
             .iter()
-            .chain(MESSAGE_PREFIX_CATALOG)
-            .chain(TEMPLATE_FRAGMENT_CATALOG)
             .map(|&(chinese, _)| chinese)
             .filter(|chinese| chinese.chars().any(is_han))
             .collect::<Vec<_>>();
@@ -3349,7 +3417,9 @@ mod tests {
                 .collect::<Vec<_>>();
             let rendered =
                 render_translated_template(template, &captures).expect("render source template");
-            let localized = localize_authored_message(&rendered, ActiveLanguage::En)
+            // `localize_line_for` splits indentation off before matching, so the
+            // production input for an indented template is the trimmed line.
+            let localized = localize_authored_message(rendered.trim_start(), ActiveLanguage::En)
                 .unwrap_or_else(|| {
                     panic!("generated template did not match its output: {template}")
                 });
@@ -3499,6 +3569,34 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    /// 整行 authored 模板必须先于前缀匹配生效，且缩进不得让它匹配不上。
+    /// 此前 doctor 的源码产物行走前缀路径，前缀英文已含 "verifies it with"，
+    /// 行尾残留的「验证」再被片段目录翻一次，每次 en 运行都输出
+    /// "verifies it with verification with"。
+    #[test]
+    fn an_indented_authored_line_translates_as_a_whole_instead_of_prefix_plus_fragments() {
+        let line = "  仓库源码产物: 未由 doctor 检查；交接/CI 由 `scripts/verify-release-contract.ps1 -RequireSourceFresh` 验证";
+        let localized = localize_line_for(line.into(), ActiveLanguage::En, false);
+        assert!(
+            localized.contains("verifies it with `scripts/verify-release-contract.ps1"),
+            "{localized}"
+        );
+        assert!(!localized.contains("verification with"), "{localized}");
+        assert!(!contains_han(&localized), "{localized}");
+        assert!(localized.starts_with("  "), "缩进必须保留: {localized:?}");
+    }
+
+    /// 整行改写的覆盖判据只能用它真正会应用的目录。此前覆盖用三个目录统计、
+    /// 改写只用一个，于是由常用词构成的用户 goal 标题被判为"框架文本"并被
+    /// 改写一半（`先运行 测试` → `run 测试`）。
+    #[test]
+    fn a_user_title_made_of_common_words_is_never_partially_rewritten() {
+        for title in ["先运行 测试", "秒表功能", "先运行 验证 再提交"] {
+            let localized = localize_line_for(title.into(), ActiveLanguage::En, false);
+            assert_eq!(localized, title, "用户内容不得被改写");
         }
     }
 

@@ -168,12 +168,7 @@ pub fn create_pytest_lease(root: &Path, label: &str) -> Result<PytestLease> {
         probe_directory(path)?;
     }
 
-    let mut environment = BTreeMap::new();
-    environment.insert("TMP".into(), path_text(&temp_dir));
-    environment.insert("TEMP".into(), path_text(&temp_dir));
-    environment.insert("TMPDIR".into(), path_text(&temp_dir));
-    environment.insert("PYTHONPYCACHEPREFIX".into(), path_text(&pycache_dir));
-    environment.insert("PYTHONDONTWRITEBYTECODE".into(), "1".into());
+    let environment = lease_environment(&temp_dir, &pycache_dir);
     let lease = PytestLease {
         schema: "rayman.pytest-lease.v1".into(),
         id: id.clone(),
@@ -194,6 +189,18 @@ pub fn create_pytest_lease(root: &Path, label: &str) -> Result<PytestLease> {
     };
     crate::file_io::write_json(&lease_root.join(LEASE_MANIFEST), &lease)?;
     verify_pytest_lease(root, &id)
+}
+
+/// 受管 lease 的**完整** environment。create 与 verify 共用同一份构造，
+/// 二者才不会各自演进出不同口径。
+fn lease_environment(temp_dir: &Path, pycache_dir: &Path) -> BTreeMap<String, String> {
+    let mut environment = BTreeMap::new();
+    environment.insert("TMP".into(), path_text(temp_dir));
+    environment.insert("TEMP".into(), path_text(temp_dir));
+    environment.insert("TMPDIR".into(), path_text(temp_dir));
+    environment.insert("PYTHONPYCACHEPREFIX".into(), path_text(pycache_dir));
+    environment.insert("PYTHONDONTWRITEBYTECODE".into(), "1".into());
+    environment
 }
 
 fn probe_directory(path: &Path) -> Result<()> {
@@ -225,16 +232,19 @@ pub fn verify_pytest_lease(root: &Path, id: &str) -> Result<PytestLease> {
     let pycache_dir = lease_root.join("pycache");
     if lease.schema != "rayman.pytest-lease.v1"
         || lease.id != id
+        // label 是 id 的前缀来源；不比对就等于 manifest 里有一段无人校验的
+        // 自由文本，改写它能让 probe 发布出与 lease 身份不符的标签。
+        || !id.starts_with(&safe_lease_id_label(&lease.label))
         || lease.root != path_text(&lease_root)
         || lease.basetemp != path_text(&basetemp)
         || lease.cache_dir != path_text(&cache_dir)
         || lease.temp_dir != path_text(&temp_dir)
         || lease.pycache_dir != path_text(&pycache_dir)
-        || lease.environment.get("TMP") != Some(&path_text(&temp_dir))
-        || lease.environment.get("TEMP") != Some(&path_text(&temp_dir))
-        || lease.environment.get("TMPDIR") != Some(&path_text(&temp_dir))
-        || lease.environment.get("PYTHONPYCACHEPREFIX") != Some(&path_text(&pycache_dir))
-        || lease.environment.get("PYTHONDONTWRITEBYTECODE") != Some(&"1".to_string())
+        // environment 必须整体相等，不能只逐键查五个已知项：逐键查是子集比较，
+        // 注入的额外变量（PYTHONPATH 等）能穿过这道 manifest 门禁，再被
+        // `temp pytest-probe` 当作"已核验"原样发布出去。README 承诺的是
+        // "publish exact argv/environment"，那就必须逐字节相等。
+        || lease.environment != lease_environment(&temp_dir, &pycache_dir)
         || lease.pytest_args
             != vec![
                 "--basetemp".to_string(),
@@ -524,6 +534,39 @@ mod tests {
         assert_eq!(report.traversal_error_count, 1);
         assert!(cleanup(dir.path()).is_err());
         assert!(outside.path().exists(), "cleanup must not follow the link");
+    }
+
+    /// manifest 门禁必须整体比对 environment：逐键查五个已知项是子集比较，
+    /// 注入的额外变量能穿过门禁，再被 `temp pytest-probe` 当作"已核验"发布。
+    #[test]
+    fn an_injected_environment_variable_fails_the_lease_manifest_gate() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::create_dir_all(root.join(".RaymanCodingSkill")).unwrap();
+        let lease = create_pytest_lease(root, "probe-env").unwrap();
+        assert!(verify_pytest_lease(root, &lease.id).is_ok());
+
+        let manifest_path = lease_path(root, &lease.id, false)
+            .unwrap()
+            .unwrap()
+            .join(LEASE_MANIFEST);
+        let mut tampered = lease.clone();
+        tampered
+            .environment
+            .insert("PYTHONPATH".into(), "C:/injected".into());
+        crate::file_io::write_json(&manifest_path, &tampered).unwrap();
+        assert!(
+            verify_pytest_lease(root, &lease.id).is_err(),
+            "注入的额外环境变量必须被门禁挡下"
+        );
+
+        let mut relabelled = lease.clone();
+        relabelled.label = "totally-different".into();
+        crate::file_io::write_json(&manifest_path, &relabelled).unwrap();
+        assert!(
+            verify_pytest_lease(root, &lease.id).is_err(),
+            "label 必须与 lease id 绑定"
+        );
     }
 
     /// 纯点 id 会被 `Path::components()` 归一化塌缩到 leases 根（release 的

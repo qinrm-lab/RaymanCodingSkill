@@ -8,7 +8,7 @@ use crate::cli::DoctorCmd;
 pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> {
     let running = std::env::current_exe().context("无法定位当前 rayman 二进制")?;
     let running_hash = rayman::hash::sha256_file(&running)?;
-    let path_candidate = rayman::toolchain::resolve_program("rayman");
+    let path_candidate = rayman::toolchain::resolve_shell_command("rayman");
     let path_hash = path_candidate
         .as_deref()
         .map(rayman::hash::sha256_file)

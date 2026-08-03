@@ -91,17 +91,21 @@ pub fn workspace_walk(root: &Path) -> WorkspaceWalk {
         .as_ref()
         .map(|tracked| tracked.directories_cmp.clone());
     builder.filter_entry(move |entry| {
-        // 只剪枝目录：名为 build/dist 的普通源码文件不应从索引里无声消失。
-        if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-            return true;
-        }
         // 工作区根本身永远保留，哪怕它恰好叫 build。
         if entry.depth() == 0 {
             return true;
         }
         let name = entry.file_name().to_string_lossy();
+        // STATE_IGNORE 是按名字剪枝，且与条目是目录还是文件无关：linked
+        // worktree / submodule 的 `.git` 是一个 gitdir 指针**文件**，此前只剪
+        // 目录，于是它进了索引与 goal fingerprint，checkpoint restore 还会用
+        // 快照里的旧指针覆盖当前指针，直接打断 worktree 的 git 链接。
         if name_matches(STATE_IGNORE, &name) {
             return false;
+        }
+        // 其余只剪枝目录：名为 build/dist 的普通源码文件不应从索引里无声消失。
+        if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            return true;
         }
         if !name_matches(VENDOR_FALLBACK_IGNORE, &name) {
             return true;
@@ -693,6 +697,26 @@ mod tests {
                 .any(|path| relative_key(workspace.path(), path) == INDEXED_STATE_POLICY)
         );
         assert!(workspace_files_checked(workspace.path()).is_err());
+    }
+
+    /// STATE_IGNORE 是按名字剪枝，与条目是目录还是文件无关：linked worktree /
+    /// submodule 的 `.git` 是 gitdir 指针**文件**，此前只剪目录，于是它进了索引
+    /// 与 goal fingerprint，checkpoint restore 还会拿快照里的旧指针覆盖当前指针，
+    /// 直接打断 worktree 的 git 链接。
+    #[test]
+    fn a_gitdir_pointer_file_never_participates_in_indexing() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::write(root.join(".git"), "gitdir: ../main-repo/.git/worktrees/wt\n").unwrap();
+        fs::write(root.join("src.rs"), "fn main() {}").unwrap();
+
+        let keys: Vec<String> = workspace_files_checked(root)
+            .unwrap()
+            .iter()
+            .map(|path| relative_key(root, path))
+            .collect();
+        assert!(keys.contains(&"src.rs".to_string()), "{keys:?}");
+        assert!(!keys.contains(&".git".to_string()), "{keys:?}");
     }
 
     /// 被 .gitignore 覆盖但被 `git add -f` 跟踪的文件曾在 ignore walker 内部

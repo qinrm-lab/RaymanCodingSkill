@@ -718,6 +718,35 @@ fn inline_tested_package_does_not_trigger_the_no_tests_warning() {
     );
 }
 
+/// 归档/改名的 `old-Cargo.toml` 不是 manifest：cargo 自己就拒绝
+/// `--manifest-path old-Cargo.toml`。裸 `ends_with("Cargo.toml")` 会把它当
+/// manifest，于是无根 manifest 的仓库被永久判为非权威拓扑，有根 manifest 的
+/// 仓库被塞进幻影包。判据与 Python 侧的 pyproject.toml 精确匹配保持一致。
+#[test]
+fn a_renamed_cargo_manifest_is_not_treated_as_a_manifest() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        root.join("old-Cargo.toml").as_path(),
+        "[package]\nname = \"oldpkg\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    );
+    write(root.join("src/lib.rs").as_path(), "pub fn x() {}\n");
+    context::refresh(root).unwrap();
+
+    let map = build_readonly(root).unwrap();
+    assert!(
+        !map.packages
+            .iter()
+            .any(|package| package.manifest_path == "old-Cargo.toml"),
+        "packages={:?}",
+        map.packages
+    );
+    assert_eq!(
+        map.topology_provenance, "no_cargo_manifest",
+        "没有真 manifest 的仓库不得被判为非权威拓扑而永久阻塞"
+    );
+}
+
 /// 嵌套 manifest 解析失败时，真实错误文本必须透传进 provenance（与根路径
 /// 同构）；此前被吞成固定字符串，cargo_unavailable 标记在此路径丢失，
 /// "缺 cargo"被误诊为仓库缺陷。

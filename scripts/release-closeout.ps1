@@ -149,14 +149,24 @@ function Get-AuthorityArguments {
     return $arguments
 }
 
+# The evidence file must be one `rayman state audit --check` allowlists.
+#
+# That audit allowlists top-level names only, and the workflow contract forbids
+# deleting state to make it pass: any other in-state path (a nested
+# `evidence/run1.json`, a differently named file) passed this check, was written
+# after the audit had already run, and then red-lined every later
+# `state audit --check` — including the one audit-repository.ps1 runs — with no
+# resolution but hand-deleting the artifact. Fail here instead, before the run.
+$script:AllowedEvidenceName = 'release-closeout-evidence.json'
+
 function Resolve-EvidencePath {
     param([string]$Path)
     $full = [IO.Path]::GetFullPath((Join-Path $repoRoot $Path))
     $stateRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot '.RaymanCodingSkill'))
+    $expected = [IO.Path]::GetFullPath((Join-Path $stateRoot $script:AllowedEvidenceName))
     $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
-    $prefix = $stateRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
-    if (-not $full.StartsWith($prefix, $comparison)) {
-        throw "EvidencePath must stay inside .RaymanCodingSkill: $full"
+    if (-not $full.Equals($expected, $comparison)) {
+        throw "EvidencePath must be the state-audit allowlisted artifact '$script:AllowedEvidenceName' directly under .RaymanCodingSkill (any other path permanently fails `rayman state audit --check`): got $full"
     }
     return $full
 }
@@ -217,6 +227,23 @@ if ($SelfTest) {
     if ($authority -notcontains '--authority' -or
         $authority[([Array]::IndexOf($authority, '--repeat') + 1)] -ne '2') {
         throw 'release closeout self-test lost mandatory authority repeat 2.'
+    }
+    # EvidencePath 必须与 `rayman state audit --check` 的白名单一致，否则一次
+    # closeout 就会让此后每一次仓库审计永久翻红（见 Resolve-EvidencePath）。
+    if ((Resolve-EvidencePath '.RaymanCodingSkill/release-closeout-evidence.json') -ne
+        [IO.Path]::GetFullPath((Join-Path $repoRoot '.RaymanCodingSkill/release-closeout-evidence.json'))) {
+        throw 'release closeout self-test rejected the allowlisted evidence path.'
+    }
+    foreach ($rejected in @(
+        '.RaymanCodingSkill/evidence/run1.json',
+        '.RaymanCodingSkill/other-evidence.json',
+        'release-closeout-evidence.json'
+    )) {
+        $accepted = $true
+        try { Resolve-EvidencePath $rejected | Out-Null } catch { $accepted = $false }
+        if ($accepted) {
+            throw "release closeout self-test accepted a state-audit-hostile EvidencePath: $rejected"
+        }
     }
     Write-Output 'release-closeout self-test: PASS'
     return
