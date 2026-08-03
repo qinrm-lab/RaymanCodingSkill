@@ -73,7 +73,18 @@ pub fn resolve_unspawnable_shim(name: &str) -> Option<PathBuf> {
 
 fn resolve_with_extensions(_name: &str, candidates: &[String]) -> Option<PathBuf> {
     let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path).find_map(|dir| {
+    resolve_in(&path, candidates)
+}
+
+/// The search itself, over an explicit `PATH` value.
+///
+/// Split out so the resolution rules can be tested without mutating the
+/// process-global `PATH`: cargo runs a binary's tests as threads of one
+/// process, so a test that rewrites `PATH` races every other test that spawns
+/// or resolves a program, and a mutex shared by only the PATH-writing tests
+/// does not exclude those.
+fn resolve_in(path: &std::ffi::OsStr, candidates: &[String]) -> Option<PathBuf> {
+    std::env::split_paths(path).find_map(|dir| {
         candidates
             .iter()
             .map(|candidate| dir.join(candidate))
@@ -83,7 +94,16 @@ fn resolve_with_extensions(_name: &str, candidates: &[String]) -> Option<PathBuf
 
 #[cfg(windows)]
 fn spawnable_file_names(name: &str) -> Vec<String> {
-    vec![format!("{name}.exe"), name.to_string()]
+    // CreateProcessW appends `.exe` to a program name that carries no extension
+    // and never tries the bare name inside a PATH directory. Admitting the bare
+    // name here reproduced the doctor-vs-gate contradiction this split exists to
+    // remove: an extensionless `cargo` on PATH probed as reachable while every
+    // spawn failed. A name that already has an extension is used as written.
+    if Path::new(name).extension().is_some() {
+        vec![name.to_string()]
+    } else {
+        vec![format!("{name}.exe")]
+    }
 }
 
 /// `PATHEXT` extensions, in the order the shell tries them.
@@ -216,33 +236,49 @@ mod tests {
         assert!(cargo.relevant);
     }
 
+    /// `Command::new` 在 Windows 给无扩展名的程序补 `.exe`，**不会**在 PATH
+    /// 目录里尝试裸名。探测若接受裸名，就复现了这个拆分本要消除的矛盾：
+    /// doctor 说可达，门禁 spawn 却 NotFound。
+    #[cfg(windows)]
+    #[test]
+    fn an_extensionless_file_on_path_is_not_reported_spawnable() {
+        let dir = tempfile::tempdir().unwrap();
+        let name = "rayman-probe-bare-xyz";
+        std::fs::write(dir.path().join(name), "not an executable").unwrap();
+        let path = std::ffi::OsString::from(dir.path());
+
+        assert!(
+            resolve_in(&path, &spawnable_file_names(name)).is_none(),
+            "探测不得声称裸名可达"
+        );
+        // 前提：Command::new 也确实启动不了它（不改全局 PATH，用绝对路径等价验证）。
+        assert!(
+            std::process::Command::new(dir.path().join(name)).output().is_err(),
+            "无扩展名文件本就不可执行"
+        );
+    }
+
     /// 探测必须与真实 spawn 语义一致：`Command::new` 在 Windows 只补 `.exe`，
     /// 不解析 PATHEXT。此前按 PATHEXT 探测，于是 doctor 报告 .bat/.cmd shim
     /// "可达"，而门禁 spawn 失败并给出"新开终端"这类完全无效的修复建议。
     #[cfg(windows)]
     #[test]
-    fn a_bat_shim_is_reported_unspawnable_with_advice_that_names_it() {
+    fn a_bat_shim_is_not_spawnable_but_is_still_visible_to_the_shell() {
         let dir = tempfile::tempdir().unwrap();
         let name = "rayman-probe-shim-xyz";
         std::fs::write(dir.path().join(format!("{name}.bat")), "@echo off\n").unwrap();
+        let path = std::ffi::OsString::from(dir.path());
 
-        let original = std::env::var_os("PATH");
-        // SAFETY: single-threaded test process; PATH is restored before return.
-        unsafe { std::env::set_var("PATH", dir.path()) };
-        let resolved = resolve_spawnable_program(name);
-        let shim = resolve_unspawnable_shim(name);
-        let advice = unreachable_tool_advice(name);
-        let spawn = std::process::Command::new(name).output();
-        match original {
-            Some(value) => unsafe { std::env::set_var("PATH", value) },
-            None => unsafe { std::env::remove_var("PATH") },
-        }
-
-        assert!(spawn.is_err(), "Command::new 无法启动 .bat，前提假设成立");
-        assert!(resolved.is_none(), "探测不得声称 .bat shim 可达");
+        assert!(
+            resolve_in(&path, &spawnable_file_names(name)).is_none(),
+            "探测不得声称 .bat shim 可达"
+        );
+        let shim = resolve_in(&path, &shim_file_names(name));
         assert!(shim.is_some(), "但必须能指出它就在 PATH 上");
-        assert!(advice.to_ascii_lowercase().contains(".bat"), "{advice}");
-        assert!(!advice.contains("新开一个终端"), "{advice}");
+        assert!(
+            resolve_in(&path, &shell_file_names(name)).is_some(),
+            "shell 语义（doctor 的身份检查）仍要看见它"
+        );
     }
 
     #[test]

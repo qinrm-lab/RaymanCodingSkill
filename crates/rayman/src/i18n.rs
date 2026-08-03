@@ -2,6 +2,16 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use clap::ValueEnum;
 pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
+    "  工具 {}: 已找到",
+    "  工具 {}: 不可达，本工作区不需要",
+    "  工具 {}: 不可达",
+    "    需要它来: {}",
+    "遗留的原子写临时项 `{name}` 不安全或无效: {error:#}",
+    "无法检查: {}",
+    "不是普通文件: {}",
+    "  工具 {}: {}",
+    "  上下文: {} → 运行 `rayman context refresh`",
+    "  上下文: {}",
     "  警告: {warning}",
     "orphan restore transaction 未能回滚，本次抢救快照可能捕获了恢复中途的工作区: {error:#}",
     "--supersedes 不能包含重复目标",
@@ -246,16 +256,12 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "非法目标 id: {id}（只允许字母、数字、下划线和连字符）",
     "验证证据说明不能为空",
     "验证命令不能启动 shell；PowerShell 脚本请用 `pwsh -NoProfile -File <script>.ps1 [参数...]` 这一种形式",
-    "工具 {detail}",
     "Cargo 拓扑权威确认（standard/release 就绪的硬前提）",
     "autosave 计划任务注册与注销",
     "找不到指定的路径",
     "未知 proof kind: {other}",
     "{TOPOLOGY_TOOL_UNAVAILABLE}: cargo 不在本进程 PATH 中",
     "{name} 不在本进程 PATH 中：安装器/工具链只改持久化 PATH，已经开着的终端不会继承；新开一个终端，或先把它的安装目录加进本进程 PATH",
-    "不可达（{}）",
-    "不可达（本工作区不需要）",
-    "已找到",
     "源码状态、跟踪文件枚举与 clean-worktree 判定",
     "环境未就绪: {}；无法确认 Cargo 拓扑",
     "无法写入 checkpoint 根目录（默认在用户目录）: {}；受限沙箱下用 --dir 指定工作区内目录，或以主机权限重试",
@@ -632,7 +638,6 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "无法读取允许的状态文件: {}",
     "无法读取工作区激活合同: {}",
     "状态锁不是安全普通文件: {}",
-    " → 运行 `rayman context refresh`",
     "archived goal 缺少 lifecycle_proof",
     "goal 包含重复 requirement id: {}",
     "work package 不存在: {package_id}",
@@ -793,7 +798,6 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "受管状态目录",
     "无待完成项。",
     "（未知时间）",
-    "  上下文: {}{}",
     "缺少 skill_file",
     "错误: {error:#}",
     "      建议: {}",
@@ -1083,6 +1087,23 @@ fn localize_line_for(line: String, language: ActiveLanguage, json_output: bool) 
                 None => localize_known_fragments(remainder_content.into(), language),
             };
             return format!("{indentation}{target}{remainder_indent}{localized_content}");
+        }
+    }
+    // A line may carry a complete authored message after a label this build
+    // prints in English already (`    BLOCKER: <authored message>`). Neither the
+    // whole-line attempt nor the prefix catalog can reach it — the prefix
+    // catalog matches Chinese heads, and the label is not one — so the payload
+    // fell through to fragment guessing and stayed Chinese under en. Try the
+    // text after each `: ` boundary as a whole authored message; anything that
+    // does not match one is left exactly as it was.
+    if language == ActiveLanguage::En {
+        let mut search = 0usize;
+        while let Some(offset) = content[search..].find(": ") {
+            let start = search + offset + ": ".len();
+            if let Some(localized) = localize_authored_message(&content[start..], language) {
+                return format!("{indentation}{}{localized}", &content[..start]);
+            }
+            search = start;
         }
     }
     localize_known_fragments(line, language)
@@ -1413,7 +1434,6 @@ const MESSAGE_PREFIX_CATALOG: &[(&str, &str)] = &[
         "实际变更 {} 个文件但缺少首次修改前的 goal plan receipt",
         "{} files changed but the goal lacks a plan receipt recorded before the first modification",
     ),
-    ("工具 {detail}", "tool {detail}"),
     (
         "Cargo 拓扑权威确认（standard/release 就绪的硬前提）",
         "authoritative Cargo topology (a hard precondition for standard/release readiness)",
@@ -1606,6 +1626,46 @@ const MESSAGE_PREFIX_CATALOG: &[(&str, &str)] = &[
 // have been extracted. Short entries are therefore safe: user titles, paths, and
 // evidence text are reinserted byte-for-byte after the static template is translated.
 const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
+    (
+        "工具 {}: 已找到",
+        "tool {}: found",
+    ),
+    (
+        "工具 {}: 不可达，本工作区不需要",
+        "tool {}: unreachable, and this workspace does not need it",
+    ),
+    (
+        "工具 {}: 不可达",
+        "tool {}: unreachable",
+    ),
+    (
+        "需要它来: {}",
+        "needed for: {}",
+    ),
+    (
+        "遗留的原子写临时项 `{name}` 不安全或无效: {error:#}",
+        "leaked atomic-write scratch entry `{name}` is unsafe or invalid: {error:#}",
+    ),
+    (
+        "无法检查: {}",
+        "could not inspect: {}",
+    ),
+    (
+        "不是普通文件: {}",
+        "is not an ordinary file: {}",
+    ),
+    (
+        "工具 {}: {}",
+        "tool {}: {}",
+    ),
+    (
+        "上下文: {} → 运行 `rayman context refresh`",
+        "context index: {} → run `rayman context refresh`",
+    ),
+    (
+        "上下文: {}",
+        "context index: {}",
+    ),
     (
         "警告: {warning}",
         "warning: {warning}",

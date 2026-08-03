@@ -139,17 +139,21 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
 /// workspace blocker.
 fn print_toolchain(probes: &[rayman::toolchain::ToolProbe]) {
     for probe in probes {
-        let state = match (probe.found, probe.relevant) {
-            (true, _) => probe.path.clone().unwrap_or_else(|| "已找到".into()),
-            (false, true) => format!("不可达（{}）", probe.required_for),
-            (false, false) => "不可达（本工作区不需要）".into(),
-        };
-        // Indentation stays outside the localized template (authored messages
-        // are matched with the line's indentation stripped), and the whole
-        // dynamic tail is one placeholder so the template re-matches its own
-        // rendering unambiguously.
-        let detail = format!("{}: {state}", probe.name);
-        let line = format!("工具 {detail}");
-        println!("  {line}");
+        // Print the state as its own complete authored line rather than nesting
+        // it in the tool line. `required_for` is itself authored Chinese that
+        // already contains full-width parens, so wrapping it in another pair
+        // produced a capture no template could match and the state stayed
+        // Chinese under en for exactly the tool whose reason is longest.
+        match (probe.found, probe.relevant) {
+            (true, _) => match probe.path.as_deref() {
+                Some(path) => println!("  工具 {}: {}", probe.name, path),
+                None => println!("  工具 {}: 已找到", probe.name),
+            },
+            (false, true) => {
+                println!("  工具 {}: 不可达", probe.name);
+                println!("    需要它来: {}", probe.required_for);
+            }
+            (false, false) => println!("  工具 {}: 不可达，本工作区不需要", probe.name),
+        }
     }
 }

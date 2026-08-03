@@ -221,12 +221,18 @@ pub fn workspace_walk(root: &Path) -> WorkspaceWalk {
             }
             let candidate = owned_root.join(relative);
             match std::fs::symlink_metadata(&candidate) {
-                Ok(metadata) if is_link_or_reparse(&metadata) => {
-                    let kind = "符号链接";
-                    report.errors.push(WalkIssue {
-                        error: format!("{kind}不会被跟随，遍历不完整: {}", candidate.display()),
-                    });
-                }
+                // A symlink only reaches the rescue when the walker never
+                // yielded it — some ignore source excluded it. Raising a fatal
+                // walk error made `.gitignore` stop being an escape for a
+                // tracked symlink and locked every walk-based command out; the
+                // walker's own silent exclusion of ignored content is what to
+                // match. Test the link bit specifically, NOT `is_link_or_reparse`:
+                // that predicate is also true for ordinary files carrying
+                // FILE_ATTRIBUTE_REPARSE_POINT (OneDrive placeholders,
+                // AppExecLink stubs), which the main walk loop indexes as plain
+                // files — dropping them here would silently disagree with the
+                // walker about the same file.
+                Ok(metadata) if metadata.file_type().is_symlink() => {}
                 Ok(metadata) if metadata.is_file() => report.files.push(candidate),
                 // 目录（子模块 gitlink 条目）：内容由 --recurse-submodules 单独列出。
                 Ok(_) => {}

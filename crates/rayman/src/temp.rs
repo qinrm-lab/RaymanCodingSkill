@@ -148,6 +148,12 @@ pub fn create_pytest_lease(root: &Path, label: &str) -> Result<PytestLease> {
         .chars()
         .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })
         .collect::<String>();
+    // Build the id from the same text the manifest stores. Deriving it from the
+    // raw argument while storing `label.trim()` made the id/label binding check
+    // reject leases this very function had just created, whenever trimming
+    // changed the sanitized value — create then failed its own verify and left
+    // an orphan no `pytest-release` could name.
+    let label = label.trim();
     let id = format!(
         "{}-{}-{}-{}",
         safe_lease_id_label(label),
@@ -172,7 +178,7 @@ pub fn create_pytest_lease(root: &Path, label: &str) -> Result<PytestLease> {
     let lease = PytestLease {
         schema: "rayman.pytest-lease.v1".into(),
         id: id.clone(),
-        label: label.trim().to_string(),
+        label: label.to_string(),
         created_at: crate::timefmt::now_iso(),
         root: path_text(&lease_root),
         basetemp: path_text(&basetemp),
@@ -534,6 +540,19 @@ mod tests {
         assert_eq!(report.traversal_error_count, 1);
         assert!(cleanup(dir.path()).is_err());
         assert!(outside.path().exists(), "cleanup must not follow the link");
+    }
+
+    /// id 从原始 label 派生、manifest 却存 trim 后的 label，会让 create 自己
+    /// 造出的 lease 通不过自己的 verify，留下一个 release 无法指名的孤儿。
+    #[test]
+    fn a_label_needing_trimming_still_creates_a_verifiable_lease() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::create_dir_all(root.join(".RaymanCodingSkill")).unwrap();
+        let lease = create_pytest_lease(root, "  spaced label  ").unwrap();
+        assert_eq!(lease.label, "spaced label");
+        assert!(verify_pytest_lease(root, &lease.id).is_ok());
+        release_pytest_lease(root, &lease.id).unwrap();
     }
 
     /// manifest 门禁必须整体比对 environment：逐键查五个已知项是子集比较，

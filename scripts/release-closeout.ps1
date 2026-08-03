@@ -60,7 +60,21 @@ function Resolve-ApplicationIdentity {
         throw "$Name must resolve directly to an Application."
     }
     $path = (Resolve-Path -LiteralPath $commands[0].Source).Path
-    return [ordered]@{ path = $path; sha256 = Get-Sha256 $path }
+    $identity = [ordered]@{ path = $path; sha256 = Get-Sha256 $path }
+    # Under rustup the toolchain binaries on PATH are shims: `rustc.exe` is
+    # byte-identical to `rustup.exe` and never changes when the active toolchain
+    # changes. Hashing the shim alone let a `rustup update` / `rustup default`
+    # between two closeouts look like an unchanged toolchain, and the reuse
+    # branch then skips the source-fresh verification entirely. Bind the
+    # reported version too, which is what actually compiles the artifact.
+    if ($Name -in @('cargo', 'rustc')) {
+        $version = & $path --version 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "$Name --version failed while binding the release toolchain identity."
+        }
+        $identity['version'] = ($version | Out-String).Trim()
+    }
+    return $identity
 }
 
 function Resolve-OrdinaryFile {
@@ -185,7 +199,15 @@ function Write-ReleaseEvidence {
         audit = 'scripts/audit-repository.ps1'
         source_fresh = 'scripts/verify-release-contract.ps1 -RequireSourceFresh'
     }
-    $temporary = "$Path.tmp-$([Guid]::NewGuid().ToString('N'))"
+    # The scratch name must be one `rayman state audit --check` tolerates. A
+    # closeout interrupted between write and rename otherwise leaves a file in
+    # `.RaymanCodingSkill/` that matches neither the allowlist nor the audit's
+    # leaked-atomic-temp shape, permanently red-lining the very gate this
+    # -EvidencePath pinning exists to protect. Mirror what `file_io` produces:
+    # `.<allowed-name>.rayman-<pid>-<counter>.tmp`.
+    $temporary = Join-Path (Split-Path -Parent $Path) (
+        '.{0}.rayman-{1}-{2}.tmp' -f (Split-Path -Leaf $Path), $PID, [Math]::Abs([Guid]::NewGuid().GetHashCode())
+    )
     try {
         [IO.File]::WriteAllText(
             $temporary,

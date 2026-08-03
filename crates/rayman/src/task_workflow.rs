@@ -11,7 +11,13 @@ use crate::cli::TaskWorkflowCmd;
 /// reference tells agents to use in workspace-only sandboxes). Consulting only
 /// the default root reported `checkpoint: none` to an agent resuming from a
 /// snapshot that exists.
-fn latest_checkpoint_across_stores(root: &Path) -> Result<Option<rayman::checkpoint::CheckpointInfo>> {
+/// Also returns the store the snapshot came from. Reporting only an id left the
+/// agent unable to act on it: `checkpoint status`/`restore` resolve `--dir`
+/// independently and default to the user-profile root, so a snapshot found in
+/// the workspace-local store was invisible to every command that could use it.
+fn latest_checkpoint_across_stores(
+    root: &Path,
+) -> Result<Option<(rayman::checkpoint::CheckpointInfo, Option<std::path::PathBuf>)>> {
     let mut stores: Vec<Option<std::path::PathBuf>> = vec![None];
     if let Some(dir) = rayman::autosave::configured_checkpoint_dir(root) {
         stores.push(Some(dir));
@@ -24,7 +30,7 @@ fn latest_checkpoint_across_stores(root: &Path) -> Result<Option<rayman::checkpo
         stores.push(Some(workspace_local));
     }
 
-    let mut best: Option<rayman::checkpoint::CheckpointInfo> = None;
+    let mut best: Option<(rayman::checkpoint::CheckpointInfo, Option<std::path::PathBuf>)> = None;
     for store in &stores {
         // A store that cannot be read (absent, denied) must not mask the others.
         let Ok(Some(candidate)) = rayman::checkpoint::latest(root, store.as_deref()) else {
@@ -35,7 +41,7 @@ fn latest_checkpoint_across_stores(root: &Path) -> Result<Option<rayman::checkpo
             .as_ref()
             .map(|manifest| manifest.created_at.clone())
             .unwrap_or_default();
-        let better = best.as_ref().is_none_or(|current| {
+        let better = best.as_ref().is_none_or(|(current, _)| {
             current
                 .manifest
                 .as_ref()
@@ -44,7 +50,7 @@ fn latest_checkpoint_across_stores(root: &Path) -> Result<Option<rayman::checkpo
                 < candidate_created
         });
         if better {
-            best = Some(candidate);
+            best = Some((candidate, store.clone()));
         }
     }
     Ok(best)
@@ -74,12 +80,25 @@ pub(crate) fn run_prepare(root: &Path, json_output: bool, cmd: TaskWorkflowCmd) 
             ))
         })?;
     let latest_checkpoint = latest_checkpoint_across_stores(root)?;
-    let latest_checkpoint = latest_checkpoint.as_ref().map(|checkpoint| {
+    let latest_checkpoint = latest_checkpoint.as_ref().map(|(checkpoint, store)| {
         json!({
             "id": checkpoint.id,
             "status": checkpoint.status,
             "created_at": checkpoint.manifest.as_ref().map(|manifest| manifest.created_at.clone()),
             "file_count": checkpoint.manifest.as_ref().map(|manifest| manifest.file_count),
+            // Without the store, `checkpoint restore <id>` cannot find it.
+            "store_dir": store.as_ref().map(|dir| rayman::pathfmt::display_path(dir)),
+            "restore_command": match store {
+                // Quote the store path: autosave --dir is routinely a profile
+                // or drive path with spaces, and an unquoted one produced a
+                // command that cannot run — the opposite of "ready-to-run".
+                Some(dir) => format!(
+                    "rayman checkpoint --dir \"{}\" restore {} --yes",
+                    rayman::pathfmt::display_path(dir),
+                    checkpoint.id
+                ),
+                None => format!("rayman checkpoint restore {} --yes", checkpoint.id),
+            },
         })
     });
     if json_output {
@@ -111,7 +130,14 @@ pub(crate) fn run_prepare(root: &Path, json_output: bool, cmd: TaskWorkflowCmd) 
             println!("  warning: {warning}");
         }
         match latest_checkpoint {
-            Some(checkpoint) => println!("  checkpoint: {}", checkpoint["id"]),
+            Some(checkpoint) => {
+                println!("  checkpoint: {}", checkpoint["id"]);
+                // The id alone is not actionable when the snapshot lives in a
+                // store the default `checkpoint restore` never looks at.
+                if let Some(command) = checkpoint["restore_command"].as_str() {
+                    println!("    restore: {command}");
+                }
+            }
             None => println!("  checkpoint: none"),
         }
         println!(

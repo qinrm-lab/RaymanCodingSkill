@@ -1448,15 +1448,15 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
                 refresh.total, refresh.reused, refresh.rehashed, refresh.removed
             );
         }
-        println!(
-            "  上下文: {}{}",
-            freshness.status,
-            if context_blocked {
-                " → 运行 `rayman context refresh`"
-            } else {
-                ""
-            }
-        );
+        // The hint is framework text, not user content, so it must not ride
+        // through a placeholder: captures are reinserted verbatim, which left
+        // `check --language en` printing a Chinese instruction. Two complete
+        // authored messages instead of one message plus a captured tail.
+        if context_blocked {
+            println!("  上下文: {} → 运行 `rayman context refresh`", freshness.status);
+        } else {
+            println!("  上下文: {}", freshness.status);
+        }
         println!(
             "  资产: 过时候选 {}，未完成标记 {}（提示，不阻塞）",
             asset_report.obsolete.len(),

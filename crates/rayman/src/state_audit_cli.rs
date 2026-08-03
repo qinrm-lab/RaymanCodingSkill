@@ -77,7 +77,18 @@ pub(crate) fn run_state_audit(root: &Path, json: bool, check: bool) -> Result<()
                         Ok(entry) => {
                             let name = entry.file_name().to_string_lossy().to_string();
                             if is_leaked_atomic_temp(&name, V2_ALLOWED) {
-                                // An uncommitted partial write, not state.
+                                // An uncommitted partial write, not state — but
+                                // it still has to BE a partial write. Skipping
+                                // the entry outright let a whole directory tree,
+                                // or a junction pointing outside the workspace,
+                                // pass the gate as clean simply by wearing the
+                                // name shape. Validate it exactly like every
+                                // other accepted entry does.
+                                if let Err(error) = audit_leaked_atomic_temp(root, &name) {
+                                    errors.push(format!(
+                                        "遗留的原子写临时项 `{name}` 不安全或无效: {error:#}"
+                                    ));
+                                }
                                 continue;
                             }
                             if !V2_ALLOWED.contains(&name.as_str()) && !is_managed_state_lock(&name)
@@ -141,6 +152,25 @@ pub(crate) fn run_state_audit(root: &Path, json: bool, check: bool) -> Result<()
 /// entry, and a link/reparse point or wrong type would otherwise make audit
 /// report `clean=true` while another command follows or later fails on it.
 /// Reuse the same state-path authority as the readers and writers.
+/// A leaked atomic-write scratch file is tolerated, but only as an ordinary
+/// file. `managed_state_file` refuses a link/reparse target, which is what stops
+/// a junction escaping the workspace from wearing the name shape.
+fn audit_leaked_atomic_temp(root: &Path, name: &str) -> Result<()> {
+    let path = rayman::state_paths::managed_state_file(root, Path::new(name), false)?;
+    match std::fs::symlink_metadata(&path) {
+        Ok(metadata) if metadata.file_type().is_file() => Ok(()),
+        Ok(_) => bail!("不是普通文件: {}", path.display()),
+        // Vanishing between `read_dir` and this stat is the *successful* end of
+        // an atomic write: the scratch file was renamed over its target. Copying
+        // the persistent-file arm from `audit_allowed_state_entry` turned a
+        // sanctioned concurrent write into a hard gate failure — measured at
+        // ~1% of audits against a concurrent writer — on the very gate this
+        // batch set out to make harder to red-line.
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| format!("无法检查: {}", path.display())),
+    }
+}
+
 fn audit_allowed_state_entry(root: &Path, name: &str) -> Result<()> {
     match name {
         "goals" => {

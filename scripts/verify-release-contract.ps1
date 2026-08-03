@@ -505,6 +505,39 @@ if ($deployedSkillHash -ne $canonicalSkillHash) {
     throw "Deployed SKILL.md SHA-256 differs from the repository canonical skill: $deployedSkillHash != $canonicalSkillHash"
 }
 
+# install-manifest.json deploys three Codex skill resources under one rollback
+# transaction, and this script is the artifact-identity primitive the release
+# contract names — but it hashed only SKILL.md, so AGENTS.md and the workflow
+# contract could be arbitrarily stale in the deployed skill and still certify.
+# Verify every resource the manifest actually deploys, relative to the deployed
+# SKILL.md's own directory (that is the deployment root).
+$manifestPath = Resolve-RequiredPath -Path (Join-Path $repoRoot 'install-manifest.json') -Label 'Install manifest'
+$manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+$deploymentRoot = Split-Path -Parent $resolvedSkill
+$verifiedSkillResources = @()
+foreach ($resource in @($manifest.codex_skill_resources)) {
+    if ($resource.destination -eq 'SKILL.md') { continue }  # already checked above
+    $deployedResource = Resolve-RequiredPath `
+        -Path (Join-Path $deploymentRoot $resource.destination) `
+        -Label "Deployed skill resource $($resource.destination)"
+    $sourceResource = Resolve-RequiredPath `
+        -Path (Join-Path $repoRoot $resource.source) `
+        -Label "Repository skill resource $($resource.source)"
+    $deployedResourceHash = Get-Sha256 -Path $deployedResource
+    $sourceResourceHash = Get-Sha256 -Path $sourceResource
+    if ($deployedResourceHash -ne $sourceResourceHash) {
+        throw "Deployed $($resource.destination) SHA-256 differs from the repository source $($resource.source): $deployedResourceHash != $sourceResourceHash"
+    }
+    $verifiedSkillResources += [pscustomobject]@{
+        Destination = $resource.destination
+        Source = $resource.source
+        DeployedPath = $deployedResource
+        SourcePath = $sourceResource
+        DeployedHash = $deployedResourceHash
+        SourceHash = $sourceResourceHash
+    }
+}
+
 $sourceFreshHash = $null
 if ($RequireSourceFresh) {
     $sourceFreshBuild = $null
@@ -587,6 +620,23 @@ if ($finalSkillPath -ne $resolvedSkill -or
     (Get-Sha256 -Path $finalSkillPath) -ne $deployedSkillHash -or
     (Get-Sha256 -Path $finalCanonicalSkill) -ne $canonicalSkillHash) {
     throw 'Deployed or repository canonical SKILL.md identity changed during verification.'
+}
+# Every other supplied/deployed identity is re-resolved and re-hashed here so a
+# concurrent replacement cannot inherit an already-validated digest. The other
+# manifest-deployed skill resources must obey the same rule as SKILL.md.
+foreach ($verified in $verifiedSkillResources) {
+    $finalDeployed = Resolve-RequiredPath `
+        -Path (Join-Path $deploymentRoot $verified.Destination) `
+        -Label "Deployed skill resource $($verified.Destination) (final check)"
+    $finalSource = Resolve-RequiredPath `
+        -Path (Join-Path $repoRoot $verified.Source) `
+        -Label "Repository skill resource $($verified.Source) (final check)"
+    if ($finalDeployed -ne $verified.DeployedPath -or
+        $finalSource -ne $verified.SourcePath -or
+        (Get-Sha256 -Path $finalDeployed) -ne $verified.DeployedHash -or
+        (Get-Sha256 -Path $finalSource) -ne $verified.SourceHash) {
+        throw "Deployed or repository $($verified.Destination) identity changed during verification."
+    }
 }
 if ($RequirePath) {
     $finalPathCli = Resolve-EffectiveRaymanApplication
