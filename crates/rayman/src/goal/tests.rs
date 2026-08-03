@@ -31,8 +31,12 @@ fn successful_receipt(
 
 /// 直接写入"仅人工声明、无 receipt"的需求状态。
 ///
-/// 生产侧的 `goal evidence` 旁路已删除（文档明言它不能支撑任何门禁），但门禁
-/// 仍必须正确处理这种历史形态，所以测试改为直接构造它。
+/// `goal evidence` 仍然是在产的命令（main.rs 的 GoalAction::Evidence →
+/// record_evidence_with_context），它记录的是尚未被机器验证的进展，按定义
+/// 不能支撑任何门禁。这个 helper 直接构造同一种形态，好让门禁测试不依赖
+/// 那条命令的具体参数形状——但**别再**据此以为生产入口不存在：它存在，
+/// 而写路径必须假定这种记录随时会出现（见
+/// close_success_requires_receipts_for_done_should_requirements）。
 fn set_legacy_evidence(root: &Path, id: &str, req_id: &str, evidence: &str) -> Goal {
     set_legacy_evidence_with_commands(root, id, req_id, evidence, Vec::new())
 }

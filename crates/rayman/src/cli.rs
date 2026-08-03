@@ -586,7 +586,10 @@ pub struct PendingCmd {
 pub enum PendingAction {
     Add {
         title: String,
-        #[arg(long = "message", short = 'm', default_value = "")]
+        /// Required: the store rejects an empty detail unconditionally, so a
+        /// `[default: ""]` here rendered an optional flag whose advertised
+        /// default invocation always failed.
+        #[arg(long = "message", short = 'm')]
         message: String,
         #[arg(long)]
         goal: Option<String>,

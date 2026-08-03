@@ -251,7 +251,12 @@ pub fn activate(root: &Path, skill_file: &Path) -> Result<WorkspaceActivationRep
     let recorded_path = canonical
         .strip_prefix(&root)
         .map(|path| path.to_string_lossy().replace('\\', "/"))
-        .unwrap_or_else(|_| canonical.display().to_string());
+        // `display()` leaks the `\\?\` verbatim prefix canonicalize() always
+        // emits on Windows, and the documented flow activates against a
+        // canonical SKILL.md *outside* the workspace, so that was the default
+        // shape of this file. Use the shared formatter the rest of the codebase
+        // uses for every user-visible and persisted path.
+        .unwrap_or_else(|_| crate::pathfmt::display_path(&canonical));
     if recorded_path.contains(['\r', '\n']) {
         bail!("skill_file 路径不能包含换行");
     }

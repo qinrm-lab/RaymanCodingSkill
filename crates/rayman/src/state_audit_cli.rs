@@ -16,7 +16,11 @@ fn is_managed_state_lock(name: &str) -> bool {
         .is_some_and(|target| STATE_LOCK_TARGETS.contains(&target))
 }
 
-const STATE_LOCK_TARGETS: &[&str] = &["pending.json", "autosave.json"];
+/// Only files a writer actually calls `acquire_state_lock` on. `autosave.json`
+/// is not one: autosave serializes on the separately allowlisted
+/// `autosave.lock`, so allowlisting `.autosave.json.rayman.lock` described a
+/// file no code path creates and quietly widened what the audit accepts.
+const STATE_LOCK_TARGETS: &[&str] = &["pending.json"];
 
 pub(crate) fn run_state_audit(root: &Path, json: bool, check: bool) -> Result<()> {
     const V2_ALLOWED: &[&str] = &[
@@ -208,10 +212,17 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let state = dir.path().join(".RaymanCodingSkill");
         std::fs::create_dir_all(&state).unwrap();
-        for lock in [".pending.json.rayman.lock", ".autosave.json.rayman.lock"] {
-            std::fs::write(state.join(lock), "").unwrap();
-        }
+        // The allowlist must describe locks a writer really creates. autosave
+        // serializes on the separately allowlisted `autosave.lock`, so
+        // `.autosave.json.rayman.lock` was an entry for a file no code path
+        // produces — and it is now refused like any other unknown state entry.
+        std::fs::write(state.join(".pending.json.rayman.lock"), "").unwrap();
+        std::fs::write(state.join("autosave.lock"), "").unwrap();
         assert!(run_state_audit(dir.path(), false, true).is_ok());
+
+        std::fs::write(state.join(".autosave.json.rayman.lock"), "").unwrap();
+        assert!(run_state_audit(dir.path(), false, true).is_err());
+        std::fs::remove_file(state.join(".autosave.json.rayman.lock")).unwrap();
 
         // Only locks for known state targets are allowed, and only as files.
         std::fs::write(state.join(".secrets.rayman.lock"), "").unwrap();

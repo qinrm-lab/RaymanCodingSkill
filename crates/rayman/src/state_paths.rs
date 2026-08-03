@@ -12,6 +12,10 @@ use std::io;
 use std::path::{Component, Path, PathBuf};
 
 use crate::file_io::is_link_or_reparse;
+// Managed-state paths are canonicalized, so raw `display()` here leaked the
+// Windows `\\?\` verbatim prefix into the write probe and into every diagnostic
+// — the prefix the rest of the codebase strips by rule.
+use crate::pathfmt::display_path;
 use anyhow::{Context, Result, bail};
 
 pub const STATE_DIR_NAME: &str = ".RaymanCodingSkill";
@@ -33,7 +37,7 @@ pub fn managed_state_root(root: &Path, create: bool) -> Result<Option<PathBuf>> 
             Ok(Some(state))
         }
         Err(error) => {
-            Err(error).with_context(|| format!("无法读取受管状态根: {}", state.display()))
+            Err(error).with_context(|| format!("无法读取受管状态根: {}", display_path(&state)))
         }
     }
 }
@@ -63,7 +67,7 @@ pub fn managed_state_dir(root: &Path, relative: &Path, create: bool) -> Result<O
             }
             Err(error) => {
                 return Err(error)
-                    .with_context(|| format!("无法读取受管状态目录: {}", current.display()));
+                    .with_context(|| format!("无法读取受管状态目录: {}", display_path(&current)));
             }
         }
     }
@@ -98,15 +102,15 @@ pub fn managed_state_file(root: &Path, relative: &Path, create_parents: bool) ->
     let path = parent.join(*name);
     match fs::symlink_metadata(&path) {
         Ok(metadata) if is_link_or_reparse(&metadata) => {
-            bail!("拒绝链接/reparse 受管状态文件: {}", path.display());
+            bail!("拒绝链接/reparse 受管状态文件: {}", display_path(&path));
         }
         Ok(metadata) if !metadata.file_type().is_file() => {
-            bail!("受管状态路径不是普通文件: {}", path.display());
+            bail!("受管状态路径不是普通文件: {}", display_path(&path));
         }
         Ok(_) => {}
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(error) => {
-            return Err(error).with_context(|| format!("无法读取受管状态文件: {}", path.display()));
+            return Err(error).with_context(|| format!("无法读取受管状态文件: {}", display_path(&path)));
         }
     }
     Ok(path)
@@ -205,7 +209,7 @@ pub fn state_write_probe(root: &Path) -> StateWriteProbe {
                 state_dir_present: true,
                 probed: true,
                 writable: true,
-                path: Some(tmp.display().to_string()),
+                path: Some(display_path(&tmp)),
                 error: cleanup.err().map(|error| error.to_string()),
             }
         }
@@ -213,7 +217,7 @@ pub fn state_write_probe(root: &Path) -> StateWriteProbe {
             state_dir_present: true,
             probed: true,
             writable: false,
-            path: Some(tmp.display().to_string()),
+            path: Some(display_path(&tmp)),
             error: Some(error.to_string()),
         },
     }
@@ -222,7 +226,7 @@ pub fn state_write_probe(root: &Path) -> StateWriteProbe {
 fn canonical_workspace_root(root: &Path) -> Result<PathBuf> {
     let workspace = root
         .canonicalize()
-        .with_context(|| format!("无法规范化工作区根: {}", root.display()))?;
+        .with_context(|| format!("无法规范化工作区根: {}", display_path(root)))?;
     ensure_real_directory(&workspace)?;
     Ok(workspace)
 }
@@ -236,13 +240,13 @@ fn ensure_real_directory_within(workspace: &Path, path: &Path) -> Result<()> {
     ensure_real_directory(path)?;
     let canonical = path
         .canonicalize()
-        .with_context(|| format!("无法规范化受管状态目录: {}", path.display()))?;
+        .with_context(|| format!("无法规范化受管状态目录: {}", display_path(path)))?;
     if !canonical.starts_with(workspace) {
         bail!(
             "受管状态目录逃逸工作区: {} -> {} (工作区: {})",
-            path.display(),
-            canonical.display(),
-            workspace.display()
+            display_path(path),
+            display_path(&canonical),
+            display_path(workspace)
         );
     }
     Ok(())
@@ -252,7 +256,7 @@ fn normal_components(relative: &Path) -> Result<Vec<&std::ffi::OsStr>> {
     let mut components = Vec::new();
     for component in relative.components() {
         let Component::Normal(part) = component else {
-            bail!("不安全的受管状态相对路径: {}", relative.display());
+            bail!("不安全的受管状态相对路径: {}", display_path(relative));
         };
         components.push(part);
     }
@@ -264,7 +268,7 @@ fn create_real_directory(path: &Path) -> Result<()> {
         Ok(()) => {}
         Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
         Err(error) => {
-            return Err(error).with_context(|| format!("无法创建受管状态目录: {}", path.display()));
+            return Err(error).with_context(|| format!("无法创建受管状态目录: {}", display_path(path)));
         }
     }
     ensure_real_directory(path)
@@ -272,10 +276,10 @@ fn create_real_directory(path: &Path) -> Result<()> {
 
 fn ensure_real_directory_metadata(path: &Path, metadata: &fs::Metadata) -> Result<()> {
     if is_link_or_reparse(metadata) {
-        bail!("拒绝链接/reparse 受管状态目录: {}", path.display());
+        bail!("拒绝链接/reparse 受管状态目录: {}", display_path(path));
     }
     if !metadata.file_type().is_dir() {
-        bail!("受管状态路径不是目录: {}", path.display());
+        bail!("受管状态路径不是目录: {}", display_path(path));
     }
     Ok(())
 }

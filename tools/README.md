@@ -98,7 +98,9 @@ cargo run -- --backend deepseek --task fix-failing-test --unsafe-host-exec   # �
 ./scripts/install-rayman.ps1 -Yes -AddToUserPath
 ```
 
-安装器只替换目标目录中的 `rayman[.exe]` 与 `SKILL.md`，写入前要求 clean source-fresh 字节一致；同目录 staging、backup move、最终替换与 Windows user PATH 更新处于同一回滚事务。`-AddToUserPath` 会把目标放到 user segment 最前，再按真实未来顺序 `Machine PATH + User PATH` 验证，机器级旧 `rayman` 在前会直接阻断；不传该开关时，当前 PATH 必须已优先解析到目标，非 Windows 传该开关会明确失败。完整交接审计只有一条命令；它要求显式给出已经安装的 application 与已部署 canonical skill：
+安装器只替换目标目录中的 `rayman[.exe]` 与 `install-manifest.json` 的
+`codex_skill_resources` 所列文件（当前为 `SKILL.md`、`AGENTS.md`、
+`references/workflow-contract.md`），写入前要求 clean source-fresh 字节一致；同目录 staging、backup move、最终替换与 Windows user PATH 更新处于同一回滚事务。`-AddToUserPath` 会把目标放到 user segment 最前，再按真实未来顺序 `Machine PATH + User PATH` 验证，机器级旧 `rayman` 在前会直接阻断；不传该开关时，当前 PATH 必须已优先解析到目标，非 Windows 传该开关会明确失败。完整交接审计只有一条命令；它要求显式给出已经安装的 application 与已部署 canonical skill：
 
 ```powershell
 ./scripts/audit-repository.ps1 `

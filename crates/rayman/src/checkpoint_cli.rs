@@ -17,7 +17,7 @@ pub fn run_checkpoint(root: &std::path::Path, json: bool, cmd: CheckpointCmd) ->
             if json {
                 crate::print(&json!({
                     "id": outcome.id,
-                    "path": outcome.path.display().to_string(),
+                    "path": rayman::pathfmt::display_path(&outcome.path),
                     "file_count": outcome.file_count,
                     "skipped_count": outcome.skipped_count,
                     "total_bytes": outcome.total_bytes,
@@ -65,7 +65,7 @@ pub fn run_checkpoint(root: &std::path::Path, json: bool, cmd: CheckpointCmd) ->
             if json {
                 crate::print(&json!({
                     "id": outcome.id,
-                    "path": outcome.path.display().to_string(),
+                    "path": rayman::pathfmt::display_path(&outcome.path),
                     "file_count": outcome.file_count,
                     "total_bytes": outcome.total_bytes,
                     "pruned": outcome.pruned,
@@ -119,9 +119,19 @@ pub fn run_checkpoint(root: &std::path::Path, json: bool, cmd: CheckpointCmd) ->
         }
         CheckpointAction::Status => {
             let latest = checkpoint::latest(root, dir)?;
+            // `latest` deliberately means "restorable standard snapshot", but
+            // reporting "no snapshots" while `list` shows recovery-only or
+            // partial ones told the user their captures did not exist. Count
+            // what is actually on disk so the two commands cannot contradict.
+            let other = if latest.is_none() {
+                checkpoint::list(root, dir).map(|all| all.len()).unwrap_or(0)
+            } else {
+                0
+            };
             if json {
                 crate::print(&json!({
                     "has_checkpoint": latest.is_some(),
+                    "non_standard_snapshots": other,
                     "latest": latest.as_ref().map(|c| json!({
                         "id": c.id,
                         "status": c.status,
@@ -146,6 +156,9 @@ pub fn run_checkpoint(root: &std::path::Path, json: bool, cmd: CheckpointCmd) ->
                             )
                         );
                     }
+                    None if other > 0 => println!(
+                        "当前工作区没有可恢复的 standard 快照；另有 {other} 份 recovery-only/partial 快照，用 `rayman checkpoint list` 查看。"
+                    ),
                     None => println!("当前工作区暂无快照。"),
                 }
             }

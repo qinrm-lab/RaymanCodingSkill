@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, bail};
 use fs2::FileExt;
 
+use crate::pathfmt::display_path;
 use crate::state_paths;
 
 /// Inter-process mutual exclusion for read-modify-write state transactions.
@@ -43,25 +44,52 @@ pub fn acquire_state_lock(target: &Path) -> Result<StateLock> {
         // Use the shared predicate: a bare `is_symlink()` check misses Windows
         // reparse points, which every other managed-state path already refuses.
         Ok(metadata) if crate::file_io::is_link_or_reparse(&metadata) || !metadata.is_file() => {
-            bail!("状态锁不是安全普通文件: {}", lock_path.display());
+            bail!("状态锁不是安全普通文件: {}", display_path(&lock_path));
         }
         Ok(_) => {}
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(error) => {
-            return Err(error).context(format!("无法检查状态锁: {}", lock_path.display()));
+            return Err(error).context(format!("无法检查状态锁: {}", display_path(&lock_path)));
         }
     }
-    let file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(&lock_path)
-        .with_context(|| format!("无法打开状态锁（权限或 ACL 拒绝）: {}", lock_path.display()))?;
+    // Opening the lock file races other rayman processes doing the same. On
+    // Windows that surfaces as a sharing violation (32/33), which the flock step
+    // below already treats as retryable contention — reporting it here as an ACL
+    // denial named the wrong cause and gave up without waiting.
+    const OPEN_TIMEOUT: Duration = Duration::from_millis(2500);
+    let open_started = Instant::now();
+    let file = loop {
+        match OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&lock_path)
+        {
+            Ok(file) => break file,
+            Err(error)
+                if is_state_lock_contention(&error) && open_started.elapsed() < OPEN_TIMEOUT =>
+            {
+                thread::sleep(Duration::from_millis(25));
+            }
+            Err(error) if is_state_lock_contention(&error) => {
+                return Err(error).context(format!(
+                    "状态锁正被另一个 rayman 进程占用: {}",
+                    display_path(&lock_path)
+                ));
+            }
+            Err(error) => {
+                return Err(error).context(format!(
+                    "无法打开状态锁（权限或 ACL 拒绝）: {}",
+                    display_path(&lock_path)
+                ));
+            }
+        }
+    };
     let metadata = fs::symlink_metadata(&lock_path)
-        .with_context(|| format!("无法复查状态锁: {}", lock_path.display()))?;
+        .with_context(|| format!("无法复查状态锁: {}", display_path(&lock_path)))?;
     if crate::file_io::is_link_or_reparse(&metadata) || !metadata.is_file() {
-        bail!("状态锁被替换为非普通文件: {}", lock_path.display());
+        bail!("状态锁被替换为非普通文件: {}", display_path(&lock_path));
     }
 
     const LOCK_TIMEOUT: Duration = Duration::from_millis(2500);
@@ -74,13 +102,13 @@ pub fn acquire_state_lock(target: &Path) -> Result<StateLock> {
             }
             Err(error) if is_state_lock_contention(&error) => bail!(
                 "状态正在被另一个 rayman 进程修改: {}；等待锁超过 {} 秒",
-                target.display(),
+                display_path(target),
                 LOCK_TIMEOUT.as_secs_f64()
             ),
             Err(error) => {
                 return Err(error).context(format!(
                     "无法取得状态独占锁（权限或 ACL 拒绝）: {}",
-                    lock_path.display()
+                    display_path(&lock_path)
                 ));
             }
         }

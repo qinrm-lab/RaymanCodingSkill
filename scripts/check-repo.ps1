@@ -60,7 +60,15 @@ Invoke-NativeChecked -Application $cargo -Arguments @(
     'test', '--manifest-path', 'evals/Cargo.toml', '--locked', '--all-targets'
 )
 $raymanName = if ($IsWindows) { 'rayman.exe' } else { 'rayman' }
-$rayman = Join-Path $repoRoot "target/debug/$raymanName"
+# The dogfood gates below must run the binary this script just built. An ambient
+# CARGO_TARGET_DIR redirects cargo's output elsewhere, which left a stale
+# target/debug binary silently running the gates.
+$targetRoot = if ($env:CARGO_TARGET_DIR) {
+    [IO.Path]::GetFullPath((Join-Path $repoRoot $env:CARGO_TARGET_DIR))
+} else {
+    Join-Path $repoRoot 'target'
+}
+$rayman = Join-Path $targetRoot "debug/$raymanName"
 if (-not (Test-Path -LiteralPath $rayman -PathType Leaf)) {
     throw "cargo test did not produce the expected debug rayman application: $rayman"
 }

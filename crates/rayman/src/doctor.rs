@@ -33,11 +33,15 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
         .unwrap_or_else(|| root.join("SKILL.md"));
     let skill_hash = activation.actual_sha256.clone();
     let metadata_hash = activation.expected_sha256.clone();
-    let metadata_matches = activation.active
-        && match (&skill_hash, &metadata_hash) {
-            (Some(actual), Some(expected)) => actual.eq_ignore_ascii_case(expected),
-            _ => false,
-        };
+    // Compare the recorded and on-disk hashes on their own terms. Folding
+    // `activation.active` into this made it unreachable as a *cause*: SKILL
+    // drift is exactly what clears `active`, so a drifted SKILL.md was reported
+    // as "workspace 未激活" while the same output printed status `invalid`.
+    let hashes_match = match (&skill_hash, &metadata_hash) {
+        (Some(actual), Some(expected)) => actual.eq_ignore_ascii_case(expected),
+        _ => false,
+    };
+    let metadata_matches = activation.active && hashes_match;
     // Doctor proves the installed identity tuple only. Source-to-artifact byte
     // identity belongs to the explicit clean-checkout repository verifier.
     let identity_ready = path_matches_running && activation.active && metadata_matches;
@@ -117,10 +121,13 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
                 "PATH 上的 rayman 与当前运行的二进制不是同一份：用仓库 release 二进制重新安装"
             });
         }
-        if !activation.active {
-            causes.push("workspace 未激活：运行 `rayman workspace activate --skill-file <canonical-SKILL.md> --yes`");
-        } else if !metadata_matches {
+        // Drift is the more specific diagnosis and must be reported first: it is
+        // what cleared `active` in the first place, so testing activation first
+        // buried it under generic "not activated" advice.
+        if !hashes_match && activation.config_present {
             causes.push("workspace SKILL.md 与记录的 skill_sha256 不一致：SKILL.md 改动后需重新 activate 重绑");
+        } else if !activation.active {
+            causes.push("workspace 未激活：运行 `rayman workspace activate --skill-file <canonical-SKILL.md> --yes`");
         }
         bail!("已安装身份契约不一致：{}", causes.join("；"));
     }

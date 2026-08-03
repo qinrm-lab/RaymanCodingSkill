@@ -558,8 +558,11 @@ impl GoalStore {
         let Some(mut goal) = Self::load_goal_file(&path)? else {
             bail!("目标不存在: {id}");
         };
-        if goal.lifecycle != GoalLifecycle::Current || goal.status != GoalStatus::Active {
-            bail!("只有 active/current 目标可以完成 work package");
+        if !goal.is_current_schema()
+            || goal.lifecycle != GoalLifecycle::Current
+            || goal.status != GoalStatus::Active
+        {
+            bail!("只有 current-schema active/current 目标可以完成 work package");
         }
         let current = workspace_fingerprint(&self.root)?;
         let Some(receipt) = goal.progress_receipts.iter().find(|receipt| {
@@ -623,8 +626,11 @@ impl GoalStore {
         let Some(mut goal) = Self::load_goal_file(&path)? else {
             bail!("目标不存在: {id}");
         };
-        if goal.lifecycle != GoalLifecycle::Current || goal.status != GoalStatus::Active {
-            bail!("只有 active/current 目标可以打开 lane");
+        if !goal.is_current_schema()
+            || goal.lifecycle != GoalLifecycle::Current
+            || goal.status != GoalStatus::Active
+        {
+            bail!("只有 current-schema active/current 目标可以打开 lane");
         }
         if goal.lanes.iter().any(|lane| lane.id == lane_id) {
             bail!("lane id 已存在: {lane_id}");
@@ -657,8 +663,8 @@ impl GoalStore {
         // retired record; without the same guard here the lane ledger of a
         // superseded goal could still be rewritten, and lane state feeds the
         // lifecycle proof.
-        if goal.lifecycle != GoalLifecycle::Current {
-            bail!("只有 current 目标可以关闭 lane");
+        if !goal.is_current_schema() || goal.lifecycle != GoalLifecycle::Current {
+            bail!("只有 current-schema current 目标可以关闭 lane");
         }
         let current = workspace_baseline(&self.root)?;
         let Some(lane) = goal.lanes.iter_mut().find(|lane| lane.id == lane_id) else {

@@ -189,12 +189,49 @@ function Invoke-LegacyProfileMigration {
     Write-Host "Removed the exact legacy rayman profile function: $($migration.Path)"
 }
 
+# Create a managed directory one component at a time, refusing any ancestor that
+# is a symlink/junction — the same rule the sibling audit script applies to this
+# very directory. `New-Item -Force` traverses an unchecked reparse point before
+# the caller ever sees the path, which would put self-test writes outside the
+# workspace.
+function New-RealManagedDirectory {
+    param([string]$Path, [string]$Label)
+
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    $root = [IO.Path]::GetPathRoot($fullPath)
+    $separators = [char[]]@(
+        [IO.Path]::DirectorySeparatorChar,
+        [IO.Path]::AltDirectorySeparatorChar
+    )
+    $segments = @(
+        $fullPath.Substring($root.Length).Split(
+            $separators,
+            [StringSplitOptions]::RemoveEmptyEntries
+        )
+    )
+    $current = $root
+    foreach ($segment in $segments) {
+        $current = Join-Path $current $segment
+        if (-not (Test-Path -LiteralPath $current)) {
+            New-Item -ItemType Directory -Path $current | Out-Null
+        }
+        $item = Get-Item -LiteralPath $current -Force
+        if (-not $item.PSIsContainer -or
+            $item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            throw "$Label ancestor must be a real directory: $current"
+        }
+    }
+    return (Resolve-Path -LiteralPath $fullPath).Path
+}
+
 function Invoke-SelfTest {
     $repoRoot = Split-Path -Parent $PSScriptRoot
-    $managedTemp = Join-Path $repoRoot '.RaymanCodingSkill/tmp'
-    New-Item -ItemType Directory -Path $managedTemp -Force | Out-Null
-    $testRoot = Join-Path $managedTemp ("profile-migration-selftest-" + [Guid]::NewGuid().ToString('N'))
-    New-Item -ItemType Directory -Path $testRoot | Out-Null
+    $managedTemp = New-RealManagedDirectory `
+        -Path (Join-Path $repoRoot '.RaymanCodingSkill/tmp') `
+        -Label 'Managed self-test temp'
+    $testRoot = New-RealManagedDirectory `
+        -Path (Join-Path $managedTemp ("profile-migration-selftest-" + [Guid]::NewGuid().ToString('N'))) `
+        -Label 'Managed self-test run'
     try {
         $legacy = Join-Path $testRoot 'legacy.ps1'
         $mixed = Join-Path $testRoot 'mixed.ps1'
