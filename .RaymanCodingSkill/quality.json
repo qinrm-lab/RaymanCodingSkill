@@ -24,9 +24,9 @@
       "reason": "Goal contracts, receipt types, and the state store intentionally form the shared fail-closed lifecycle boundary; focused goal tests, CLI integration tests, and repeated repository authority gates cover all consumers."
     },
     {
-      "path": "crates/rayman/src/goal/state_lock.rs",
+      "path": "crates/rayman/src/state_lock.rs",
       "kind": "public_api_without_test_evidence",
-      "reason": "This goal-private OS advisory-lock module exposes only parent-visible helpers; focused contention and ACL classification tests run through the goal test module and the full repository gate."
+      "reason": "This OS advisory-lock module is shared by the goal store and checkpoint restore, which is why it sits at the crate root; focused contention and ACL classification tests run through the goal test module and the full repository gate."
     },
     {
       "path": "crates/rayman/src/cli.rs",
