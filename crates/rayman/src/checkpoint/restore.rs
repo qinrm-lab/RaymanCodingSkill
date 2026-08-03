@@ -50,6 +50,18 @@ fn restore_impl_with_options(
     }
     ensure_real_directory_chain(&ws_dir)?;
     ensure_real_directory(&ws_dir)?;
+    // Lock order is fixed at autosave → checkpoint → per-file state locks,
+    // because an autosave tick takes the autosave lock and then calls
+    // `checkpoint::save`. Taking the autosave lock after the checkpoint lock
+    // here would close an ABBA cycle with every scheduled tick.
+    //
+    // Probe the managed state root first and never create it: a workspace
+    // without one has no autosave writer to race, and minting state from a
+    // read-shaped step is its own defect.
+    let _autosave_lock = match crate::state_paths::managed_state_root(&root, false)? {
+        Some(_) => Some(crate::autosave::acquire_lock(&root)?),
+        None => None,
+    };
     let _lock = CheckpointLock::acquire(&ws_dir)?;
     recover_orphaned_restore_transactions(&root, &ws_dir)?;
     let checkpoints = list(&root, override_dir)?;
@@ -100,6 +112,15 @@ fn restore_impl_with_options(
 
     let mut files = manifest.files.clone();
     files.sort_by(|a, b| a.path.cmp(&b.path));
+
+    // Managed state files have their own writers (goal receipts, pending items,
+    // autosave bookkeeping) that serialize on per-file state locks, not on the
+    // checkpoint lock. Publishing them while holding only the checkpoint lock
+    // let a concurrently committed write be silently replaced, and left a
+    // validate→rename window where restore could overwrite bytes it had just
+    // verified as unchanged. Hold the writers' own locks for the whole
+    // transaction.
+    let _state_locks = acquire_managed_state_locks(&root, &files)?;
 
     let mut transaction = create_restore_transaction(&root, &ws_dir, &files)?;
     let operation = (|| -> Result<()> {
@@ -240,6 +261,38 @@ impl TreeNameIndex {
         }
         Ok(candidates.first().cloned())
     }
+}
+
+/// Take the writers' own locks for every managed state file this restore will
+/// publish, in a fixed path order so two concurrent restores (two `--dir` stores
+/// for one workspace share no checkpoint lock) can never deadlock.
+///
+/// `autosave.json` is guarded by `autosave.lock`, which the caller already holds
+/// — see the lock-order note at the top of the restore.
+fn acquire_managed_state_locks(
+    root: &Path,
+    files: &[FileIntegrity],
+) -> Result<Vec<crate::state_lock::StateLock>> {
+    let state_prefix = format!("{}/", crate::state_paths::STATE_DIR_NAME);
+    let mut targets: Vec<PathBuf> = Vec::new();
+    for file in files {
+        let Some(relative) = file.path.strip_prefix(&state_prefix) else {
+            continue;
+        };
+        // Only files an independent writer serializes on: pending.json and the
+        // per-goal records. Context index/project map have no such writer.
+        if relative == "pending.json" || relative.starts_with("goals/") {
+            targets.push(root.join(manifest_relative_path(&file.path)?));
+        }
+    }
+    targets.sort();
+    targets.dedup();
+
+    let mut locks = Vec::with_capacity(targets.len());
+    for target in &targets {
+        locks.push(crate::state_lock::acquire_state_lock(target)?);
+    }
+    Ok(locks)
 }
 
 fn create_restore_transaction(

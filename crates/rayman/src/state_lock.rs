@@ -13,7 +13,7 @@ use crate::state_paths;
 /// A stable regular file carries an OS advisory lock. The kernel releases the
 /// lock when a process exits, so crash recovery never guesses from mtime or
 /// deletes a lock path. Permission/ACL failures remain distinct from contention.
-pub(super) struct StateLock {
+pub struct StateLock {
     file: fs::File,
 }
 
@@ -23,14 +23,14 @@ impl Drop for StateLock {
     }
 }
 
-pub(super) fn is_state_lock_contention(error: &std::io::Error) -> bool {
+pub fn is_state_lock_contention(error: &std::io::Error) -> bool {
     error.kind() == std::io::ErrorKind::WouldBlock
         // Windows LockFileEx maps real contention to sharing/lock violations.
         // ERROR_ACCESS_DENIED (5) is deliberately not retryable.
         || matches!(error.raw_os_error(), Some(32 | 33))
 }
 
-pub(super) fn acquire_state_lock(target: &Path) -> Result<StateLock> {
+pub fn acquire_state_lock(target: &Path) -> Result<StateLock> {
     let parent = target.parent().unwrap_or_else(|| Path::new("."));
     state_paths::ensure_real_directory(parent)?;
     let name = target

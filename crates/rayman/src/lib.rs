@@ -14,6 +14,7 @@ pub mod goal;
 pub mod hash;
 pub mod map;
 pub mod source_state;
+pub mod state_lock;
 pub mod state_paths;
 pub mod temp;
 pub mod toolchain;

@@ -158,6 +158,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "lifecycle-only replacement 当前 delta 与授权 proof 不一致",
     "replacement must 与被转移目标 must（含 typed proof 义务）的精确并集不一致",
     "{name} 在 PATH 上只有本进程无法启动的 {} —— rayman 用 `Command::new` 直接创建进程，Windows 只会补 `.exe`，不解析 PATHEXT；请把真正的 {name}.exe 所在目录加进 PATH（或改用提供 .exe 的安装方式）",
+    "自动停止失败: {error:#}",
     "停止状态写入失败且计划任务重注册失败：state={persist_error}; register={register_error}",
     "workspace 未激活且没有自动保存状态，无需停止",
     "workspace 未激活，跳过快照: {error:#}",
@@ -1390,6 +1391,7 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "停止状态写入失败且计划任务重注册失败：",
         "stop state write failed and scheduled-task re-registration failed: ",
     ),
+    ("自动停止失败", "auto-stop failed"),
     (
         "已隔离为 untrusted history；隔离是单向降级，审计记录必须保留，不能恢复为",
         "is quarantined as untrusted history; the quarantine is a one-way downgrade, the audit record must be retained, and it cannot be restored to",

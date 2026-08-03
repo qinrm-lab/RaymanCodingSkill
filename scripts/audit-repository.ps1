@@ -778,8 +778,13 @@ try {
     # Packaging and cargo-install are separate from a workspace build. Exercise
     # both so missing package metadata/files cannot survive until release day.
     Invoke-NativeChecked $nativeApplications.Cargo.Path @('package', '--locked', '-p', 'rayman')
+    # Anchor on $repoRoot like every sibling helper. [IO.Path]::GetFullPath
+    # resolves a relative path against [Environment]::CurrentDirectory, which
+    # Push-Location/Set-Location never update, so a pwsh started outside the repo
+    # built the smoke root under that unrelated directory and the containment
+    # check below aborted the audit ~30 minutes in.
     $smokeRoot = [IO.Path]::GetFullPath(
-        (Join-Path '.RaymanCodingSkill/tmp' ("audit-install-$PID-" + [Guid]::NewGuid().ToString('N')))
+        (Join-Path $repoRoot (Join-Path '.RaymanCodingSkill/tmp' ("audit-install-$PID-" + [Guid]::NewGuid().ToString('N'))))
     )
     $managedTempRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot '.RaymanCodingSkill/tmp'))
     $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }

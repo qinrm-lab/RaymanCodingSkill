@@ -15,10 +15,9 @@ use sha2::{Digest, Sha256};
 
 use crate::file_io::{read_json, write_json};
 use crate::state_paths;
-mod state_lock;
-use state_lock::acquire_state_lock;
+use crate::state_lock::acquire_state_lock;
 #[cfg(test)]
-use state_lock::is_state_lock_contention;
+use crate::state_lock::is_state_lock_contention;
 
 use crate::timefmt::now_iso;
 

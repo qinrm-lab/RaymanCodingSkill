@@ -5,6 +5,51 @@ use serde_json::json;
 
 use crate::cli::TaskWorkflowCmd;
 
+/// The newest verified snapshot across every store this workspace actually
+/// uses: the default user-profile root, the store autosave was configured with,
+/// and the workspace-local one the state audit allowlists (which the workflow
+/// reference tells agents to use in workspace-only sandboxes). Consulting only
+/// the default root reported `checkpoint: none` to an agent resuming from a
+/// snapshot that exists.
+fn latest_checkpoint_across_stores(root: &Path) -> Result<Option<rayman::checkpoint::CheckpointInfo>> {
+    let mut stores: Vec<Option<std::path::PathBuf>> = vec![None];
+    if let Some(dir) = rayman::autosave::configured_checkpoint_dir(root) {
+        stores.push(Some(dir));
+    }
+    let workspace_local = std::path::PathBuf::from(".RaymanCodingSkill/checkpoints");
+    if !stores
+        .iter()
+        .any(|store| store.as_deref() == Some(workspace_local.as_path()))
+    {
+        stores.push(Some(workspace_local));
+    }
+
+    let mut best: Option<rayman::checkpoint::CheckpointInfo> = None;
+    for store in &stores {
+        // A store that cannot be read (absent, denied) must not mask the others.
+        let Ok(Some(candidate)) = rayman::checkpoint::latest(root, store.as_deref()) else {
+            continue;
+        };
+        let candidate_created = candidate
+            .manifest
+            .as_ref()
+            .map(|manifest| manifest.created_at.clone())
+            .unwrap_or_default();
+        let better = best.as_ref().is_none_or(|current| {
+            current
+                .manifest
+                .as_ref()
+                .map(|manifest| manifest.created_at.clone())
+                .unwrap_or_default()
+                < candidate_created
+        });
+        if better {
+            best = Some(candidate);
+        }
+    }
+    Ok(best)
+}
+
 pub(crate) fn run_prepare(root: &Path, json_output: bool, cmd: TaskWorkflowCmd) -> Result<()> {
     let store = rayman::goal::GoalStore::new(root);
     let (goal_id, goal_status, summary, refresh, source) =
@@ -28,7 +73,7 @@ pub(crate) fn run_prepare(root: &Path, json_output: bool, cmd: TaskWorkflowCmd) 
                 rayman::source_state::inspect(root),
             ))
         })?;
-    let latest_checkpoint = rayman::checkpoint::latest(root, None)?;
+    let latest_checkpoint = latest_checkpoint_across_stores(root)?;
     let latest_checkpoint = latest_checkpoint.as_ref().map(|checkpoint| {
         json!({
             "id": checkpoint.id,

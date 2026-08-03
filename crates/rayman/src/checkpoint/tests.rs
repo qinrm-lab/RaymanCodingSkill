@@ -460,6 +460,38 @@ fn committed_orphan(
     transaction
 }
 
+/// 相对 `--dir` 必须锚在工作区根，而不是进程 cwd：autosave 把这个相对字符串
+/// 原样存进状态，计划任务却以工作区根为工作目录运行，从子目录跑一次手动 save
+/// 就会把 store 劈成两个，`checkpoint list` 互相看不见对方的快照。
+#[test]
+fn a_relative_dir_store_is_anchored_at_the_workspace_root() {
+    let ws = tempfile::tempdir().unwrap();
+    let root = ws.path();
+    write(&root.join("a.txt"), "checkpoint-a");
+    fs::create_dir_all(root.join("sub")).unwrap();
+
+    let from_root = checkpoints_root(root, Some(Path::new("ckpt"))).unwrap();
+    let canonical = root.canonicalize().unwrap();
+    assert_eq!(from_root, canonical.join("ckpt"));
+
+    // 绝对路径原样保留。
+    let absolute = ws.path().join("elsewhere");
+    assert_eq!(
+        checkpoints_root(root, Some(&absolute)).unwrap(),
+        absolute
+    );
+
+    // 存进去再列出来：同一个相对 --dir 必须命中同一个 store。
+    let saved = save(root, Some(Path::new("ckpt")), DEFAULT_KEEP).unwrap();
+    let listed = list(root, Some(Path::new("ckpt"))).unwrap();
+    assert!(
+        listed.iter().any(|entry| entry.id == saved.id),
+        "listed={:?}",
+        listed.iter().map(|entry| &entry.id).collect::<Vec<_>>()
+    );
+    assert!(canonical.join("ckpt").is_dir());
+}
+
 /// 崩溃点落在"Planned 目录记录落盘"与"Created 记录落盘"之间：目录已由本事务
 /// `create_dir` 出来，journal 里却还是 Planned。回滚此前无条件拒绝删除这种目录，
 /// 于是孤儿事务永远回滚不完，之后每一次 save/restore/autosave tick 都在工作区锁

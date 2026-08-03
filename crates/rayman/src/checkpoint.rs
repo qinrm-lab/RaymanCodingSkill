@@ -289,9 +289,18 @@ struct RestoreTransaction {
 }
 
 /// checkpoint 根：`override_dir` 优先，否则用户级默认目录。
-pub fn checkpoints_root(override_dir: Option<&Path>) -> Result<PathBuf> {
+///
+/// 相对的 `--dir` 按**工作区根**解析，不按进程 cwd：同一个 `--dir ckpt`
+/// 从工作区根和从子目录运行过去会指向两个不同的 store，而 autosave 把这个
+/// 相对字符串原样存进状态、计划任务却以工作区根为工作目录运行——手动 save
+/// 与定时 tick 于是各写各的，`checkpoint list` 看不到对方的快照。
+pub fn checkpoints_root(root: &Path, override_dir: Option<&Path>) -> Result<PathBuf> {
     if let Some(dir) = override_dir {
-        return Ok(dir.to_path_buf());
+        if dir.is_absolute() {
+            return Ok(dir.to_path_buf());
+        }
+        let anchor = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+        return Ok(anchor.join(dir));
     }
     Ok(user_data_root()?.join("Rayman").join("checkpoints"))
 }
@@ -340,7 +349,7 @@ pub fn workspace_key(root: &Path) -> String {
 }
 
 fn workspace_dir(root: &Path, override_dir: Option<&Path>) -> Result<PathBuf> {
-    Ok(checkpoints_root(override_dir)?.join(workspace_key(root)))
+    Ok(checkpoints_root(root, override_dir)?.join(workspace_key(root)))
 }
 
 /// 纳入快照的文件：工作树（gitignore 感知）+ v2 状态白名单。
@@ -507,7 +516,7 @@ fn save_with_purpose(
         .with_context(|| format!("无法规范化工作区根: {}", display_path(root)))?;
     let activation = activation_provenance(&root);
 
-    let requested_root = checkpoints_root(override_dir)?;
+    let requested_root = checkpoints_root(&root, override_dir)?;
     let (ckpt_root, ws_dir, _lock) = (|| -> Result<(PathBuf, PathBuf, CheckpointLock)> {
         ensure_real_directory_chain(&requested_root)?;
         fs::create_dir_all(&requested_root).with_context(|| {
@@ -766,7 +775,13 @@ pub fn prune_standard_snapshots(
             return Err(error)
                 .with_context(|| format!("无法检查 checkpoint 目录: {}", display_path(&ws_dir)));
         }
-        Ok(_) => ensure_real_directory(&ws_dir)?,
+        // prune 会 remove_dir_all 真实快照目录，所以它需要与 save/restore
+        // 同等的路径信任：只验最后一段，任何一层祖先被换成 junction 都能把
+        // 删除重定向到另一个 store。
+        Ok(_) => {
+            ensure_real_directory_chain(&ws_dir)?;
+            ensure_real_directory(&ws_dir)?;
+        }
     }
     let _lock = CheckpointLock::acquire(&ws_dir)?;
     prune_standard(&ws_dir, keep.max(1))

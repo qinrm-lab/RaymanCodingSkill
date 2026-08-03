@@ -30,8 +30,17 @@ const AUTOSAVE_LOCK_TIMEOUT: Duration = Duration::from_secs(30);
 /// lock file stable (rather than deleting it after unlock) prevents different
 /// processes from locking different file identities after an unlink/recreate
 /// race.
-struct AutosaveLock {
+pub struct AutosaveLock {
     file: fs::File,
+}
+
+/// Take the autosave writers' lock from outside this module.
+///
+/// `checkpoint restore` republishes `autosave.json`, which is guarded by this
+/// lock rather than by a per-file state lock, so it has to serialize against
+/// tick/stop/status like every other writer.
+pub fn acquire_lock(root: &Path) -> Result<AutosaveLock> {
+    AutosaveLock::acquire(root)
 }
 
 impl AutosaveLock {
@@ -153,6 +162,20 @@ fn state_path(root: &Path, create_parents: bool) -> Result<PathBuf> {
 /// 错误注销仍可能需要恢复的计划任务。
 fn load_state(root: &Path) -> Result<Option<AutosaveState>> {
     crate::file_io::read_json(&state_path(root, false)?)
+}
+
+/// The checkpoint store autosave was configured to write into, if any.
+///
+/// Anything that reports "the latest checkpoint" has to consult this: autosave
+/// honors `--dir`, and the workflow reference tells agents to point it at the
+/// workspace in sandboxes, so reading only the default user-profile root
+/// reports `none` for workspaces that are in fact being snapshotted.
+pub fn configured_checkpoint_dir(root: &Path) -> Option<PathBuf> {
+    load_state(root)
+        .ok()
+        .flatten()
+        .and_then(|state| state.dir)
+        .map(PathBuf::from)
 }
 
 fn save_state(root: &Path, state: &AutosaveState) -> Result<()> {
@@ -352,7 +375,22 @@ fn tick_with_scheduler(root: &Path, scheduler: &dyn TaskScheduler) -> Result<Act
     }
 
     if state.auto_stop && work_is_complete(root) {
-        finalize_with_scheduler(root, &mut state, "success (auto)", scheduler)?;
+        // 与下面的普通保存同约：tick 的任何结局都必须落进 autosave.json，
+        // 否则一个持续失败的自停（磁盘满、checkpoint 根被 ACL 拒绝）每 30
+        // 分钟静默失败一次，status 却一直显示"运行中、零失败"。
+        // finalize 内部已回滚 active 状态与计划任务注册，这里只补记账。
+        if let Err(error) = finalize_with_scheduler(root, &mut state, "success (auto)", scheduler) {
+            let now = crate::timefmt::now_iso();
+            state.consecutive_failures = state.consecutive_failures.saturating_add(1);
+            state.last_error = Some(format!("自动停止失败: {error:#}"));
+            state.last_error_at = Some(now.clone());
+            state.last_tick_at = Some(now);
+            if let Err(persist_error) = save_state(root, &state) {
+                return Err(error)
+                    .context(format!("自动保存失败状态也未能写入: {persist_error:#}"));
+            }
+            return Err(error);
+        }
         return Ok(ActionOutcome {
             message: "检测到全部目标均为 success：已存最后一次快照并停止自动保存。".into(),
             state: Some(state),
