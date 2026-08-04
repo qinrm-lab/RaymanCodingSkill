@@ -97,7 +97,7 @@ The verifier above is one release primitive, not the test suite. The single full
   -SkillPath <deployed-canonical-SKILL.md>
 ```
 
-It includes root and evals fmt/Clippy/tests/dependency policy, `cargo package` and `cargo install` smoke, context refresh, strict quality, release readiness, state/assets checks, and this installed release contract. See [AUDIT.md](AUDIT.md).
+It includes root and evals fmt/Clippy/tests/dependency policy, `cargo package` and `cargo install` smoke, context refresh, strict quality, release readiness, the `state audit --check` gate plus a report-only `assets` scan, and this installed release contract. See [AUDIT.md](AUDIT.md).
 
 For goal-bound handoff closure, `scripts/release-closeout.ps1` composes the
 audit, source-fresh verification, and the final goal authority gate. Its

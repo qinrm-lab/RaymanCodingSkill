@@ -113,28 +113,42 @@ fn restore_impl_with_options(
     let mut files = manifest.files.clone();
     files.sort_by(|a, b| a.path.cmp(&b.path));
 
+    let mut transaction = create_restore_transaction(&root, &ws_dir, &files)?;
+
+    // Staging only reads the snapshot tree and writes inside the transaction
+    // directory — it touches nothing in the workspace — and it is by far the
+    // longest phase (copy + hash-verify of every file). Taking the state locks
+    // before it made restore hold locks sized for a millisecond read-modify-write
+    // for the whole multi-minute copy, so any concurrent `goal`/`pending` write
+    // hit the 2.5 s timeout. Growing that timeout is not fixable by any constant
+    // (the hold is O(snapshot)), so shrink the hold instead.
+    let staged = stage_restore_sources(&tree, &mut transaction);
+
     // Managed state files have their own writers (goal receipts, pending items,
     // autosave bookkeeping) that serialize on per-file state locks, not on the
-    // checkpoint lock. Publishing them while holding only the checkpoint lock
-    // let a concurrently committed write be silently replaced, and left a
+    // checkpoint lock. Publishing them while holding only the checkpoint lock let
+    // a concurrently committed write be silently replaced, and left a
     // validate→rename window where restore could overwrite bytes it had just
-    // verified as unchanged. Hold the writers' own locks for the whole
-    // transaction.
-    let _state_locks =
+    // verified as unchanged.
+    //
+    // The guard MUST live in the function body, not inside the operation
+    // closure: rollback republishes those same files from `backups/`, and a
+    // closure-local guard is dropped before `finish_failed_restore` runs — which
+    // is exactly what `recover_orphaned_restore_transactions` documents as the
+    // reason it takes these locks before rolling back an orphan.
+    let state_locks =
         acquire_managed_state_locks(&root, files.iter().map(|file| file.path.clone()))?;
 
-    let mut transaction = create_restore_transaction(&root, &ws_dir, &files)?;
-    let operation = (|| -> Result<()> {
-        stage_restore_sources(&tree, &mut transaction)?;
+    let operation = staged.and_then(|()| {
         prepare_restore_destinations(&root, &mut transaction)?;
         validate_restore_destinations_unchanged(&root, &transaction)?;
         publish_restore_transaction(&root, &mut transaction, fail_on_publish_index)?;
         validate_published_restore(&root, &transaction)?;
         set_restore_phase(&mut transaction, RestorePhase::Committed)
-    })();
+    });
 
     if let Err(error) = operation {
-        return finish_failed_restore(&root, &ws_dir, &mut transaction, error);
+        return finish_failed_restore(&root, &ws_dir, &mut transaction, error, &state_locks);
     }
     remove_restore_transaction(&ws_dir, &transaction.path).with_context(|| {
         format!(
@@ -553,12 +567,19 @@ fn validate_published_restore(root: &Path, transaction: &RestoreTransaction) -> 
     Ok(())
 }
 
+/// `state_locks` is unused at runtime and required on purpose: rollback
+/// republishes managed state files from `backups/`, so the writers' per-file
+/// locks must still be held here. Taking them by reference makes the compiler
+/// reject the shape that caused a real regression — binding the guards inside
+/// the operation closure, where they are dropped before this call.
 fn finish_failed_restore(
     root: &Path,
     ws_dir: &Path,
     transaction: &mut RestoreTransaction,
     operation_error: anyhow::Error,
+    state_locks: &[crate::state_lock::StateLock],
 ) -> Result<RestoreOutcome> {
+    let _ = state_locks;
     let rollback = rollback_restore_transaction(root, transaction);
     match rollback {
         Ok(()) => match remove_restore_transaction(ws_dir, &transaction.path) {

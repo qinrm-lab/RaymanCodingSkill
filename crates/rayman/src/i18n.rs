@@ -2,6 +2,10 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use clap::ValueEnum;
 pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
+    "已存最后一次快照并停止自动保存（状态：{status}）。计划任务 '{}' 未注册。",
+    "workspace 未激活：已停止自动保存；计划任务 '{}' 未注册。最终快照已跳过；如需抢救快照，运行 `rayman checkpoint salvage-save`。",
+    "Codex hooks 正被另一个进程修改: {}；等待锁超过 {} 秒",
+    "  另有 {other} 份 recovery-only/partial 快照，用 `rayman checkpoint list` 查看。",
     "  工具 {}: 已找到",
     "  工具 {}: 不可达，本工作区不需要",
     "  工具 {}: 不可达",
@@ -1627,49 +1631,49 @@ const MESSAGE_PREFIX_CATALOG: &[(&str, &str)] = &[
 // evidence text are reinserted byte-for-byte after the static template is translated.
 const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     (
-        "工具 {}: 已找到",
-        "tool {}: found",
+        "workspace 未激活：已停止自动保存并注销计划任务 '{}'。最终快照已跳过；如需抢救快照，运行 `rayman checkpoint salvage-save`。",
+        "the workspace is not activated: autosave stopped and scheduled task '{}' was unregistered. The final snapshot was skipped; to salvage a snapshot, run `rayman checkpoint salvage-save`.",
     ),
+    (
+        "已存最后一次快照并停止自动保存（状态：{status}）。计划任务 '{}' 已注销。",
+        "saved a final snapshot and stopped autosave (status: {status}). Scheduled task '{}' was unregistered.",
+    ),
+    (
+        "已存最后一次快照并停止自动保存（状态：{status}）。计划任务 '{}' 未注册。",
+        "saved a final snapshot and stopped autosave (status: {status}). Scheduled task '{}' was not registered.",
+    ),
+    (
+        "workspace 未激活：已停止自动保存；计划任务 '{}' 未注册。最终快照已跳过；如需抢救快照，运行 `rayman checkpoint salvage-save`。",
+        "the workspace is not activated: autosave stopped; scheduled task '{}' was not registered. The final snapshot was skipped; to salvage a snapshot, run `rayman checkpoint salvage-save`.",
+    ),
+    (
+        "Codex hooks 正被另一个进程修改: {}；等待锁超过 {} 秒",
+        "Codex hooks are being modified by another process: {}; waited more than {} seconds for the lock",
+    ),
+    (
+        "另有 {other} 份 recovery-only/partial 快照，用 `rayman checkpoint list` 查看。",
+        "there are also {other} recovery-only/partial snapshots — inspect them with `rayman checkpoint list`.",
+    ),
+    ("工具 {}: 已找到", "tool {}: found"),
     (
         "工具 {}: 不可达，本工作区不需要",
         "tool {}: unreachable, and this workspace does not need it",
     ),
-    (
-        "工具 {}: 不可达",
-        "tool {}: unreachable",
-    ),
-    (
-        "需要它来: {}",
-        "needed for: {}",
-    ),
+    ("工具 {}: 不可达", "tool {}: unreachable"),
+    ("需要它来: {}", "needed for: {}"),
     (
         "遗留的原子写临时项 `{name}` 不安全或无效: {error:#}",
         "leaked atomic-write scratch entry `{name}` is unsafe or invalid: {error:#}",
     ),
-    (
-        "无法检查: {}",
-        "could not inspect: {}",
-    ),
-    (
-        "不是普通文件: {}",
-        "is not an ordinary file: {}",
-    ),
-    (
-        "工具 {}: {}",
-        "tool {}: {}",
-    ),
+    ("无法检查: {}", "could not inspect: {}"),
+    ("不是普通文件: {}", "is not an ordinary file: {}"),
+    ("工具 {}: {}", "tool {}: {}"),
     (
         "上下文: {} → 运行 `rayman context refresh`",
         "context index: {} → run `rayman context refresh`",
     ),
-    (
-        "上下文: {}",
-        "context index: {}",
-    ),
-    (
-        "警告: {warning}",
-        "warning: {warning}",
-    ),
+    ("上下文: {}", "context index: {}"),
+    ("警告: {warning}", "warning: {warning}"),
     (
         "orphan restore transaction 未能回滚，本次抢救快照可能捕获了恢复中途的工作区: {error:#}",
         "the orphan restore transaction could not be rolled back, so this salvage snapshot may have captured a workspace mid-restore: {error:#}",
@@ -1698,10 +1702,7 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "authority receipt invocation hash 无效",
         "the authority receipt's invocation hash is invalid",
     ),
-    (
-        "checkpoint 缺少 manifest",
-        "the checkpoint has no manifest",
-    ),
+    ("checkpoint 缺少 manifest", "the checkpoint has no manifest"),
     (
         "checkpoint 缺少 manifest: {}",
         "the checkpoint has no manifest: {}",
@@ -1710,10 +1711,7 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "checkpoint 路径不是普通文件: {}",
         "the checkpoint path is not an ordinary file: {}",
     ),
-    (
-        "checkpoint 路径为空",
-        "the checkpoint path is empty",
-    ),
+    ("checkpoint 路径为空", "the checkpoint path is empty"),
     (
         "context schema/workspace identity 不匹配",
         "the context schema or workspace identity does not match",
@@ -1846,10 +1844,7 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "无法创建目标状态目录",
         "could not create the goal state directory",
     ),
-    (
-        "无法同步目录: {}",
-        "could not sync the directory: {}",
-    ),
+    ("无法同步目录: {}", "could not sync the directory: {}"),
     (
         "无法回滚 restore 目标: {}",
         "could not roll back the restore target: {}",
@@ -1918,10 +1913,7 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "未知 review_priority: {right}",
         "unknown review_priority: {right}",
     ),
-    (
-        "未知 review_priority: {}",
-        "unknown review_priority: {}",
-    ),
+    ("未知 review_priority: {}", "unknown review_priority: {}"),
     (
         "未知的关闭状态: {status}（可用: success | partial | blocked）",
         "unknown close status: {status} (available: success | partial | blocked)",
@@ -1934,10 +1926,7 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "目标 {id} 已隔离为 untrusted history；隔离是单向降级，审计记录必须保留，不能恢复为 current",
         "goal {id} is quarantined as untrusted history; the quarantine is a one-way downgrade, the audit record must be retained, and it cannot be restored to current",
     ),
-    (
-        "目标标题不能为空",
-        "the goal title must not be empty",
-    ),
+    ("目标标题不能为空", "the goal title must not be empty"),
     (
         "目标状态目录不存在",
         "the goal state directory does not exist",
@@ -2350,10 +2339,7 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "归档 success 的 lifecycle proof 仍然有效；拒绝把有效证据降级为 quarantine",
         "the archived success still has a valid lifecycle proof; refusing to downgrade valid evidence to a quarantine",
     ),
-    (
-        "归档原因不能为空",
-        "the archive reason must not be empty",
-    ),
+    ("归档原因不能为空", "the archive reason must not be empty"),
     (
         "恢复前源文件完整性发生变化: {}",
         "source file integrity changed before the restore: {}",
@@ -2366,10 +2352,7 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "恢复目标是目录而非文件: {}",
         "the restore target is a directory, not a file: {}",
     ),
-    (
-        "找不到 checkpoint: {id}",
-        "checkpoint not found: {id}",
-    ),
+    ("找不到 checkpoint: {id}", "checkpoint not found: {id}"),
     (
         "拒绝关闭为 blocked：必须先记录至少一个带完整解决方案包的 human/external pending，且不能仍有 agent-owned pending",
         "refusing to close as blocked: record at least one human/external pending with a complete resolution package first, and no agent-owned pending may remain",
@@ -2402,10 +2385,7 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "拒绝链接/reparse checkpoint 路径组件: {}",
         "refusing a link/reparse checkpoint path component: {}",
     ),
-    (
-        "拒绝非普通文件: {}",
-        "refusing a non-ordinary file: {}",
-    ),
+    ("拒绝非普通文件: {}", "refusing a non-ordinary file: {}"),
     (
         "文件在读取期间变更或变为链接: {}",
         "the file changed or became a link while it was being read: {}",
@@ -2446,10 +2426,7 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "无法扫描 restore transaction: {}",
         "could not scan restore transactions: {}",
     ),
-    (
-        "无法扫描目录: {}",
-        "could not scan the directory: {}",
-    ),
+    ("无法扫描目录: {}", "could not scan the directory: {}"),
     (
         "无法持久化 restore journal: {}",
         "could not persist the restore journal: {}",
@@ -2586,10 +2563,7 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "目标 {id} 缺少开工 baseline，无法核对实际变更；请用新的 baseline-bound goal supersede，或将已完成记录显式 archive",
         "goal {id} has no starting baseline, so its actual changes cannot be checked; supersede it with a new baseline-bound goal, or archive the finished record explicitly",
     ),
-    (
-        "目标不能 supersede 自己",
-        "a goal cannot supersede itself",
-    ),
+    ("目标不能 supersede 自己", "a goal cannot supersede itself"),
     (
         "目标包含多个 plan receipt；拒绝继续使用可拆分绕过的计划状态",
         "the goal holds several plan receipts; refusing to keep using a plan state that can be bypassed by splitting",
@@ -2670,10 +2644,7 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "stop state write failed and scheduled-task re-registration failed: ",
     ),
     ("自动停止失败", "auto-stop failed"),
-    (
-        "嵌套 Cargo manifest 超过",
-        "nested Cargo manifests exceed",
-    ),
+    ("嵌套 Cargo manifest 超过", "nested Cargo manifests exceed"),
     (
         "个，已停止逐个解析；把它们纳入同一个 workspace（根 Cargo.toml 的",
         "mutually independent packages; per-manifest resolution stopped. Put them in one workspace (the root Cargo.toml's",
@@ -2685,6 +2656,13 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     (
         "路径不能以引号开头或结尾（激活合同按未加引号的标量写入）",
         "path must not start or end with a quote (the activation contract is written as an unquoted scalar)",
+    ),
+    // Whole-template pairs: composing these two lines out of fragments left
+    // run-together English ("currentworkspacehas no可restore …"), because
+    // fragment substitution has no word-boundary protection.
+    (
+        "当前工作区没有可恢复的 standard 快照；另有 {other} 份 recovery-only/partial 快照，用 `rayman checkpoint list` 查看。",
+        "This workspace has no restorable standard snapshot; there are also {other} recovery-only/partial snapshots — inspect them with `rayman checkpoint list`.",
     ),
     (
         "当前工作区没有可恢复的 standard 快照；另有",
@@ -2719,10 +2697,7 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "。最终快照已跳过；如需抢救快照，运行",
         ". The final snapshot was skipped; to salvage a snapshot, run",
     ),
-    (
-        "无法检查被跟踪文件",
-        "unable to inspect tracked file",
-    ),
+    ("无法检查被跟踪文件", "unable to inspect tracked file"),
     (
         "（含 typed proof 义务）",
         " (including typed proof obligations) ",

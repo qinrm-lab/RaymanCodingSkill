@@ -346,16 +346,30 @@ impl PendingStore {
         Ok(item)
     }
 
+    /// Remove one pending item.
+    ///
+    /// This is the only removal path, so it must not be gated on the same
+    /// load-time contract validation it is the escape from: an item that fails
+    /// `validate_contract` (a hand-edited or downgraded `pending.json`) made
+    /// `load()` hard-fail, which blocked `check` *and* every attempt to delete
+    /// the offending item, with no CLI way out. Read the list without enforcing
+    /// the contract here; every other entry point still enforces it, so an
+    /// invalid record can be removed but never used.
     pub fn resolve(&self, id: &str) -> Result<bool> {
         let path = self.path(true)?;
         let _lock = acquire_state_lock(&path)?;
-        let mut list = self.load()?;
+        let mut list: PendingList = read_json(&self.path(false)?)?.unwrap_or_default();
         let before = list.items.len();
         list.items.retain(|item| item.id != id);
         let removed = list.items.len() != before;
         if removed {
             write_json(&path, &list)?;
         }
+        // Deliberately no contract re-check on the not-found path: re-running
+        // `load()` here would restore the very lockout this escape hatch exists
+        // to break — `resolve` would fail again on an invalid file — for the
+        // sake of a nicer message. `list`/`check` still report the invalid
+        // contract, so the diagnosis is never lost, only not repeated here.
         Ok(removed)
     }
 

@@ -360,10 +360,7 @@ fn close_success_rejects_an_invalid_handoff_contract() {
         .unwrap();
     record_non_code_must_receipt(&store, dir.path(), &goal);
 
-    let path = dir
-        .path()
-        .join(GOALS_DIR)
-        .join(format!("{}.json", goal.id));
+    let path = dir.path().join(GOALS_DIR).join(format!("{}.json", goal.id));
     let mut tampered = GoalStore::load_goal_file(&path).unwrap().unwrap();
     tampered.handoff = Some(HandoffContract {
         source_goal_id: "goal_missing".into(),

@@ -214,7 +214,6 @@ pub struct SaveOutcome {
     pub id: String,
     pub path: PathBuf,
     pub file_count: usize,
-    pub skipped_count: usize,
     pub total_bytes: u64,
     pub pruned: usize,
     pub purpose: CheckpointPurpose,
@@ -671,7 +670,6 @@ fn save_with_purpose(
         id,
         path: final_dir,
         file_count: manifest.file_count,
-        skipped_count: 0,
         total_bytes: manifest.total_bytes,
         pruned,
         purpose,
@@ -832,6 +830,7 @@ fn prune_inner(ws_dir: &Path, keep_standard: Option<usize>) -> Result<usize> {
     ensure_real_directory(ws_dir)?;
     let mut standard = Vec::new();
     let mut partial = Vec::new();
+    let mut partial_recovery = Vec::new();
     let entries = fs::read_dir(ws_dir)
         .with_context(|| format!("无法列出 checkpoint 目录: {}", display_path(ws_dir)))?;
     for entry in entries {
@@ -857,28 +856,43 @@ fn prune_inner(ws_dir: &Path, keep_standard: Option<usize>) -> Result<usize> {
             continue;
         }
         let (manifest, status) = inspect_snapshot(&path);
+        // A missing/unparseable manifest defaults to Standard on purpose: an
+        // unreadable snapshot must not become permanently unrotatable. It is
+        // inert anyway, since such a snapshot classifies as Corrupt below.
+        let purpose = manifest.map(|value| value.purpose).unwrap_or_default();
         match status {
-            SnapshotStatus::Complete => {
-                match manifest.map(|value| value.purpose).unwrap_or_default() {
-                    CheckpointPurpose::Standard => standard.push(path),
-                    // Recovery-only (salvage) snapshots are intentionally never rotated:
-                    // an emergency save must never delete another recovery point. The
-                    // `recovery_only_saves_preserve_every_snapshot_and_standard_latest`
-                    // test locks this in.
-                    CheckpointPurpose::RecoveryOnly => {}
-                }
-            }
-            SnapshotStatus::Partial => partial.push(path),
+            SnapshotStatus::Complete => match purpose {
+                CheckpointPurpose::Standard => standard.push(path),
+                // Recovery-only (salvage) snapshots are intentionally never rotated:
+                // an emergency save must never delete another recovery point. The
+                // `recovery_only_saves_preserve_every_snapshot_and_standard_latest`
+                // test locks this in.
+                CheckpointPurpose::RecoveryOnly => {}
+            },
+            // Partials rotate per purpose. Pooling them let ordinary
+            // standard-save failures (an autosave tick produces one per
+            // failure) rotate away an emergency salvage capture — the one
+            // artifact a human could still hand-recover files from. Two
+            // buckets keep the "partials must not grow without bound"
+            // guarantee that MAX_PARTIAL_SNAPSHOTS exists for; exempting
+            // recovery-only partials outright would remove it, and a
+            // repeatedly failing salvage-save would accumulate forever.
+            SnapshotStatus::Partial => match purpose {
+                CheckpointPurpose::Standard => partial.push(path),
+                CheckpointPurpose::RecoveryOnly => partial_recovery.push(path),
+            },
             SnapshotStatus::Corrupt => {}
         }
     }
     standard.sort(); // 时间戳目录名字典序 = 时间序
     partial.sort();
+    partial_recovery.sort();
     let mut pruned = 0;
     if let Some(keep) = keep_standard {
         pruned += rotate_oldest(&standard, keep)?;
     }
     pruned += rotate_oldest(&partial, MAX_PARTIAL_SNAPSHOTS)?;
+    pruned += rotate_oldest(&partial_recovery, MAX_PARTIAL_SNAPSHOTS)?;
     Ok(pruned)
 }
 

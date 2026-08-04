@@ -811,7 +811,15 @@ try {
     Write-AuditPhase -Name 'workspace_self_dogfood' -Status 'start'
 
     Invoke-NativeChecked $nativeApplications.Cargo.Path @('build', '--locked', '--release', '-p', 'rayman')
-    $referenceArtifact = (Resolve-Path -LiteralPath (Join-Path 'target/release' $artifactName)).Path
+    # An ambient CARGO_TARGET_DIR sends cargo's output elsewhere, so a hardcoded
+    # target/release either fails to resolve or silently certifies a stale
+    # artifact. `[IO.Path]::Combine` (unlike Join-Path) lets an absolute value win.
+    $releaseRoot = if ($env:CARGO_TARGET_DIR) {
+        [IO.Path]::GetFullPath([IO.Path]::Combine($repoRoot, $env:CARGO_TARGET_DIR))
+    } else {
+        Join-Path $repoRoot 'target'
+    }
+    $referenceArtifact = (Resolve-Path -LiteralPath (Join-Path $releaseRoot "release/$artifactName")).Path
     $resolvedCli = (Resolve-Path -LiteralPath $CliPath).Path
     $resolvedSkill = (Resolve-Path -LiteralPath $SkillPath).Path
 
@@ -851,5 +859,5 @@ try {
     Pop-Location
 }
 
-Write-Host 'Complete repository audit passed: root/MSRV/CLI coverage, evals safety+mock provenance, package/install, strict workspace, checkpoint/state/assets, and installed release identity.'
+Write-Host 'Complete repository audit passed: root/MSRV/CLI coverage, evals safety+mock provenance, package/install, strict workspace, checkpoint and state gates plus a report-only assets scan, and installed release identity.'
 Write-AuditPhase -Name 'complete' -Status 'pass'

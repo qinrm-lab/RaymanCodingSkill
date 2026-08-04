@@ -110,7 +110,8 @@ pub fn managed_state_file(root: &Path, relative: &Path, create_parents: bool) ->
         Ok(_) => {}
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(error) => {
-            return Err(error).with_context(|| format!("无法读取受管状态文件: {}", display_path(&path)));
+            return Err(error)
+                .with_context(|| format!("无法读取受管状态文件: {}", display_path(&path)));
         }
     }
     Ok(path)
@@ -268,7 +269,8 @@ fn create_real_directory(path: &Path) -> Result<()> {
         Ok(()) => {}
         Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
         Err(error) => {
-            return Err(error).with_context(|| format!("无法创建受管状态目录: {}", display_path(path)));
+            return Err(error)
+                .with_context(|| format!("无法创建受管状态目录: {}", display_path(path)));
         }
     }
     ensure_real_directory(path)

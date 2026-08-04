@@ -17,7 +17,12 @@ use crate::cli::TaskWorkflowCmd;
 /// the workspace-local store was invisible to every command that could use it.
 fn latest_checkpoint_across_stores(
     root: &Path,
-) -> Result<Option<(rayman::checkpoint::CheckpointInfo, Option<std::path::PathBuf>)>> {
+) -> Result<
+    Option<(
+        rayman::checkpoint::CheckpointInfo,
+        Option<std::path::PathBuf>,
+    )>,
+> {
     let mut stores: Vec<Option<std::path::PathBuf>> = vec![None];
     if let Some(dir) = rayman::autosave::configured_checkpoint_dir(root) {
         stores.push(Some(dir));
@@ -30,7 +35,10 @@ fn latest_checkpoint_across_stores(
         stores.push(Some(workspace_local));
     }
 
-    let mut best: Option<(rayman::checkpoint::CheckpointInfo, Option<std::path::PathBuf>)> = None;
+    let mut best: Option<(
+        rayman::checkpoint::CheckpointInfo,
+        Option<std::path::PathBuf>,
+    )> = None;
     for store in &stores {
         // A store that cannot be read (absent, denied) must not mask the others.
         let Ok(Some(candidate)) = rayman::checkpoint::latest(root, store.as_deref()) else {

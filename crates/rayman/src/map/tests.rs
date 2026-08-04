@@ -754,7 +754,10 @@ fn a_renamed_cargo_manifest_is_not_treated_as_a_manifest() {
 fn nested_manifest_failure_propagates_the_real_error_into_provenance() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
-    write(root.join("pkg/Cargo.toml").as_path(), "[package\nbroken = \n");
+    write(
+        root.join("pkg/Cargo.toml").as_path(),
+        "[package\nbroken = \n",
+    );
     write(root.join("pkg/src/lib.rs").as_path(), "pub fn x() {}\n");
     context::refresh(root).unwrap();
 

@@ -447,7 +447,9 @@ fn pending_store_rejects_hand_tampered_owner_kind_contract() {
 
     assert!(store.list().is_err());
     assert!(store.add("new", "must not overwrite").is_err());
-    assert!(store.resolve("pending_x").is_err());
+    // `resolve` is the only removal path, so it must stay usable on an invalid
+    // file — but removing an id that is not there must still not rewrite it.
+    assert!(!store.resolve("pending_x").unwrap());
     assert_eq!(fs::read(&path).unwrap(), original);
 }
 
@@ -482,7 +484,15 @@ fn pending_store_rejects_hand_tampered_incomplete_solution_package() {
     write_json(&path, &tampered).unwrap();
 
     assert!(store.list().is_err());
-    assert!(store.resolve(&item.id).is_err());
+    // Every reading path stays fail-closed, but `resolve` — the only removal
+    // path — must be able to take the invalid item out. Gating it on the same
+    // load-time validation left `check` blocked with no CLI way to clear the
+    // record that blocked it.
+    assert!(store.resolve(&item.id).unwrap());
+    assert!(
+        store.list().unwrap().is_empty(),
+        "removing the invalid item must restore a readable store"
+    );
 }
 
 #[test]

@@ -227,6 +227,40 @@ fn probe_directory(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Does `id` have the exact shape `create_pytest_lease` produces for this
+/// sanitized label — `{label}-{timestamp}-{pid}-{sequence}`?
+///
+/// The label cannot simply be split off: the timestamp is `now_iso()` with every
+/// non-alphanumeric byte mapped to `-`, so it contains dashes of its own and the
+/// field count is not fixed. What is pinned instead is everything that does not
+/// depend on the label: the boundary must fall on a `-`, the timestamp must
+/// begin with the ISO year digit, and the last two fields must be the pure-digit
+/// pid and sequence. A bare `starts_with` accepted any label that sanitized to a
+/// *prefix* of the real one; this rejects those unless the truncation happens to
+/// leave a digit at the boundary and a digit-only tail, which the generator's own
+/// alphabet makes a far narrower opening.
+fn lease_id_matches_label(id: &str, sanitized_label: &str) -> bool {
+    let Some(rest) = id.strip_prefix(sanitized_label) else {
+        return false;
+    };
+    let Some(rest) = rest.strip_prefix('-') else {
+        return false;
+    };
+    if !rest.starts_with(|ch: char| ch.is_ascii_digit()) {
+        return false;
+    }
+    let mut tail = rest.rsplitn(3, '-');
+    let (Some(sequence), Some(pid), Some(timestamp)) = (tail.next(), tail.next(), tail.next())
+    else {
+        return false;
+    };
+    !timestamp.is_empty()
+        && !pid.is_empty()
+        && !sequence.is_empty()
+        && pid.chars().all(|ch| ch.is_ascii_digit())
+        && sequence.chars().all(|ch| ch.is_ascii_digit())
+}
+
 pub fn verify_pytest_lease(root: &Path, id: &str) -> Result<PytestLease> {
     let lease_root =
         lease_path(root, id, false)?.ok_or_else(|| anyhow::anyhow!("pytest lease 不存在: {id}"))?;
@@ -240,7 +274,9 @@ pub fn verify_pytest_lease(root: &Path, id: &str) -> Result<PytestLease> {
         || lease.id != id
         // label 是 id 的前缀来源；不比对就等于 manifest 里有一段无人校验的
         // 自由文本，改写它能让 probe 发布出与 lease 身份不符的标签。
-        || !id.starts_with(&safe_lease_id_label(&lease.label))
+        // 光用 `starts_with` 是前缀测试：任何能 sanitize 成真实 label 前缀的
+        // 篡改值都会照样通过。这里改为校验 id 的完整生成形态（见函数注释）。
+        || !lease_id_matches_label(id, &safe_lease_id_label(&lease.label))
         || lease.root != path_text(&lease_root)
         || lease.basetemp != path_text(&basetemp)
         || lease.cache_dir != path_text(&cache_dir)

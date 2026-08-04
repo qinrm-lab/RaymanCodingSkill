@@ -39,7 +39,7 @@ fn fixture() -> tempfile::TempDir {
 }
 
 #[test]
-fn installer_self_test_is_classified_as_test_without_weakening_installation() {
+fn installer_self_test_is_generic_evidence_not_a_typed_test_or_installation_proof() {
     let root = fixture();
     let installer =
         parse_validation_command("pwsh -NoProfile -File scripts/install-rayman.ps1 -Yes").unwrap();
@@ -53,7 +53,11 @@ fn installer_self_test_is_classified_as_test_without_weakening_installation() {
             "pwsh -NoProfile -File scripts/install-rayman.ps1 -SelfTest"
         )
         .unwrap(),
-        ProofKind::Test
+        // NOT ProofKind::Test: the structured test proof (listed>0, passed>0,
+        // passed+ignored==listed) is only ever demanded of cargo test / pytest
+        // invocations, so a Test label here let a typed `--must-proof test::…`
+        // obligation be discharged by a run that lists and executes zero tests.
+        ProofKind::Generic
     );
     assert_eq!(
         validation_proof_kind(
@@ -95,7 +99,10 @@ fn abbreviated_self_test_switches_never_mint_installation_evidence() {
         let command = format!("pwsh -NoProfile -File scripts/install-rayman.ps1 {switch}");
         assert_eq!(
             validation_proof_kind(root.path(), &command).unwrap(),
-            ProofKind::Test,
+            // Generic, not Test: a self-test proves neither an installation nor
+            // a test execution, and a Test label made it satisfy a typed
+            // `--must-proof test::…` obligation with zero tests run.
+            ProofKind::Generic,
             "{switch} must not be installation evidence"
         );
         let parsed = parse_validation_command(&command).unwrap();

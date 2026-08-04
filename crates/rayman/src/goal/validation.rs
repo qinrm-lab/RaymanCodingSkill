@@ -293,10 +293,18 @@ pub fn validation_proof_kind(root: &Path, command: &str) -> Result<ProofKind> {
         return Ok(ProofKind::RepositoryGate);
     }
     if script == "install-rayman.ps1" {
+        // A `-SelfTest` run installs nothing, so it is not installation
+        // evidence — but it is not test-execution evidence either. Labelling it
+        // `Test` made a typed `--must-proof test::…` requirement satisfiable by
+        // a run that lists and executes zero tests: the structured test proof
+        // (listed>0, passed>0, passed+ignored==listed, plus independent list
+        // digests) is only ever demanded of `cargo test`/`pytest` invocations,
+        // which this is not. `Generic` is the truthful label: it still records
+        // real evidence, it just cannot stand in for a typed obligation.
         return Ok(if release_installer_invocation(root, &parsed) {
             ProofKind::Installation
         } else {
-            ProofKind::Test
+            ProofKind::Generic
         });
     }
     if script == "check-agent-instructions.ps1"
@@ -444,6 +452,18 @@ fn validate_test_execution_mode(command: &ParsedValidationCommand) -> Result<()>
 
 pub fn validate_command_security(root: &Path, command: &ParsedValidationCommand) -> Result<()> {
     validate_test_execution_mode(command)?;
+    validate_command_containment(root, command)
+}
+
+/// The spawn-safety half of [`validate_command_security`], without the
+/// test-execution-mode rule.
+///
+/// `goal progress` records explicitly non-authoritative evidence, so demanding
+/// that a test command actually execute tests (a receipt-grade rule) rejected
+/// legitimate progress commands like a collect-only dry run. It still must not
+/// be able to spawn anything the validation path refuses, which is exactly what
+/// this half enforces.
+pub fn validate_command_containment(root: &Path, command: &ParsedValidationCommand) -> Result<()> {
     let Some(script) = powershell_script(command) else {
         return Ok(());
     };

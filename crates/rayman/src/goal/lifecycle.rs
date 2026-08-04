@@ -1493,7 +1493,9 @@ pub fn replacement_authority_error(goal: &Goal, root: &Path, fingerprint: &str) 
     }
     if must_transfer_multiset(std::iter::once(goal)) != must_transfer_multiset(predecessors.iter())
     {
-        return Some("replacement must 与被转移目标 must（含 typed proof 义务）的精确并集不一致".into());
+        return Some(
+            "replacement must 与被转移目标 must（含 typed proof 义务）的精确并集不一致".into(),
+        );
     }
     if let Some(error) = replacement_delta_scope_error(&predecessors, &proof.source_delta_paths) {
         return Some(error);

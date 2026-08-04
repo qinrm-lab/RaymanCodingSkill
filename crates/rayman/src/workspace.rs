@@ -7,6 +7,7 @@ use serde::Serialize;
 
 use crate::file_io::write_atomic;
 use crate::hash::sha256_file;
+use crate::pathfmt::display_path;
 use crate::state_paths;
 
 const ACTIVATION_RELATIVE: &str = "workspace_skill.yaml";
@@ -101,7 +102,7 @@ pub fn activation_status(root: &Path) -> Result<WorkspaceActivationReport> {
         }
         Ok(_) => bail!(
             "workspace_skill.yaml 必须是普通非链接文件: {}",
-            config_path.display()
+            display_path(config_path.as_ref())
         ),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
         Err(error) => return Err(error).context("无法检查 workspace_skill.yaml"),
@@ -133,8 +134,12 @@ pub fn activation_status(root: &Path) -> Result<WorkspaceActivationReport> {
         });
     }
 
-    let text = fs::read_to_string(&config_path)
-        .with_context(|| format!("无法读取工作区激活合同: {}", config_path.display()))?;
+    let text = fs::read_to_string(&config_path).with_context(|| {
+        format!(
+            "无法读取工作区激活合同: {}",
+            display_path(config_path.as_ref())
+        )
+    })?;
     let fields = parse_activation(&text)?;
     let skill = fields.get("skill").cloned();
     let enabled = fields
@@ -166,17 +171,26 @@ pub fn activation_status(root: &Path) -> Result<WorkspaceActivationReport> {
                 match sha256_file(&path) {
                     Ok(hash) => Some(hash),
                     Err(error) => {
-                        issues.push(format!("无法哈希 skill_file {}: {error}", path.display()));
+                        issues.push(format!(
+                            "无法哈希 skill_file {}: {error}",
+                            display_path(path.as_ref())
+                        ));
                         None
                     }
                 }
             }
             Ok(_) => {
-                issues.push(format!("skill_file 不是普通非链接文件: {}", path.display()));
+                issues.push(format!(
+                    "skill_file 不是普通非链接文件: {}",
+                    display_path(path.as_ref())
+                ));
                 None
             }
             Err(error) => {
-                issues.push(format!("skill_file 不可读取 {}: {error}", path.display()));
+                issues.push(format!(
+                    "skill_file 不可读取 {}: {error}",
+                    display_path(path.as_ref())
+                ));
                 None
             }
         }
@@ -239,11 +253,11 @@ pub fn activate(root: &Path, skill_file: &Path) -> Result<WorkspaceActivationRep
         root.join(skill_file)
     };
     let metadata = fs::symlink_metadata(&lexical)
-        .with_context(|| format!("无法读取 canonical skill: {}", lexical.display()))?;
+        .with_context(|| format!("无法读取 canonical skill: {}", display_path(&lexical)))?;
     if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
         bail!(
             "canonical skill 必须是普通非链接文件: {}",
-            lexical.display()
+            display_path(&lexical)
         );
     }
     let canonical = lexical.canonicalize()?;

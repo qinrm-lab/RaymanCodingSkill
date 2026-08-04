@@ -1453,7 +1453,10 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
         // `check --language en` printing a Chinese instruction. Two complete
         // authored messages instead of one message plus a captured tail.
         if context_blocked {
-            println!("  上下文: {} → 运行 `rayman context refresh`", freshness.status);
+            println!(
+                "  上下文: {} → 运行 `rayman context refresh`",
+                freshness.status
+            );
         } else {
             println!("  上下文: {}", freshness.status);
         }

@@ -42,14 +42,12 @@ fn is_leaked_atomic_temp(name: &str, allowed: &[&str]) -> bool {
         return false;
     };
     allowed.contains(&base)
-        && suffix
-            .split_once('-')
-            .is_some_and(|(pid, counter)| {
-                !pid.is_empty()
-                    && !counter.is_empty()
-                    && pid.chars().all(|c| c.is_ascii_digit())
-                    && counter.chars().all(|c| c.is_ascii_digit())
-            })
+        && suffix.split_once('-').is_some_and(|(pid, counter)| {
+            !pid.is_empty()
+                && !counter.is_empty()
+                && pid.chars().all(|c| c.is_ascii_digit())
+                && counter.chars().all(|c| c.is_ascii_digit())
+        })
 }
 
 pub(crate) fn run_state_audit(root: &Path, json: bool, check: bool) -> Result<()> {

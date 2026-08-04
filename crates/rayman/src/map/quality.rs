@@ -592,13 +592,29 @@ pub(super) fn infer_risks(
     risks
 }
 
-/// A Cargo binary crate root, at any nesting depth (`src/main.rs`,
-/// `crates/x/src/main.rs`, `src/bin/foo.rs`).
+/// A Cargo binary crate root, at any nesting depth.
+///
+/// Exactly the two shapes cargo auto-discovers — `…/src/main.rs` and
+/// `…/src/bin/<name>.rs` or `…/src/bin/<name>/main.rs` — and nothing else. A
+/// bare `src/bin/` prefix would be the directory-shaped escape hatch
+/// `docs/QUALITY_POLICY.md` forbids: it would exempt every file nested anywhere
+/// under a `bin` directory, including ordinary modules that a test can import
+/// and therefore should be held to the coverage rule.
 fn is_crate_binary_root(path: &str) -> bool {
-    path == "src/main.rs"
-        || path.ends_with("/src/main.rs")
-        || path.starts_with("src/bin/")
-        || path.contains("/src/bin/")
+    if path == "src/main.rs" || path.ends_with("/src/main.rs") {
+        return true;
+    }
+    let Some(rest) = path
+        .strip_prefix("src/bin/")
+        .or_else(|| path.split_once("/src/bin/").map(|(_, rest)| rest))
+    else {
+        return false;
+    };
+    match rest.split('/').collect::<Vec<_>>().as_slice() {
+        [file] => file.ends_with(".rs"),
+        [_directory, "main.rs"] => true,
+        _ => false,
+    }
 }
 
 fn large_file_warning_lines(kind: &str) -> usize {

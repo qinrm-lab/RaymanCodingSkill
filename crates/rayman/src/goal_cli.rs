@@ -237,8 +237,11 @@ pub fn run_progress(
     let parsed = goal::parse_validation_command(&command)?;
     // `goal validate` runs this before spawning anything (it refuses shells,
     // control operators and command substitution). progress spawns the very same
-    // way, so skipping it here made the weaker twin path the easy one.
-    goal::validate_command_security(root, &parsed)?;
+    // way, so skipping it here made the weaker twin path the easy one. Only the
+    // containment half applies: progress records explicitly non-authoritative
+    // evidence, so the receipt-grade "a test command must execute tests" rule
+    // would reject legitimate progress commands such as a collect-only run.
+    goal::validate_command_containment(root, &parsed)?;
     let before = goal::workspace_fingerprint(root)?;
     let output = run_validation_command(root, &parsed)?;
     let after = goal::workspace_fingerprint(root)?;

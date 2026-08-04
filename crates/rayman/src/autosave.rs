@@ -461,7 +461,7 @@ fn stop_with_scheduler(
         let was_active = state.active;
         let interval_min = state.interval_min;
         let rollback_name = state.task_name.clone();
-        let _removed = scheduler.unregister(&state.task_name)?;
+        let removed = scheduler.unregister(&state.task_name)?;
         let now = crate::timefmt::now_iso();
         state.active = false;
         state.stopped_at = Some(now.clone());
@@ -483,10 +483,17 @@ fn stop_with_scheduler(
             return Err(persist_error);
         }
         return Ok(ActionOutcome {
-            message: format!(
-                "workspace 未激活：已停止自动保存并注销计划任务 '{}'。最终快照已跳过；如需抢救快照，运行 `rayman checkpoint salvage-save`。",
-                state.task_name
-            ),
+            message: if removed {
+                format!(
+                    "workspace 未激活：已停止自动保存并注销计划任务 '{}'。最终快照已跳过；如需抢救快照，运行 `rayman checkpoint salvage-save`。",
+                    state.task_name
+                )
+            } else {
+                format!(
+                    "workspace 未激活：已停止自动保存；计划任务 '{}' 未注册。最终快照已跳过；如需抢救快照，运行 `rayman checkpoint salvage-save`。",
+                    state.task_name
+                )
+            },
             state: Some(state),
         });
     }
@@ -508,12 +515,19 @@ fn stop_with_scheduler(
             last_error_at: None,
         },
     };
-    finalize_with_scheduler(root, &mut state, status, scheduler)?;
+    let removed = finalize_with_scheduler(root, &mut state, status, scheduler)?;
     Ok(ActionOutcome {
-        message: format!(
-            "已存最后一次快照并停止自动保存（状态：{status}）。计划任务 '{}' 已注销。",
-            state.task_name
-        ),
+        message: if removed {
+            format!(
+                "已存最后一次快照并停止自动保存（状态：{status}）。计划任务 '{}' 已注销。",
+                state.task_name
+            )
+        } else {
+            format!(
+                "已存最后一次快照并停止自动保存（状态：{status}）。计划任务 '{}' 未注册。",
+                state.task_name
+            )
+        },
         state: Some(state),
     })
 }
@@ -524,7 +538,7 @@ fn finalize_with_scheduler(
     state: &mut AutosaveState,
     status: &str,
     scheduler: &dyn TaskScheduler,
-) -> Result<()> {
+) -> Result<bool> {
     let task_name = state.task_name.clone();
     let persist_rollback_name = task_name.clone();
     let checkpoint_rollback_name = task_name.clone();
@@ -546,7 +560,7 @@ fn finalize_with<F, R, C>(
     unregister: F,
     reregister: R,
     checkpoint_reregister: C,
-) -> Result<()>
+) -> Result<bool>
 where
     F: FnOnce() -> Result<bool>,
     R: FnOnce() -> Result<()>,
@@ -556,7 +570,7 @@ where
     // 不能伪造“已最终保存并停止”的结果。
     let original = state.clone();
     checkpoint::save(root, dir_override(&state.dir).as_deref(), state.keep)?;
-    finalize_state_with(
+    let removed = finalize_state_with(
         state,
         status,
         unregister,
@@ -585,7 +599,7 @@ where
         }
         return Err(checkpoint_error);
     }
-    Ok(())
+    Ok(removed)
 }
 
 fn finalize_state_with<F, P, R>(
@@ -594,7 +608,7 @@ fn finalize_state_with<F, P, R>(
     unregister: F,
     persist: P,
     reregister: R,
-) -> Result<()>
+) -> Result<bool>
 where
     F: FnOnce() -> Result<bool>,
     P: FnOnce(&AutosaveState) -> Result<()>,
@@ -602,7 +616,10 @@ where
 {
     // 注销失败时也必须保持 persisted active 状态；否则任务仍在运行，而 status
     // 和 stop 输出却会谎报已经停止。
-    let _removed = unregister()?;
+    //
+    // 返回值同样重要：`unregister` 报告"本来就没注册"时，调用方不得输出
+    // "计划任务已注销"——那是对用户说了一件没发生的事。
+    let removed = unregister()?;
     let was_active = state.active;
     let mut stopped = state.clone();
     stopped.active = false;
@@ -625,7 +642,7 @@ where
         return Err(state_error);
     }
     *state = stopped;
-    Ok(())
+    Ok(removed)
 }
 
 fn activate_state_with<F, R>(
@@ -1659,7 +1676,9 @@ mod tests {
         );
         assert!(persisted.last_error_at.is_some());
         assert!(
-            checkpoint::list(root, Some(store.path())).unwrap().is_empty(),
+            checkpoint::list(root, Some(store.path()))
+                .unwrap()
+                .is_empty(),
             "激活破损的工作区不得铸造 standard 快照"
         );
         let message = status_with_scheduler(root, &AbsentScheduler)
@@ -1695,7 +1714,9 @@ mod tests {
         );
         assert!(!load_state(root).unwrap().unwrap().active);
         assert!(
-            checkpoint::list(root, Some(store.path())).unwrap().is_empty(),
+            checkpoint::list(root, Some(store.path()))
+                .unwrap()
+                .is_empty(),
             "激活破损的工作区不得铸造 standard 最终快照"
         );
     }

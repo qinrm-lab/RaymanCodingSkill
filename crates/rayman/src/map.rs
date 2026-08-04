@@ -645,16 +645,33 @@ fn nested_cargo_metadata_topology(
     // the skip-set was seeded with manifests cargo had never parsed: one
     // invocation marked the whole repo covered, and a manifest cargo rejects
     // sailed through as authoritative `cargo_metadata` topology.
+    // Each run also returns heuristic entries for the manifests cargo did not
+    // resolve, so the same manifest appears in several runs. Keep the entry
+    // produced by that manifest's OWN run — plain first-wins dedup kept an
+    // earlier run's guess, which mislabels workspace membership and yields a
+    // `cargo test -p <name>` recommendation that cannot run.
+    let mut authoritative: BTreeSet<String> = BTreeSet::new();
+    let mut by_manifest: BTreeMap<String, PackageEntry> = BTreeMap::new();
     for manifest in manifests {
         let (found, deps) = match cargo_metadata_at(root, index, Some(manifest)) {
             Ok(result) => result,
             Err(error) => return Some(Err(error)),
         };
-        packages.extend(found);
+        for package in found {
+            let own_run = package.manifest_path == manifest;
+            if own_run {
+                authoritative.insert(package.manifest_path.clone());
+                by_manifest.insert(package.manifest_path.clone(), package);
+            } else if !authoritative.contains(&package.manifest_path) {
+                by_manifest
+                    .entry(package.manifest_path.clone())
+                    .or_insert(package);
+            }
+        }
         dependencies.extend(deps);
     }
+    packages.extend(by_manifest.into_values());
     packages.sort_by(|left, right| left.manifest_path.cmp(&right.manifest_path));
-    packages.dedup_by(|left, right| left.manifest_path == right.manifest_path);
     dependencies.sort_by(|left, right| {
         (
             &left.from_package,
@@ -937,8 +954,7 @@ fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
                 // 吞掉错误换成固定字符串，"缺 cargo"被误诊为仓库损坏。
                 let workspace = read_workspace_info(root, index)?;
                 let packages = discover_packages(root, index, &workspace)?;
-                let dependencies =
-                    infer_package_dependencies(root, index, &packages, &workspace)?;
+                let dependencies = infer_package_dependencies(root, index, &packages, &workspace)?;
                 (
                     packages,
                     dependencies,

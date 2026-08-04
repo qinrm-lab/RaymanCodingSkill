@@ -41,6 +41,18 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
         (Some(actual), Some(expected)) => actual.eq_ignore_ascii_case(expected),
         _ => false,
     };
+    // Drift means "a hash was recorded and the file no longer matches it".
+    // Reporting drift whenever a contract file merely exists misdiagnosed the
+    // deactivated workspace — `deactivate` writes a contract with no
+    // skill_file/skill_sha256 at all — and made the "not activated" cause
+    // unreachable for it.
+    //
+    // Only the RECORDED hash may gate this. Also requiring the on-disk hash
+    // meant a bound SKILL.md that was deleted or replaced by a link — which
+    // leaves `actual_sha256` as None — stopped being diagnosed as drift and
+    // fell back to generic "not activated" advice, the same misdiagnosis in
+    // the other direction.
+    let hashes_recorded = metadata_hash.is_some();
     let metadata_matches = activation.active && hashes_match;
     // Doctor proves the installed identity tuple only. Source-to-artifact byte
     // identity belongs to the explicit clean-checkout repository verifier.
@@ -124,7 +136,7 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
         // Drift is the more specific diagnosis and must be reported first: it is
         // what cleared `active` in the first place, so testing activation first
         // buried it under generic "not activated" advice.
-        if !hashes_match && activation.config_present {
+        if hashes_recorded && !hashes_match {
             causes.push("workspace SKILL.md 与记录的 skill_sha256 不一致：SKILL.md 改动后需重新 activate 重绑");
         } else if !activation.active {
             causes.push("workspace 未激活：运行 `rayman workspace activate --skill-file <canonical-SKILL.md> --yes`");
@@ -152,6 +164,15 @@ fn print_toolchain(probes: &[rayman::toolchain::ToolProbe]) {
             (false, true) => {
                 println!("  工具 {}: 不可达", probe.name);
                 println!("    需要它来: {}", probe.required_for);
+                // The JSON report carries `unspawnable_shim`, but the human
+                // surface dropped it, so a `.bat`/`.cmd` shim on PATH looked
+                // identical to a missing tool and got repair advice that cannot
+                // work. `unreachable_tool_advice` already distinguishes the two
+                // and both of its strings are registered for en.
+                println!(
+                    "    {}",
+                    rayman::toolchain::unreachable_tool_advice(probe.name)
+                );
             }
             (false, false) => println!("  工具 {}: 不可达，本工作区不需要", probe.name),
         }

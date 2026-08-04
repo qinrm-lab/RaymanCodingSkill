@@ -175,7 +175,10 @@ pub fn toolchain_probe(root: &Path) -> Vec<ToolProbe> {
 
 fn probe(name: &'static str, required_for: &'static str, relevant: bool) -> ToolProbe {
     let resolved = resolve_spawnable_program(name);
-    let shim = resolved.is_none().then(|| resolve_unspawnable_shim(name)).flatten();
+    let shim = resolved
+        .is_none()
+        .then(|| resolve_unspawnable_shim(name))
+        .flatten();
     ToolProbe {
         name,
         required_for,
@@ -253,7 +256,9 @@ mod tests {
         );
         // 前提：Command::new 也确实启动不了它（不改全局 PATH，用绝对路径等价验证）。
         assert!(
-            std::process::Command::new(dir.path().join(name)).output().is_err(),
+            std::process::Command::new(dir.path().join(name))
+                .output()
+                .is_err(),
             "无扩展名文件本就不可执行"
         );
     }

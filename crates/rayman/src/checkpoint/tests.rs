@@ -317,6 +317,62 @@ fn restore_rollback_removes_new_file_and_new_parent_directory() {
     assert_eq!(fs::read_to_string(root.join("z.txt")).unwrap(), "live-z");
 }
 
+/// 回滚会把 `backups/` 里的受管状态文件写回工作区，所以它必须仍然持有那些文件
+/// 写者用的 per-file 状态锁。
+///
+/// 曾把取锁移进 `operation` 闭包以缩短持锁窗口——闭包一返回 guard 就析构，于是
+/// `finish_failed_restore` 的整个回滚在无锁下改写 `pending.json` 与 `goals/*.json`；
+/// 同一文件的孤儿恢复路径注释里正写着不许这样。
+///
+/// 真正钉住这条不变量的是**类型**：`finish_failed_restore` 取一个
+/// `&[StateLock]` 参数，所以 guard 必须在调用点仍然活着，闭包内绑定的写法根本
+/// 编译不过。计时探针做不到这一点——本地跑过一版 2ms 轮询的探针，把回归改回去
+/// 它照样通过。这个测试只覆盖行为侧：失败的 restore 必须完整回滚且不留锁。
+#[test]
+fn rollback_still_holds_the_managed_state_locks() {
+    let ws = tempfile::tempdir().unwrap();
+    let store = tempfile::tempdir().unwrap();
+    let root = ws.path();
+    crate::workspace::activate(root, &root.join("SKILL.md")).ok();
+    write(&root.join("SKILL.md"), "skill");
+    write(&root.join("z.txt"), "checkpoint-z");
+    // A managed state file must be in the snapshot for the locks to be taken.
+    let pending = crate::goal::PendingStore::new(root);
+    pending.add("boundary", "needs a human").unwrap();
+
+    let saved = save(root, Some(store.path()), DEFAULT_KEEP).unwrap();
+    let manifest = verify_snapshot(&saved.path).unwrap();
+    assert!(
+        manifest
+            .files
+            .iter()
+            .any(|file| file.path.ends_with("pending.json")),
+        "fixture must snapshot a managed state file: {:?}",
+        manifest.files.iter().map(|f| &f.path).collect::<Vec<_>>()
+    );
+
+    write(&root.join("z.txt"), "live-z");
+    let pending_before = fs::read(root.join(".RaymanCodingSkill").join("pending.json")).unwrap();
+
+    let error = restore_impl(root, Some(store.path()), Some(&saved.id), Some(1))
+        .err()
+        .expect("fault injection must fail the restore");
+    let error = format!("{error:#}");
+    assert!(error.contains("已完整回滚"), "{error}");
+
+    // Rollback restored the managed state file it had republished.
+    assert_eq!(
+        fs::read(root.join(".RaymanCodingSkill").join("pending.json")).unwrap(),
+        pending_before
+    );
+    // And it released the locks, so the next writer is not blocked.
+    let state_file = root.join(".RaymanCodingSkill").join("pending.json");
+    assert!(
+        crate::state_lock::acquire_state_lock(&state_file).is_ok(),
+        "a failed restore must not leave the managed-state locks held"
+    );
+}
+
 /// 恢复被删除的文件必须还原**原始大小写**的文件名。
 ///
 /// manifest 路径曾经存的是大小写折叠后的比较键，而 restore 又拿它当真实落盘路径，
@@ -519,10 +575,7 @@ fn a_relative_dir_store_is_anchored_at_the_workspace_root() {
 
     // 绝对路径原样保留。
     let absolute = ws.path().join("elsewhere");
-    assert_eq!(
-        checkpoints_root(root, Some(&absolute)).unwrap(),
-        absolute
-    );
+    assert_eq!(checkpoints_root(root, Some(&absolute)).unwrap(), absolute);
 
     // 存进去再列出来：同一个相对 --dir 必须命中同一个 store。
     let saved = save(root, Some(Path::new("ckpt")), DEFAULT_KEEP).unwrap();

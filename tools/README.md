@@ -108,4 +108,4 @@ cargo run -- --backend deepseek --task fix-failing-test --unsafe-host-exec   # �
   -SkillPath "$HOME/.codex/skills/raymancodingskill/SKILL.md"
 ```
 
-此审计依次覆盖 root/evals fmt、Clippy、tests、deny，`cargo package`/`cargo install` smoke，当前 artifact 的 context + strict + release 自食验证，state/assets，以及最终 clean-source/PATH/skill 身份。任一项失败都不能声明发布或安装完成。
+此审计依次覆盖 root/evals fmt、Clippy、tests、deny，`cargo package`/`cargo install` smoke，当前 artifact 的 context + strict + release 自食验证，`state audit --check` 门禁与仅作报告的 `assets` 扫描，以及最终 clean-source/PATH/skill 身份。任一**门禁**失败都不能声明发布或安装完成；`assets` 只报告，不阻塞。

@@ -8,6 +8,8 @@ use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use fs2::FileExt;
@@ -19,6 +21,7 @@ use crate::goal::{
     FrontierExecution, GoalLifecycle, GoalStatus, GoalStore, PendingStore, goal_gate_verdict,
     workspace_fingerprint,
 };
+use crate::pathfmt::display_path;
 
 const MANAGED_STATUS: &str = "Rayman Owner Mode completion guard";
 const HOOKS_FILE: &str = "hooks.json";
@@ -208,7 +211,12 @@ pub fn run_stop_from_stdin() -> StopHookResponse {
     }
 }
 
-fn hooks_path(codex_home: Option<&Path>) -> Result<PathBuf> {
+/// `require_home` is false for read-only callers: a Codex home that was never
+/// created is the same answer as a `hooks.json` that was never created — nothing
+/// is installed — but `status` used to hard-error on it while explicitly
+/// tolerating the missing file one check later. Writers still demand a real
+/// directory, so nothing is ever created through a link/reparse.
+fn hooks_path(codex_home: Option<&Path>, require_home: bool) -> Result<PathBuf> {
     let home = codex_home
         .map(Path::to_path_buf)
         .map_or_else(crate::codex_host::default_codex_home, Ok)?;
@@ -217,7 +225,12 @@ fn hooks_path(codex_home: Option<&Path>) -> Result<PathBuf> {
     } else {
         env::current_dir()?.join(home)
     };
-    crate::file_io::ensure_real_directory_labeled(&home, "Codex home")?;
+    match fs::symlink_metadata(&home) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound && !require_home => {
+            return Ok(home.join(HOOKS_FILE));
+        }
+        _ => crate::file_io::ensure_real_directory_labeled(&home, "Codex home")?,
+    }
     let path = home.join(HOOKS_FILE);
     match fs::symlink_metadata(&path) {
         Ok(metadata) if is_link_or_reparse(&metadata) => {
@@ -363,13 +376,47 @@ fn lock_hooks(path: &Path) -> Result<fs::File> {
         .write(true)
         .open(&lock_path)
         .with_context(|| format!("cannot open hook lock: {}", lock_path.display()))?;
-    file.lock_exclusive()
-        .with_context(|| format!("cannot lock Codex hooks: {}", path.display()))?;
-    Ok(file)
+    // Bounded wait, like every other lock in this codebase. A blocking
+    // `lock_exclusive` made `codex-hook install`/`uninstall` hang forever and
+    // silently against a stuck holder, with no message and no timeout — the one
+    // lock here with no way out. Reuse the shared contention predicate rather
+    // than inventing a second classification of the same OS errors.
+    const LOCK_TIMEOUT: Duration = Duration::from_millis(2500);
+    let started = Instant::now();
+    loop {
+        match file.try_lock_exclusive() {
+            Ok(()) => return Ok(file),
+            Err(error)
+                if crate::state_lock::is_state_lock_contention(&error)
+                    && started.elapsed() < LOCK_TIMEOUT =>
+            {
+                thread::sleep(Duration::from_millis(25));
+            }
+            // `bail!`, not `.context()` on the io error: the CLI prints
+            // `{error:#}`, so a context wrapper renders as
+            // `<authored text>: <io cause>` and the authored template can never
+            // match the whole line — the message stays Chinese under
+            // `--language en` even though it is registered. The cause here is
+            // only "would block", which the text already states. This mirrors
+            // the flock branch in `state_lock`.
+            Err(error) if crate::state_lock::is_state_lock_contention(&error) => {
+                let _ = error;
+                bail!(
+                    "Codex hooks 正被另一个进程修改: {}；等待锁超过 {} 秒",
+                    display_path(path),
+                    LOCK_TIMEOUT.as_secs_f64()
+                );
+            }
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("cannot lock Codex hooks: {}", display_path(path)));
+            }
+        }
+    }
 }
 
 pub fn install(codex_home: Option<&Path>, executable: &Path) -> Result<HookInstallReport> {
-    let path = hooks_path(codex_home)?;
+    let path = hooks_path(codex_home, true)?;
     let _lock = lock_hooks(&path)?;
     let command = hook_command(executable)?;
     let mut value = read_hooks(&path)?;
@@ -390,7 +437,7 @@ pub fn install(codex_home: Option<&Path>, executable: &Path) -> Result<HookInsta
 }
 
 pub fn uninstall(codex_home: Option<&Path>) -> Result<HookInstallReport> {
-    let path = hooks_path(codex_home)?;
+    let path = hooks_path(codex_home, true)?;
     let _lock = lock_hooks(&path)?;
     let mut value = read_hooks(&path)?;
     let changed = remove_managed_handlers(&mut value)?;
@@ -408,7 +455,7 @@ pub fn uninstall(codex_home: Option<&Path>) -> Result<HookInstallReport> {
 }
 
 pub fn status(codex_home: Option<&Path>) -> Result<HookInstallReport> {
-    let path = hooks_path(codex_home)?;
+    let path = hooks_path(codex_home, false)?;
     let value = read_hooks(&path)?;
     let command = value
         .get("hooks")

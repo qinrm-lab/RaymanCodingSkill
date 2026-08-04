@@ -14,10 +14,10 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::file_io::{read_json, write_json};
-use crate::state_paths;
 use crate::state_lock::acquire_state_lock;
 #[cfg(test)]
 use crate::state_lock::is_state_lock_contention;
+use crate::state_paths;
 
 use crate::timefmt::now_iso;
 
@@ -1348,7 +1348,9 @@ impl GoalStore {
         if must_transfer_multiset(std::iter::once(&replacement))
             != must_transfer_multiset(predecessors.iter())
         {
-            bail!("replacement must 必须与 --supersedes 目标 must（含 typed proof 义务）的精确并集一致");
+            bail!(
+                "replacement must 必须与 --supersedes 目标 must（含 typed proof 义务）的精确并集一致"
+            );
         }
         if let Some(error) = replacement_delta_scope_error(&predecessors, &source_delta_paths) {
             bail!("{error}");

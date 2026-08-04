@@ -9,6 +9,8 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 
+use crate::pathfmt::display_path;
+
 static ATOMIC_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// 该 metadata 是否指向符号链接或 Windows reparse point。
@@ -52,24 +54,24 @@ pub(crate) fn ensure_real_directory_labeled(path: &Path, label: &str) -> Result<
 pub fn write_atomic(target: &Path, text: &str) -> Result<()> {
     let parent = target
         .parent()
-        .ok_or_else(|| anyhow::anyhow!("原子写入目标没有父目录: {}", target.display()))?;
+        .ok_or_else(|| anyhow::anyhow!("原子写入目标没有父目录: {}", display_path(target)))?;
     // The callers that own state creation must establish their parent through
     // `state_paths` first.  Re-creating it here would follow a parent that was
     // swapped to a symlink/reparse point after that validation.
     crate::state_paths::ensure_real_directory(parent)
-        .with_context(|| format!("原子写入父目录不安全或不存在: {}", parent.display()))?;
+        .with_context(|| format!("原子写入父目录不安全或不存在: {}", display_path(parent)))?;
     let temp = create_synced_temp(target, text)?;
     // Detect a parent swap that happened while the temporary file was being
     // written before attempting to publish it.  Handle-relative no-follow I/O
     // would be needed to eliminate the remaining kernel-level TOCTOU window.
     crate::state_paths::ensure_real_directory(parent)
-        .with_context(|| format!("原子发布前父目录不安全: {}", parent.display()))?;
+        .with_context(|| format!("原子发布前父目录不安全: {}", display_path(parent)))?;
     if let Err(error) = rename_with_retry(&temp, target) {
         let _ = fs::remove_file(&temp);
         bail!(
             "无法原子替换文件 {} -> {}: {error}",
-            temp.display(),
-            target.display()
+            display_path(temp.as_ref()),
+            display_path(target)
         );
     }
     sync_parent_directory(parent)?;
@@ -97,11 +99,11 @@ fn copy_atomic_impl(
     const MAX_TEMP_NAME_ATTEMPTS: usize = 32;
     let parent = target
         .parent()
-        .ok_or_else(|| anyhow::anyhow!("原子复制目标没有父目录: {}", target.display()))?;
+        .ok_or_else(|| anyhow::anyhow!("原子复制目标没有父目录: {}", display_path(target)))?;
     crate::state_paths::ensure_real_directory(parent)
-        .with_context(|| format!("原子复制父目录不安全或不存在: {}", parent.display()))?;
+        .with_context(|| format!("原子复制父目录不安全或不存在: {}", display_path(parent)))?;
     let permissions = fs::metadata(source)
-        .with_context(|| format!("无法读取原子复制源元数据: {}", source.display()))?
+        .with_context(|| format!("无法读取原子复制源元数据: {}", display_path(source)))?
         .permissions();
 
     for _ in 0..MAX_TEMP_NAME_ATTEMPTS {
@@ -114,21 +116,22 @@ fn copy_atomic_impl(
             Ok(file) => file,
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
             Err(error) => {
-                return Err(error)
-                    .with_context(|| format!("无法创建原子复制临时文件: {}", temp.display()));
+                return Err(error).with_context(|| {
+                    format!("无法创建原子复制临时文件: {}", display_path(temp.as_ref()))
+                });
             }
         };
         let copied = (|| -> Result<u64> {
             let mut input = fs::File::open(source)
-                .with_context(|| format!("无法读取原子复制源: {}", source.display()))?;
+                .with_context(|| format!("无法读取原子复制源: {}", display_path(source)))?;
             let copied = io::copy(&mut input, &mut output)
-                .with_context(|| format!("无法复制到临时文件: {}", temp.display()))?;
+                .with_context(|| format!("无法复制到临时文件: {}", display_path(temp.as_ref())))?;
             output
                 .set_permissions(permissions.clone())
-                .with_context(|| format!("无法保留复制权限: {}", temp.display()))?;
-            output
-                .sync_all()
-                .with_context(|| format!("无法同步原子复制临时文件: {}", temp.display()))?;
+                .with_context(|| format!("无法保留复制权限: {}", display_path(temp.as_ref())))?;
+            output.sync_all().with_context(|| {
+                format!("无法同步原子复制临时文件: {}", display_path(temp.as_ref()))
+            })?;
             Ok(copied)
         })();
         drop(output);
@@ -143,15 +146,16 @@ fn copy_atomic_impl(
             Ok(hash) => hash,
             Err(error) => {
                 let _ = fs::remove_file(&temp);
-                return Err(error)
-                    .with_context(|| format!("无法校验原子复制临时文件: {}", temp.display()));
+                return Err(error).with_context(|| {
+                    format!("无法校验原子复制临时文件: {}", display_path(temp.as_ref()))
+                });
             }
         };
         if copied != expected_size || staged_hash != expected_sha256 {
             let _ = fs::remove_file(&temp);
             bail!(
                 "原子复制临时文件完整性不匹配: {} (size {} != {} or sha256 {} != {})",
-                temp.display(),
+                display_path(temp.as_ref()),
                 copied,
                 expected_size,
                 staged_hash,
@@ -159,13 +163,13 @@ fn copy_atomic_impl(
             );
         }
         crate::state_paths::ensure_real_directory(parent)
-            .with_context(|| format!("原子复制发布前父目录不安全: {}", parent.display()))?;
+            .with_context(|| format!("原子复制发布前父目录不安全: {}", display_path(parent)))?;
         if let Err(error) = rename_with_retry(&temp, target) {
             let _ = fs::remove_file(&temp);
             bail!(
                 "无法原子替换复制目标 {} -> {}: {error}",
-                temp.display(),
-                target.display()
+                display_path(temp.as_ref()),
+                display_path(target)
             );
         }
         sync_parent_directory(parent)?;
@@ -173,7 +177,7 @@ fn copy_atomic_impl(
     }
     bail!(
         "无法为原子复制创建独占临时文件（连续 {MAX_TEMP_NAME_ATTEMPTS} 个名称已存在）: {}",
-        target.display()
+        display_path(target)
     )
 }
 
@@ -181,7 +185,7 @@ fn copy_atomic_impl(
 fn sync_parent_directory(parent: &Path) -> Result<()> {
     fs::File::open(parent)
         .and_then(|directory| directory.sync_all())
-        .with_context(|| format!("无法同步父目录: {}", parent.display()))
+        .with_context(|| format!("无法同步父目录: {}", display_path(parent)))
 }
 
 #[cfg(not(unix))]
@@ -203,13 +207,14 @@ fn create_synced_temp(target: &Path, text: &str) -> Result<PathBuf> {
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
             Err(error) => {
                 let _ = fs::remove_file(&temp);
-                return Err(error).with_context(|| format!("无法写入临时文件: {}", temp.display()));
+                return Err(error)
+                    .with_context(|| format!("无法写入临时文件: {}", display_path(temp.as_ref())));
             }
         }
     }
     bail!(
         "无法为原子写入创建独占临时文件（连续 {MAX_TEMP_NAME_ATTEMPTS} 个名称已存在）: {}",
-        target.display()
+        display_path(target)
     )
 }
 
@@ -270,11 +275,11 @@ pub fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<Option<T
         Ok(text) => text,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(error) => {
-            return Err(error).with_context(|| format!("无法读取文件: {}", path.display()));
+            return Err(error).with_context(|| format!("无法读取文件: {}", display_path(path)));
         }
     };
     let value = serde_json::from_str(&text)
-        .with_context(|| format!("无法解析 JSON: {}", path.display()))?;
+        .with_context(|| format!("无法解析 JSON: {}", display_path(path)))?;
     Ok(Some(value))
 }
 

@@ -829,7 +829,20 @@ if ($SelfTest) {
 }
 
 if (-not $Yes) {
-    throw 'Installation replaces the managed rayman executable, canonical SKILL.md, and shared AGENTS.md. Re-run with -Yes after reviewing the destination paths.'
+    # Derive the declared set from the manifest rather than restating it. The
+    # hand-written list had drifted: it named three of the four artifacts and
+    # omitted references/workflow-contract.md, which the manifest, the write
+    # loop and this script's own self-test all require — so the one place the
+    # user is told what gets overwritten under-declared it.
+    # `Get-CodexSkillResourcePlan` only reads the manifest and computes paths —
+    # it creates nothing — so it is safe to call before the consent gate. The
+    # destination root is irrelevant here because only the relative names are
+    # reported; pass the repo root so the containment check is trivially met.
+    $declared = @('the managed rayman executable') + (
+        @(Get-CodexSkillResourcePlan -DestinationRoot ([IO.Path]::GetFullPath($repoRoot))) |
+            ForEach-Object { $_.DestinationRelative }
+    )
+    throw "Installation replaces $($declared -join ', '). Re-run with -Yes after reviewing the destination paths."
 }
 
 # Fail before any installation write when this shell would invoke an alias or
@@ -856,7 +869,15 @@ foreach ($resource in $skillResources) {
 Push-Location $repoRoot
 try {
     Invoke-NativeChecked -FilePath $cargoApplication -Arguments @('build', '--locked', '--release', '-p', 'rayman')
-    $artifact = (Resolve-Path -LiteralPath (Join-Path 'target/release' $artifactName)).Path
+    # An ambient CARGO_TARGET_DIR sends cargo's output elsewhere, so a hardcoded
+    # target/release either fails to resolve or installs a stale artifact.
+    # `[IO.Path]::Combine` (unlike Join-Path) lets an absolute value win.
+    $releaseRoot = if ($env:CARGO_TARGET_DIR) {
+        [IO.Path]::GetFullPath([IO.Path]::Combine($repoRoot, $env:CARGO_TARGET_DIR))
+    } else {
+        Join-Path $repoRoot 'target'
+    }
+    $artifact = (Resolve-Path -LiteralPath (Join-Path $releaseRoot "release/$artifactName")).Path
 
     $artifactIdentityText = & $artifact '--format' 'json' 'doctor'
     if ($LASTEXITCODE -ne 0) {

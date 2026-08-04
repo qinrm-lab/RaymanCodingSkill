@@ -7,7 +7,7 @@ During development, bind the final project gate to the task instead of running i
 ```powershell
 rayman goal validate <id> --req <req-id> `
   -m "authority gate stable twice" `
-  --command "pwsh -NoProfile -File <workspace-gate.ps1>" `
+  --command "pwsh -NoProfile -File scripts/check-repo.ps1" `
   --changed <path> --authority --repeat 2
 rayman finish --goal <id>
 ```
@@ -54,7 +54,7 @@ It covers, in order:
 3. A real `cargo llvm-cov` line threshold for the shipped root CLI workspace. This threshold does not claim coverage for the standalone eval harness.
 4. Standalone `evals` fmt, Clippy, tests, cargo-deny, real-backend host-exec rejection, third-party-grade rejection, and offline mock report/grade provenance.
 5. `cargo package` plus an isolated managed-temp `cargo install` smoke.
-6. A locked release build followed by current-artifact context refresh, strict quality, release readiness, state/assets checks, and isolated standard checkpoint save + `checkpoint verify`; recovery-only salvage is negative-tested but never accepted as release evidence.
+6. A locked release build followed by current-artifact context refresh, strict quality, release readiness, the `state audit --check` gate plus a report-only `assets` scan, and isolated standard checkpoint save + `checkpoint verify`; recovery-only salvage is negative-tested but never accepted as release evidence.
 7. Installed CLI/reference artifact/deployed skill/effective PATH identity plus a clean isolated source-fresh rebuild and terminal identity re-hash.
 
 Use focused Cargo/rayman commands during development; only this command supports the complete local claim. CI mirrors these mandatory lanes across platform jobs and additionally performs the scheduled weekly advisory refresh declared in `.github/workflows/ci.yml`.

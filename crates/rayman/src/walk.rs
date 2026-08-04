@@ -132,9 +132,8 @@ pub fn workspace_walk(root: &Path) -> WorkspaceWalk {
                 .strip_prefix(&filter_root)
                 .ok()
                 .is_some_and(|rel| {
-                    directories.contains(&tracked_cmp_key(
-                        &rel.to_string_lossy().replace('\\', "/"),
-                    ))
+                    directories
+                        .contains(&tracked_cmp_key(&rel.to_string_lossy().replace('\\', "/")))
                 }),
             // 非 git 工作区或 git 不可用：无从判断跟踪状态，按名字兜底剪枝。
             None => false,
@@ -243,10 +242,7 @@ pub fn workspace_walk(root: &Path) -> WorkspaceWalk {
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
                 Err(error) if cfg!(windows) && error.raw_os_error() == Some(123) => {}
                 Err(error) => report.errors.push(WalkIssue {
-                    error: format!(
-                        "无法检查被跟踪文件 {}: {error}",
-                        candidate.display()
-                    ),
+                    error: format!("无法检查被跟踪文件 {}: {error}", candidate.display()),
                 }),
             }
         }
@@ -261,7 +257,8 @@ pub fn workspace_walk(root: &Path) -> WorkspaceWalk {
 /// 是同一个目录，按字节精确比较会让判定随盘面大小写漂移；非 Windows 保持精确。
 fn name_matches(list: &[&str], name: &str) -> bool {
     if cfg!(windows) {
-        list.iter().any(|candidate| candidate.eq_ignore_ascii_case(name))
+        list.iter()
+            .any(|candidate| candidate.eq_ignore_ascii_case(name))
     } else {
         list.contains(&name)
     }
@@ -519,7 +516,10 @@ mod tests {
         fs::write(root.join(".gitignore"), "build/out/\nbuild/*.tmp\n").unwrap();
 
         git(root, &["init", "--quiet"]);
-        git(root, &["add", "build/deploy.ps1", "README.md", ".gitignore"]);
+        git(
+            root,
+            &["add", "build/deploy.ps1", "README.md", ".gitignore"],
+        );
 
         fs::create_dir_all(root.join("build/out")).unwrap();
         fs::write(root.join("build/out/bundle.bin"), "artifact").unwrap();
@@ -722,7 +722,11 @@ mod tests {
     fn a_gitdir_pointer_file_never_participates_in_indexing() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
-        fs::write(root.join(".git"), "gitdir: ../main-repo/.git/worktrees/wt\n").unwrap();
+        fs::write(
+            root.join(".git"),
+            "gitdir: ../main-repo/.git/worktrees/wt\n",
+        )
+        .unwrap();
         fs::write(root.join("src.rs"), "fn main() {}").unwrap();
 
         let keys: Vec<String> = workspace_files_checked(root)
@@ -784,7 +788,8 @@ mod tests {
                 .map(|path| relative_key(root, path))
                 .collect();
             assert!(
-                rels.iter().any(|rel| rel.eq_ignore_ascii_case("build/tool.md")),
+                rels.iter()
+                    .any(|rel| rel.eq_ignore_ascii_case("build/tool.md")),
                 "大小写漂移不得让被跟踪的 vendor 目录文件消失: {rels:?}"
             );
             assert_eq!(

@@ -17,7 +17,6 @@
       "kind": "large_file",
       "reason": "This module contains the immutable authored-message template catalog used to prove complete English coverage without mutating dynamic Unicode; exact source/catalog equality, every-template localization, dynamic-value preservation, CLI integration tests, and the full repository gate cover the executable logic."
     },
-
     {
       "path": "crates/rayman/src/goal.rs",
       "kind": "high_fan_in",
@@ -27,6 +26,11 @@
       "path": "crates/rayman/src/state_lock.rs",
       "kind": "public_api_without_test_evidence",
       "reason": "This OS advisory-lock module is shared by the goal store and checkpoint restore, which is why it sits at the crate root; focused contention and ACL classification tests run through the goal test module and the full repository gate."
+    },
+    {
+      "path": "crates/rayman/src/state_lock.rs",
+      "kind": "high_fan_in",
+      "reason": "Inter-process advisory locking for managed state is intentionally one module: the goal store, the pending store, checkpoint restore, and the Codex hook installer must all serialize on the same lock identity and share one contention/ACL classification. Focused contention tests, checkpoint restore tests, and the full repository gate exercise every caller together."
     },
     {
       "path": "crates/rayman/src/cli.rs",
