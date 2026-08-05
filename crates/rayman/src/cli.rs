@@ -36,9 +36,9 @@ pub enum Format {
 #[allow(clippy::large_enum_variant)]
 #[derive(Subcommand)]
 pub enum Command {
-    /// Codex 生命周期钩子，防止 Owner Mode 过早交接 / Codex lifecycle hook integration.
+    /// Codex 生命周期钩子，防止 Owner Mode 过早交接
     CodexHook(CodexHookCmd),
-    /// 激活、停用或检查工作区契约 / Activate, deactivate, or inspect the workspace contract.
+    /// 激活、重绑、停用或检查工作区契约
     Workspace(WorkspaceCmd),
     /// 工作区上下文索引（内容 hash 证明；map/check 会拒绝未验证内容）
     Context(ContextCmd),
@@ -132,6 +132,22 @@ pub enum WorkspaceAction {
         #[arg(long)]
         skill_file: Option<PathBuf>,
         /// Explicitly allow the activation contract write.
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Refresh an eligible stale activation against the current CLI and SKILL identity.
+    Rebind {
+        /// Explicitly allow the activation contract rewrite.
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Installer-only activation finalization after every other install check succeeds.
+    #[command(name = "install-bind", hide = true)]
+    InstallBind {
+        /// Canonical RaymanCodingSkill SKILL.md for this installer workspace.
+        #[arg(long)]
+        skill_file: PathBuf,
+        /// Explicitly allow the activation contract transaction.
         #[arg(long)]
         yes: bool,
     },

@@ -19,9 +19,16 @@ chrono = { workspace = true }
 clap = { workspace = true }
 ignore = { workspace = true }
 fs2 = { workspace = true }
+getrandom = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }

@@ -29,6 +29,15 @@ $claude = Read-StrictUtf8 'CLAUDE.md'
 $workflow = Read-StrictUtf8 'references/workflow-contract.md'
 $manifestText = Read-StrictUtf8 'install-manifest.json'
 
+$canonicalSkillAsset = 'crates/rayman/assets/canonical-skill.md'
+$null = Read-StrictUtf8 $canonicalSkillAsset
+$skillBytes = [IO.File]::ReadAllBytes((Join-Path $repoRoot 'SKILL.md'))
+$canonicalSkillBytes = [IO.File]::ReadAllBytes((Join-Path $repoRoot $canonicalSkillAsset))
+if ($skillBytes.Length -ne $canonicalSkillBytes.Length -or
+    [Convert]::ToBase64String($skillBytes) -cne [Convert]::ToBase64String($canonicalSkillBytes)) {
+    throw "Packaged canonical skill bytes differ from repository SKILL.md: $canonicalSkillAsset"
+}
+
 $marker = 'AGENT_CONTRACT: rayman-shared-v1'
 foreach ($entry in @{ 'AGENTS.md' = $agents; 'SKILL.md' = $skill; 'CLAUDE.md' = $claude }.GetEnumerator()) {
     $count = ([regex]::Matches($entry.Value, [regex]::Escape($marker))).Count

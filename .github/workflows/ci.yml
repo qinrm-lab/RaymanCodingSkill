@@ -31,6 +31,12 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
+      - name: Install ACL test dependency
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends acl
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable, pinned 2026-07-14
         with:
@@ -38,6 +44,14 @@ jobs:
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+      - name: Add Linux ARM64 Rust target
+        if: runner.os == 'Linux'
+        run: rustup target add aarch64-unknown-linux-gnu
+
+      - name: Check Linux ARM64 cfg paths
+        if: runner.os == 'Linux'
+        run: cargo check --locked -p rayman --target aarch64-unknown-linux-gnu
 
       - name: Format check
         run: cargo fmt --all --check
@@ -53,6 +67,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install ACL test dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends acl
 
       - name: Install MSRV toolchain
         uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable action, explicit MSRV below
@@ -262,6 +281,24 @@ jobs:
             throw "Unexpected offline mock provenance or trial count in $reportPath"
           }
 
+  installer-selftest:
+    name: installer CAS self-test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Install ACL self-test dependency
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends acl
+      - name: Installer identity/metadata/race self-test
+        shell: pwsh
+        run: ./scripts/install-rayman.ps1 -SelfTest
+
   package-install:
     name: cargo package + install smoke
     runs-on: ubuntu-latest
@@ -269,9 +306,6 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable, pinned 2026-07-14
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-      - name: Installer path/hash/rollback self-test
-        shell: pwsh
-        run: ./scripts/install-rayman.ps1 -SelfTest
       - name: Legacy PowerShell profile migration self-test
         shell: pwsh
         run: ./scripts/repair-rayman-powershell-profile.ps1 -SelfTest

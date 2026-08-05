@@ -292,7 +292,7 @@ fn run(cli: Cli) -> Result<()> {
             "`rayman audit` 已退役；工作区门禁使用 `rayman check --profile standard`，任务交付使用 `rayman finish --goal <id>`，状态卫生使用 `rayman state audit --check`"
         ),
         Command::LegacyWorkspaceSkill(_) => bail!(
-            "`rayman workspace-skill` 已退役；使用 `rayman workspace status|inspect|activate|deactivate`"
+            "`rayman workspace-skill` 已退役；使用 `rayman workspace status|inspect|activate|rebind|deactivate`"
         ),
         Command::LegacySubagent(_) => bail!(
             "`rayman subagent` 已退役且 v2 不维护 agent ledger；需要保留未完成工作时使用 `rayman goal pending add`"
@@ -333,6 +333,32 @@ fn run_workspace(root: &Path, json: bool, cmd: WorkspaceCmd) -> Result<()> {
             }
             workspace::activate(root, &skill_file.unwrap_or_else(|| root.join("SKILL.md")))?
         }
+        WorkspaceAction::Rebind { yes } => {
+            if !yes {
+                bail!("rebind rewrites workspace_skill.yaml; add --yes to confirm");
+            }
+            let report = workspace::rebind(root)?;
+            if json {
+                print(&serde_json::to_value(&report)?);
+            } else {
+                print_workspace_activation(&report.activation);
+                println!("  changed: {}", report.changed);
+            }
+            return Ok(());
+        }
+        WorkspaceAction::InstallBind { skill_file, yes } => {
+            if !yes {
+                bail!("install-bind updates workspace_skill.yaml; add --yes to confirm");
+            }
+            let report = workspace::install_bind(root, &skill_file)?;
+            if json {
+                print(&serde_json::to_value(&report)?);
+            } else {
+                print_workspace_activation(&report.activation);
+                println!("  changed: {}", report.changed);
+            }
+            return Ok(());
+        }
         WorkspaceAction::Deactivate { yes } => {
             if !yes {
                 bail!("deactivation rewrites workspace_skill.yaml; add --yes to confirm");
@@ -343,18 +369,25 @@ fn run_workspace(root: &Path, json: bool, cmd: WorkspaceCmd) -> Result<()> {
     if json {
         print(&serde_json::to_value(&report)?);
     } else {
-        println!(
-            "RaymanCodingSkill workspace activation: {} (active={}, config_present={})",
-            report.status, report.active, report.config_present
-        );
-        for issue in &report.issues {
-            println!("  issue: {issue}");
-        }
+        print_workspace_activation(&report);
         // Text only: `workspace status` JSON is the activation report itself and
         // callers parse that shape. The agent-facing surface is the text one.
         print_host_patch_probe(&rayman::codex_host::patch_probe(None));
     }
     Ok(())
+}
+
+fn print_workspace_activation(report: &workspace::WorkspaceActivationReport) {
+    println!(
+        "RaymanCodingSkill workspace activation: {} (active={}, config_present={})",
+        report.status, report.active, report.config_present
+    );
+    for issue in &report.issues {
+        println!("  issue: {issue}");
+    }
+    if let Some(command) = &report.recovery_command {
+        println!("  recovery: `{command}`");
+    }
 }
 
 fn print_source_state(source: &source_state::SourceState) {

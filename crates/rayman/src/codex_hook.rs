@@ -31,9 +31,11 @@ struct StopHookInput {
     hook_event_name: Option<String>,
     // Accepted for schema compatibility but deliberately not honored: de-escalating a
     // block after the guard already fired once would let an agent escape a legitimate,
-    // still-unsatisfied completion gate by simply retrying the stop. The guard therefore
-    // stays fail-closed on every invocation. Repair the flagged goal/pending/activation
-    // state to clear the block — that is the only intended exit.
+    // still-unsatisfied completion gate by simply retrying the stop. Goal and structurally
+    // invalid activation failures therefore remain fail-closed. Eligible identity drift is
+    // different: the hook cannot infer whether the request was read-only, so it must not
+    // force a state write merely to let a read-only audit end.
+    // It must still traverse goal/frontier state so unfinished governed work remains blocked.
     #[allow(dead_code)]
     stop_hook_active: Option<bool>,
 }
@@ -92,16 +94,28 @@ pub fn evaluate_stop(root: &Path) -> StopHookResponse {
     if !activation.config_present {
         return StopHookResponse::allow();
     }
-    if !activation.active {
-        if !activation.enabled {
+    let recovery_command = if !activation.active {
+        if activation.status == "inactive" {
             return StopHookResponse::allow();
         }
-        return StopHookResponse::block(format!(
-            "Rayman activation exists but is invalid (status={}, issues={}). Run `rayman workspace status` and repair it before ending the turn.",
-            activation.status,
-            activation.issues.join("; ")
-        ));
-    }
+        match activation.recovery_command.clone() {
+            Some(command) => {
+                // A Stop hook sees no user intent and cannot turn read-only work into an
+                // unauthorized activation-contract write. Keep the recovery command, but
+                // continue through Owner Mode goal/frontier checks before allowing stop.
+                Some(command)
+            }
+            None => {
+                return StopHookResponse::block(format!(
+                    "Rayman activation exists but is invalid (status={}, issues={}). Run `rayman workspace status` and repair it before ending the turn.",
+                    activation.status,
+                    activation.issues.join("; ")
+                ));
+            }
+        }
+    } else {
+        None
+    };
 
     let store = GoalStore::new(root);
     let (goals, issues) = match store.list_with_issues() {
@@ -176,9 +190,16 @@ pub fn evaluate_stop(root: &Path) -> StopHookResponse {
     if unfinished.is_empty() {
         StopHookResponse::allow()
     } else {
+        let recovery_guidance = recovery_command
+            .as_deref()
+            .map(|command| {
+                format!(" The workspace activation identity is safely rebindable; run `{command}` before continuing governed work.")
+            })
+            .unwrap_or_default();
         StopHookResponse::block(format!(
-            "Rayman Owner Mode forbids premature handoff. {}. Continue safe foreground work, update the goal contract for newly added requirements, then run `rayman goal frontier <id>` and `rayman finish --goal <id>` before ending the turn.",
-            unfinished.join(" | ")
+            "Rayman Owner Mode forbids premature handoff. {}.{} Continue safe foreground work, update the goal contract for newly added requirements, then run `rayman goal frontier <id>` and `rayman finish --goal <id>` before ending the turn.",
+            unfinished.join(" | "),
+            recovery_guidance
         ))
     }
 }
@@ -295,6 +316,20 @@ fn read_hooks(path: &Path) -> Result<Value> {
 
 fn is_managed_handler(value: &Value) -> bool {
     value.get("statusMessage").and_then(Value::as_str) == Some(MANAGED_STATUS)
+}
+
+fn is_canonical_managed_handler(value: &Value) -> bool {
+    let Some(handler) = value.as_object() else {
+        return false;
+    };
+    handler.len() == 4
+        && handler.get("type").and_then(Value::as_str) == Some("command")
+        && handler
+            .get("command")
+            .and_then(Value::as_str)
+            .is_some_and(|command| !command.trim().is_empty())
+        && handler.get("timeout").and_then(Value::as_u64) == Some(30)
+        && handler.get("statusMessage").and_then(Value::as_str) == Some(MANAGED_STATUS)
 }
 
 fn remove_managed_handlers(root: &mut Value) -> Result<bool> {
@@ -465,7 +500,7 @@ pub fn status(codex_home: Option<&Path>) -> Result<HookInstallReport> {
         .flatten()
         .filter_map(|group| group.get("hooks").and_then(Value::as_array))
         .flatten()
-        .find(|handler| is_managed_handler(handler))
+        .find(|handler| is_canonical_managed_handler(handler))
         .and_then(|handler| handler.get("command"))
         .and_then(Value::as_str)
         .map(str::to_string);
@@ -488,6 +523,35 @@ mod tests {
         crate::workspace::activate(root, &skill).unwrap();
     }
 
+    fn activate_running_canonical(root: &Path) {
+        let skill = root.join("SKILL.md");
+        fs::write(&skill, include_bytes!("../assets/canonical-skill.md")).unwrap();
+        crate::workspace::activate(root, &skill).unwrap();
+    }
+
+    fn drift_activation_identity(root: &Path) -> PathBuf {
+        let activation = root.join(".RaymanCodingSkill/workspace_skill.yaml");
+        let current = fs::read_to_string(&activation).unwrap();
+        let stale = current
+            .replace(
+                &format!("cli_contract: {}", crate::CLI_CONTRACT),
+                "cli_contract: rayman-cli-contract-v1",
+            )
+            .replace(
+                &format!("cli_version: {}", crate::CLI_VERSION),
+                "cli_version: 0.1.0",
+            );
+        assert_ne!(stale, current);
+        fs::write(&activation, stale).unwrap();
+        let status = crate::workspace::activation_status(root).unwrap();
+        assert!(status.rebind_eligible, "{:?}", status.issues);
+        assert_eq!(
+            status.recovery_command.as_deref(),
+            Some("rayman workspace rebind --yes")
+        );
+        activation
+    }
+
     #[test]
     fn inactive_or_goal_less_workspace_may_stop() {
         let root = tempfile::tempdir().unwrap();
@@ -496,6 +560,69 @@ mod tests {
         assert!(!evaluate_stop(root.path()).blocks_stop());
         crate::workspace::deactivate(root.path()).unwrap();
         assert!(!evaluate_stop(root.path()).blocks_stop());
+    }
+
+    #[test]
+    fn rebindable_identity_drift_without_goal_may_stop_without_writing() {
+        let root = tempfile::tempdir().unwrap();
+        activate_running_canonical(root.path());
+        let activation = drift_activation_identity(root.path());
+        let before = fs::read(&activation).unwrap();
+
+        assert!(!evaluate_stop(root.path()).blocks_stop());
+        assert_eq!(fs::read(activation).unwrap(), before);
+    }
+
+    #[test]
+    fn rebindable_identity_drift_cannot_bypass_an_active_goal() {
+        let root = tempfile::tempdir().unwrap();
+        activate_running_canonical(root.path());
+        let goal = GoalStore::new(root.path())
+            .start(
+                "unfinished governed work",
+                &[("finish the task".into(), true)],
+            )
+            .unwrap();
+        drift_activation_identity(root.path());
+
+        let response = evaluate_stop(root.path());
+        assert!(response.blocks_stop());
+        let reason = response.reason.unwrap();
+        assert!(reason.contains(&goal.id), "{reason}");
+        assert!(reason.contains("rayman workspace rebind --yes"), "{reason}");
+    }
+
+    #[test]
+    fn malformed_enabled_value_cannot_disable_stop_guard_for_an_active_goal() {
+        let root = tempfile::tempdir().unwrap();
+        activate(root.path());
+        let goal = GoalStore::new(root.path())
+            .start(
+                "malformed activation must remain governed",
+                &[("finish the task".into(), true)],
+            )
+            .unwrap();
+        let activation = root.path().join(".RaymanCodingSkill/workspace_skill.yaml");
+        let canonical = fs::read_to_string(&activation).unwrap();
+        for malformed in [
+            canonical.replace("enabled: true", "enabled: True"),
+            canonical
+                .replace("enabled: true", "enabled: false")
+                .replace("skill: raymancodingskill", "skill: another-skill"),
+            canonical
+                .replace("enabled: true", "enabled: false")
+                .replace("skill: raymancodingskill\n", ""),
+        ] {
+            fs::write(&activation, malformed).unwrap();
+            let response = evaluate_stop(root.path());
+            assert!(response.blocks_stop());
+            let reason = response.reason.unwrap();
+            assert!(
+                reason.contains("activation exists but is invalid"),
+                "{reason}"
+            );
+            assert!(!reason.contains(&goal.id), "{reason}");
+        }
     }
 
     #[test]
@@ -589,6 +716,65 @@ mod tests {
                 .to_string()
                 .contains("Other")
         );
+    }
+
+    #[test]
+    fn status_rejects_noncanonical_managed_schema_and_repairs_owned_handlers() {
+        let home = tempfile::tempdir().unwrap();
+        let executable = env::current_exe().unwrap();
+        let command = hook_command(&executable).unwrap();
+        let malformed_cases = [
+            json!({
+                "hooks": {"Stop": [{"hooks": [{
+                    "type": "prompt",
+                    "command": command.clone(),
+                    "timeout": 30,
+                    "statusMessage": MANAGED_STATUS
+                }]}]}
+            }),
+            json!({
+                "hooks": {"Stop": [{"hooks": [{
+                    "type": "command",
+                    "command": command.clone(),
+                    "timeout": 31,
+                    "statusMessage": MANAGED_STATUS
+                }]}]}
+            }),
+            json!({
+                "hooks": {"Stop": [{"handler": {
+                    "type": "command",
+                    "command": command.clone(),
+                    "timeout": 30,
+                    "statusMessage": MANAGED_STATUS
+                }}]}
+            }),
+            json!({
+                "hooks": {"Stop": [{"hooks": [{
+                    "type": "command",
+                    "command": command.clone(),
+                    "timeout": 30,
+                    "statusMessage": MANAGED_STATUS,
+                    "extra": true
+                }]}]}
+            }),
+        ];
+        for malformed in &malformed_cases {
+            fs::write(
+                home.path().join(HOOKS_FILE),
+                serde_json::to_vec_pretty(malformed).unwrap(),
+            )
+            .unwrap();
+            let report = status(Some(home.path())).unwrap();
+            assert!(!report.installed, "{malformed}");
+            assert_eq!(report.command, None, "{malformed}");
+        }
+
+        assert!(install(Some(home.path()), &executable).unwrap().changed);
+        let repaired = status(Some(home.path())).unwrap();
+        assert!(repaired.installed);
+        assert_eq!(repaired.command.as_deref(), Some(command.as_str()));
+        let text = fs::read_to_string(home.path().join(HOOKS_FILE)).unwrap();
+        assert_eq!(text.matches(MANAGED_STATUS).count(), 1);
     }
 
     #[test]

@@ -549,17 +549,20 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
 name = "rayman"
-version = "2.8.0"
+version = "2.9.0"
 dependencies = [
  "anyhow",
  "chrono",
  "clap",
  "fs2",
+ "getrandom",
  "ignore",
+ "libc",
  "serde",
  "serde_json",
  "sha2",
  "tempfile",
+ "windows-sys",
 ]
 
 [[package]]

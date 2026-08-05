@@ -254,6 +254,113 @@ fn state_snapshot(root: &Path) -> BTreeMap<String, (u64, std::time::SystemTime, 
     out
 }
 
+fn rebind_activation_path(root: &Path) -> std::path::PathBuf {
+    root.join(".RaymanCodingSkill/workspace_skill.yaml")
+}
+
+fn activate_rebind_fixture(root: &Path) -> std::path::PathBuf {
+    let skill_path = root.join("skill-fixtures/canonical SKILL.md");
+    write(
+        root,
+        "skill-fixtures/canonical SKILL.md",
+        "canonical skill before upgrade\n",
+    );
+    let activated = run_raw(
+        root,
+        &[
+            "workspace",
+            "activate",
+            "--skill-file",
+            skill_path.to_str().unwrap(),
+            "--yes",
+        ],
+    );
+    assert_eq!(
+        activated.status, 0,
+        "fixture activation failed: stdout={} stderr={}",
+        activated.stdout, activated.stderr
+    );
+    skill_path
+}
+
+fn make_rebind_eligible_identity_drift(root: &Path) -> std::path::PathBuf {
+    let skill_path = activate_rebind_fixture(root);
+    let activation_path = rebind_activation_path(root);
+    let original = std::fs::read_to_string(&activation_path).unwrap();
+    let current_contract = format!("cli_contract: {}", rayman::CLI_CONTRACT);
+    let current_version = format!("cli_version: {}", rayman::CLI_VERSION);
+    let stale = original
+        .replace(&current_contract, "cli_contract: rayman-cli-contract-v1")
+        .replace(&current_version, "cli_version: 0.1.0");
+    assert_ne!(
+        stale, original,
+        "fixture must replace the running CLI identity"
+    );
+    assert!(stale.contains("cli_contract: rayman-cli-contract-v1"));
+    assert!(stale.contains("cli_version: 0.1.0"));
+
+    std::fs::write(&skill_path, include_bytes!("../assets/canonical-skill.md")).unwrap();
+    std::fs::write(&activation_path, stale).unwrap();
+    activation_path
+}
+
+fn complete_rebind_contract(
+    skill: &str,
+    enabled: bool,
+    skill_file: &str,
+    skill_sha256: &str,
+) -> String {
+    format!(
+        "skill: {skill}\nenabled: {enabled}\nskill_file: {skill_file}\nskill_sha256: {skill_sha256}\ncli_contract: {}\ncli_version: {}\n",
+        rayman::CLI_CONTRACT,
+        rayman::CLI_VERSION
+    )
+}
+
+fn managed_state_without_activation(
+    root: &Path,
+) -> BTreeMap<String, (u64, std::time::SystemTime, Vec<u8>)> {
+    let mut snapshot = state_snapshot(root);
+    snapshot.remove("workspace_skill.yaml");
+    snapshot
+}
+
+fn assert_rebind_rejected_without_state_changes(root: &Path, case: &str) {
+    let activation_path = rebind_activation_path(root);
+    // Rebind must acquire the shared activation lock before rejecting a parsed contract.
+    // Seed that stable lifecycle file so the snapshot checks managed data bytes rather
+    // than treating first-use lock creation as an application-state mutation.
+    drop(rayman::state_lock::acquire_state_lock(&activation_path).unwrap());
+    let activation_before = std::fs::read(&activation_path).ok();
+    let state_before = state_snapshot(root);
+    let rejected = run_raw(root, &["--format", "json", "workspace", "rebind", "--yes"]);
+    assert_ne!(
+        rejected.status, 0,
+        "case={case} stdout={} stderr={}",
+        rejected.stdout, rejected.stderr
+    );
+    assert_eq!(
+        std::fs::read(&activation_path).ok(),
+        activation_before,
+        "case={case} changed workspace_skill.yaml"
+    );
+    assert_eq!(
+        state_snapshot(root),
+        state_before,
+        "case={case} changed managed state"
+    );
+}
+
+fn assert_exact_rebind_hint(surface: &str, source: &str) {
+    assert!(
+        surface.contains("rayman workspace rebind --yes"),
+        "{source} did not provide the exact rebind command: {surface}"
+    );
+    assert!(
+        !surface.contains("workspace activate --skill-file"),
+        "{source} incorrectly routed eligible identity drift through activation: {surface}"
+    );
+}
 #[test]
 fn language_selection_preserves_utf8_unicode_paths_and_json_contract() {
     let temp = tempfile::tempdir().unwrap();
@@ -900,7 +1007,7 @@ fn doctor_verifies_installed_identity_in_an_ordinary_managed_workspace() {
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
         &format!(
-            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v14\ncli_version: 2.8.0\n"
+            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v15\ncli_version: 2.9.0\n"
         ),
     );
     let binary = std::fs::canonicalize(BIN).unwrap();
@@ -935,7 +1042,7 @@ fn doctor_rejects_an_earlier_windows_path_wrapper() {
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
         &format!(
-            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v14\ncli_version: 2.8.0\n"
+            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v15\ncli_version: 2.9.0\n"
         ),
     );
     let wrapper_dir = tempfile::tempdir().unwrap();
@@ -968,7 +1075,7 @@ fn doctor_and_workspace_inspect_report_the_state_write_probe() {
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
         &format!(
-            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v14\ncli_version: 2.8.0\n"
+            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v15\ncli_version: 2.9.0\n"
         ),
     );
     let binary = std::fs::canonicalize(BIN).unwrap();
@@ -3264,8 +3371,8 @@ fn workspace_activation_rejects_the_previous_cli_identity() {
     let activation_path = root.join(".RaymanCodingSkill/workspace_skill.yaml");
     let previous_identity = std::fs::read_to_string(&activation_path)
         .unwrap()
-        .replace("rayman-cli-contract-v14", "rayman-cli-contract-v10")
-        .replace("cli_version: 2.8.0", "cli_version: 2.5.1");
+        .replace("rayman-cli-contract-v15", "rayman-cli-contract-v10")
+        .replace("cli_version: 2.9.0", "cli_version: 2.5.1");
     std::fs::write(&activation_path, previous_identity).unwrap();
 
     let status = run_raw(root, &["--format", "json", "workspace", "status"]);
@@ -3275,8 +3382,8 @@ fn workspace_activation_rejects_the_previous_cli_identity() {
     assert_eq!(status["active"], false);
     assert_eq!(status["cli_contract"], "rayman-cli-contract-v10");
     assert_eq!(status["cli_version"], "2.5.1");
-    assert_eq!(status["running_cli_contract"], "rayman-cli-contract-v14");
-    assert_eq!(status["running_cli_version"], "2.8.0");
+    assert_eq!(status["running_cli_contract"], "rayman-cli-contract-v15");
+    assert_eq!(status["running_cli_version"], "2.9.0");
     assert!(
         status["issues"]
             .as_array()
@@ -3293,6 +3400,391 @@ fn workspace_activation_rejects_the_previous_cli_identity() {
     );
 }
 
+#[test]
+fn workspace_install_bind_is_hidden_confirmed_and_path_stable() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let canonical = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("SKILL.md")
+        .canonicalize()
+        .unwrap();
+    let canonical_text = canonical.to_str().unwrap();
+
+    let help = run_raw(root, &["workspace", "--help"]);
+    assert_eq!(help.status, 0, "{}", help.stderr);
+    assert!(!help.stdout.contains("install-bind"), "{}", help.stdout);
+
+    let rejected = run_raw(
+        root,
+        &["workspace", "install-bind", "--skill-file", canonical_text],
+    );
+    assert_ne!(rejected.status, 0);
+    assert!(rejected.stderr.contains("--yes"), "{}", rejected.stderr);
+    let binding = root.join(".RaymanCodingSkill/workspace_skill.yaml");
+    assert!(!binding.exists());
+
+    let created = run_raw(
+        root,
+        &[
+            "--format",
+            "json",
+            "workspace",
+            "install-bind",
+            "--skill-file",
+            canonical_text,
+            "--yes",
+        ],
+    );
+    assert_eq!(created.status, 0, "{}", created.stderr);
+    let created_json: Value = serde_json::from_str(&created.stdout).unwrap();
+    assert_eq!(created_json["active"], true);
+    assert_eq!(created_json["changed"], true);
+    let created_bytes = std::fs::read(&binding).unwrap();
+
+    let no_op = run_raw(
+        root,
+        &[
+            "--format",
+            "json",
+            "workspace",
+            "install-bind",
+            "--skill-file",
+            canonical_text,
+            "--yes",
+        ],
+    );
+    assert_eq!(no_op.status, 0, "{}", no_op.stderr);
+    let no_op_json: Value = serde_json::from_str(&no_op.stdout).unwrap();
+    assert_eq!(no_op_json["changed"], false);
+    assert_eq!(std::fs::read(&binding).unwrap(), created_bytes);
+
+    let stale = std::fs::read_to_string(&binding)
+        .unwrap()
+        .replace(
+            &format!("cli_contract: {}", rayman::CLI_CONTRACT),
+            "cli_contract: rayman-cli-contract-v1",
+        )
+        .replace(
+            &format!("cli_version: {}", rayman::CLI_VERSION),
+            "cli_version: 0.1.0",
+        );
+    std::fs::write(&binding, stale).unwrap();
+    let rebound = run_raw(
+        root,
+        &[
+            "--format",
+            "json",
+            "workspace",
+            "install-bind",
+            "--skill-file",
+            canonical_text,
+            "--yes",
+        ],
+    );
+    assert_eq!(rebound.status, 0, "{}", rebound.stderr);
+    let rebound_json: Value = serde_json::from_str(&rebound.stdout).unwrap();
+    assert_eq!(rebound_json["changed"], true);
+    assert_eq!(rebound_json["active"], true);
+
+    let alternate = root.join("alternate-SKILL.md");
+    std::fs::write(&alternate, include_bytes!("../assets/canonical-skill.md")).unwrap();
+    let binding_before_path_change = std::fs::read(&binding).unwrap();
+    let path_change = run_raw(
+        root,
+        &[
+            "workspace",
+            "install-bind",
+            "--skill-file",
+            alternate.to_str().unwrap(),
+            "--yes",
+        ],
+    );
+    assert_ne!(path_change.status, 0);
+    assert!(
+        path_change.stderr.contains("path change"),
+        "{}",
+        path_change.stderr
+    );
+    assert_eq!(std::fs::read(&binding).unwrap(), binding_before_path_change);
+}
+#[test]
+fn workspace_rebind_requires_yes_and_preserves_drifted_contract_bytes() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let activation_path = make_rebind_eligible_identity_drift(root);
+    write(
+        root,
+        ".RaymanCodingSkill/goals/untouched.json",
+        "managed sentinel\n",
+    );
+    let activation_before = std::fs::read(&activation_path).unwrap();
+    let state_before = state_snapshot(root);
+
+    let rejected = run_raw(root, &["workspace", "rebind"]);
+
+    assert_ne!(rejected.status, 0, "stdout={}", rejected.stdout);
+    assert!(rejected.stderr.contains("--yes"), "{}", rejected.stderr);
+    assert_eq!(std::fs::read(&activation_path).unwrap(), activation_before);
+    assert_eq!(state_snapshot(root), state_before);
+}
+
+#[test]
+fn workspace_rebind_repairs_only_hash_and_cli_identity_drift() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let activation_path = make_rebind_eligible_identity_drift(root);
+    write(
+        root,
+        ".RaymanCodingSkill/goals/untouched.json",
+        "managed goal sentinel\n",
+    );
+    write(
+        root,
+        ".RaymanCodingSkill/context/untouched.json",
+        "managed context sentinel\n",
+    );
+    let config_before = std::fs::read_to_string(&activation_path).unwrap();
+    let skill_file_before = config_before
+        .lines()
+        .find(|line| line.starts_with("skill_file:"))
+        .unwrap()
+        .to_string();
+    let other_state_before = managed_state_without_activation(root);
+
+    let rebound = run_raw(root, &["--format", "json", "workspace", "rebind", "--yes"]);
+
+    assert_eq!(
+        rebound.status, 0,
+        "stdout={} stderr={}",
+        rebound.stdout, rebound.stderr
+    );
+    let mut rebound_report: Value = serde_json::from_str(&rebound.stdout).unwrap();
+    assert_eq!(rebound_report["changed"], true);
+    assert_eq!(rebound_report["status"], "active");
+    assert_eq!(rebound_report["active"], true);
+    assert_eq!(
+        rebound_report["cli_contract"],
+        Value::String(rayman::CLI_CONTRACT.to_string())
+    );
+    assert_eq!(
+        rebound_report["cli_version"],
+        Value::String(rayman::CLI_VERSION.to_string())
+    );
+    assert_eq!(
+        rebound_report["expected_sha256"],
+        rebound_report["actual_sha256"]
+    );
+
+    let changed = rebound_report
+        .as_object_mut()
+        .unwrap()
+        .remove("changed")
+        .unwrap();
+    assert_eq!(changed, true);
+    let status = run_raw(root, &["--format", "json", "workspace", "status"]);
+    assert_eq!(status.status, 0, "{}", status.stderr);
+    let status: Value = serde_json::from_str(&status.stdout).unwrap();
+    assert_eq!(
+        rebound_report, status,
+        "rebind JSON must be workspace status plus changed"
+    );
+
+    let config_after = std::fs::read_to_string(&activation_path).unwrap();
+    let skill_file_after = config_after
+        .lines()
+        .find(|line| line.starts_with("skill_file:"))
+        .unwrap();
+    assert_eq!(skill_file_after, skill_file_before);
+    for prefix in ["skill:", "enabled:"] {
+        assert_eq!(
+            config_after.lines().find(|line| line.starts_with(prefix)),
+            config_before.lines().find(|line| line.starts_with(prefix)),
+            "rebind changed non-identity field {prefix}"
+        );
+    }
+    assert!(config_after.contains(&format!("cli_contract: {}", rayman::CLI_CONTRACT)));
+    assert!(config_after.contains(&format!("cli_version: {}", rayman::CLI_VERSION)));
+    assert!(
+        !config_after
+            .lines()
+            .any(|line| line == "cli_contract: rayman-cli-contract-v1")
+    );
+    assert!(
+        !config_after
+            .lines()
+            .any(|line| line == "cli_version: 0.1.0")
+    );
+    assert_eq!(managed_state_without_activation(root), other_state_before);
+}
+
+#[test]
+fn workspace_rebind_is_idempotent_when_activation_is_already_current() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    activate_rebind_fixture(root);
+    write(
+        root,
+        ".RaymanCodingSkill/goals/untouched.json",
+        "managed sentinel\n",
+    );
+    let activation_path = rebind_activation_path(root);
+    let activation_before = std::fs::read(&activation_path).unwrap();
+    let state_before = state_snapshot(root);
+
+    let rebound = run_raw(root, &["--format", "json", "workspace", "rebind", "--yes"]);
+
+    assert_eq!(
+        rebound.status, 0,
+        "stdout={} stderr={}",
+        rebound.stdout, rebound.stderr
+    );
+    let mut rebound_report: Value = serde_json::from_str(&rebound.stdout).unwrap();
+    assert_eq!(rebound_report["changed"], false);
+    assert_eq!(rebound_report["active"], true);
+    rebound_report
+        .as_object_mut()
+        .unwrap()
+        .remove("changed")
+        .unwrap();
+    let status = run_raw(root, &["--format", "json", "workspace", "status"]);
+    assert_eq!(status.status, 0, "{}", status.stderr);
+    assert_eq!(
+        rebound_report,
+        serde_json::from_str::<Value>(&status.stdout).unwrap()
+    );
+    assert_eq!(std::fs::read(&activation_path).unwrap(), activation_before);
+    assert_eq!(state_snapshot(root), state_before);
+}
+
+#[test]
+fn workspace_rebind_rejects_ineligible_contracts_without_writing_state() {
+    {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(root, ".RaymanCodingSkill/goals/orphan.json", "orphan\n");
+        assert_rebind_rejected_without_state_changes(root, "orphan");
+    }
+
+    {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(root, "SKILL.md", "canonical skill\n");
+        let hash = rayman::hash::sha256_file(&root.join("SKILL.md")).unwrap();
+        write(
+            root,
+            ".RaymanCodingSkill/workspace_skill.yaml",
+            &complete_rebind_contract("raymancodingskill", false, "SKILL.md", &hash),
+        );
+        assert_rebind_rejected_without_state_changes(root, "disabled");
+    }
+
+    {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(root, "SKILL.md", "canonical skill\n");
+        let hash = rayman::hash::sha256_file(&root.join("SKILL.md")).unwrap();
+        write(
+            root,
+            ".RaymanCodingSkill/workspace_skill.yaml",
+            &complete_rebind_contract("another-skill", true, "SKILL.md", &hash),
+        );
+        assert_rebind_rejected_without_state_changes(root, "wrong-skill");
+    }
+
+    {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(root, "SKILL.md", "canonical skill\n");
+        write(
+            root,
+            ".RaymanCodingSkill/workspace_skill.yaml",
+            "skill raymancodingskill\nenabled: true\nskill_file: SKILL.md\n",
+        );
+        assert_rebind_rejected_without_state_changes(root, "malformed");
+    }
+
+    {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(root, "SKILL.md", "canonical skill\n");
+        let hash = rayman::hash::sha256_file(&root.join("SKILL.md")).unwrap();
+        write(
+            root,
+            ".RaymanCodingSkill/workspace_skill.yaml",
+            &format!(
+                "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {hash}\ncli_contract: {}\n",
+                rayman::CLI_CONTRACT
+            ),
+        );
+        assert_rebind_rejected_without_state_changes(root, "missing-field");
+    }
+
+    {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(root, "SKILL.md", "canonical skill\n");
+        write(
+            root,
+            ".RaymanCodingSkill/workspace_skill.yaml",
+            &complete_rebind_contract("raymancodingskill", true, "SKILL.md", "not-a-sha256"),
+        );
+        assert_rebind_rejected_without_state_changes(root, "invalid-hash");
+    }
+
+    {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let valid_but_stale_hash = "a".repeat(64);
+        write(
+            root,
+            ".RaymanCodingSkill/workspace_skill.yaml",
+            &complete_rebind_contract(
+                "raymancodingskill",
+                true,
+                "missing/SKILL.md",
+                &valid_but_stale_hash,
+            ),
+        );
+        assert_rebind_rejected_without_state_changes(root, "missing-file");
+    }
+}
+
+#[test]
+fn eligible_identity_drift_reports_recovery_without_forcing_a_stop_hook_write() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    make_rebind_eligible_identity_drift(root);
+
+    let status = run_raw(root, &["workspace", "status"]);
+    assert_eq!(
+        status.status, 0,
+        "stdout={} stderr={}",
+        status.stdout, status.stderr
+    );
+    assert_exact_rebind_hint(&format!("{}\n{}", status.stdout, status.stderr), "status");
+
+    let binary = std::fs::canonicalize(BIN).unwrap();
+    let binary_dir = binary.parent().unwrap();
+    let doctor = run_with_path(root, &["doctor", "--check"], &[binary_dir], None);
+    assert_ne!(doctor.status, 0, "stdout={}", doctor.stdout);
+    assert_exact_rebind_hint(&format!("{}\n{}", doctor.stdout, doctor.stderr), "doctor");
+
+    let stop = run_raw_with_stdin(
+        root,
+        &["codex-hook", "stop"],
+        r#"{"hook_event_name":"Stop","stop_hook_active":false}"#,
+    );
+    assert_eq!(
+        stop.status, 0,
+        "stdout={} stderr={}",
+        stop.stdout, stop.stderr
+    );
+    let stop: Value = serde_json::from_str(&stop.stdout).unwrap();
+    assert!(stop["decision"].is_null());
+    assert!(stop["reason"].is_null());
+    assert_eq!(stop["continue"], true);
+}
 #[test]
 fn goal_plan_and_review_receipts_close_a_real_two_file_delta() {
     let temp = tempfile::tempdir().unwrap();

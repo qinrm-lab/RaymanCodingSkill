@@ -105,6 +105,9 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
         println!("  当前二进制: {}", running.display());
         println!("  PATH 命令一致: {path_matches_running}");
         println!("  workspace activation: {}", activation.status);
+        if let Some(command) = &activation.recovery_command {
+            println!("  workspace recovery: `{command}`");
+        }
         crate::print_state_write_probe(&state_write);
         crate::print_host_patch_probe(&host_patch);
         print_toolchain(&toolchain);
@@ -126,20 +129,28 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
         // running shell never inherits), and the old text told them to edit
         // skill_sha256 instead.
         let mut causes = Vec::new();
+        if let Some(command) = &activation.recovery_command {
+            causes.push(format!("workspace 激活身份可安全重绑：运行 `{command}`"));
+        }
         if !path_matches_running {
-            causes.push(if path_candidate.is_none() {
-                "PATH 上找不到 rayman：安装器只改持久化 PATH，已经开着的终端不会继承；新开一个终端，或先把安装目录加进本进程 PATH"
-            } else {
-                "PATH 上的 rayman 与当前运行的二进制不是同一份：用仓库 release 二进制重新安装"
-            });
+            causes.push(
+                (if path_candidate.is_none() {
+                    "PATH 上找不到 rayman：安装器只改持久化 PATH，已经开着的终端不会继承；新开一个终端，或先把安装目录加进本进程 PATH"
+                } else {
+                    "PATH 上的 rayman 与当前运行的二进制不是同一份：用仓库 release 二进制重新安装"
+                })
+                .to_string(),
+            );
         }
         // Drift is the more specific diagnosis and must be reported first: it is
         // what cleared `active` in the first place, so testing activation first
         // buried it under generic "not activated" advice.
-        if hashes_recorded && !hashes_match {
-            causes.push("workspace SKILL.md 与记录的 skill_sha256 不一致：SKILL.md 改动后需重新 activate 重绑");
-        } else if !activation.active {
-            causes.push("workspace 未激活：运行 `rayman workspace activate --skill-file <canonical-SKILL.md> --yes`");
+        if activation.recovery_command.is_none() {
+            if hashes_recorded && !hashes_match {
+                causes.push("workspace SKILL.md 与记录的 skill_sha256 不一致：SKILL.md 改动后需重新 activate 重绑".into());
+            } else if !activation.active {
+                causes.push("workspace 未激活：运行 `rayman workspace activate --skill-file <canonical-SKILL.md> --yes`".into());
+            }
         }
         bail!("已安装身份契约不一致：{}", causes.join("；"));
     }

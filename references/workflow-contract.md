@@ -74,6 +74,26 @@ overwriting user-managed state still require user authority.
 
 - Operational state lives under `.RaymanCodingSkill/`; the tracked
   `quality.json` policy is the exception.
+- Installation never scans for or automatically rewrites activation contracts
+  in other workspaces. An exact-identity upgrade may therefore leave a prior
+  binding invalid until that workspace explicitly runs `workspace rebind
+  --yes`.
+- Rebind is a narrow identity migration: it accepts only an existing complete,
+  enabled `raymancodingskill` binding whose defects are limited to skill hash,
+  CLI contract, or CLI version drift and whose current skill bytes match the
+  canonical `SKILL.md` embedded in the running CLI. It updates only those
+  identity scalar values under the same state lock used by activate/deactivate,
+  preserving `skill_file`, comments, field order, quoting, and line endings.
+  It refuses orphan, deactivated, malformed, wrong-skill, untrusted/missing-file,
+  unsafe-path, and path-change cases. New activation or a canonical-path change
+  uses `workspace activate --skill-file ... --yes`.
+- When the user explicitly invokes Rayman for a non-read-only task, perform an
+  eligible rebind and continue the original task. A read-only request does not
+  authorize the state write and receives the recovery command instead.
+- The Stop Hook cannot infer whether a request was read-only and never writes
+  the activation contract. It sends safely rebindable drift through normal
+  goal/frontier checks: no-goal and legitimately paused/complete work may end,
+  but unfinished goals and structurally invalid activation remain fail-closed.
 - `state audit --check` is read-only. Do not delete state to make it pass.
 - `checkpoint save` is lossless by default. Use explicit prune/retention
   policy for deletion. `salvage-save` is recovery-only and never completion

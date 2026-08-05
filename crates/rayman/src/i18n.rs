@@ -321,7 +321,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "一条真正验证该变更的命令；rayman 自身与 --version/--help 之类的查询不是证据",
     "maintenance cycle rebind 要求 archived command 恰好包含一个 -MaintenanceOrchestrationCycle",
     "已存初始快照 {}（{} 个文件）并注册计划任务 '{}'：每 {} 分钟自动快照{}。",
-    "`rayman workspace-skill` 已退役；使用 `rayman workspace status|inspect|activate|deactivate`",
+    "`rayman workspace-skill` 已退役；使用 `rayman workspace status|inspect|activate|rebind|deactivate`",
     "共享 quality policy 的父目录必须是工作区内真实目录，不能是链接/reparse: {}",
     "已保存 recovery-only 快照 {} — {} 个文件；它不会成为默认 latest 或完成证据",
     "validation 必须提供至少一个 `--changed`；非代码需求必须显式使用 `--non-code`",
@@ -510,7 +510,6 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "无法读取 lifecycle-only authority goal: {error}",
     "  交接/CI 必须运行 `{SOURCE_FRESH_VERIFIER}`",
     "  模块: {} kind={} lines={} symbols={} public={}",
-    "canonical skill 必须是普通非链接文件: {}",
     "goal baseline fingerprint 与文件清单不匹配",
     "goal {} 状态为 {}，不能作为 standard READY",
     "id、title、detail 与 created_at 都不能为空",
@@ -580,7 +579,6 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "goal {} supersession 合约无效: {error}",
     "goal 包含空的 requirement id 或文本",
     "lifecycle-only replacement 缺少 baseline",
-    "skill_file 不是普通非链接文件: {}",
     "superseded goal 必须记录 superseded_by",
     "无法原子替换文件 {} -> {}: {error}",
     "无法计算 goal 实际变更集: {error}",
@@ -657,10 +655,8 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "goal 至少需要一个 must 需求",
     "must {} 未完成或缺少 evidence",
     "pytest lease 清理探针失败: {}",
-    "skill_file 不可读取 {}: {error}",
     "skill_file 路径不能包含换行",
     "只有 success/partial/blocked goal 可以 archived",
-    "无法哈希 skill_file {}: {error}",
     "无法复查 autosave 独占锁: {}",
     "无法定位当前 rayman 二进制",
     "无法打开 autosave 独占锁: {}",
@@ -830,6 +826,33 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "未注册",
     "运行中",
     "待办",
+    "RaymanCodingSkill 工作区激活身份已漂移（status={}）：运行 `{command}`",
+    "skill_file 不可安全读取 {}: {error}",
+    "skill_file 不是普通文件: {}",
+    "skill_file 当前内容与此 CLI 内嵌的 canonical SKILL.md 不一致",
+    "skill_file 在 rebind 写后验证期间发生并发变化",
+    "skill_file 在 rebind 发布前发生并发变化",
+    "skill_file 在校验期间发生变化: {}",
+    "skill_file 路径不得经过链接/reparse: {}",
+    "skill_file 路径不是 activate 可生成的安全规范形式",
+    "skill_file 路径为空",
+    "skill_file 路径组件不是目录: {}",
+    "workspace rebind 只接受 enabled: true",
+    "workspace rebind 只接受 skill: {SKILL_NAME}",
+    "workspace rebind 只接受完整六字段激活合同",
+    "workspace rebind 已无需更新，但激活状态仍无效",
+    "workspace rebind 拒绝无法原样安全写回的 skill_file",
+    "workspace rebind 拒绝格式无效的旧身份字段",
+    "workspace rebind 缺少 skill_file",
+    "workspace 激活身份可安全重绑：运行 `{command}`",
+    "workspace_skill.yaml 在 rebind 发布前发生并发变化",
+    "workspace_skill.yaml 必须是有效 UTF-8",
+    "写入后的 workspace rebind 合同仍无效: {}",
+    "原激活合同不是有效 UTF-8",
+    "当前 workspace 激活合同不可 rebind: {}",
+    "无法复查 skill_file: {}",
+    "无法规范化 skill_file: {}",
+    "无法读取 skill_file 路径组件: {}",
 ];
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
@@ -1630,6 +1653,111 @@ const MESSAGE_PREFIX_CATALOG: &[(&str, &str)] = &[
 // have been extracted. Short entries are therefore safe: user titles, paths, and
 // evidence text are reinserted byte-for-byte after the static template is translated.
 const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
+    (
+        "RaymanCodingSkill 工作区激活身份已漂移（status={}）：运行 `{command}`",
+        "RaymanCodingSkill workspace activation identity has drifted (status={}): run `{command}`",
+    ),
+    (
+        "skill_file 不可安全读取 {}: {error}",
+        "could not safely read skill_file {}: {error}",
+    ),
+    (
+        "skill_file 不是普通文件: {}",
+        "skill_file is not an ordinary file: {}",
+    ),
+    (
+        "skill_file 当前内容与此 CLI 内嵌的 canonical SKILL.md 不一致",
+        "skill_file contents do not match the canonical SKILL.md embedded in this CLI",
+    ),
+    (
+        "skill_file 在 rebind 写后验证期间发生并发变化",
+        "skill_file was concurrently modified during post-write rebind verification",
+    ),
+    (
+        "skill_file 在 rebind 发布前发生并发变化",
+        "skill_file was concurrently modified before rebind publication",
+    ),
+    (
+        "skill_file 在校验期间发生变化: {}",
+        "skill_file changed during validation: {}",
+    ),
+    (
+        "skill_file 路径不得经过链接/reparse: {}",
+        "skill_file path must not traverse a link/reparse point: {}",
+    ),
+    (
+        "skill_file 路径不是 activate 可生成的安全规范形式",
+        "skill_file path is not in a safe canonical form producible by workspace activate",
+    ),
+    ("skill_file 路径为空", "skill_file path is empty"),
+    (
+        "skill_file 路径组件不是目录: {}",
+        "skill_file path component is not a directory: {}",
+    ),
+    (
+        "workspace rebind 只接受 enabled: true",
+        "workspace rebind accepts only enabled: true",
+    ),
+    (
+        "workspace rebind 只接受 skill: {SKILL_NAME}",
+        "workspace rebind accepts only skill: {SKILL_NAME}",
+    ),
+    (
+        "workspace rebind 只接受完整六字段激活合同",
+        "workspace rebind accepts only a complete six-field activation contract",
+    ),
+    (
+        "workspace rebind 已无需更新，但激活状态仍无效",
+        "workspace rebind found no update to apply, but activation is still invalid",
+    ),
+    (
+        "workspace rebind 拒绝无法原样安全写回的 skill_file",
+        "workspace rebind refuses a skill_file that cannot be safely written back verbatim",
+    ),
+    (
+        "workspace rebind 拒绝格式无效的旧身份字段",
+        "workspace rebind refuses invalid recorded identity fields",
+    ),
+    (
+        "workspace rebind 缺少 skill_file",
+        "workspace rebind is missing skill_file",
+    ),
+    (
+        "workspace 激活身份可安全重绑：运行 `{command}`",
+        "workspace activation identity can be safely rebound: run `{command}`",
+    ),
+    (
+        "workspace_skill.yaml 在 rebind 发布前发生并发变化",
+        "workspace_skill.yaml was concurrently modified before rebind publication",
+    ),
+    (
+        "workspace_skill.yaml 必须是有效 UTF-8",
+        "workspace_skill.yaml must be valid UTF-8",
+    ),
+    (
+        "写入后的 workspace rebind 合同仍无效: {}",
+        "the workspace rebind contract remains invalid after writing: {}",
+    ),
+    (
+        "原激活合同不是有效 UTF-8",
+        "the original activation contract is not valid UTF-8",
+    ),
+    (
+        "当前 workspace 激活合同不可 rebind: {}",
+        "the current workspace activation contract is not eligible for rebind: {}",
+    ),
+    (
+        "无法复查 skill_file: {}",
+        "unable to recheck skill_file: {}",
+    ),
+    (
+        "无法规范化 skill_file: {}",
+        "unable to canonicalize skill_file: {}",
+    ),
+    (
+        "无法读取 skill_file 路径组件: {}",
+        "unable to read a skill_file path component: {}",
+    ),
     (
         "workspace 未激活：已停止自动保存并注销计划任务 '{}'。最终快照已跳过；如需抢救快照，运行 `rayman checkpoint salvage-save`。",
         "the workspace is not activated: autosave stopped and scheduled task '{}' was unregistered. The final snapshot was skipped; to salvage a snapshot, run `rayman checkpoint salvage-save`.",
@@ -3983,8 +4111,8 @@ const MESSAGE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "Codex lifecycle hook integration",
     ),
     (
-        "激活、停用或检查工作区契约",
-        "Activate, deactivate, or inspect the workspace contract",
+        "激活、重绑、停用或检查工作区契约",
+        "Activate, rebind, deactivate, or inspect the workspace contract",
     ),
     (
         "快照根目录（默认用户级：Windows 为 %LOCALAPPDATA%\\Rayman\\checkpoints）",

@@ -13,6 +13,10 @@ param(
     [string]$SkillPath,
 
     [Parameter(ParameterSetName = 'Verify')]
+    [ValidateNotNullOrEmpty()]
+    [string]$DoctorWorkspace,
+
+    [Parameter(ParameterSetName = 'Verify')]
     [switch]$RequirePath,
 
     [Parameter(ParameterSetName = 'Verify')]
@@ -38,7 +42,8 @@ $workspaceManifest = Join-Path $repoRoot 'Cargo.toml'
 $crateManifest = Join-Path $repoRoot 'crates/rayman/Cargo.toml'
 $lockfile = Join-Path $repoRoot 'Cargo.lock'
 $canonicalSkill = Join-Path $repoRoot 'SKILL.md'
-$expectedContract = 'rayman-cli-contract-v14'
+$packagedCanonicalSkill = Join-Path $repoRoot 'crates/rayman/assets/canonical-skill.md'
+$expectedContract = 'rayman-cli-contract-v15'
 $requiredMsrv = '1.88'
 
 function Read-RequiredFile {
@@ -70,10 +75,175 @@ function Resolve-RequiredPath {
     return (Resolve-Path -LiteralPath $Path).Path
 }
 
+function Resolve-RequiredDirectory {
+    param([string]$Path, [string]$Label)
+
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    $root = [IO.Path]::GetPathRoot($fullPath)
+    $comparison = if ($IsWindows) {
+        [StringComparison]::OrdinalIgnoreCase
+    } else {
+        [StringComparison]::Ordinal
+    }
+    if ($fullPath.Equals($root, $comparison)) {
+        throw "$Label cannot be a filesystem root: $fullPath"
+    }
+    $fullPath = $fullPath.TrimEnd(
+        [IO.Path]::DirectorySeparatorChar,
+        [IO.Path]::AltDirectorySeparatorChar
+    )
+    if (-not (Test-Path -LiteralPath $fullPath -PathType Container)) {
+        throw "$Label is missing or is not a directory: $fullPath"
+    }
+
+    # Validate every named component. Checking only the final directory lets an
+    # ancestor junction/symlink keep a lexical path outside the repository while
+    # redirecting the doctor into repository state.
+    $separators = [char[]]@(
+        [IO.Path]::DirectorySeparatorChar,
+        [IO.Path]::AltDirectorySeparatorChar
+    )
+    $relative = $fullPath.Substring($root.Length)
+    $segments = @($relative.Split($separators, [StringSplitOptions]::RemoveEmptyEntries))
+    $current = $root
+    foreach ($segment in $segments) {
+        $current = Join-Path $current $segment
+        $item = Get-Item -LiteralPath $current -Force
+        if (-not $item.PSIsContainer -or
+            $item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            throw "$Label ancestor must be a real non-reparse directory: $current"
+        }
+    }
+
+    $resolved = (Resolve-Path -LiteralPath $fullPath).Path.TrimEnd(
+        [IO.Path]::DirectorySeparatorChar,
+        [IO.Path]::AltDirectorySeparatorChar
+    )
+    if (-not $resolved.Equals($fullPath, $comparison)) {
+        throw "$Label canonical path differs from the explicitly named path: $fullPath -> $resolved"
+    }
+    return $resolved
+}
+
+function Resolve-RequiredRegularFile {
+    param([string]$Path, [string]$Label)
+
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    $resolvedParent = Resolve-RequiredDirectory -Path (Split-Path -Parent $fullPath) -Label "$Label parent"
+    if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
+        throw "$Label is missing or is not a regular file: $fullPath"
+    }
+    $item = Get-Item -LiteralPath $fullPath -Force
+    if ($item.PSIsContainer -or
+        $item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw "$Label must be a real regular file: $fullPath"
+    }
+    $resolved = (Resolve-Path -LiteralPath $fullPath).Path
+    $comparison = if ($IsWindows) {
+        [StringComparison]::OrdinalIgnoreCase
+    } else {
+        [StringComparison]::Ordinal
+    }
+    if (-not $resolved.Equals($fullPath, $comparison) -or
+        -not (Split-Path -Parent $resolved).Equals($resolvedParent, $comparison)) {
+        throw "$Label canonical path differs from the explicitly named path: $fullPath -> $resolved"
+    }
+    return $resolved
+}
+
+function Test-SameOrDescendantPath {
+    param([string]$Candidate, [string]$Parent)
+
+    $comparison = if ($IsWindows) {
+        [StringComparison]::OrdinalIgnoreCase
+    } else {
+        [StringComparison]::Ordinal
+    }
+    if ($Candidate.Equals($Parent, $comparison)) {
+        return $true
+    }
+    $prefix = $Parent.TrimEnd(
+        [IO.Path]::DirectorySeparatorChar,
+        [IO.Path]::AltDirectorySeparatorChar
+    ) + [IO.Path]::DirectorySeparatorChar
+    return $Candidate.StartsWith($prefix, $comparison)
+}
+
+function Resolve-IsolatedDoctorWorkspace {
+    param([string]$Path)
+
+    $resolved = Resolve-RequiredDirectory -Path $Path -Label 'Doctor workspace'
+    $resolvedRepo = Resolve-RequiredDirectory -Path $repoRoot -Label 'Repository root'
+    if ((Test-SameOrDescendantPath -Candidate $resolved -Parent $resolvedRepo) -or
+        (Test-SameOrDescendantPath -Candidate $resolvedRepo -Parent $resolved)) {
+        throw "Doctor workspace must be outside and disjoint from the repository tree: $resolved"
+    }
+
+    $stateRoot = Resolve-RequiredDirectory `
+        -Path (Join-Path $resolved '.RaymanCodingSkill') `
+        -Label 'Doctor workspace state root'
+    $binding = Resolve-RequiredRegularFile `
+        -Path (Join-Path $stateRoot 'workspace_skill.yaml') `
+        -Label 'Doctor workspace activation binding'
+    return [pscustomobject]@{
+        Workspace = $resolved
+        StateRoot = $stateRoot
+        Binding = $binding
+        BindingHash = Get-Sha256 -Path $binding
+    }
+}
+
+function Assert-IsolatedDoctorWorkspaceSnapshot {
+    param(
+        [Parameter(Mandatory = $true)]$Expected,
+        [Parameter(Mandatory = $true)]$Actual,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $comparison = if ($IsWindows) {
+        [StringComparison]::OrdinalIgnoreCase
+    } else {
+        [StringComparison]::Ordinal
+    }
+    foreach ($property in @('Workspace', 'StateRoot', 'Binding')) {
+        $expectedPath = [string]$Expected.$property
+        $actualPath = [string]$Actual.$property
+        if (-not $actualPath.Equals($expectedPath, $comparison)) {
+            throw "$Label $property identity changed during verification: $expectedPath -> $actualPath"
+        }
+    }
+    if ($Actual.BindingHash -ne $Expected.BindingHash) {
+        throw "$Label binding content changed during verification: $($Expected.BindingHash) -> $($Actual.BindingHash)"
+    }
+}
+
 function Get-Sha256 {
     param([string]$Path)
 
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Assert-CanonicalSkillAssetBinding {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepositorySkillPath,
+        [Parameter(Mandatory = $true)]
+        [string]$PackagedSkillPath
+    )
+
+    $repositoryPath = Resolve-RequiredPath -Path $RepositorySkillPath -Label 'Repository canonical skill'
+    $packagedPath = Resolve-RequiredPath -Path $PackagedSkillPath -Label 'Packaged canonical skill asset'
+    $repositoryHash = Get-Sha256 -Path $repositoryPath
+    $packagedHash = Get-Sha256 -Path $packagedPath
+    if ($repositoryHash -ne $packagedHash) {
+        throw "Packaged canonical skill SHA-256 differs from repository SKILL.md: $packagedHash != $repositoryHash"
+    }
+    return [pscustomobject]@{
+        RepositoryPath = $repositoryPath
+        PackagedPath = $packagedPath
+        RepositoryHash = $repositoryHash
+        PackagedHash = $packagedHash
+    }
 }
 
 function Resolve-RequiredApplication {
@@ -277,6 +447,148 @@ function Invoke-Rayman {
     return $text
 }
 
+function Invoke-WithDoctorWorkspaceValidation {
+    param(
+        [Parameter(Mandatory = $true)][string]$Workspace,
+        $ExpectedIsolatedSnapshot,
+        [Parameter(Mandatory = $true)][scriptblock]$Operation
+    )
+
+    if ($null -ne $ExpectedIsolatedSnapshot) {
+        $before = Resolve-IsolatedDoctorWorkspace -Path $Workspace
+        Assert-IsolatedDoctorWorkspaceSnapshot `
+            -Expected $ExpectedIsolatedSnapshot `
+            -Actual $before `
+            -Label 'Doctor workspace pre-check'
+        $validatedWorkspace = $before.Workspace
+    } else {
+        $validatedWorkspace = Resolve-RequiredDirectory -Path $Workspace -Label 'Repository doctor workspace'
+    }
+
+    $result = $null
+    $operationFailure = $null
+    $postValidationFailure = $null
+    try {
+        $result = & $Operation $validatedWorkspace
+    } catch {
+        $operationFailure = $_.Exception
+    } finally {
+        try {
+            if ($null -ne $ExpectedIsolatedSnapshot) {
+                $after = Resolve-IsolatedDoctorWorkspace -Path $Workspace
+                Assert-IsolatedDoctorWorkspaceSnapshot `
+                    -Expected $ExpectedIsolatedSnapshot `
+                    -Actual $after `
+                    -Label 'Doctor workspace post-check'
+            } else {
+                $afterWorkspace = Resolve-RequiredDirectory -Path $Workspace -Label 'Repository doctor workspace (post-check)'
+                $comparison = if ($IsWindows) {
+                    [StringComparison]::OrdinalIgnoreCase
+                } else {
+                    [StringComparison]::Ordinal
+                }
+                if (-not $afterWorkspace.Equals($validatedWorkspace, $comparison)) {
+                    throw "Repository doctor workspace identity changed during verification: $validatedWorkspace -> $afterWorkspace"
+                }
+            }
+        } catch {
+            $postValidationFailure = $_.Exception
+        }
+    }
+
+    if ($null -ne $operationFailure) {
+        if ($null -ne $postValidationFailure) {
+            throw "Doctor invocation failed: $($operationFailure.Message)`nDoctor workspace post-check also failed: $($postValidationFailure.Message)"
+        }
+        throw $operationFailure
+    }
+    if ($null -ne $postValidationFailure) {
+        throw "Doctor workspace post-check failed: $($postValidationFailure.Message)"
+    }
+    return $result
+}
+
+function Assert-DoctorReady {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Workspace,
+        [Parameter(Mandatory = $true)]
+        [string]$ExpectedSkillPath,
+        $ExpectedIsolatedSnapshot
+    )
+
+    $invocation = Invoke-WithDoctorWorkspaceValidation `
+        -Workspace $Workspace `
+        -ExpectedIsolatedSnapshot $ExpectedIsolatedSnapshot `
+        -Operation {
+            param([string]$ValidatedWorkspace)
+
+            $startingLocation = (Get-Location).Path
+            $pushedLocation = $false
+            $doctorText = $null
+            try {
+                Push-Location $ValidatedWorkspace
+                $pushedLocation = $true
+                $reportedVersion = Invoke-Rayman -Arguments @('--version')
+                if ($reportedVersion -ne "rayman $expectedVersion") {
+                    throw "CLI reports '$reportedVersion', expected 'rayman $expectedVersion'."
+                }
+                $doctorText = Invoke-Rayman -Arguments @('--format', 'json', 'doctor', '--check')
+            } finally {
+                if ($pushedLocation) {
+                    Pop-Location
+                }
+                if (-not (Get-Location).Path.Equals(
+                        $startingLocation,
+                        $(if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal })
+                    )) {
+                    throw 'Doctor verification did not restore the caller working directory.'
+                }
+            }
+            return [pscustomobject]@{
+                DoctorText = $doctorText
+                Workspace = $ValidatedWorkspace
+            }
+        }
+
+    $doctorText = $invocation.DoctorText
+    try {
+        $doctor = $doctorText | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        throw "doctor did not return valid JSON: $doctorText"
+    }
+    if ($doctor.contract -ne $expectedContract) {
+        throw "doctor reports contract '$($doctor.contract)', expected '$expectedContract'."
+    }
+    if ($doctor.version -ne $expectedVersion -or
+        -not $doctor.PSObject.Properties['release_identity'] -or
+        -not $doctor.release_identity.ready) {
+        throw 'doctor did not report the expected ready installed identity.'
+    }
+    if (-not $doctor.PSObject.Properties['source_fresh'] -or
+        $doctor.source_fresh.status -ne 'not_checked_by_doctor') {
+        throw 'doctor did not explicitly distinguish installed identity from source freshness.'
+    }
+    if (-not $doctor.PSObject.Properties['workspace_skill'] -or
+        [string]::IsNullOrWhiteSpace([string]$doctor.workspace_skill.path)) {
+        throw 'doctor did not report the workspace skill path.'
+    }
+    $reportedDoctorSkill = [string]$doctor.workspace_skill.path
+    $doctorSkillCandidate = if ([IO.Path]::IsPathRooted($reportedDoctorSkill)) {
+        $reportedDoctorSkill
+    } else {
+        Join-Path $invocation.Workspace $reportedDoctorSkill
+    }
+    $doctorSkill = Resolve-RequiredPath -Path $doctorSkillCandidate -Label 'Doctor workspace skill'
+    if (-not $doctorSkill.Equals(
+            $ExpectedSkillPath,
+            $(if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal })
+        )) {
+        throw "doctor workspace skill path differs from -SkillPath: $doctorSkill != $ExpectedSkillPath"
+    }
+    return $doctor
+}
+
 function Assert-GitHubTagContext {
     param(
         [Parameter(Mandatory = $true)]
@@ -318,6 +630,153 @@ function Assert-GitHubTagContext {
     }
 }
 
+function Get-ReleaseVerifierSelfTestItem {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    try {
+        return Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+    } catch {
+        if ($_.CategoryInfo.Category -eq [System.Management.Automation.ErrorCategory]::ObjectNotFound) {
+            return $null
+        }
+        throw "Unable to inspect release verifier self-test path '$Path': $($_.Exception.Message)"
+    }
+}
+
+function Resolve-ReleaseVerifierSelfTestDirectory {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$TempRoot,
+        [Parameter(Mandatory = $true)][string]$NamePattern,
+        [switch]$AllowMissing,
+        [switch]$RequireNoReparseDescendants
+    )
+
+    $comparison = if ($IsWindows) {
+        [StringComparison]::OrdinalIgnoreCase
+    } else {
+        [StringComparison]::Ordinal
+    }
+    $resolvedTempRoot = Resolve-RequiredDirectory `
+        -Path $TempRoot `
+        -Label 'Release verifier self-test temp root'
+    $fullPath = [IO.Path]::GetFullPath($Path).TrimEnd(
+        [IO.Path]::DirectorySeparatorChar,
+        [IO.Path]::AltDirectorySeparatorChar
+    )
+    $parent = Split-Path -Parent $fullPath
+    $leaf = Split-Path -Leaf $fullPath
+    if (-not $parent.Equals($resolvedTempRoot, $comparison) -or
+        $leaf -notmatch $NamePattern) {
+        throw "Refusing self-test cleanup outside the exact direct-child GUID scope: $fullPath"
+    }
+
+    $item = Get-ReleaseVerifierSelfTestItem -Path $fullPath
+    if ($null -eq $item) {
+        if ($AllowMissing) {
+            return $null
+        }
+        throw "Release verifier self-test cleanup target is missing: $fullPath"
+    }
+    $resolved = Resolve-RequiredDirectory -Path $fullPath -Label 'Release verifier self-test cleanup root'
+    if (-not $resolved.Equals($fullPath, $comparison)) {
+        throw "Release verifier self-test cleanup root did not resolve exactly: $fullPath -> $resolved"
+    }
+    if ($RequireNoReparseDescendants) {
+        $reparseDescendant = @(
+            Get-ChildItem -LiteralPath $resolved -Force -Recurse |
+                Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint } |
+                Select-Object -First 1
+        )
+        if ($reparseDescendant.Count -gt 0) {
+            throw "Refusing recursive self-test cleanup with a reparse descendant: $($reparseDescendant[0].FullName)"
+        }
+        $terminalResolved = Resolve-RequiredDirectory `
+            -Path $fullPath `
+            -Label 'Release verifier self-test cleanup root (terminal check)'
+        if (-not $terminalResolved.Equals($resolved, $comparison)) {
+            throw "Release verifier self-test cleanup root changed before deletion: $resolved -> $terminalResolved"
+        }
+    }
+    return $resolved
+}
+
+function Remove-ReleaseVerifierSelfTestDirectory {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$TempRoot,
+        [Parameter(Mandatory = $true)][string]$NamePattern
+    )
+
+    $resolved = Resolve-ReleaseVerifierSelfTestDirectory `
+        -Path $Path `
+        -TempRoot $TempRoot `
+        -NamePattern $NamePattern `
+        -AllowMissing `
+        -RequireNoReparseDescendants
+    if ($null -eq $resolved) {
+        return
+    }
+    Remove-Item -LiteralPath $resolved -Recurse -Force
+    $remaining = Get-ReleaseVerifierSelfTestItem -Path $resolved
+    if ($null -ne $remaining) {
+        throw "Release verifier self-test cleanup did not remove its exact target: $resolved"
+    }
+}
+
+function Remove-ReleaseVerifierSelfTestReparsePoint {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$ExpectedParent,
+        [Parameter(Mandatory = $true)][string]$TempRoot,
+        [Parameter(Mandatory = $true)][string]$ParentNamePattern
+    )
+
+    $comparison = if ($IsWindows) {
+        [StringComparison]::OrdinalIgnoreCase
+    } else {
+        [StringComparison]::Ordinal
+    }
+    $resolvedParent = Resolve-ReleaseVerifierSelfTestDirectory `
+        -Path $ExpectedParent `
+        -TempRoot $TempRoot `
+        -NamePattern $ParentNamePattern `
+        -AllowMissing
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    if ((Split-Path -Leaf $fullPath) -ne 'linked-ancestor') {
+        throw "Refusing to remove an unexpected self-test reparse path: $fullPath"
+    }
+    if ($null -eq $resolvedParent) {
+        $orphan = Get-ReleaseVerifierSelfTestItem -Path $fullPath
+        if ($null -ne $orphan) {
+            throw "Self-test reparse point exists without its validated parent: $fullPath"
+        }
+        return
+    }
+    if (-not (Split-Path -Parent $fullPath).Equals($resolvedParent, $comparison)) {
+        throw "Refusing self-test reparse cleanup outside its exact parent: $fullPath"
+    }
+
+    $item = Get-ReleaseVerifierSelfTestItem -Path $fullPath
+    if ($null -eq $item) {
+        return
+    }
+    $itemPath = [IO.Path]::GetFullPath($item.FullName)
+    if (-not $itemPath.Equals($fullPath, $comparison) -or
+        -not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw "Refusing to remove a non-reparse or path-drifted self-test entry: $fullPath"
+    }
+    if ($item.PSIsContainer) {
+        [IO.Directory]::Delete($fullPath)
+    } else {
+        [IO.File]::Delete($fullPath)
+    }
+    $remaining = Get-ReleaseVerifierSelfTestItem -Path $fullPath
+    if ($null -ne $remaining) {
+        throw "Release verifier self-test reparse cleanup did not remove its exact target: $fullPath"
+    }
+}
+
 function Invoke-ReleaseVerifierSelfTest {
     foreach ($name in @('cargo', 'git', 'rustc')) {
         Set-Item -LiteralPath "Function:$name" -Value { 'forged command' }
@@ -336,6 +795,144 @@ function Invoke-ReleaseVerifierSelfTest {
         }
     }
 
+    $repositorySkillProbe = [IO.Path]::GetTempFileName()
+    $packagedSkillProbe = [IO.Path]::GetTempFileName()
+    try {
+        [IO.File]::WriteAllBytes($repositorySkillProbe, [byte[]](1, 2, 3))
+        [IO.File]::WriteAllBytes($packagedSkillProbe, [byte[]](1, 2, 4))
+        $assetMismatchRejected = $false
+        try {
+            $null = Assert-CanonicalSkillAssetBinding -RepositorySkillPath $repositorySkillProbe -PackagedSkillPath $packagedSkillProbe
+        } catch {
+            $assetMismatchRejected = $_.Exception.Message -match 'Packaged canonical skill SHA-256 differs'
+        }
+        if (-not $assetMismatchRejected) {
+            throw 'Release verifier self-test failed: a mismatched packaged canonical skill asset was not rejected.'
+        }
+    } finally {
+        Remove-Item -LiteralPath $repositorySkillProbe, $packagedSkillProbe -Force -ErrorAction SilentlyContinue
+    }
+
+    $selfTestTempRoot = Resolve-RequiredDirectory `
+        -Path ([IO.Path]::GetTempPath()) `
+        -Label 'Release verifier self-test temp root'
+    $selfTestRootNamePattern = '^' +
+        [regex]::Escape("rayman-release-doctor-selftest-$PID-") +
+        '[0-9a-f]{32}(?:-(?:missing|reparse-target|reparse-carrier))?$'
+    $doctorProbeRoot = Join-Path $selfTestTempRoot (
+        "rayman-release-doctor-selftest-$PID-" + [Guid]::NewGuid().ToString('N')
+    )
+    $missingMarkerRoot = "$doctorProbeRoot-missing"
+    $reparseTargetRoot = "$doctorProbeRoot-reparse-target"
+    $reparseCarrierRoot = "$doctorProbeRoot-reparse-carrier"
+    $reparseLink = Join-Path $reparseCarrierRoot 'linked-ancestor'
+    try {
+        New-Item -ItemType Directory -Path (Join-Path $doctorProbeRoot '.RaymanCodingSkill') -Force | Out-Null
+        $bindingProbe = Join-Path $doctorProbeRoot '.RaymanCodingSkill/workspace_skill.yaml'
+        [IO.File]::WriteAllText(
+            $bindingProbe,
+            ('self-test marker' + [Environment]::NewLine),
+            [Text.UTF8Encoding]::new($false)
+        )
+        $resolvedProbe = Resolve-IsolatedDoctorWorkspace -Path $doctorProbeRoot
+        if (-not $resolvedProbe.Workspace.Equals(
+                (Resolve-Path -LiteralPath $doctorProbeRoot).Path,
+                $(if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal })
+            )) {
+            throw 'Release verifier self-test failed: isolated doctor workspace resolution drifted.'
+        }
+
+        # Exercise the same wrapper used by each real doctor invocation: a binding
+        # mutation after the pre-check must be rejected by the post-check.
+        $originalBinding = [IO.File]::ReadAllBytes($bindingProbe)
+        $terminalMutationRejected = $false
+        try {
+            $null = Invoke-WithDoctorWorkspaceValidation `
+                -Workspace $resolvedProbe.Workspace `
+                -ExpectedIsolatedSnapshot $resolvedProbe `
+                -Operation {
+                    param([string]$ValidatedWorkspace)
+                    [IO.File]::WriteAllText(
+                        (Join-Path $ValidatedWorkspace '.RaymanCodingSkill/workspace_skill.yaml'),
+                        ('mutated self-test marker' + [Environment]::NewLine),
+                        [Text.UTF8Encoding]::new($false)
+                    )
+                    return 'mutation-complete'
+                }
+        } catch {
+            $terminalMutationRejected = $_.Exception.Message -match 'post-check' -and
+                $_.Exception.Message -match 'binding content changed'
+        } finally {
+            [IO.File]::WriteAllBytes($bindingProbe, $originalBinding)
+        }
+        if (-not $terminalMutationRejected) {
+            throw 'Release verifier self-test failed: terminal doctor workspace mutation was not rejected.'
+        }
+        $restoredProbe = Resolve-IsolatedDoctorWorkspace -Path $doctorProbeRoot
+        Assert-IsolatedDoctorWorkspaceSnapshot `
+            -Expected $resolvedProbe `
+            -Actual $restoredProbe `
+            -Label 'Release verifier self-test restoration'
+
+        New-Item -ItemType Directory -Path $missingMarkerRoot -Force | Out-Null
+        foreach ($invalid in @(
+            $repoRoot,
+            (Join-Path $repoRoot 'scripts'),
+            (Split-Path -Parent $repoRoot),
+            $missingMarkerRoot
+        )) {
+            $rejected = $false
+            try {
+                $null = Resolve-IsolatedDoctorWorkspace -Path $invalid
+            } catch {
+                $rejected = $true
+            }
+            if (-not $rejected) {
+                throw "Release verifier self-test failed: unsafe doctor workspace was accepted: $invalid"
+            }
+        }
+
+        $reparseDoctorRoot = Join-Path $reparseTargetRoot 'doctor-workspace'
+        New-Item -ItemType Directory -Path (Join-Path $reparseDoctorRoot '.RaymanCodingSkill') -Force | Out-Null
+        [IO.File]::WriteAllText(
+            (Join-Path $reparseDoctorRoot '.RaymanCodingSkill/workspace_skill.yaml'),
+            ('reparse self-test marker' + [Environment]::NewLine),
+            [Text.UTF8Encoding]::new($false)
+        )
+        New-Item -ItemType Directory -Path $reparseCarrierRoot -Force | Out-Null
+        if ($IsWindows) {
+            New-Item -ItemType Junction -Path $reparseLink -Target $reparseTargetRoot | Out-Null
+        } else {
+            New-Item -ItemType SymbolicLink -Path $reparseLink -Target $reparseTargetRoot | Out-Null
+        }
+        $ancestorReparseRejected = $false
+        try {
+            $null = Resolve-IsolatedDoctorWorkspace -Path (Join-Path $reparseLink 'doctor-workspace')
+        } catch {
+            $ancestorReparseRejected = $_.Exception.Message -match 'ancestor must be a real non-reparse directory'
+        }
+        if (-not $ancestorReparseRejected) {
+            throw 'Release verifier self-test failed: an ancestor reparse point was not rejected.'
+        }
+    } finally {
+        Remove-ReleaseVerifierSelfTestReparsePoint `
+            -Path $reparseLink `
+            -ExpectedParent $reparseCarrierRoot `
+            -TempRoot $selfTestTempRoot `
+            -ParentNamePattern $selfTestRootNamePattern
+        foreach ($owned in @(
+            $doctorProbeRoot,
+            $missingMarkerRoot,
+            $reparseCarrierRoot,
+            $reparseTargetRoot
+        )) {
+            Remove-ReleaseVerifierSelfTestDirectory `
+                -Path $owned `
+                -TempRoot $selfTestTempRoot `
+                -NamePattern $selfTestRootNamePattern
+        }
+    }
+
     $contextNames = @(
         'GITHUB_ACTIONS',
         'GITHUB_REF_TYPE',
@@ -348,7 +945,7 @@ function Invoke-ReleaseVerifierSelfTest {
         $savedContext[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
     }
     $sourceHead = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-    $exactTag = 'v2.8.0'
+    $exactTag = 'v2.9.0'
     try {
         [Environment]::SetEnvironmentVariable('GITHUB_ACTIONS', 'true', 'Process')
         $forgedCases = @(
@@ -397,7 +994,7 @@ function Invoke-ReleaseVerifierSelfTest {
         }
     }
 
-    Write-Host 'Release verifier self-test passed: native command shadows and forged GitHub tag context were rejected.'
+    Write-Host 'Release verifier self-test passed: native command shadows, packaged canonical skill drift, isolated doctor workspace ancestry/terminal guards, and forged GitHub tag context were verified.'
 }
 
 if ($SelfTest) {
@@ -460,37 +1057,21 @@ $resolvedReference = if ($ReferenceCliPath) {
     Resolve-RequiredPath -Path $ReferenceCliPath -Label 'Reference CLI artifact'
 }
 $resolvedSkill = Resolve-RequiredPath -Path $SkillPath -Label 'Deployed canonical skill'
-$resolvedCanonicalSkill = Resolve-RequiredPath -Path $canonicalSkill -Label 'Repository canonical skill'
-
-Push-Location $repoRoot
-try {
-    $reportedVersion = Invoke-Rayman -Arguments @('--version')
-    if ($reportedVersion -ne "rayman $expectedVersion") {
-        throw "CLI reports '$reportedVersion', expected 'rayman $expectedVersion'."
-    }
-
-    $doctorText = Invoke-Rayman -Arguments @('--format', 'json', 'doctor', '--check')
-    try {
-        $doctor = $doctorText | ConvertFrom-Json -ErrorAction Stop
-    } catch {
-        throw "doctor did not return valid JSON: $doctorText"
-    }
-    if ($doctor.contract -ne $expectedContract) {
-        throw "doctor reports contract '$($doctor.contract)', expected '$expectedContract'."
-    }
-    if ($doctor.version -ne $expectedVersion -or
-        -not $doctor.PSObject.Properties['release_identity'] -or
-        -not $doctor.release_identity.ready) {
-        throw 'doctor did not report the expected ready installed identity.'
-    }
-    if (-not $doctor.PSObject.Properties['source_fresh'] -or
-        $doctor.source_fresh.status -ne 'not_checked_by_doctor') {
-        throw 'doctor did not explicitly distinguish installed identity from source freshness.'
-    }
-} finally {
-    Pop-Location
+$doctorWorkspaceSnapshot = $null
+$resolvedDoctorWorkspace = if ([string]::IsNullOrWhiteSpace($DoctorWorkspace)) {
+    Resolve-RequiredDirectory -Path $repoRoot -Label 'Repository doctor workspace'
+} else {
+    $doctorWorkspaceSnapshot = Resolve-IsolatedDoctorWorkspace -Path $DoctorWorkspace
+    $doctorWorkspaceSnapshot.Workspace
 }
+$canonicalSkillBinding = Assert-CanonicalSkillAssetBinding -RepositorySkillPath $canonicalSkill -PackagedSkillPath $packagedCanonicalSkill
+$resolvedCanonicalSkill = $canonicalSkillBinding.RepositoryPath
+$resolvedPackagedCanonicalSkill = $canonicalSkillBinding.PackagedPath
 
+$doctor = Assert-DoctorReady `
+    -Workspace $resolvedDoctorWorkspace `
+    -ExpectedSkillPath $resolvedSkill `
+    -ExpectedIsolatedSnapshot $doctorWorkspaceSnapshot
 $cliHash = Get-Sha256 -Path $script:resolvedCli
 if ($resolvedReference) {
     $referenceHash = Get-Sha256 -Path $resolvedReference
@@ -500,7 +1081,8 @@ if ($resolvedReference) {
 }
 
 $deployedSkillHash = Get-Sha256 -Path $resolvedSkill
-$canonicalSkillHash = Get-Sha256 -Path $resolvedCanonicalSkill
+$canonicalSkillHash = $canonicalSkillBinding.RepositoryHash
+$packagedCanonicalSkillHash = $canonicalSkillBinding.PackagedHash
 if ($deployedSkillHash -ne $canonicalSkillHash) {
     throw "Deployed SKILL.md SHA-256 differs from the repository canonical skill: $deployedSkillHash != $canonicalSkillHash"
 }
@@ -616,10 +1198,14 @@ if ($resolvedReference) {
 }
 $finalSkillPath = Resolve-RequiredPath -Path $SkillPath -Label 'Deployed canonical skill (final check)'
 $finalCanonicalSkill = Resolve-RequiredPath -Path $canonicalSkill -Label 'Repository canonical skill (final check)'
+$finalPackagedCanonicalSkill = Resolve-RequiredPath -Path $packagedCanonicalSkill -Label 'Packaged canonical skill asset (final check)'
 if ($finalSkillPath -ne $resolvedSkill -or
+    $finalCanonicalSkill -ne $resolvedCanonicalSkill -or
+    $finalPackagedCanonicalSkill -ne $resolvedPackagedCanonicalSkill -or
     (Get-Sha256 -Path $finalSkillPath) -ne $deployedSkillHash -or
-    (Get-Sha256 -Path $finalCanonicalSkill) -ne $canonicalSkillHash) {
-    throw 'Deployed or repository canonical SKILL.md identity changed during verification.'
+    (Get-Sha256 -Path $finalCanonicalSkill) -ne $canonicalSkillHash -or
+    (Get-Sha256 -Path $finalPackagedCanonicalSkill) -ne $packagedCanonicalSkillHash) {
+    throw 'Deployed, repository, or packaged canonical SKILL.md identity changed during verification.'
 }
 # Every other supplied/deployed identity is re-resolved and re-hashed here so a
 # concurrent replacement cannot inherit an already-validated digest. The other
@@ -654,6 +1240,23 @@ if ($RequireSourceFresh) {
         throw "Source HEAD changed before final release-contract output: $sourceHeadBefore -> $terminalHead"
     }
 }
+if ($null -ne $doctorWorkspaceSnapshot) {
+    $terminalDoctorWorkspaceSnapshot = Resolve-IsolatedDoctorWorkspace -Path $resolvedDoctorWorkspace
+    Assert-IsolatedDoctorWorkspaceSnapshot `
+        -Expected $doctorWorkspaceSnapshot `
+        -Actual $terminalDoctorWorkspaceSnapshot `
+        -Label 'Terminal doctor workspace check'
+    $resolvedDoctorWorkspace = $terminalDoctorWorkspaceSnapshot.Workspace
+} else {
+    $resolvedDoctorWorkspace = Resolve-RequiredDirectory `
+        -Path $repoRoot `
+        -Label 'Repository doctor workspace (terminal check)'
+}
+$null = Assert-DoctorReady `
+    -Workspace $resolvedDoctorWorkspace `
+    -ExpectedSkillPath $finalSkillPath `
+    -ExpectedIsolatedSnapshot $doctorWorkspaceSnapshot
+
 foreach ($name in @($toolIdentity.Keys | Sort-Object)) {
     $finalTool = Resolve-RequiredApplication -Name $name -Label "$name executable (final check)"
     $initialTool = $toolIdentity[$name]

@@ -16,11 +16,12 @@ fn is_managed_state_lock(name: &str) -> bool {
         .is_some_and(|target| STATE_LOCK_TARGETS.contains(&target))
 }
 
-/// Only files a writer actually calls `acquire_state_lock` on. `autosave.json`
-/// is not one: autosave serializes on the separately allowlisted
-/// `autosave.lock`, so allowlisting `.autosave.json.rayman.lock` described a
-/// file no code path creates and quietly widened what the audit accepts.
-const STATE_LOCK_TARGETS: &[&str] = &["pending.json"];
+/// Only files a writer actually calls `acquire_state_lock` on. Activation
+/// activate/rebind/deactivate share the workspace-skill lock; goal pending uses
+/// the pending lock. `autosave.json` is not one: autosave serializes on the
+/// separately allowlisted `autosave.lock`, so allowing its generated-looking
+/// lock name would describe a file no code path creates and widen the audit.
+const STATE_LOCK_TARGETS: &[&str] = &["pending.json", "workspace_skill.yaml"];
 
 /// `.<allowed-state-file>.rayman-<pid>-<counter>.tmp` — the scratch file
 /// `file_io` writes and renames for every atomic state write.
@@ -265,10 +266,10 @@ mod tests {
         assert!(run_state_audit(dir.path(), false, true).is_err());
     }
 
-    /// `goal pending add` leaves `.pending.json.rayman.lock` behind by design,
-    /// and `scripts/audit-repository.ps1` runs `state audit --check`, so this
-    /// omission made an ordinary documented command permanently red-line the
-    /// repository audit.
+    /// Managed writers leave both pending and activation lock files behind by
+    /// design, and `scripts/audit-repository.ps1` runs `state audit --check`,
+    /// so omitting either exact target makes an ordinary documented command
+    /// permanently red-line the repository audit.
     #[test]
     fn state_audit_accepts_the_state_locks_the_cli_itself_creates() {
         let dir = tempfile::tempdir().unwrap();
@@ -279,6 +280,7 @@ mod tests {
         // `.autosave.json.rayman.lock` was an entry for a file no code path
         // produces — and it is now refused like any other unknown state entry.
         std::fs::write(state.join(".pending.json.rayman.lock"), "").unwrap();
+        std::fs::write(state.join(".workspace_skill.yaml.rayman.lock"), "").unwrap();
         std::fs::write(state.join("autosave.lock"), "").unwrap();
         assert!(run_state_audit(dir.path(), false, true).is_ok());
 
