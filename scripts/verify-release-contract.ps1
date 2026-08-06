@@ -43,7 +43,7 @@ $crateManifest = Join-Path $repoRoot 'crates/rayman/Cargo.toml'
 $lockfile = Join-Path $repoRoot 'Cargo.lock'
 $canonicalSkill = Join-Path $repoRoot 'SKILL.md'
 $packagedCanonicalSkill = Join-Path $repoRoot 'crates/rayman/assets/canonical-skill.md'
-$expectedContract = 'rayman-cli-contract-v15'
+$expectedContract = 'rayman-cli-contract-v16'
 $requiredMsrv = '1.88'
 
 function Read-RequiredFile {
@@ -945,7 +945,9 @@ function Invoke-ReleaseVerifierSelfTest {
         $savedContext[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
     }
     $sourceHead = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-    $exactTag = 'v2.9.0'
+    $selfTestManifest = Read-RequiredFile -Path $workspaceManifest -Label 'Workspace manifest'
+    $selfTestVersion = Get-ManifestValue -Content $selfTestManifest -Key 'version' -Label $workspaceManifest
+    $exactTag = "v$selfTestVersion"
     try {
         [Environment]::SetEnvironmentVariable('GITHUB_ACTIONS', 'true', 'Process')
         $forgedCases = @(

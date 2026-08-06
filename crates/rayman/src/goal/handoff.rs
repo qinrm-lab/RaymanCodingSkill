@@ -229,6 +229,8 @@ impl GoalStore {
             updated_at: now,
             baseline: Some(workspace_baseline(&self.root)?),
             plan_receipts: Vec::new(),
+            plan_publish_intent: None,
+            plan_publication_policy: Some(super::PLAN_PUBLICATION_POLICY_V1.to_string()),
             review_receipts: Vec::new(),
             authority_receipts: Vec::new(),
             work_packages: Vec::new(),

@@ -20,8 +20,8 @@ use sha2::{Digest, Sha256};
 use cli::{
     AutosaveAction, AutosaveCmd, CheckCmd, CheckProfile, CheckpointAction, CheckpointCmd, Cli,
     Command, ContextAction, ContextCmd, Format, GoalAction, GoalCmd, HandoffAction, MapAction,
-    MapCmd, PendingAction, QualityProfile, StateAction, StateCmd, TempAction, TempCmd,
-    WorkspaceAction, WorkspaceCmd,
+    MapCmd, QualityProfile, StateAction, StateCmd, TempAction, TempCmd, WorkspaceAction,
+    WorkspaceCmd,
 };
 use rayman::{assets, autosave, context, goal, map, source_state, temp, workspace, workspace_root};
 
@@ -308,13 +308,17 @@ fn run_workspace(root: &Path, json: bool, cmd: WorkspaceCmd) -> Result<()> {
             let activation = workspace::activation_status(root)?;
             let source = source_state::inspect(root);
             let state_write = rayman::state_paths::state_write_probe(root);
+            let activation_metadata = workspace::activation_metadata_capability_probe(root);
             let host_patch = rayman::codex_host::patch_probe(None);
+            let execution_context = rayman::codex_host::execution_context_probe();
             if json {
                 print(&json!({
                     "activation": activation,
                     "source": source,
                     "state_write": state_write,
+                    "activation_metadata": activation_metadata,
                     "host_patch": host_patch,
+                    "execution_context": execution_context,
                 }));
             } else {
                 println!(
@@ -323,7 +327,9 @@ fn run_workspace(root: &Path, json: bool, cmd: WorkspaceCmd) -> Result<()> {
                 );
                 print_source_state(&source);
                 print_state_write_probe(&state_write);
+                print_activation_metadata_probe(&activation_metadata);
                 print_host_patch_probe(&host_patch);
+                print_execution_context_probe(&execution_context);
             }
             return Ok(());
         }
@@ -430,6 +436,46 @@ pub(crate) fn print_host_patch_probe(probe: &rayman::codex_host::HostPatchProbe)
     println!("{}", i18n::message(i18n::MessageId::HostPatchFix, &[]));
 }
 
+/// Keep execution identity distinct from filesystem elevation. A caller can
+/// bind the relevant identity/profile axis before attempting another broker;
+/// the SID fingerprint alone is never an ACL-capability claim.
+pub(crate) fn print_execution_context_probe(probe: &rayman::codex_host::ExecutionContextProbe) {
+    if !probe.applicable {
+        return;
+    }
+    println!(
+        "  execution context: status={:?} principal_match={:?} profile_match={:?} account={} sid={} principal_fingerprint={} token_profile={} environment_profile={} environment_matches_token={:?} capability_key_hint={}",
+        probe.status,
+        probe.principal_match,
+        probe.profile_match,
+        probe.principal_account.as_deref().unwrap_or("unknown"),
+        probe.principal_sid.as_deref().unwrap_or("unknown"),
+        probe.principal_fingerprint.as_deref().unwrap_or("unknown"),
+        probe.token_profile.as_deref().unwrap_or("unknown"),
+        probe.environment_profile.as_deref().unwrap_or("unknown"),
+        probe.environment_profile_matches_token,
+        probe.capability_key_hint.as_deref().unwrap_or("none")
+    );
+    use rayman::codex_host::ExecutionContextStatus;
+    match probe.status {
+        ExecutionContextStatus::PrincipalMismatch => println!(
+            "    principal mismatch: a principal-bound retry must prove the required SID/account changed; transport or elevation alone is not evidence — {}",
+            probe.reason
+        ),
+        ExecutionContextStatus::ProfileMismatch => println!(
+            "    profile mismatch: the same SID may be valid only after proving the required profile changed — {}",
+            probe.reason
+        ),
+        ExecutionContextStatus::Unknown | ExecutionContextStatus::PlatformMismatch => println!(
+            "    execution context unresolved: do not claim this requirement satisfied — {}",
+            probe.reason
+        ),
+        ExecutionContextStatus::Match
+        | ExecutionContextStatus::NotRequired
+        | ExecutionContextStatus::NotApplicable => {}
+    }
+}
+
 /// Sandboxed hosts deny state writes with ACL errors that otherwise surface
 /// mid-transaction; the probe line lets an agent escalate before starting one.
 pub(crate) fn print_state_write_probe(probe: &rayman::state_paths::StateWriteProbe) {
@@ -444,6 +490,32 @@ pub(crate) fn print_state_write_probe(probe: &rayman::state_paths::StateWritePro
         println!(
             "  状态写探针: 写入被拒或探测失败（权限或 ACL）: {}",
             probe.error.as_deref().unwrap_or("")
+        );
+    }
+}
+
+/// The generic state-write probe covers ordinary managed tmp files only. This
+/// separate line reports whether the current process can stage the activation
+/// file's exact authorization metadata without touching the canonical target.
+pub(crate) fn print_activation_metadata_probe(
+    probe: &rayman::workspace::ActivationMetadataCapabilityProbe,
+) {
+    if probe.ready {
+        println!("  激活元数据写探针: 就绪（原授权元数据 staging 已验证，激活文件未变）");
+    } else if !probe.applicable && !probe.probed {
+        println!("  激活元数据写探针: 无激活合同或平台不支持，未探测");
+    } else {
+        println!(
+            "  激活元数据写探针: 失败 phase={:?} class={:?} os_error={} activation_unchanged={:?} cleanup_complete={:?}: {}",
+            probe.phase,
+            probe.failure_class,
+            probe
+                .os_error_code
+                .map(|code| code.to_string())
+                .unwrap_or_else(|| "none".into()),
+            probe.activation_unchanged,
+            probe.cleanup_complete,
+            probe.error.as_deref().unwrap_or("unknown error")
         );
     }
 }
@@ -1086,81 +1158,7 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 }
             }
         }
-        GoalAction::Pending(pending_cmd) => match pending_cmd.action {
-            PendingAction::Add {
-                title,
-                message,
-                goal: goal_id,
-                owner,
-                kind,
-                attempts,
-                evidence_paths,
-                minimum_input,
-                recommended,
-                alternatives,
-                risk,
-                resume_command,
-                auto_resume_condition,
-                consultation_timing,
-                background_mechanism,
-                background_authority_evidence,
-                background_isolation_evidence,
-            } => {
-                if let Some(goal_id) = goal_id.as_deref()
-                    && store.get(goal_id)?.is_none()
-                {
-                    bail!("pending 绑定的 goal 不存在: {goal_id}");
-                }
-                let item = pending.add_structured(goal::PendingSubmission {
-                    title,
-                    detail: message,
-                    goal_id,
-                    owner: goal::PendingOwner::parse(&owner)?,
-                    kind: goal::PendingKind::parse(&kind)?,
-                    attempts,
-                    evidence_paths,
-                    minimum_input,
-                    recommended_action: recommended,
-                    alternatives,
-                    risk,
-                    resume_command,
-                    auto_resume_condition,
-                    consultation_timing: goal::ConsultationTiming::parse(&consultation_timing)?,
-                    background_mechanism,
-                    background_authority_evidence,
-                    background_isolation_evidence,
-                })?;
-                if json {
-                    print(&serde_json::to_value(&item)?);
-                } else {
-                    println!("已记录待完成项 {}", item.id);
-                }
-            }
-            PendingAction::List => {
-                let items = pending.list()?;
-                if json {
-                    print(&serde_json::to_value(&items)?);
-                } else if items.is_empty() {
-                    println!("无待完成项。");
-                } else {
-                    for item in items {
-                        println!("{}  {}  {}", item.id, item.title, item.detail);
-                    }
-                }
-            }
-            PendingAction::Resolve { id } => {
-                // 与 goal show 同理：解决一个不存在的待完成项必须非零退出，
-                // 否则调用方会把"没找到"当成"已解决"。
-                if !pending.resolve(&id)? {
-                    bail!("待完成项不存在: {id}");
-                }
-                if json {
-                    print(&json!({ "resolved": true, "id": id }));
-                } else {
-                    println!("已解决待完成项。");
-                }
-            }
-        },
+        GoalAction::Pending(command) => goal_cli::run_pending(&store, &pending, json, *command)?,
     }
     Ok(())
 }

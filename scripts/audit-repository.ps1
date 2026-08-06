@@ -630,9 +630,15 @@ db-path = "unexpected"
 $nativeApplications = [ordered]@{
     Cargo = Resolve-NativeApplication -Name 'cargo' -Label 'Cargo'
     CargoDeny = Resolve-NativeApplication -Name 'cargo-deny' -Label 'cargo-deny'
-    Rustup = Resolve-NativeApplication -Name 'rustup' -Label 'rustup'
-    Git = Resolve-NativeApplication -Name 'git' -Label 'Git'
-    Rustc = Resolve-NativeApplication -Name 'rustc' -Label 'rustc'
+}
+# The focused dependency-policy lane executes only Cargo-independent
+# cargo-deny checks (plus the generic script self-test, which binds Cargo and
+# cargo-deny). Requiring the complete-audit MSRV/Git/compiler toolset here made
+# that focused lane fail on supported MSI Rust installations with no rustup.
+if (-not $DependencyPolicyOnly) {
+    $nativeApplications.Rustup = Resolve-NativeApplication -Name 'rustup' -Label 'rustup'
+    $nativeApplications.Git = Resolve-NativeApplication -Name 'git' -Label 'Git'
+    $nativeApplications.Rustc = Resolve-NativeApplication -Name 'rustc' -Label 'rustc'
 }
 $capturedNativeIdentities = @($nativeApplications.Values)
 Write-AuditPhase -Name 'script_self_test' -Status 'start'

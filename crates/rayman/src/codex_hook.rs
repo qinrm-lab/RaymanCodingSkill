@@ -18,8 +18,8 @@ use serde_json::{Map, Value, json};
 
 use crate::file_io::{is_link_or_reparse, write_atomic};
 use crate::goal::{
-    FrontierExecution, GoalLifecycle, GoalStatus, GoalStore, PendingStore, goal_gate_verdict,
-    workspace_fingerprint,
+    FrontierConsultation, FrontierExecution, GoalLifecycle, GoalStatus, GoalStore, PendingStore,
+    goal_gate_verdict, workspace_fingerprint,
 };
 use crate::pathfmt::display_path;
 
@@ -29,6 +29,9 @@ const HOOKS_FILE: &str = "hooks.json";
 #[derive(Debug, Deserialize)]
 struct StopHookInput {
     hook_event_name: Option<String>,
+    session_id: Option<String>,
+    turn_id: Option<String>,
+    last_assistant_message: Option<String>,
     // Accepted for schema compatibility but deliberately not honored: de-escalating a
     // block after the guard already fired once would let an agent escape a legitimate,
     // still-unsatisfied completion gate by simply retrying the stop. Goal and structurally
@@ -48,6 +51,20 @@ pub struct StopHookResponse {
     pub reason: Option<String>,
     #[serde(rename = "continue", skip_serializing_if = "Option::is_none")]
     pub should_continue: Option<bool>,
+    /// Internal evaluation evidence only. Codex's published Stop stdout
+    /// contract does not authorize custom top-level fields.
+    #[serde(skip)]
+    pub(crate) internal_observation: Option<CodexStopCandidateObservation>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CodexStopCandidateObservation {
+    pub semantics: &'static str,
+    pub session_id: String,
+    pub turn_id: String,
+    pub message_sha256: String,
+    pub render_sha256: String,
+    pub package_sha256s: Vec<String>,
 }
 
 impl StopHookResponse {
@@ -56,6 +73,16 @@ impl StopHookResponse {
             decision: None,
             reason: None,
             should_continue: Some(true),
+            internal_observation: None,
+        }
+    }
+
+    fn allow_observed(observation: CodexStopCandidateObservation) -> Self {
+        Self {
+            decision: None,
+            reason: None,
+            should_continue: Some(true),
+            internal_observation: Some(observation),
         }
     }
 
@@ -64,6 +91,7 @@ impl StopHookResponse {
             decision: Some("block".into()),
             reason: Some(reason.into()),
             should_continue: None,
+            internal_observation: None,
         }
     }
 
@@ -83,6 +111,18 @@ pub struct HookInstallReport {
 /// Inactive workspaces are outside Rayman's authority. Once an activation
 /// contract exists, malformed activation or task state fails closed.
 pub fn evaluate_stop(root: &Path) -> StopHookResponse {
+    evaluate_stop_event(root, None)
+}
+
+fn evaluate_stop_event(root: &Path, event: Option<&StopHookInput>) -> StopHookResponse {
+    evaluate_stop_event_with_phase_hook(root, event, || {})
+}
+
+fn evaluate_stop_event_with_phase_hook(
+    root: &Path,
+    event: Option<&StopHookInput>,
+    before_confirmation: impl FnOnce(),
+) -> StopHookResponse {
     let activation = match crate::workspace::activation_status(root) {
         Ok(report) => report,
         Err(error) => {
@@ -118,7 +158,7 @@ pub fn evaluate_stop(root: &Path) -> StopHookResponse {
     };
 
     let store = GoalStore::new(root);
-    let (goals, issues) = match store.list_with_issues() {
+    let (mut goals, issues) = match store.list_with_issues() {
         Ok(result) => result,
         Err(error) => {
             return StopHookResponse::block(format!(
@@ -136,6 +176,7 @@ pub fn evaluate_stop(root: &Path) -> StopHookResponse {
             "Rayman goal state is incomplete or corrupt: {detail}. Repair it before ending the turn."
         ));
     }
+    goals.sort_by(|left, right| left.id.cmp(&right.id));
 
     let current = goals
         .iter()
@@ -155,7 +196,16 @@ pub fn evaluate_stop(root: &Path) -> StopHookResponse {
         }
     };
     let pending = PendingStore::new(root);
+    let pending_before = match pending.list() {
+        Ok(items) => items,
+        Err(error) => {
+            return StopHookResponse::block(format!(
+                "Rayman Stop guard could not capture pending state: {error:#}"
+            ));
+        }
+    };
     let mut unfinished = Vec::new();
+    let mut ready_goals = Vec::new();
     for goal in current {
         let frontier = match pending.frontier(goal) {
             Ok(frontier) => frontier,
@@ -166,10 +216,18 @@ pub fn evaluate_stop(root: &Path) -> StopHookResponse {
                 ));
             }
         };
+        if frontier.consultation == FrontierConsultation::Ready {
+            ready_goals.push((*goal).clone());
+            continue;
+        }
         match frontier.execution {
-            FrontierExecution::PausedForUser
-            | FrontierExecution::WaitExternal
-            | FrontierExecution::ContinueBackground => {}
+            FrontierExecution::WaitExternal => {}
+            FrontierExecution::PausedForUser | FrontierExecution::ContinueBackground => {
+                unfinished.push(format!(
+                    "{} reached a user pause without a current Stop candidate: {}",
+                    goal.id, frontier.reason
+                ));
+            }
             FrontierExecution::Complete => {
                 let verdict = goal_gate_verdict(goal, &goals, root, Some(&fingerprint));
                 if !verdict.blockers.is_empty() || goal.status != GoalStatus::Success {
@@ -186,9 +244,167 @@ pub fn evaluate_stop(root: &Path) -> StopHookResponse {
             )),
         }
     }
+    let pending_after = match pending.list() {
+        Ok(items) => items,
+        Err(error) => {
+            return StopHookResponse::block(format!(
+                "Rayman Stop guard could not confirm pending state: {error:#}"
+            ));
+        }
+    };
+    if pending_before != pending_after {
+        return StopHookResponse::block(
+            "Rayman pending state changed while the Stop guard classified the frontier",
+        );
+    }
+    let initial_guard_state_sha256 = match serde_json::to_vec(&(&goals, &pending_after)) {
+        Ok(bytes) => crate::hash::sha256_bytes(&bytes),
+        Err(error) => {
+            return StopHookResponse::block(format!(
+                "Rayman Stop guard could not bind its initial state snapshot: {error}"
+            ));
+        }
+    };
+
+    let mut observation = None;
+    if !ready_goals.is_empty() {
+        let rendered = match pending.render_for_goals(&ready_goals) {
+            Ok(rendered) => rendered,
+            Err(error) => {
+                return StopHookResponse::block(format!(
+                    "Rayman Stop guard could not render the current human-boundary candidate: {error:#}"
+                ));
+            }
+        };
+        let event_matches = event.is_some_and(|event| {
+            event
+                .session_id
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty())
+                && event
+                    .turn_id
+                    .as_deref()
+                    .is_some_and(|value| !value.trim().is_empty())
+                && event
+                    .last_assistant_message
+                    .as_deref()
+                    .is_some_and(|message| {
+                        crate::goal::normalize_stop_candidate_message(message) == rendered.text
+                    })
+        });
+        if event_matches {
+            before_confirmation();
+            let (mut fresh_goals, fresh_issues) = match store.list_with_issues() {
+                Ok(result) => result,
+                Err(error) => {
+                    return StopHookResponse::block(format!(
+                        "Rayman Stop guard could not re-read all goal state: {error:#}"
+                    ));
+                }
+            };
+            if !fresh_issues.is_empty() {
+                return StopHookResponse::block(
+                    "Rayman goal state became incomplete or corrupt during Stop confirmation",
+                );
+            }
+            fresh_goals.sort_by(|left, right| left.id.cmp(&right.id));
+            let fresh_pending_before = match pending.list() {
+                Ok(items) => items,
+                Err(error) => {
+                    return StopHookResponse::block(format!(
+                        "Rayman Stop guard could not re-read pending state: {error:#}"
+                    ));
+                }
+            };
+            let mut fresh_ready_goals = Vec::new();
+            for goal in fresh_goals
+                .iter()
+                .filter(|goal| goal.lifecycle == GoalLifecycle::Current)
+            {
+                match pending.frontier(goal) {
+                    Ok(frontier) if frontier.consultation == FrontierConsultation::Ready => {
+                        fresh_ready_goals.push((*goal).clone());
+                    }
+                    Ok(_) => {}
+                    Err(error) => {
+                        return StopHookResponse::block(format!(
+                            "Rayman Stop guard could not re-evaluate frontier for {}: {error:#}",
+                            goal.id
+                        ));
+                    }
+                }
+            }
+            let fresh_pending_after = match pending.list() {
+                Ok(items) => items,
+                Err(error) => {
+                    return StopHookResponse::block(format!(
+                        "Rayman Stop guard could not finish re-reading pending state: {error:#}"
+                    ));
+                }
+            };
+            let fresh_guard_state_sha256 =
+                match serde_json::to_vec(&(&fresh_goals, &fresh_pending_after)) {
+                    Ok(bytes) => crate::hash::sha256_bytes(&bytes),
+                    Err(error) => {
+                        return StopHookResponse::block(format!(
+                            "Rayman Stop guard could not bind its confirmation snapshot: {error}"
+                        ));
+                    }
+                };
+            let fresh_fingerprint = match workspace_fingerprint(root) {
+                Ok(fingerprint) => fingerprint,
+                Err(error) => {
+                    return StopHookResponse::block(format!(
+                        "Rayman Stop guard could not refresh the workspace fingerprint: {error:#}"
+                    ));
+                }
+            };
+            if fresh_pending_before != fresh_pending_after
+                || fresh_guard_state_sha256 != initial_guard_state_sha256
+                || fresh_fingerprint != fingerprint
+            {
+                return StopHookResponse::block(
+                    "Rayman workspace, goal, or pending state changed while checking the current Stop candidate",
+                );
+            }
+            let confirmed = match pending.render_for_goals(&fresh_ready_goals) {
+                Ok(confirmed) => confirmed,
+                Err(error) => {
+                    return StopHookResponse::block(format!(
+                        "Rayman Stop candidate became stale during confirmation: {error:#}"
+                    ));
+                }
+            };
+            if confirmed.render_sha256 == rendered.render_sha256
+                && confirmed.state_sha256 == rendered.state_sha256
+                && confirmed.text == rendered.text
+            {
+                let event = event.expect("event_matches requires an event");
+                observation = Some(CodexStopCandidateObservation {
+                    semantics: "codex_stop_candidate_observed",
+                    session_id: event.session_id.clone().expect("validated session id"),
+                    turn_id: event.turn_id.clone().expect("validated turn id"),
+                    message_sha256: crate::hash::sha256_bytes(rendered.text.as_bytes()),
+                    render_sha256: rendered.render_sha256,
+                    package_sha256s: rendered.package_sha256s,
+                });
+            } else {
+                unfinished.push(
+                    "the deterministic Stop candidate changed while the hook confirmed state"
+                        .into(),
+                );
+            }
+        } else {
+            unfinished.push(format!(
+                "ready human-boundary packages require the exact aggregate output of `rayman goal pending render --current` as this event's complete last_assistant_message (render_sha256={}, pending={})",
+                rendered.render_sha256,
+                rendered.pending_ids.join(",")
+            ));
+        }
+    }
 
     if unfinished.is_empty() {
-        StopHookResponse::allow()
+        observation.map_or_else(StopHookResponse::allow, StopHookResponse::allow_observed)
     } else {
         let recovery_guidance = recovery_command
             .as_deref()
@@ -225,7 +441,7 @@ pub fn run_stop_from_stdin() -> StopHookResponse {
         );
     }
     match crate::workspace_root() {
-        Ok(root) => evaluate_stop(&root),
+        Ok(root) => evaluate_stop_event(&root, Some(&event)),
         Err(error) => StopHookResponse::block(format!(
             "Rayman Stop guard could not resolve the workspace: {error:#}"
         )),
@@ -523,6 +739,39 @@ mod tests {
         crate::workspace::activate(root, &skill).unwrap();
     }
 
+    fn add_human_boundary(
+        root: &Path,
+        goal: &crate::goal::Goal,
+        capability_key: &str,
+        detail: &str,
+    ) -> crate::goal::PendingItem {
+        PendingStore::new(root)
+            .add_capability_bound(
+                PendingSubmission {
+                    title: "owner choice".into(),
+                    detail: detail.into(),
+                    goal_id: Some(goal.id.clone()),
+                    owner: PendingOwner::Human,
+                    kind: PendingKind::HumanInput,
+                    attempts: vec!["completed independent work".into()],
+                    evidence_paths: vec!["decision.md".into()],
+                    minimum_input: Some("choose A or B".into()),
+                    recommended_action: Some("choose A".into()),
+                    alternatives: vec!["choose B".into()],
+                    risk: Some("behavior differs".into()),
+                    resume_command: Some(format!("rayman prepare --goal {}", goal.id)),
+                    auto_resume_condition: Some("owner records choice".into()),
+                    consultation_timing: ConsultationTiming::Immediate,
+                    background_mechanism: None,
+                    background_authority_evidence: None,
+                    background_isolation_evidence: None,
+                },
+                Some(capability_key.into()),
+                Some("owner_decision".into()),
+            )
+            .unwrap()
+    }
+
     fn activate_running_canonical(root: &Path) {
         let skill = root.join("SKILL.md");
         fs::write(&skill, include_bytes!("../assets/canonical-skill.md")).unwrap();
@@ -644,34 +893,137 @@ mod tests {
     }
 
     #[test]
-    fn complete_human_solution_package_allows_pause() {
+    fn stop_allows_only_the_current_exact_render_and_keeps_observation_internal() {
         let root = tempfile::tempdir().unwrap();
         activate(root.path());
         let goal = GoalStore::new(root.path())
             .start("human boundary", &[("requires owner choice".into(), true)])
             .unwrap();
-        PendingStore::new(root.path())
-            .add_structured(PendingSubmission {
-                title: "owner choice".into(),
-                detail: "two materially different directions".into(),
-                goal_id: Some(goal.id),
-                owner: PendingOwner::Human,
-                kind: PendingKind::HumanInput,
-                attempts: vec!["completed independent work".into()],
-                evidence_paths: vec!["decision.md".into()],
-                minimum_input: Some("choose A or B".into()),
-                recommended_action: Some("choose A".into()),
-                alternatives: vec!["choose B".into()],
-                risk: Some("behavior differs".into()),
-                resume_command: Some("rayman prepare --goal goal".into()),
-                auto_resume_condition: Some("owner records choice".into()),
-                consultation_timing: ConsultationTiming::Immediate,
-                background_mechanism: None,
-                background_authority_evidence: None,
-                background_isolation_evidence: None,
-            })
+        let pending = PendingStore::new(root.path());
+        add_human_boundary(
+            root.path(),
+            &goal,
+            "owner/current-choice",
+            "two materially different directions",
+        );
+        let rendered = pending
+            .render_for_goals(std::slice::from_ref(&goal))
             .unwrap();
-        assert!(!evaluate_stop(root.path()).blocks_stop());
+        assert!(
+            evaluate_stop(root.path()).blocks_stop(),
+            "an askable package is not a current Stop observation"
+        );
+        let exact_event = StopHookInput {
+            hook_event_name: Some("Stop".into()),
+            session_id: Some("session-1".into()),
+            turn_id: Some("turn-1".into()),
+            last_assistant_message: Some(rendered.text.clone()),
+            stop_hook_active: Some(true),
+        };
+        let allowed = evaluate_stop_event(root.path(), Some(&exact_event));
+        assert!(!allowed.blocks_stop(), "{:?}", allowed.reason);
+        let observation = allowed.internal_observation.as_ref().unwrap();
+        assert_eq!(observation.semantics, "codex_stop_candidate_observed");
+        assert_eq!(observation.session_id, "session-1");
+        assert_eq!(observation.turn_id, "turn-1");
+        assert_eq!(observation.render_sha256, rendered.render_sha256);
+        let stdout = serde_json::to_value(&allowed).unwrap();
+        assert_eq!(stdout, json!({ "continue": true }));
+        let stdout_text = serde_json::to_string(&stdout).unwrap();
+        for forbidden in [
+            "rayman_observation",
+            "delivered",
+            "visible",
+            "user_saw",
+            "read_by_user",
+        ] {
+            assert!(!stdout_text.contains(forbidden), "{stdout_text}");
+        }
+
+        for changed in [
+            format!("prefix{}", rendered.text),
+            format!("{}suffix", rendered.text),
+            rendered.text.replace("  ", " "),
+            "owner choice".into(),
+            String::new(),
+        ] {
+            let event = StopHookInput {
+                hook_event_name: Some("Stop".into()),
+                session_id: Some("session-1".into()),
+                turn_id: Some("turn-2".into()),
+                last_assistant_message: Some(changed),
+                stop_hook_active: Some(true),
+            };
+            assert!(evaluate_stop_event(root.path(), Some(&event)).blocks_stop());
+        }
+        assert!(evaluate_stop(root.path()).blocks_stop());
+    }
+
+    #[test]
+    fn stop_requires_the_complete_workspace_aggregate() {
+        let root = tempfile::tempdir().unwrap();
+        activate(root.path());
+        let goals = GoalStore::new(root.path());
+        let goal_a = goals
+            .start("boundary A", &[("choose A".into(), true)])
+            .unwrap();
+        let goal_b = goals
+            .start("boundary B", &[("choose B".into(), true)])
+            .unwrap();
+        let pending = PendingStore::new(root.path());
+        add_human_boundary(root.path(), &goal_a, "owner/shared", "choice A");
+        add_human_boundary(root.path(), &goal_b, "owner/shared", "choice B");
+        let partial = pending
+            .render_for_goals(std::slice::from_ref(&goal_a))
+            .unwrap();
+        let aggregate = pending
+            .render_for_goals(&[goal_b.clone(), goal_a.clone()])
+            .unwrap();
+
+        let event = |message: String| StopHookInput {
+            hook_event_name: Some("Stop".into()),
+            session_id: Some("session-aggregate".into()),
+            turn_id: Some("turn-aggregate".into()),
+            last_assistant_message: Some(message),
+            stop_hook_active: Some(true),
+        };
+        assert!(evaluate_stop_event(root.path(), Some(&event(partial.text))).blocks_stop());
+        assert!(!evaluate_stop_event(root.path(), Some(&event(aggregate.text))).blocks_stop());
+    }
+
+    #[test]
+    fn stop_confirmation_relists_all_current_goals() {
+        let root = tempfile::tempdir().unwrap();
+        activate(root.path());
+        let goals = GoalStore::new(root.path());
+        let goal = goals
+            .start("initial boundary", &[("choose".into(), true)])
+            .unwrap();
+        let pending = PendingStore::new(root.path());
+        add_human_boundary(root.path(), &goal, "owner/initial", "initial choice");
+        let rendered = pending.render_for_goals(&[goal]).unwrap();
+        let event = StopHookInput {
+            hook_event_name: Some("Stop".into()),
+            session_id: Some("session-race".into()),
+            turn_id: Some("turn-race".into()),
+            last_assistant_message: Some(rendered.text),
+            stop_hook_active: Some(true),
+        };
+
+        let response = evaluate_stop_event_with_phase_hook(root.path(), Some(&event), || {
+            goals
+                .start("late current goal", &[("finish late work".into(), true)])
+                .unwrap();
+        });
+        assert!(response.blocks_stop());
+        assert!(
+            response
+                .reason
+                .as_deref()
+                .is_some_and(|reason| reason.contains("state changed")),
+            "{:?}",
+            response.reason
+        );
     }
 
     /// `codex-hook install` canonicalizes the executable, which on Windows

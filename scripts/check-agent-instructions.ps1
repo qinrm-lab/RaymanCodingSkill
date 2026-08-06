@@ -27,6 +27,7 @@ $agents = Read-StrictUtf8 'AGENTS.md'
 $skill = Read-StrictUtf8 'SKILL.md'
 $claude = Read-StrictUtf8 'CLAUDE.md'
 $workflow = Read-StrictUtf8 'references/workflow-contract.md'
+$readme = Read-StrictUtf8 'README.md'
 $manifestText = Read-StrictUtf8 'install-manifest.json'
 
 $canonicalSkillAsset = 'crates/rayman/assets/canonical-skill.md'
@@ -72,6 +73,30 @@ foreach ($required in @('--must-proof KIND::TEXT', 'goal handoff start', 'Unboun
     if (-not $workflow.Contains($required, [StringComparison]::OrdinalIgnoreCase)) {
         throw "Shared workflow reference is missing required contract text: $required"
     }
+}
+
+# Keep the public human-boundary contract aligned with the event-local Stop
+# implementation. Byte equality alone can make SKILL.md and its packaged copy
+# consistently wrong, while README drift would otherwise remain invisible.
+$publicPendingContracts = @{
+    'SKILL.md' = $skill
+    'references/workflow-contract.md' = $workflow
+    'README.md' = $readme
+}
+foreach ($entry in $publicPendingContracts.GetEnumerator()) {
+    foreach ($forbidden in @('goal pending present', 'consultation=presented', 'decision=await_user')) {
+        if ($entry.Value.Contains($forbidden, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Public pending contract contains retired durable-presentation semantics '$forbidden': $($entry.Key)"
+        }
+    }
+    if ($entry.Value -notmatch 'goal\s+pending\s+render\s+--current') {
+        throw "Public pending contract is missing deterministic workspace aggregate rendering: $($entry.Key)"
+    }
+}
+if (-not $skill.Contains('current Codex Stop event', [StringComparison]::Ordinal) -or
+    -not $workflow.Contains('current Codex Stop event', [StringComparison]::Ordinal) -or
+    -not $readme.Contains('consultation=none|deferred|ready', [StringComparison]::Ordinal)) {
+    throw 'Public pending contracts must describe current-event observation and the none/deferred/ready frontier.'
 }
 
 $skillLines = $skill -split "`n"

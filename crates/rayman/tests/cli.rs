@@ -16,6 +16,14 @@ struct Output {
     stderr: String,
 }
 
+fn current_activation_contract(skill_hash: &str) -> String {
+    format!(
+        "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: {}\ncli_version: {}\n",
+        rayman::CLI_CONTRACT,
+        rayman::CLI_VERSION,
+    )
+}
+
 /// 在 `dir` 下运行 `rayman <args...>`，返回退出码与输出。
 fn run_raw(dir: &Path, args: &[&str]) -> Output {
     let output = Command::new(BIN)
@@ -126,6 +134,62 @@ fn run_json(dir: &Path, args: &[&str]) -> Value {
     );
     serde_json::from_str(&output.stdout)
         .unwrap_or_else(|error| panic!("输出不是 JSON: {error}\n{}", output.stdout))
+}
+
+fn add_complete_human_pending(
+    root: &Path,
+    goal_id: &str,
+    capability_key: &str,
+    detail: &str,
+) -> Value {
+    add_complete_human_pending_with_title(root, goal_id, capability_key, "choice", detail)
+}
+
+fn add_complete_human_pending_with_title(
+    root: &Path,
+    goal_id: &str,
+    capability_key: &str,
+    title: &str,
+    detail: &str,
+) -> Value {
+    let args = vec![
+        "goal".to_string(),
+        "pending".into(),
+        "add".into(),
+        title.into(),
+        "-m".into(),
+        detail.into(),
+        "--goal".into(),
+        goal_id.into(),
+        "--owner".into(),
+        "human".into(),
+        "--kind".into(),
+        "human_input".into(),
+        "--attempt".into(),
+        "completed every safe local path".into(),
+        "--evidence-path".into(),
+        "reports/options.md".into(),
+        "--minimum-input".into(),
+        "choose A or B".into(),
+        "--recommended".into(),
+        "choose A".into(),
+        "--alternative".into(),
+        "choose B".into(),
+        "--risk".into(),
+        "behavior differs".into(),
+        "--resume-command".into(),
+        format!("rayman prepare --goal {goal_id}"),
+        "--auto-resume-condition".into(),
+        "owner records choice".into(),
+        "--consultation-timing".into(),
+        "immediate".into(),
+        "--capability-key".into(),
+        capability_key.into(),
+        "--boundary-class".into(),
+        "owner_decision".into(),
+    ];
+    let args = args.iter().map(String::as_str).collect::<Vec<_>>();
+    run_json(root, &args)
 }
 
 /// Current-schema goals need a receipt produced by the CLI itself. `rustc
@@ -1006,9 +1070,7 @@ fn doctor_verifies_installed_identity_in_an_ordinary_managed_workspace() {
     write(
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
-        &format!(
-            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v15\ncli_version: 2.9.0\n"
-        ),
+        &current_activation_contract(&skill_hash),
     );
     let binary = std::fs::canonicalize(BIN).unwrap();
     let binary_dir = binary.parent().unwrap();
@@ -1027,6 +1089,23 @@ fn doctor_verifies_installed_identity_in_an_ordinary_managed_workspace() {
     );
     let report: Value = serde_json::from_str(&output.stdout).unwrap();
     assert_eq!(report["release_identity"]["ready"], true);
+    assert_eq!(report["doctor_check"]["ready"], true);
+    assert_eq!(report["doctor_check"]["context_requirement_present"], false);
+    #[cfg(windows)]
+    {
+        assert!(
+            report["execution_context"]["principal_fingerprint"]
+                .as_str()
+                .is_some_and(|value| !value.is_empty()),
+            "{report}"
+        );
+        assert_eq!(report["execution_context"]["status"], "not_required");
+    }
+    #[cfg(not(windows))]
+    {
+        assert!(report["execution_context"]["principal_fingerprint"].is_null());
+        assert_eq!(report["execution_context"]["status"], "not_applicable");
+    }
     assert_eq!(report["repo_release"]["checked"], false);
     assert_eq!(report["repo_release"]["status"], "not_checked_by_doctor");
 }
@@ -1041,9 +1120,7 @@ fn doctor_rejects_an_earlier_windows_path_wrapper() {
     write(
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
-        &format!(
-            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v15\ncli_version: 2.9.0\n"
-        ),
+        &current_activation_contract(&skill_hash),
     );
     let wrapper_dir = tempfile::tempdir().unwrap();
     write(wrapper_dir.path(), "rayman.cmd", "@echo wrong wrapper\r\n");
@@ -1066,18 +1143,18 @@ fn doctor_rejects_an_earlier_windows_path_wrapper() {
 }
 
 #[test]
-fn doctor_and_workspace_inspect_report_the_state_write_probe() {
+fn doctor_and_workspace_inspect_report_distinct_write_probes() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     write(root, "SKILL.md", "ordinary workspace canonical skill\n");
     let skill_hash = rayman::hash::sha256_file(&root.join("SKILL.md")).unwrap();
+    let activation_path = root.join(".RaymanCodingSkill/workspace_skill.yaml");
     write(
         root,
         ".RaymanCodingSkill/workspace_skill.yaml",
-        &format!(
-            "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: rayman-cli-contract-v15\ncli_version: 2.9.0\n"
-        ),
+        &current_activation_contract(&skill_hash),
     );
+    let activation_before = std::fs::read(&activation_path).unwrap();
     let binary = std::fs::canonicalize(BIN).unwrap();
     let binary_dir = binary.parent().unwrap();
 
@@ -1091,12 +1168,33 @@ fn doctor_and_workspace_inspect_report_the_state_write_probe() {
     assert_eq!(report["state_write"]["state_dir_present"], true);
     assert_eq!(report["state_write"]["probed"], true);
     assert_eq!(report["state_write"]["writable"], true);
+    assert_eq!(report["activation_metadata"]["applicable"], true);
+    assert_eq!(report["activation_metadata"]["probed"], true);
+    assert_eq!(report["activation_metadata"]["ready"], true);
+    assert_eq!(
+        report["activation_metadata"]["capability_key"],
+        "activation/metadata-preserving-staging"
+    );
+    assert_eq!(report["activation_metadata"]["activation_unchanged"], true);
+    assert_eq!(report["activation_metadata"]["cleanup_complete"], true);
 
     let inspect = run_raw(root, &["--format", "json", "workspace", "inspect"]);
     assert_eq!(inspect.status, 0, "{}", inspect.stderr);
     let inspect: Value = serde_json::from_str(&inspect.stdout).unwrap();
     assert_eq!(inspect["state_write"]["probed"], true);
     assert_eq!(inspect["state_write"]["writable"], true);
+    assert_eq!(inspect["activation_metadata"]["probed"], true);
+    assert_eq!(inspect["activation_metadata"]["ready"], true);
+    assert_eq!(inspect["activation_metadata"]["phase"], "complete");
+    assert!(inspect["execution_context"]["status"].is_string());
+
+    let status = run_raw(root, &["--format", "json", "workspace", "status"]);
+    assert_eq!(status.status, 0, "{}", status.stderr);
+    let status: Value = serde_json::from_str(&status.stdout).unwrap();
+    assert!(
+        status.get("activation_metadata").is_none(),
+        "workspace status must remain the activation report only"
+    );
 
     let inspect_en = run_raw(root, &["--language", "en", "workspace", "inspect"]);
     assert_eq!(inspect_en.status, 0, "{}", inspect_en.stderr);
@@ -1104,6 +1202,26 @@ fn doctor_and_workspace_inspect_report_the_state_write_probe() {
         inspect_en.stdout.contains("state-write probe: writable"),
         "stdout={}",
         inspect_en.stdout
+    );
+    assert!(
+        inspect_en
+            .stdout
+            .contains("activation-metadata write probe: ready"),
+        "stdout={}",
+        inspect_en.stdout
+    );
+    assert_eq!(std::fs::read(&activation_path).unwrap(), activation_before);
+    assert!(
+        std::fs::read_dir(root.join(".RaymanCodingSkill"))
+            .unwrap()
+            .filter_map(Result::ok)
+            .all(|entry| {
+                !entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".workspace_skill.yaml.rayman-")
+            }),
+        "activation metadata probe left a named sidecar"
     );
 
     // A workspace without a state root must be reported unprobed, not mutated.
@@ -1113,7 +1231,176 @@ fn doctor_and_workspace_inspect_report_the_state_write_probe() {
     let bare_inspect: Value = serde_json::from_str(&bare_inspect.stdout).unwrap();
     assert_eq!(bare_inspect["state_write"]["state_dir_present"], false);
     assert_eq!(bare_inspect["state_write"]["probed"], false);
+    assert_eq!(bare_inspect["activation_metadata"]["applicable"], false);
+    assert_eq!(bare_inspect["activation_metadata"]["probed"], false);
     assert!(!bare.path().join(".RaymanCodingSkill").exists());
+}
+
+#[cfg(windows)]
+#[test]
+fn doctor_check_rejects_an_unsatisfied_untrusted_context_requirement_without_changing_identity() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "SKILL.md", "ordinary workspace canonical skill\n");
+    let skill_hash = rayman::hash::sha256_file(&root.join("SKILL.md")).unwrap();
+    write(
+        root,
+        ".RaymanCodingSkill/workspace_skill.yaml",
+        &current_activation_contract(&skill_hash),
+    );
+    let binary = std::fs::canonicalize(BIN).unwrap();
+    let binary_dir = binary.parent().unwrap();
+    let mut entries = vec![binary_dir.to_path_buf()];
+    entries.extend(std::env::split_paths(
+        &std::env::var_os("PATH").unwrap_or_default(),
+    ));
+    let path = std::env::join_paths(entries).unwrap();
+    let output = Command::new(BIN)
+        .args(["--format", "json", "doctor", "--check"])
+        .current_dir(root)
+        .env("PATH", path)
+        .env("RAYMAN_REQUIRED_PRINCIPAL", "RAYMAN_TEST\\NotTheTokenUser")
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(!output.status.success(), "stdout={stdout} stderr={stderr}");
+    let report: Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(report["execution_context"]["status"], "principal_mismatch");
+    assert_eq!(
+        report["execution_context"]["requirement_source"],
+        "process_environment_untrusted"
+    );
+    assert_eq!(report["release_identity"]["ready"], true);
+    assert_eq!(report["doctor_check"]["ready"], false);
+    assert_eq!(report["doctor_check"]["identity_ready"], true);
+    assert_eq!(report["doctor_check"]["context_ready"], false);
+    assert!(
+        stderr.contains("execution-context requirement 未满足"),
+        "stderr={stderr}"
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn doctor_profile_requirement_uses_the_token_profile_not_userprofile() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "SKILL.md", "ordinary workspace canonical skill\n");
+    let skill_hash = rayman::hash::sha256_file(&root.join("SKILL.md")).unwrap();
+    write(
+        root,
+        ".RaymanCodingSkill/workspace_skill.yaml",
+        &current_activation_contract(&skill_hash),
+    );
+    let binary = std::fs::canonicalize(BIN).unwrap();
+    let binary_dir = binary.parent().unwrap();
+    let mut entries = vec![binary_dir.to_path_buf()];
+    entries.extend(std::env::split_paths(
+        &std::env::var_os("PATH").unwrap_or_default(),
+    ));
+    let path = std::env::join_paths(entries).unwrap();
+
+    let baseline = Command::new(BIN)
+        .args(["--format", "json", "doctor"])
+        .current_dir(root)
+        .env("PATH", &path)
+        .env_remove("RAYMAN_REQUIRED_SID")
+        .env_remove("RAYMAN_REQUIRED_PRINCIPAL")
+        .env_remove("RAYMAN_REQUIRED_PROFILE")
+        .output()
+        .unwrap();
+    assert!(baseline.status.success());
+    let baseline: Value = serde_json::from_slice(&baseline.stdout).unwrap();
+    let forged_profile = root.join("forged-profile").display().to_string();
+    let Some(token_profile) = baseline["execution_context"]["token_profile"]
+        .as_str()
+        .map(str::to_string)
+    else {
+        // Restricted service/sandbox identities may have a real process token
+        // but no registered Windows profile directory. That is an observable
+        // Unknown result, not permission to fall back to attacker-controlled
+        // USERPROFILE.
+        let unavailable = Command::new(BIN)
+            .args(["--format", "json", "doctor", "--check"])
+            .current_dir(root)
+            .env("PATH", &path)
+            .env("USERPROFILE", &forged_profile)
+            .env("RAYMAN_REQUIRED_PROFILE", &forged_profile)
+            .env_remove("RAYMAN_REQUIRED_SID")
+            .env_remove("RAYMAN_REQUIRED_PRINCIPAL")
+            .output()
+            .unwrap();
+        assert!(!unavailable.status.success());
+        let report: Value = serde_json::from_slice(&unavailable.stdout).unwrap();
+        assert_eq!(report["execution_context"]["status"], "unknown");
+        assert_eq!(report["execution_context"]["profile_match"], "unknown");
+        assert_eq!(report["execution_context"]["token_profile"], Value::Null);
+        assert_eq!(
+            report["execution_context"]["environment_profile"],
+            forged_profile
+        );
+        assert_eq!(report["doctor_check"]["ready"], false);
+        return;
+    };
+    assert_ne!(
+        token_profile.to_ascii_lowercase(),
+        forged_profile.to_ascii_lowercase()
+    );
+
+    let forged = Command::new(BIN)
+        .args(["--format", "json", "doctor", "--check"])
+        .current_dir(root)
+        .env("PATH", &path)
+        .env("USERPROFILE", &forged_profile)
+        .env("RAYMAN_REQUIRED_PROFILE", &forged_profile)
+        .env_remove("RAYMAN_REQUIRED_SID")
+        .env_remove("RAYMAN_REQUIRED_PRINCIPAL")
+        .output()
+        .unwrap();
+    assert!(!forged.status.success());
+    let forged_report: Value = serde_json::from_slice(&forged.stdout).unwrap();
+    assert_eq!(
+        forged_report["execution_context"]["status"],
+        "profile_mismatch"
+    );
+    assert_eq!(
+        forged_report["execution_context"]["environment_profile"],
+        forged_profile
+    );
+    assert_eq!(
+        forged_report["execution_context"]["token_profile"],
+        token_profile
+    );
+    assert_eq!(
+        forged_report["execution_context"]["environment_profile_matches_token"],
+        false
+    );
+    assert_eq!(forged_report["doctor_check"]["ready"], false);
+
+    let token_bound = Command::new(BIN)
+        .args(["--format", "json", "doctor", "--check"])
+        .current_dir(root)
+        .env("PATH", path)
+        .env("USERPROFILE", &forged_profile)
+        .env("RAYMAN_REQUIRED_PROFILE", &token_profile)
+        .env_remove("RAYMAN_REQUIRED_SID")
+        .env_remove("RAYMAN_REQUIRED_PRINCIPAL")
+        .output()
+        .unwrap();
+    assert!(
+        token_bound.status.success(),
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&token_bound.stdout),
+        String::from_utf8_lossy(&token_bound.stderr)
+    );
+    let token_bound_report: Value = serde_json::from_slice(&token_bound.stdout).unwrap();
+    assert_eq!(token_bound_report["execution_context"]["status"], "match");
+    assert_eq!(token_bound_report["doctor_check"]["ready"], true);
+    assert_eq!(
+        token_bound_report["execution_context"]["environment_profile_matches_token"],
+        false
+    );
 }
 
 #[test]
@@ -2993,13 +3280,32 @@ fn checkpoint_verify_state_audit_and_recursive_temp_status_are_exposed_by_cli() 
     assert_eq!(verified["status"], "complete");
     assert!(verified["file_count"].as_u64().unwrap() >= 1);
 
+    let temp_before = run_json(root, &["temp", "status"]);
+    assert_eq!(temp_before["traversal_error_count"], 0);
+    let run_root = root.join(".RaymanCodingSkill/tmp/run");
+    assert!(!run_root.exists());
+
     write(root, ".RaymanCodingSkill/tmp/run/nested/a.bin", "abc");
     write(root, ".RaymanCodingSkill/tmp/run/b.bin", "d");
     let temp_status = run_json(root, &["temp", "status"]);
-    assert_eq!(temp_status["entry_count"], 1);
-    assert_eq!(temp_status["file_count"], 2);
-    assert_eq!(temp_status["directory_count"], 2);
-    assert_eq!(temp_status["total_bytes"], 4);
+    assert!(run_root.join("nested/a.bin").is_file());
+    assert!(run_root.join("b.bin").is_file());
+    assert_eq!(
+        temp_status["entry_count"].as_u64().unwrap(),
+        temp_before["entry_count"].as_u64().unwrap() + 1
+    );
+    assert_eq!(
+        temp_status["file_count"].as_u64().unwrap(),
+        temp_before["file_count"].as_u64().unwrap() + 2
+    );
+    assert_eq!(
+        temp_status["directory_count"].as_u64().unwrap(),
+        temp_before["directory_count"].as_u64().unwrap() + 2
+    );
+    assert_eq!(
+        temp_status["total_bytes"].as_u64().unwrap(),
+        temp_before["total_bytes"].as_u64().unwrap() + 4
+    );
     assert_eq!(temp_status["traversal_error_count"], 0);
 
     let clean_audit = run_json(root, &["state", "audit", "--check"]);
@@ -3371,8 +3677,11 @@ fn workspace_activation_rejects_the_previous_cli_identity() {
     let activation_path = root.join(".RaymanCodingSkill/workspace_skill.yaml");
     let previous_identity = std::fs::read_to_string(&activation_path)
         .unwrap()
-        .replace("rayman-cli-contract-v15", "rayman-cli-contract-v10")
-        .replace("cli_version: 2.9.0", "cli_version: 2.5.1");
+        .replace(rayman::CLI_CONTRACT, "rayman-cli-contract-v15")
+        .replace(
+            &format!("cli_version: {}", rayman::CLI_VERSION),
+            "cli_version: 2.9.0",
+        );
     std::fs::write(&activation_path, previous_identity).unwrap();
 
     let status = run_raw(root, &["--format", "json", "workspace", "status"]);
@@ -3380,10 +3689,10 @@ fn workspace_activation_rejects_the_previous_cli_identity() {
     let status: Value = serde_json::from_str(&status.stdout).unwrap();
     assert_eq!(status["status"], "invalid");
     assert_eq!(status["active"], false);
-    assert_eq!(status["cli_contract"], "rayman-cli-contract-v10");
-    assert_eq!(status["cli_version"], "2.5.1");
-    assert_eq!(status["running_cli_contract"], "rayman-cli-contract-v15");
-    assert_eq!(status["running_cli_version"], "2.9.0");
+    assert_eq!(status["cli_contract"], "rayman-cli-contract-v15");
+    assert_eq!(status["cli_version"], "2.9.0");
+    assert_eq!(status["running_cli_contract"], rayman::CLI_CONTRACT);
+    assert_eq!(status["running_cli_version"], rayman::CLI_VERSION);
     assert!(
         status["issues"]
             .as_array()
@@ -3397,6 +3706,14 @@ fn workspace_activation_rejects_the_previous_cli_identity() {
             .unwrap()
             .iter()
             .any(|issue| { issue.as_str().unwrap().contains("cli_version") })
+    );
+    let activation_before = std::fs::read(&activation_path).unwrap();
+    let write_attempt = run_raw(root, &["context", "refresh"]);
+    assert_ne!(write_attempt.status, 0, "stdout={}", write_attempt.stdout);
+    assert_eq!(std::fs::read(&activation_path).unwrap(), activation_before);
+    assert!(
+        !root.join(".RaymanCodingSkill/context.json").exists(),
+        "a previous-contract binding must not authorize a v16 state write"
     );
 }
 
@@ -4327,7 +4644,20 @@ fn task_bound_check_prepare_and_finish_distinguish_task_from_workspace_readiness
     );
     let id = started["id"].as_str().unwrap();
     let prepared = run_json(root, &["prepare", "--goal", id]);
-    assert_eq!(prepared["ready"], true);
+    assert!(prepared.get("ready").is_none(), "{prepared}");
+    assert_eq!(prepared["readiness"]["scope"], "goal_workspace_snapshot");
+    assert!(
+        prepared["readiness"]["workspace_fingerprint"]
+            .as_str()
+            .is_some_and(|value| value.len() == 64),
+        "{prepared}"
+    );
+    assert!(
+        prepared["readiness"]["goal_state_sha256"]
+            .as_str()
+            .is_some_and(|value| value.len() == 64),
+        "{prepared}"
+    );
     assert_eq!(prepared["goal_id"], id);
 
     write(
@@ -4447,10 +4777,14 @@ fn frontier_requires_a_complete_solution_package_before_asking_user() {
             "human",
             "--kind",
             "human_input",
+            "--capability-key",
+            "owner/choice",
+            "--boundary-class",
+            "owner_decision",
         ],
     );
     assert_eq!(incomplete.status, 1);
-    run_json(
+    let choice = run_json(
         root,
         &[
             "goal",
@@ -4481,13 +4815,45 @@ fn frontier_requires_a_complete_solution_package_before_asking_user() {
             "rayman prepare --goal owner",
             "--auto-resume-condition",
             "choice recorded",
+            "--capability-key",
+            "owner/choice",
+            "--boundary-class",
+            "owner_decision",
         ],
     );
     let frontier = run_json(root, &["goal", "frontier", id]);
     assert_eq!(frontier["decision"], "ask_user");
     assert_eq!(frontier["ask_user_allowed"], true);
     assert_eq!(frontier["execution"], "paused_for_user");
-    assert_eq!(frontier["consultation"], "presented");
+    assert_eq!(frontier["consultation"], "ready");
+    let rendered = run_json(root, &["goal", "pending", "render", "--goal", id]);
+    assert!(
+        rendered["text"]
+            .as_str()
+            .is_some_and(|text| text.contains(choice["id"].as_str().unwrap())),
+        "{rendered}"
+    );
+    let retired = run(
+        root,
+        &[
+            "goal",
+            "pending",
+            "present",
+            choice["id"].as_str().unwrap(),
+            "--goal",
+            id,
+            "--package-sha256",
+            choice["package_sha256"].as_str().unwrap(),
+            "--channel",
+            "codex",
+        ],
+    );
+    assert_eq!(retired.status, 1);
+    assert!(retired.stderr.contains("已退役"), "{}", retired.stderr);
+    let frontier = run_json(root, &["goal", "frontier", id]);
+    assert_eq!(frontier["decision"], "ask_user");
+    assert_eq!(frontier["ask_user_allowed"], true);
+    assert_eq!(frontier["consultation"], "ready");
     assert_eq!(
         run(root, &["goal", "close", id, "--status", "blocked"]).status,
         0
@@ -4495,7 +4861,7 @@ fn frontier_requires_a_complete_solution_package_before_asking_user() {
 }
 
 #[test]
-fn frontier_requires_complete_background_authority_before_presented_parallel_work() {
+fn frontier_requires_complete_background_authority_before_rendered_parallel_work() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     write(root, "README.md", "workspace");
@@ -4553,6 +4919,10 @@ fn frontier_requires_complete_background_authority_before_presented_parallel_wor
             "worktree task",
             "--background-authority-evidence",
             "user instruction codex://threads/test",
+            "--capability-key",
+            "mixed/urgent-choice",
+            "--boundary-class",
+            "owner_decision",
         ],
     );
     assert_eq!(partial.status, 1);
@@ -4590,13 +4960,27 @@ fn frontier_requires_complete_background_authority_before_presented_parallel_wor
             "choice recorded",
             "--consultation-timing",
             "immediate",
+            "--capability-key",
+            "mixed/urgent-choice",
+            "--boundary-class",
+            "owner_decision",
         ],
     );
     let frontier = run_json(root, &["goal", "frontier", id]);
     assert_eq!(frontier["decision"], "ask_user");
     assert_eq!(frontier["execution"], "paused_for_user");
-    assert_eq!(frontier["consultation"], "presented");
+    assert_eq!(frontier["consultation"], "ready");
     assert_eq!(frontier["background_execution_allowed"], false);
+    let rendered = run_json(root, &["goal", "pending", "render", "--current"]);
+    assert!(
+        rendered["text"]
+            .as_str()
+            .is_some_and(|text| text.contains(immediate["id"].as_str().unwrap())),
+        "{rendered}"
+    );
+    let frontier = run_json(root, &["goal", "frontier", id]);
+    assert_eq!(frontier["decision"], "ask_user");
+    assert_eq!(frontier["consultation"], "ready");
     run(
         root,
         &[
@@ -4607,7 +4991,7 @@ fn frontier_requires_complete_background_authority_before_presented_parallel_wor
         ],
     );
 
-    run_json(
+    let background = run_json(
         root,
         &[
             "goal",
@@ -4646,13 +5030,89 @@ fn frontier_requires_complete_background_authority_before_presented_parallel_wor
             "user instruction codex://threads/test",
             "--background-isolation-evidence",
             "isolated worktree task task_123",
+            "--capability-key",
+            "mixed/urgent-choice",
+            "--boundary-class",
+            "owner_decision",
         ],
     );
     let frontier = run_json(root, &["goal", "frontier", id]);
     assert_eq!(frontier["decision"], "ask_user");
     assert_eq!(frontier["execution"], "continue_background");
-    assert_eq!(frontier["consultation"], "presented");
+    assert_eq!(frontier["consultation"], "ready");
     assert_eq!(frontier["background_execution_allowed"], true);
+    let rendered = run_json(root, &["goal", "pending", "render", "--current"]);
+    assert!(
+        rendered["text"]
+            .as_str()
+            .is_some_and(|text| text.contains(background["id"].as_str().unwrap())),
+        "{rendered}"
+    );
+    let frontier = run_json(root, &["goal", "frontier", id]);
+    assert_eq!(frontier["decision"], "ask_user");
+    assert_eq!(frontier["execution"], "continue_background");
+    assert_eq!(frontier["consultation"], "ready");
+    assert_eq!(frontier["ask_user_allowed"], true);
+}
+
+#[test]
+fn pending_render_current_matches_the_workspace_aggregate() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "README.md", "workspace");
+    run_json(root, &["context", "refresh"]);
+    let goal_a = run_json(root, &["goal", "start", "aggregate A", "--must", "choose"]);
+    let goal_b = run_json(root, &["goal", "start", "aggregate B", "--must", "choose"]);
+    let id_a = goal_a["id"].as_str().unwrap();
+    let id_b = goal_b["id"].as_str().unwrap();
+    let item_a = add_complete_human_pending(root, id_a, "owner/shared", "choice A");
+    let item_b = add_complete_human_pending(root, id_b, "owner/shared", "choice B");
+
+    let aggregate = run_json(root, &["goal", "pending", "render", "--current"]);
+    let partial = run_json(root, &["goal", "pending", "render", "--goal", id_a]);
+    let aggregate_text = aggregate["text"].as_str().unwrap();
+    assert!(aggregate_text.contains(item_a["id"].as_str().unwrap()));
+    assert!(aggregate_text.contains(item_b["id"].as_str().unwrap()));
+    assert_eq!(aggregate["goal_ids"].as_array().unwrap().len(), 2);
+    assert_ne!(aggregate["render_sha256"], partial["render_sha256"]);
+    assert_eq!(run(root, &["goal", "pending", "render"]).status, 1);
+    assert_ne!(
+        run(
+            root,
+            &["goal", "pending", "render", "--goal", id_a, "--current"],
+        )
+        .status,
+        0
+    );
+}
+
+#[test]
+fn pending_render_text_is_protocol_exact_under_the_english_locale() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "README.md", "workspace");
+    run_json(root, &["context", "refresh"]);
+    let goal = run_json(
+        root,
+        &["goal", "start", "exact aggregate", "--must", "choose"],
+    );
+    let id = goal["id"].as_str().unwrap();
+    add_complete_human_pending_with_title(root, id, "owner/exact", "秒", "choose safely");
+
+    let expected = run_json(root, &["goal", "pending", "render", "--current"]);
+    let expected = expected["text"].as_str().unwrap();
+    assert!(expected.contains("秒"), "{expected}");
+
+    let rendered = run(
+        root,
+        &["--language", "en", "goal", "pending", "render", "--current"],
+    );
+    assert_eq!(rendered.status, 0, "{}", rendered.stderr);
+    assert_eq!(
+        rendered.stdout.trim_end_matches(&['\r', '\n'][..]),
+        expected,
+        "text-mode output must remain byte-for-byte compatible with the Stop candidate"
+    );
 }
 
 #[test]

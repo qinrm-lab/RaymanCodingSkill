@@ -637,8 +637,53 @@ pub enum PendingAction {
         background_authority_evidence: Option<String>,
         #[arg(long)]
         background_isolation_evidence: Option<String>,
+        /// Stable semantic identity for this capability boundary. Public
+        /// human/external blockers must provide it so a retry cannot mint a
+        /// second copy of the same question.
+        #[arg(long)]
+        capability_key: Option<String>,
+        /// Stable class of the authority/capability boundary (for example
+        /// `execution_context` or `owner_decision`).
+        #[arg(long)]
+        boundary_class: Option<String>,
     },
     List,
+    /// Render the exact aggregate human-boundary package that the current
+    /// Codex Stop event must observe byte-for-byte.
+    Render {
+        #[arg(long, conflicts_with = "current")]
+        goal: Option<String>,
+        /// Aggregate every currently askable current goal, matching the Stop
+        /// hook's workspace-wide candidate.
+        #[arg(long, conflicts_with = "goal")]
+        current: bool,
+    },
+    /// Explicitly migrate one legacy non-agent package using its old digest
+    /// and a stable goal-scoped capability identity.
+    Migrate {
+        id: String,
+        #[arg(long)]
+        goal: String,
+        #[arg(long)]
+        legacy_package_sha256: String,
+        #[arg(long)]
+        capability_key: String,
+        #[arg(long)]
+        boundary_class: String,
+    },
+    /// Retired compatibility surface. Always fails; use `render`.
+    #[command(hide = true)]
+    Present {
+        id: String,
+        #[arg(long)]
+        goal: String,
+        #[arg(long)]
+        package_sha256: String,
+        #[arg(long)]
+        channel: String,
+        #[arg(long)]
+        reference: Option<String>,
+    },
     Resolve {
         id: String,
     },

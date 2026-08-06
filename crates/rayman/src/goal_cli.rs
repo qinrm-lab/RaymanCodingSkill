@@ -1,5 +1,7 @@
 use super::*;
-use crate::cli::{LaneAction, LaneCmd, WorkPackageAction, WorkPackageCmd};
+use crate::cli::{
+    LaneAction, LaneCmd, PendingAction, PendingCmd, WorkPackageAction, WorkPackageCmd,
+};
 
 pub fn run_show(store: &goal::GoalStore, json: bool, id: String) -> Result<()> {
     let Some(goal) = store.get(&id)? else {
@@ -279,6 +281,186 @@ pub fn run_progress(
     }
     Ok(())
 }
+
+pub fn run_pending(
+    store: &goal::GoalStore,
+    pending: &goal::PendingStore,
+    json: bool,
+    command: PendingCmd,
+) -> Result<()> {
+    match command.action {
+        PendingAction::Add {
+            title,
+            message,
+            goal: goal_id,
+            owner,
+            kind,
+            attempts,
+            evidence_paths,
+            minimum_input,
+            recommended,
+            alternatives,
+            risk,
+            resume_command,
+            auto_resume_condition,
+            consultation_timing,
+            background_mechanism,
+            background_authority_evidence,
+            background_isolation_evidence,
+            capability_key,
+            boundary_class,
+        } => {
+            if let Some(goal_id) = goal_id.as_deref()
+                && store.get(goal_id)?.is_none()
+            {
+                bail!("pending 绑定的 goal 不存在: {goal_id}");
+            }
+            let owner = goal::PendingOwner::parse(&owner)?;
+            let submission = goal::PendingSubmission {
+                title,
+                detail: message,
+                goal_id,
+                owner,
+                kind: goal::PendingKind::parse(&kind)?,
+                attempts,
+                evidence_paths,
+                minimum_input,
+                recommended_action: recommended,
+                alternatives,
+                risk,
+                resume_command,
+                auto_resume_condition,
+                consultation_timing: goal::ConsultationTiming::parse(&consultation_timing)?,
+                background_mechanism,
+                background_authority_evidence,
+                background_isolation_evidence,
+            };
+            let capability_bound = owner != goal::PendingOwner::Agent
+                || capability_key.is_some()
+                || boundary_class.is_some();
+            let item = if capability_bound {
+                pending.add_capability_bound(submission, capability_key, boundary_class)?
+            } else {
+                pending.add_structured(submission)?
+            };
+            if json {
+                print(&serde_json::to_value(&item)?);
+            } else {
+                println!("已记录待完成项 {}", item.id);
+            }
+        }
+        PendingAction::List => {
+            let items = pending.list()?;
+            if json {
+                print(&serde_json::to_value(&items)?);
+            } else if items.is_empty() {
+                println!("无待完成项。");
+            } else {
+                for item in items {
+                    println!("{}  {}  {}", item.id, item.title, item.detail);
+                }
+            }
+        }
+        PendingAction::Render {
+            goal: goal_id,
+            current,
+        } => {
+            let selected = match (goal_id, current) {
+                (Some(goal_id), false) => {
+                    let Some(selected) = store.get(&goal_id)? else {
+                        bail!("pending 绑定的 goal 不存在: {goal_id}");
+                    };
+                    vec![selected]
+                }
+                (None, true) => {
+                    let (goals, issues) = store.list_with_issues()?;
+                    if !issues.is_empty() {
+                        bail!(
+                            "pending render --current 发现损坏的 goal state: {}",
+                            issues
+                                .iter()
+                                .map(|issue| format!("{}: {}", issue.path, issue.error))
+                                .collect::<Vec<_>>()
+                                .join("; ")
+                        );
+                    }
+                    let mut ready = Vec::new();
+                    for goal in goals
+                        .into_iter()
+                        .filter(|goal| goal.lifecycle == goal::GoalLifecycle::Current)
+                    {
+                        if pending.frontier(&goal)?.consultation
+                            == goal::FrontierConsultation::Ready
+                        {
+                            ready.push(goal);
+                        }
+                    }
+                    if ready.is_empty() {
+                        bail!("pending render --current 没有当前可咨询的 goal");
+                    }
+                    ready
+                }
+                _ => bail!("pending render 必须且只能指定 --goal <id> 或 --current"),
+            };
+            let rendered = pending.render_for_goals(&selected)?;
+            if json {
+                print(&serde_json::to_value(&rendered)?);
+            } else {
+                // This is protocol text, not a localizable status line: the
+                // Codex Stop guard compares the exact aggregate bytes.
+                std::println!("{}", rendered.text);
+            }
+        }
+        PendingAction::Migrate {
+            id,
+            goal: goal_id,
+            legacy_package_sha256,
+            capability_key,
+            boundary_class,
+        } => {
+            if store.get(&goal_id)?.is_none() {
+                bail!("pending 绑定的 goal 不存在: {goal_id}");
+            }
+            let item = pending.migrate_legacy(
+                &id,
+                &goal_id,
+                &legacy_package_sha256,
+                &capability_key,
+                &boundary_class,
+            )?;
+            if json {
+                print(&serde_json::to_value(&item)?);
+            } else {
+                println!("已迁移 legacy pending {}。", item.id);
+            }
+        }
+        PendingAction::Present {
+            id: _,
+            goal: _,
+            package_sha256: _,
+            channel: _,
+            reference: _,
+        } => {
+            bail!(
+                "`goal pending present` 已退役：代理不能自证用户展示。使用 `rayman goal pending render --current` 生成 workspace aggregate，并由当前 Codex Stop 事件严格核对 last_assistant_message"
+            );
+        }
+        PendingAction::Resolve { id } => {
+            // 与 goal show 同理：解决一个不存在的待完成项必须非零退出，
+            // 否则调用方会把"没找到"当成"已解决"。
+            if !pending.resolve(&id)? {
+                bail!("待完成项不存在: {id}");
+            }
+            if json {
+                print(&json!({ "resolved": true, "id": id }));
+            } else {
+                println!("已解决待完成项。");
+            }
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

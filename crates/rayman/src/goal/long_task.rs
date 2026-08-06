@@ -861,6 +861,7 @@ mod tests {
             review_priority: "high".into(),
             impacted_paths: Vec::new(),
             recommended_checks: Vec::new(),
+            publication: None,
             plan_sha256: String::new(),
             extensions: Vec::new(),
         });

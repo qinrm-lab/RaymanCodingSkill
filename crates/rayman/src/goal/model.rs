@@ -245,11 +245,87 @@ pub struct WorkspaceBaseline {
     pub files: BTreeMap<String, String>,
 }
 
+/// A source-of-truth comparison between a goal's opening baseline, its
+/// effective aggregate plan, and one freshly hashed workspace snapshot.
+///
+/// This deliberately does not use Git status: Git reports a HEAD-relative
+/// delta and is unavailable in supported non-Git workspaces, while the goal
+/// contract is bound to its own content baseline.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct GoalPlanDelta {
+    pub baseline_fingerprint: String,
+    pub current_fingerprint: String,
+    pub actual_changed_paths: Vec<String>,
+    pub planned_changed_paths: Vec<String>,
+    pub unplanned_changed_paths: Vec<String>,
+    pub plan_recorded: bool,
+    pub plan_required: bool,
+    pub covered: bool,
+}
+
 pub struct PlanReceiptSubmission {
     pub changed_paths: Vec<String>,
     pub review_priority: String,
     pub impacted_paths: Vec<String>,
     pub recommended_checks: Vec<String>,
+}
+
+/// Write-ahead marker for the only interval in which a plan could otherwise
+/// become a post-hoc receipt.  The intent is published before the final
+/// workspace compare-and-swap.  A crash or source drift leaves it in place so
+/// every normal goal gate fails closed instead of silently promoting it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PlanPublishIntent {
+    /// The enclosing goal identity. Empty is accepted only when retiring an
+    /// unbound pre-v16 development record as non-success history.
+    #[serde(default)]
+    pub goal_id: String,
+    pub prepared_at: String,
+    pub kind: PlanPublishIntentKind,
+    pub baseline_fingerprint: String,
+    pub precheck_fingerprint: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_plan_sha256: Option<String>,
+    pub changed_paths: Vec<String>,
+    pub review_priority: String,
+    pub impacted_paths: Vec<String>,
+    pub recommended_checks: Vec<String>,
+    pub intent_sha256: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanPublishIntentKind {
+    Initial,
+    Extension,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanPublicationState {
+    Pending,
+    Committed,
+}
+
+/// Durable proof that the plan was first published as a fail-closed intent,
+/// then promoted only after the workspace still matched its precheck.  The
+/// v2 plan hash includes this proof, so an older writer that drops unknown
+/// fields leaves a hash it cannot validate as a legacy v1 receipt.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PlanPublicationProof {
+    /// The enclosing goal identity. The v3 publication hash binds it so a
+    /// receipt cannot be transplanted between otherwise identical goals.
+    #[serde(default)]
+    pub goal_id: String,
+    pub state: PlanPublicationState,
+    pub intent_sha256: String,
+    pub precheck_fingerprint: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirmed_fingerprint: Option<String>,
+    pub published_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub committed_at: Option<String>,
+    pub publication_sha256: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -260,6 +336,8 @@ pub struct PlanReceipt {
     pub review_priority: String,
     pub impacted_paths: Vec<String>,
     pub recommended_checks: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub publication: Option<PlanPublicationProof>,
     pub plan_sha256: String,
     /// Monotonic cumulative snapshots. The base receipt above never changes;
     /// every extension binds the previous effective hash and can only widen
@@ -276,6 +354,8 @@ pub struct PlanExtensionReceipt {
     pub review_priority: String,
     pub impacted_paths: Vec<String>,
     pub recommended_checks: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub publication: Option<PlanPublicationProof>,
     pub extension_sha256: String,
 }
 
@@ -403,6 +483,14 @@ pub struct Goal {
     pub baseline: Option<WorkspaceBaseline>,
     #[serde(default)]
     pub plan_receipts: Vec<PlanReceipt>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_publish_intent: Option<PlanPublishIntent>,
+    /// Explicit epoch for plan publication semantics.  Goals created before
+    /// write-ahead publication shipped have no marker and are readable only
+    /// through the bounded legacy policy in `plan_chain_error`; v16 never
+    /// appends a new plan node to such a chain.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_publication_policy: Option<String>,
     #[serde(default)]
     pub review_receipts: Vec<ReviewReceipt>,
     #[serde(default)]

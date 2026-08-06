@@ -651,6 +651,8 @@ fn relevance_requires_one_current_receipt_bound_to_command_and_impact() {
         updated_at: now_iso(),
         baseline: None,
         plan_receipts: Vec::new(),
+        plan_publish_intent: None,
+        plan_publication_policy: Some(PLAN_PUBLICATION_POLICY_V1.to_string()),
         review_receipts: Vec::new(),
         authority_receipts: Vec::new(),
         work_packages: Vec::new(),
@@ -783,6 +785,8 @@ fn legacy_v2_lifecycle_hash_projection_remains_byte_compatible() {
             files,
         }),
         plan_receipts: Vec::new(),
+        plan_publish_intent: None,
+        plan_publication_policy: None,
         review_receipts: Vec::new(),
         authority_receipts: Vec::new(),
         work_packages: Vec::new(),
@@ -2142,6 +2146,341 @@ fn plan_receipt_precedes_changes_and_high_review_is_source_fresh() {
     assert_eq!(
         store.close(&goal.id, "success").unwrap().status,
         GoalStatus::Success
+    );
+}
+
+#[test]
+fn initial_plan_publication_is_write_ahead_and_recovers_in_place() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    fs::write(root.join("a.txt"), "a0").unwrap();
+    let store = GoalStore::new(root);
+    let goal = store
+        .start("initial publication", &[("ship".into(), true)])
+        .unwrap();
+    let submission = PlanReceiptSubmission {
+        changed_paths: vec!["a.txt".into()],
+        review_priority: "high".into(),
+        impacted_paths: vec!["a.txt".into()],
+        recommended_checks: vec!["focused".into()],
+    };
+    let goal_path = store.goal_path(&goal.id).unwrap();
+
+    let error = store
+        .record_plan_with_before_confirm(
+            &goal.id,
+            PlanReceiptSubmission {
+                changed_paths: submission.changed_paths.clone(),
+                review_priority: submission.review_priority.clone(),
+                impacted_paths: submission.impacted_paths.clone(),
+                recommended_checks: submission.recommended_checks.clone(),
+            },
+            || {
+                let pending = GoalStore::load_goal_file(&goal_path).unwrap().unwrap();
+                assert!(pending.plan_publish_intent.is_some());
+                assert_eq!(pending.plan_receipts.len(), 1);
+                assert_eq!(
+                    pending.plan_receipts[0].publication.as_ref().unwrap().state,
+                    PlanPublicationState::Pending
+                );
+                assert!(plan_chain_error(&pending).is_none());
+                fs::write(root.join("a.txt"), "raced").unwrap();
+            },
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("CAS 窗口"), "error={error}");
+    let pending = store.get(&goal.id).unwrap().unwrap();
+    assert!(pending.plan_publish_intent.is_some());
+    assert!(pending.current_schema_error().is_some());
+
+    fs::write(root.join("a.txt"), "a0").unwrap();
+    let committed = store.record_plan(&goal.id, submission).unwrap();
+    assert!(committed.plan_publish_intent.is_none());
+    assert_eq!(committed.plan_receipts.len(), 1);
+    let proof = committed.plan_receipts[0].publication.as_ref().unwrap();
+    assert_eq!(proof.state, PlanPublicationState::Committed);
+    assert_eq!(
+        proof.confirmed_fingerprint.as_deref(),
+        Some(proof.precheck_fingerprint.as_str())
+    );
+    assert!(plan_chain_error(&committed).is_none());
+}
+
+#[test]
+fn extension_publication_puts_pending_tail_in_chain_before_confirmation() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    fs::write(root.join("a.txt"), "a0").unwrap();
+    fs::write(root.join("b.txt"), "b0").unwrap();
+    let store = GoalStore::new(root);
+    let goal = store
+        .start("extension publication", &[("ship".into(), true)])
+        .unwrap();
+    let base = store
+        .record_plan(
+            &goal.id,
+            PlanReceiptSubmission {
+                changed_paths: vec!["a.txt".into()],
+                review_priority: "normal".into(),
+                impacted_paths: vec!["a.txt".into()],
+                recommended_checks: vec!["base".into()],
+            },
+        )
+        .unwrap();
+    let base_sha256 = base.plan_receipts[0].plan_sha256.clone();
+    fs::write(root.join("a.txt"), "planned change").unwrap();
+    let submission = PlanReceiptSubmission {
+        changed_paths: vec!["b.txt".into()],
+        review_priority: "high".into(),
+        impacted_paths: vec!["b.txt".into()],
+        recommended_checks: vec!["extension".into()],
+    };
+    let goal_path = store.goal_path(&goal.id).unwrap();
+
+    let error = store
+        .extend_plan_with_before_confirm(
+            &goal.id,
+            PlanReceiptSubmission {
+                changed_paths: submission.changed_paths.clone(),
+                review_priority: submission.review_priority.clone(),
+                impacted_paths: submission.impacted_paths.clone(),
+                recommended_checks: submission.recommended_checks.clone(),
+            },
+            || {
+                let pending = GoalStore::load_goal_file(&goal_path).unwrap().unwrap();
+                let receipt = &pending.plan_receipts[0];
+                assert_eq!(receipt.plan_sha256, base_sha256);
+                assert_eq!(receipt.extensions.len(), 1);
+                assert_eq!(
+                    receipt.extensions[0].publication.as_ref().unwrap().state,
+                    PlanPublicationState::Pending
+                );
+                assert!(plan_chain_error(&pending).is_none());
+                fs::write(root.join("b.txt"), "raced").unwrap();
+            },
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("CAS 窗口"), "error={error}");
+
+    fs::write(root.join("b.txt"), "b0").unwrap();
+    let committed = store.extend_plan(&goal.id, submission).unwrap();
+    let receipt = &committed.plan_receipts[0];
+    assert_eq!(receipt.plan_sha256, base_sha256);
+    assert_eq!(receipt.extensions.len(), 1);
+    assert_eq!(
+        receipt.extensions[0].publication.as_ref().unwrap().state,
+        PlanPublicationState::Committed
+    );
+    assert_eq!(receipt.effective_changed_paths(), ["a.txt", "b.txt"]);
+    assert!(plan_chain_error(&committed).is_none());
+}
+
+#[test]
+fn plan_publication_validation_rejects_rehashed_shape_and_policy_downgrades() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("a.txt"), "a0").unwrap();
+    let store = GoalStore::new(dir.path());
+    let goal = store
+        .start("publication integrity", &[("ship".into(), true)])
+        .unwrap();
+    let committed = store
+        .record_plan(
+            &goal.id,
+            PlanReceiptSubmission {
+                changed_paths: vec!["a.txt".into()],
+                review_priority: "normal".into(),
+                impacted_paths: vec!["a.txt".into()],
+                recommended_checks: Vec::new(),
+            },
+        )
+        .unwrap();
+
+    let mut forged_pending = committed.clone();
+    let receipt = &mut forged_pending.plan_receipts[0];
+    let proof = receipt.publication.as_mut().unwrap();
+    proof.state = PlanPublicationState::Pending;
+    proof.publication_sha256 = plan_publication_sha256(proof);
+    receipt.plan_sha256 = plan_receipt_sha256(receipt);
+    assert!(forged_pending.current_schema_error().is_some());
+
+    let mut forged_confirmation = committed.clone();
+    let receipt = &mut forged_confirmation.plan_receipts[0];
+    let proof = receipt.publication.as_mut().unwrap();
+    proof.confirmed_fingerprint = Some("f".repeat(64));
+    proof.publication_sha256 = plan_publication_sha256(proof);
+    receipt.plan_sha256 = plan_receipt_sha256(receipt);
+    assert!(forged_confirmation.current_schema_error().is_some());
+
+    let mut v15_rewrite = committed;
+    v15_rewrite.created_at = "2026-08-05T10:30:01Z".into();
+    v15_rewrite.plan_publication_policy = None;
+    let receipt = &mut v15_rewrite.plan_receipts[0];
+    receipt.publication = None;
+    receipt.plan_sha256 = plan_receipt_sha256(receipt);
+    assert!(v15_rewrite.current_schema_error().is_some());
+}
+
+#[test]
+fn plan_publication_hashes_are_bound_to_the_enclosing_goal() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    fs::write(root.join("a.txt"), "a0").unwrap();
+    let store = GoalStore::new(root);
+    let source = store.start("source", &[("ship".into(), true)]).unwrap();
+    let target = store.start("target", &[("ship".into(), true)]).unwrap();
+    let source = store
+        .record_plan(
+            &source.id,
+            PlanReceiptSubmission {
+                changed_paths: vec!["a.txt".into()],
+                review_priority: "normal".into(),
+                impacted_paths: vec!["a.txt".into()],
+                recommended_checks: vec!["focused".into()],
+            },
+        )
+        .unwrap();
+
+    let mut transplanted = target;
+    transplanted.plan_receipts = source.plan_receipts;
+    let error = plan_chain_error(&transplanted).unwrap();
+    assert!(error.contains("goal_id"), "unexpected error: {error}");
+}
+
+#[test]
+fn publication_rejects_invalid_and_reversed_times_after_rehash() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    fs::write(root.join("a.txt"), "a0").unwrap();
+    let store = GoalStore::new(root);
+    let goal = store.start("time-bound", &[("ship".into(), true)]).unwrap();
+    let committed = store
+        .record_plan(
+            &goal.id,
+            PlanReceiptSubmission {
+                changed_paths: vec!["a.txt".into()],
+                review_priority: "normal".into(),
+                impacted_paths: vec!["a.txt".into()],
+                recommended_checks: Vec::new(),
+            },
+        )
+        .unwrap();
+
+    let rehash = |goal: &mut Goal| {
+        let receipt = &mut goal.plan_receipts[0];
+        let proof = receipt.publication.as_mut().unwrap();
+        let intent = PlanPublishIntent {
+            goal_id: proof.goal_id.clone(),
+            prepared_at: proof.published_at.clone(),
+            kind: PlanPublishIntentKind::Initial,
+            baseline_fingerprint: receipt.baseline_fingerprint.clone(),
+            precheck_fingerprint: proof.precheck_fingerprint.clone(),
+            previous_plan_sha256: None,
+            changed_paths: receipt.changed_paths.clone(),
+            review_priority: receipt.review_priority.clone(),
+            impacted_paths: receipt.impacted_paths.clone(),
+            recommended_checks: receipt.recommended_checks.clone(),
+            intent_sha256: String::new(),
+        };
+        proof.intent_sha256 = plan_publish_intent_sha256(&intent);
+        proof.publication_sha256 = plan_publication_sha256(proof);
+        receipt.plan_sha256 = plan_receipt_sha256(receipt);
+    };
+
+    let mut invalid = committed.clone();
+    invalid.plan_receipts[0]
+        .publication
+        .as_mut()
+        .unwrap()
+        .published_at = "not-a-time".into();
+    rehash(&mut invalid);
+    assert!(
+        plan_chain_error(&invalid).unwrap().contains("必需字段"),
+        "invalid RFC3339 must fail even after every hash is recomputed"
+    );
+
+    let mut reversed = committed.clone();
+    {
+        let proof = reversed.plan_receipts[0].publication.as_mut().unwrap();
+        proof.published_at = "2030-01-01T00:00:00Z".into();
+        proof.committed_at = Some("2029-12-31T23:59:59Z".into());
+    }
+    reversed.updated_at = "2031-01-01T00:00:00Z".into();
+    rehash(&mut reversed);
+    assert!(
+        plan_chain_error(&reversed)
+            .unwrap()
+            .contains("committed_at"),
+        "reversed publication time must fail after rehash"
+    );
+
+    let mut receipt_after_publication = committed;
+    receipt_after_publication.plan_receipts[0].recorded_at = "2099-01-01T00:00:00Z".into();
+    receipt_after_publication.updated_at = "2100-01-01T00:00:00Z".into();
+    rehash(&mut receipt_after_publication);
+    assert!(
+        plan_chain_error(&receipt_after_publication)
+            .unwrap()
+            .contains("时间顺序"),
+        "receipt chronology must fail after the v3 outer hash is recomputed"
+    );
+}
+
+#[test]
+fn legacy_plan_history_is_frozen_before_rollout_and_never_current() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    fs::write(root.join("a.txt"), "a0").unwrap();
+    let store = GoalStore::new(root);
+    let goal = store.start("legacy", &[("ship".into(), true)]).unwrap();
+    let committed = store
+        .record_plan(
+            &goal.id,
+            PlanReceiptSubmission {
+                changed_paths: vec!["a.txt".into()],
+                review_priority: "normal".into(),
+                impacted_paths: vec!["a.txt".into()],
+                recommended_checks: Vec::new(),
+            },
+        )
+        .unwrap();
+
+    let mut legacy = committed;
+    legacy.created_at = "2026-08-05T10:00:00Z".into();
+    legacy.plan_publication_policy = None;
+    let receipt = &mut legacy.plan_receipts[0];
+    receipt.recorded_at = "2026-08-05T10:10:00Z".into();
+    receipt.publication = None;
+    receipt.plan_sha256 = plan_receipt_sha256(receipt);
+    assert!(
+        plan_chain_error(&legacy).is_some(),
+        "a current legacy goal must be frozen or retired, never writable by v15"
+    );
+
+    legacy.status = GoalStatus::Partial;
+    legacy.lifecycle = GoalLifecycle::Archived;
+    legacy.lifecycle_reason = Some("retired legacy history".into());
+    legacy.updated_at = now_iso();
+    legacy.lifecycle_proof = Some(issue_lifecycle_proof(
+        &legacy,
+        workspace_fingerprint(root).unwrap(),
+        None,
+        Some(RECEIPT_POLICY_V2.into()),
+    ));
+    assert!(legacy.current_schema_error().is_none());
+
+    legacy.plan_receipts[0].recorded_at = "2026-08-05T10:30:01Z".into();
+    legacy.plan_receipts[0].plan_sha256 = plan_receipt_sha256(&legacy.plan_receipts[0]);
+    legacy.lifecycle_proof = Some(issue_lifecycle_proof(
+        &legacy,
+        workspace_fingerprint(root).unwrap(),
+        None,
+        Some(RECEIPT_POLICY_V2.into()),
+    ));
+    assert!(
+        plan_chain_error(&legacy).is_some(),
+        "a post-rollout v15 node must not become readable by backdating goal.created_at"
     );
 }
 

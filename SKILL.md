@@ -40,39 +40,27 @@ workflow reference defines the exact boundary.
   the Codex host integration. Preserve unrelated handlers.
 - Claude Code uses the repository `CLAUDE.md` entrypoint; this installer does
   not claim a global Claude deployment.
-- Under the Codex Windows restricted-token sandbox, the built-in
-  `apply_patch` tool has two distinct failure modes with distinct fixes.
-  `cannot enforce split writable root sets` (or split read / deny-read
-  restrictions) is a host configuration defect, not a patch defect: the
-  `unelevated` sandbox cannot express the managed profile's read-only
-  `.git`/`.agents`/`.codex` carve-outs. Report it and ask for Codex
-  `[windows] sandbox = "elevated"`, which supports all three. `Access is
-  denied.` from `apply_patch.bat` is a different defect with a different fix:
-  Codex writes that shim as a direct absolute-path call to its own
-  executable, and an MSIX/Store install lives under
-  `C:\Program Files\WindowsApps\`, which Windows refuses to launch by path at
-  all — not an ACL to repair, and it fails the same way for an ordinary
-  interactive user. Read the newest
-  `~/.codex/tmp/arg0/*/apply_patch.bat` to see which build the session is
-  bound to; a `WindowsApps` target fails every call, a
-  `%LOCALAPPDATA%\OpenAI\Codex\bin\...` target works. The fix is to run
-  Codex from the non-MSIX install. A third signature,
-  `windows sandbox failed: helper_unknown_error: setup refresh had errors`,
-  occurs even on an `elevated` host. Escalation fixes none of them. Until the
-  host is fixed, fall back as the workflow reference describes: write the
-  patch into the directory `rayman temp scratch <label>` prints — `C:\tmp` and
-  `%TEMP%` are outside the writable roots — then `git apply`; in a workspace
-  that is not a Git worktree, rewrite the whole file and re-read it instead of
-  splicing regions. Stop retrying the tool.
+- Diagnose Codex Windows patch failures by signature: split-root enforcement
+  requires the `elevated` sandbox; a `WindowsApps` shim requires the non-MSIX
+  Codex install; `helper_unknown_error` is a host boundary. Stop retrying and
+  use the managed-scratch `git apply` or whole-file fallback defined in the
+  workflow reference.
 - Request escalated permissions upfront for rayman state writes, git
   stage/commit, repository gates, and installer runs; over-long command
   lines fail to spawn under the sandbox wrapper, so split them. Details:
   the sandbox and permission boundaries section of the workflow reference.
+- Keep OS identity separate from elevation transport. Inspect the execution
+  principal/profile probe before retrying a broker. A principal fingerprint
+  proves only the SID, not ACL capability; require fresh evidence for the
+  boundary that matters (SID, profile, or an action-specific permission probe)
+  instead of treating elevated, COM, Terminal, or Task Scheduler as evidence.
 
 ## Working flow
 
 1. Confirm activation, perform an eligible explicit-use rebind when the task is
-   not read-only, then start a goal and run `prepare --goal <id>`.
+   not read-only, then start a goal and run `prepare --goal <id>`. Every later
+   prepare reconciles the live goal-baseline delta with the effective plan; it
+   never auto-extends a plan after the source changed.
 2. Persist a pre-mutation plan for multi-file work and extend it before
    touching newly discovered paths.
 3. Implement conservatively, run focused project checks, and record staged
@@ -86,8 +74,12 @@ workflow reference defines the exact boundary.
    complete its installation, audit, and source-fresh stages.
 
 Keep working while safe agent-owned work remains. Human/external consultations
-must be complete solution packages. Commit, push, install, publish, deploy,
-destructive deletion, and account changes still require user authority.
+must be complete, capability-keyed solution packages. An askable `ready`
+frontier only authorizes asking: run `goal pending render --current`, emit that
+exact workspace aggregate as the complete final message, and let only the
+current Codex Stop event compare its `last_assistant_message`. No persisted
+receipt proves delivery, visibility, reading, or user awareness. Commit, push,
+install, publish, deploy, destructive deletion, and account changes still require user authority.
 
 ## Detailed contract
 

@@ -31,6 +31,18 @@ pub fn is_state_lock_contention(error: &std::io::Error) -> bool {
         || matches!(error.raw_os_error(), Some(32 | 33))
 }
 
+fn state_lock_contention_timeout(
+    error: std::io::Error,
+    target: &Path,
+    timeout: Duration,
+) -> anyhow::Error {
+    anyhow::Error::new(error).context(format!(
+        "状态正在被另一个 rayman 进程修改: {}；等待锁超过 {} 秒",
+        display_path(target),
+        timeout.as_secs_f64()
+    ))
+}
+
 pub fn acquire_state_lock(target: &Path) -> Result<StateLock> {
     let parent = target.parent().unwrap_or_else(|| Path::new("."));
     state_paths::ensure_real_directory(parent)?;
@@ -100,11 +112,9 @@ pub fn acquire_state_lock(target: &Path) -> Result<StateLock> {
             Err(error) if is_state_lock_contention(&error) && started.elapsed() < LOCK_TIMEOUT => {
                 thread::sleep(Duration::from_millis(25));
             }
-            Err(error) if is_state_lock_contention(&error) => bail!(
-                "状态正在被另一个 rayman 进程修改: {}；等待锁超过 {} 秒",
-                display_path(target),
-                LOCK_TIMEOUT.as_secs_f64()
-            ),
+            Err(error) if is_state_lock_contention(&error) => {
+                return Err(state_lock_contention_timeout(error, target, LOCK_TIMEOUT));
+            }
             Err(error) => {
                 return Err(error).context(format!(
                     "无法取得状态独占锁（权限或 ACL 拒绝）: {}",
@@ -112,5 +122,25 @@ pub fn acquire_state_lock(target: &Path) -> Result<StateLock> {
                 ));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn contention_timeout_preserves_the_structured_io_error() {
+        let error = state_lock_contention_timeout(
+            std::io::Error::from(std::io::ErrorKind::WouldBlock),
+            Path::new("goal.json"),
+            Duration::from_millis(2500),
+        );
+
+        assert!(error.chain().any(|cause| {
+            cause
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(is_state_lock_contention)
+        }));
     }
 }

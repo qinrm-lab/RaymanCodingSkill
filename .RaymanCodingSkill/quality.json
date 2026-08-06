@@ -23,6 +23,11 @@
       "reason": "Goal contracts, receipt types, and the state store intentionally form the shared fail-closed lifecycle boundary; focused goal tests, CLI integration tests, and repeated repository authority gates cover all consumers."
     },
     {
+      "path": "crates/rayman/src/goal.rs",
+      "kind": "large_file",
+      "reason": "GoalStore is the single fail-closed transaction boundary for baseline-bound goal state and write-ahead plan publication; plan-intent hashing, CAS confirmation, legacy-plan quarantine, and atomic persistence share private invariants that are validated together. Focused goal tests, CLI integration tests, and the full repository gate cover this module; this exact exemption keeps the finding visible until plan publication can be extracted as a dedicated reviewed change."
+    },
+    {
       "path": "crates/rayman/src/state_lock.rs",
       "kind": "public_api_without_test_evidence",
       "reason": "This OS advisory-lock module is shared by the goal store and checkpoint restore, which is why it sits at the crate root; focused contention and ACL classification tests run through the goal test module and the full repository gate."
@@ -46,6 +51,11 @@
       "path": "crates/rayman/src/workspace.rs",
       "kind": "high_fan_in",
       "reason": "Workspace activation and source identity are intentionally centralized as the shared fail-closed boundary; workspace unit tests, CLI integration tests, and the full repository gate cover every consumer."
+    },
+    {
+      "path": "crates/rayman/src/workspace.rs",
+      "kind": "large_file",
+      "reason": "Workspace activation is one handle-bound, metadata-preserving transaction across Windows and Linux; no-follow identity checks, staging, publication, rollback, retained evidence, and action-specific capability probes share private state so every failure path is audited together. Platform-focused workspace tests, CLI integration tests, and the full repository gate cover the module; splitting this security boundary requires a dedicated cross-platform refactor rather than a release-closure edit."
     },
     {
       "path": "crates/rayman/src/timefmt.rs",

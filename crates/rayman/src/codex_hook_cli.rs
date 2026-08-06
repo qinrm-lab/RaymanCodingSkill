@@ -7,11 +7,10 @@ pub(crate) fn run(json_output: bool, command: &CodexHookCmd) -> Result<()> {
         CodexHookAction::Stop => {
             // The block/allow decision travels only in the stdout JSON
             // ({"decision":"block",...} vs {"continue":true}); the process always exits 0.
-            // This mirrors Claude Code's Stop-hook I/O contract, which we assume Codex
-            // honors — there is no separate published Codex contract in this repo, so
-            // `codex-hook install` asks the operator to review the exact hook in the Codex
-            // hooks file and restart Codex rather than inferring it works. A runner that
-            // gated on exit code instead of parsing stdout would not see the block.
+            // These are Codex's published Stop/common output fields. Keep transient
+            // Rayman observations internal: unknown top-level fields have no compatibility
+            // promise. Installation still requires reviewing the exact hooks file and a
+            // fresh host trust/restart boundary; exit code alone never proves enforcement.
             let response = rayman::codex_hook::run_stop_from_stdin();
             println!("{}", serde_json::to_string(&response)?);
             return Ok(());

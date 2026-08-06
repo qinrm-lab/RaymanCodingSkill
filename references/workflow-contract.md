@@ -25,7 +25,11 @@ host integration details.
 ## Standard workflow
 
 1. Confirm `workspace status`, then create a baseline-bound goal with
-   `goal start` and run `prepare --goal <id>`.
+   `goal start` and run `prepare --goal <id>`. Prepare checks the current goal
+   schema and reconciles the goal-start baseline delta against the effective
+   plan both before and after context refresh. It fails on uncovered paths or
+   a changing snapshot; it never auto-extends or treats Git-HEAD status as the
+   goal delta.
 2. Before changing two or more files, persist one aggregate
    `goal plan <id> <paths...> --check`. Extend it before touching a newly
    discovered path.
@@ -62,10 +66,20 @@ for a proven human or external boundary: credentials, MFA/CAPTCHA, legal or
 payment acceptance, destructive or irreversible authority, conflicting
 product direction, or an exhausted external service.
 
-Before waiting, record a complete solution package with `goal pending add`
-and inspect `goal frontier`. A presented consultation ends foreground work;
-background continuation additionally needs explicit authority, mechanism, and
-workspace-isolation evidence. Never report done while pending work remains.
+Before waiting, record one complete solution package with `goal pending add`.
+Every public human/external boundary is goal-bound and carries stable
+`--capability-key` and `--boundary-class` identities; replaying the same
+package is idempotent, while changing its contract under the same key fails.
+Inspect `goal frontier`: `consultation=ready` only authorizes asking. Run `goal
+pending render --current` and emit that exact workspace aggregate as the whole
+final message. Only the current Codex Stop event may compare its exact
+`last_assistant_message` with a freshly rendered aggregate; before allowing the
+stop it must re-list every current goal and pending package and recheck the
+workspace fingerprint. This observation is transient and never becomes a
+persisted or reusable receipt. Never claim that it proves delivery, visibility,
+reading, or user awareness. Background continuation additionally needs explicit
+authority, mechanism, and workspace-isolation evidence. Never report done while
+pending work remains.
 
 Commit, push, publish, install, deploy, account changes, payment, deletion, and
 overwriting user-managed state still require user authority.
@@ -102,7 +116,9 @@ overwriting user-managed state still require user authority.
   files.
 - `goal lane` coordinates scoped-writer, advisory read-only, and
   final-reviewer work. Read-only and final-reviewer lanes are zero-write
-  brackets that reject any workspace change. An open lane blocks closing the
+  brackets that reject any workspace change. In a shared worktree, do not keep
+  one open while the main agent or another writer mutates source; close it
+  before mutation or use an isolated checkout. An open lane blocks closing the
   goal as `success`; to keep the goal deliverable, discharge a drifted lane by
   reverting the drift or by `supersede`. A non-success close (`partial` /
   `blocked`) followed by `archive` retires the goal as history with the lane
@@ -113,6 +129,17 @@ overwriting user-managed state still require user authority.
   roots.
 
 ## Sandbox and permission boundaries
+
+- Elevation transport and OS identity are different capabilities. Read the
+  `workspace inspect` / `doctor` execution-context probe before repeating an
+  ACL or profile-bound action. `principal_fingerprint` proves only the SID,
+  not token permissions: a principal-bound retry needs new SID evidence, a
+  profile-bound retry needs new profile evidence, and an ACL-bound retry needs
+  an action-specific permission probe. Elevated PowerShell, COM, Terminal, or
+  Task Scheduler labels alone prove none of those changes. Optional diagnostic
+  comparisons use `RAYMAN_REQUIRED_SID`, `RAYMAN_REQUIRED_PRINCIPAL`, and
+  `RAYMAN_REQUIRED_PROFILE`; their provenance is untrusted process environment
+  and they never authorize a privileged action.
 
 Restricted host sandboxes (for example the Codex Windows restricted token)
 can deny writes even inside the workspace. Known boundaries: state lock files
@@ -126,6 +153,16 @@ boundaries, not lock contention and not source defects.
   state-writing commands (goal/checkpoint/autosave transactions, git
   stage/commit, installers, repository gates) with escalated host permission
   from the first attempt instead of probe-fail-retry loops.
+- The `state_write` probe proves only ordinary create/write/remove capability
+  under `.RaymanCodingSkill/tmp`; it is not evidence that activation metadata
+  can be preserved. `doctor` and `workspace inspect` therefore report a
+  separate `activation_metadata` probe that stages the real activation
+  owner/group/ACL and platform attributes, verifies them through the held
+  handle, cleans the stage, and rechecks that `workspace_skill.yaml` did not
+  change. Only `activation_metadata.ready=true` is action-specific evidence
+  for retrying an owner-preserving activation write in the current execution
+  context. The result is diagnostic, not cached authority: `activate`,
+  `rebind`, and `install-bind` still revalidate inside their own transaction.
 - Escalation cannot fix every host defect. A broken host patch tool or an
   over-long command line fails identically when escalated: split over-long
   command lines, record the boundary once in the goal environment notes, and

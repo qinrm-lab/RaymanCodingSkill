@@ -26,6 +26,8 @@ const GOALS_DIR: &str = ".RaymanCodingSkill/goals";
 const PENDING_PATH: &str = ".RaymanCodingSkill/pending.json";
 const GOALS_RELATIVE: &str = "goals";
 pub const GOAL_SCHEMA_VERSION: u32 = 2;
+pub const PLAN_PUBLICATION_POLICY_V1: &str = "write_ahead_v1";
+const PLAN_PUBLICATION_ROLLOUT_AT: &str = "2026-08-05T10:30:00Z";
 const STRICT_RECEIPT_ROLLOUT_AT: &str = "2026-07-14T00:00:00Z";
 const PRE_RECEIPT_MIGRATION: &str = "pre_receipt_schema_v2";
 const RECEIPT_POLICY_V1: &str = "receipt_integrity_v1";
@@ -111,14 +113,42 @@ fn hash_string_sequence(hasher: &mut Sha256, values: &[String]) {
     }
 }
 
+fn hash_required_string(hasher: &mut Sha256, value: &str) {
+    hasher.update((value.len() as u64).to_le_bytes());
+    hasher.update(value.as_bytes());
+}
+
+fn hash_optional_string(hasher: &mut Sha256, value: Option<&str>) {
+    hasher.update([u8::from(value.is_some())]);
+    if let Some(value) = value {
+        hash_required_string(hasher, value);
+    }
+}
+
 pub fn plan_receipt_sha256(receipt: &PlanReceipt) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(b"rayman.goal-plan-receipt.v1");
+    let publication_goal_bound = receipt
+        .publication
+        .as_ref()
+        .is_some_and(|publication| !publication.goal_id.is_empty());
+    hasher.update(
+        match (receipt.publication.is_some(), publication_goal_bound) {
+            (true, true) => b"rayman.goal-plan-receipt.v3".as_slice(),
+            (true, false) => b"rayman.goal-plan-receipt.v2".as_slice(),
+            (false, _) => b"rayman.goal-plan-receipt.v1".as_slice(),
+        },
+    );
+    if publication_goal_bound {
+        hash_required_string(&mut hasher, &receipt.recorded_at);
+    }
     hasher.update(receipt.baseline_fingerprint.as_bytes());
     hasher.update(receipt.review_priority.as_bytes());
     hash_string_sequence(&mut hasher, &receipt.changed_paths);
     hash_string_sequence(&mut hasher, &receipt.impacted_paths);
     hash_string_sequence(&mut hasher, &receipt.recommended_checks);
+    if let Some(publication) = receipt.publication.as_ref() {
+        hasher.update(publication.publication_sha256.as_bytes());
+    }
     format!("{:x}", hasher.finalize())
 }
 
@@ -127,14 +157,475 @@ pub fn plan_extension_sha256(
     extension: &PlanExtensionReceipt,
 ) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(b"rayman.goal-plan-extension.v1");
+    let publication_goal_bound = extension
+        .publication
+        .as_ref()
+        .is_some_and(|publication| !publication.goal_id.is_empty());
+    hasher.update(
+        match (extension.publication.is_some(), publication_goal_bound) {
+            (true, true) => b"rayman.goal-plan-extension.v3".as_slice(),
+            (true, false) => b"rayman.goal-plan-extension.v2".as_slice(),
+            (false, _) => b"rayman.goal-plan-extension.v1".as_slice(),
+        },
+    );
+    if publication_goal_bound {
+        hash_required_string(&mut hasher, &extension.recorded_at);
+    }
     hasher.update(baseline_fingerprint.as_bytes());
     hasher.update(extension.previous_plan_sha256.as_bytes());
     hasher.update(extension.review_priority.as_bytes());
     hash_string_sequence(&mut hasher, &extension.changed_paths);
     hash_string_sequence(&mut hasher, &extension.impacted_paths);
     hash_string_sequence(&mut hasher, &extension.recommended_checks);
+    if let Some(publication) = extension.publication.as_ref() {
+        hasher.update(publication.publication_sha256.as_bytes());
+    }
     format!("{:x}", hasher.finalize())
+}
+
+fn plan_publication_sha256(publication: &PlanPublicationProof) -> String {
+    let mut hasher = Sha256::new();
+    if publication.goal_id.is_empty() {
+        hasher.update(b"rayman.goal-plan-publication.v2");
+    } else {
+        hasher.update(b"rayman.goal-plan-publication.v3");
+        hash_required_string(&mut hasher, &publication.goal_id);
+    }
+    hash_required_string(
+        &mut hasher,
+        match publication.state {
+            PlanPublicationState::Pending => "pending",
+            PlanPublicationState::Committed => "committed",
+        },
+    );
+    hash_required_string(&mut hasher, &publication.intent_sha256);
+    hash_required_string(&mut hasher, &publication.precheck_fingerprint);
+    hash_optional_string(&mut hasher, publication.confirmed_fingerprint.as_deref());
+    hash_required_string(&mut hasher, &publication.published_at);
+    hash_optional_string(&mut hasher, publication.committed_at.as_deref());
+    format!("{:x}", hasher.finalize())
+}
+
+fn pending_plan_publication(intent: &PlanPublishIntent) -> PlanPublicationProof {
+    let mut publication = PlanPublicationProof {
+        goal_id: intent.goal_id.clone(),
+        state: PlanPublicationState::Pending,
+        intent_sha256: intent.intent_sha256.clone(),
+        precheck_fingerprint: intent.precheck_fingerprint.clone(),
+        confirmed_fingerprint: None,
+        published_at: intent.prepared_at.clone(),
+        committed_at: None,
+        publication_sha256: String::new(),
+    };
+    publication.publication_sha256 = plan_publication_sha256(&publication);
+    publication
+}
+
+fn commit_plan_publication(publication: &mut PlanPublicationProof, confirmed_fingerprint: &str) {
+    publication.state = PlanPublicationState::Committed;
+    publication.confirmed_fingerprint = Some(confirmed_fingerprint.to_string());
+    publication.committed_at = Some(now_iso());
+    publication.publication_sha256 = plan_publication_sha256(publication);
+}
+
+fn plan_publish_intent_sha256(intent: &PlanPublishIntent) -> String {
+    let mut hasher = Sha256::new();
+    if intent.goal_id.is_empty() {
+        hasher.update(b"rayman.goal-plan-publish-intent.v2");
+    } else {
+        hasher.update(b"rayman.goal-plan-publish-intent.v3");
+        hash_required_string(&mut hasher, &intent.goal_id);
+    }
+    hash_required_string(
+        &mut hasher,
+        match intent.kind {
+            PlanPublishIntentKind::Initial => "initial",
+            PlanPublishIntentKind::Extension => "extension",
+        },
+    );
+    hash_required_string(&mut hasher, &intent.prepared_at);
+    hash_required_string(&mut hasher, &intent.baseline_fingerprint);
+    hash_required_string(&mut hasher, &intent.precheck_fingerprint);
+    hash_optional_string(&mut hasher, intent.previous_plan_sha256.as_deref());
+    hash_required_string(&mut hasher, &intent.review_priority);
+    hash_string_sequence(&mut hasher, &intent.changed_paths);
+    hash_string_sequence(&mut hasher, &intent.impacted_paths);
+    hash_string_sequence(&mut hasher, &intent.recommended_checks);
+    format!("{:x}", hasher.finalize())
+}
+
+fn timestamp_before(value: &str, boundary: &chrono::DateTime<chrono::FixedOffset>) -> bool {
+    chrono::DateTime::parse_from_rfc3339(value).is_ok_and(|value| value < *boundary)
+}
+
+fn plan_timestamp(
+    label: &str,
+    value: &str,
+) -> std::result::Result<chrono::DateTime<chrono::FixedOffset>, String> {
+    chrono::DateTime::parse_from_rfc3339(value)
+        .map_err(|_| format!("{label} 必须是 RFC3339 timestamp"))
+}
+
+fn publication_end_timestamp(
+    publication: &PlanPublicationProof,
+) -> std::result::Result<chrono::DateTime<chrono::FixedOffset>, String> {
+    plan_timestamp(
+        "plan publication end",
+        publication
+            .committed_at
+            .as_deref()
+            .unwrap_or(&publication.published_at),
+    )
+}
+
+fn legacy_plan_publication_eligible(goal: &Goal) -> bool {
+    if goal.lifecycle == GoalLifecycle::Current {
+        return false;
+    }
+    let Ok(created) = chrono::DateTime::parse_from_rfc3339(&goal.created_at) else {
+        return false;
+    };
+    let rollout = chrono::DateTime::parse_from_rfc3339(PLAN_PUBLICATION_ROLLOUT_AT)
+        .expect("plan publication rollout timestamp must be valid");
+    created < rollout
+        && goal.plan_receipts.iter().all(|receipt| {
+            timestamp_before(&receipt.recorded_at, &rollout)
+                && receipt
+                    .extensions
+                    .iter()
+                    .all(|extension| timestamp_before(&extension.recorded_at, &rollout))
+        })
+}
+
+struct PublicationExpectation<'a> {
+    enclosing_goal_id: &'a str,
+    allow_unbound_retired_history: bool,
+    kind: PlanPublishIntentKind,
+    baseline_fingerprint: &'a str,
+    previous_plan_sha256: Option<&'a str>,
+    changed_paths: &'a [String],
+    review_priority: &'a str,
+    impacted_paths: &'a [String],
+    recommended_checks: &'a [String],
+    state: PlanPublicationState,
+}
+
+fn publication_error(
+    expected: PublicationExpectation<'_>,
+    publication: &PlanPublicationProof,
+) -> Option<String> {
+    if publication.goal_id != expected.enclosing_goal_id
+        && !(expected.allow_unbound_retired_history && publication.goal_id.is_empty())
+    {
+        return Some("plan publication 未绑定 enclosing goal_id".into());
+    }
+    if publication.state != expected.state {
+        return Some(format!(
+            "plan publication state={:?}, expected={:?}",
+            publication.state, expected.state
+        ));
+    }
+    if !validation::is_sha256(&publication.intent_sha256)
+        || !validation::is_sha256(&publication.precheck_fingerprint)
+        || chrono::DateTime::parse_from_rfc3339(&publication.published_at).is_err()
+        || publication.publication_sha256 != plan_publication_sha256(publication)
+    {
+        return Some("plan publication hash 或必需字段无效".into());
+    }
+    match publication.state {
+        PlanPublicationState::Pending => {
+            if publication.confirmed_fingerprint.is_some() || publication.committed_at.is_some() {
+                return Some("pending plan publication 不得携带 confirmed/committed 字段".into());
+            }
+        }
+        PlanPublicationState::Committed => {
+            if publication.confirmed_fingerprint.as_deref()
+                != Some(publication.precheck_fingerprint.as_str())
+                || publication
+                    .committed_at
+                    .as_deref()
+                    .is_none_or(|value| value.trim().is_empty())
+            {
+                return Some(
+                    "committed plan publication 必须证明 confirmed==precheck 并记录 committed_at"
+                        .into(),
+                );
+            }
+            let published_at = chrono::DateTime::parse_from_rfc3339(&publication.published_at)
+                .expect("published_at checked above");
+            let committed_at = publication
+                .committed_at
+                .as_deref()
+                .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok());
+            if committed_at.is_none_or(|committed_at| committed_at < published_at) {
+                return Some(
+                    "committed plan publication 的 committed_at 必须是 RFC3339 且不早于 published_at"
+                        .into(),
+                );
+            }
+        }
+    }
+    let reconstructed = PlanPublishIntent {
+        goal_id: publication.goal_id.clone(),
+        prepared_at: publication.published_at.clone(),
+        kind: expected.kind,
+        baseline_fingerprint: expected.baseline_fingerprint.to_string(),
+        precheck_fingerprint: publication.precheck_fingerprint.clone(),
+        previous_plan_sha256: expected.previous_plan_sha256.map(str::to_string),
+        changed_paths: expected.changed_paths.to_vec(),
+        review_priority: expected.review_priority.to_string(),
+        impacted_paths: expected.impacted_paths.to_vec(),
+        recommended_checks: expected.recommended_checks.to_vec(),
+        intent_sha256: String::new(),
+    };
+    if publication.intent_sha256 != plan_publish_intent_sha256(&reconstructed) {
+        return Some("plan publication 未绑定对应 plan payload".into());
+    }
+    None
+}
+
+/// Validate the entire plan chain and its write-ahead publication epoch.
+///
+/// Legacy v15 goals remain readable only when they predate the rollout and the
+/// whole chain is legacy.  v16 never appends to them.  A governed v16 chain is
+/// either fully committed, or contains exactly one pending tail node that is
+/// atomically paired with the single persisted publish intent.
+pub(super) fn plan_chain_error(goal: &Goal) -> Option<String> {
+    let allow_unbound_retired_history = goal.lifecycle == GoalLifecycle::Archived
+        && matches!(goal.status, GoalStatus::Partial | GoalStatus::Blocked);
+    let Some(baseline) = goal.baseline.as_ref() else {
+        if goal.plan_receipts.is_empty() && goal.plan_publish_intent.is_none() {
+            return None;
+        }
+        return Some("缺少 baseline 的 goal 不得携带 plan publication state".into());
+    };
+    if goal.plan_receipts.len() > 1 {
+        return Some("goal 只能携带一个不可拆分的聚合 plan receipt".into());
+    }
+
+    match goal.plan_publication_policy.as_deref() {
+        None => {
+            if !legacy_plan_publication_eligible(goal) {
+                return Some(format!(
+                    "legacy plan chain 只允许作为 rollout {PLAN_PUBLICATION_ROLLOUT_AT} 前产生且已退休的历史记录"
+                ));
+            }
+            if goal.plan_publish_intent.is_some()
+                || goal.plan_receipts.iter().any(|receipt| {
+                    receipt.publication.is_some()
+                        || receipt
+                            .extensions
+                            .iter()
+                            .any(|extension| extension.publication.is_some())
+                })
+            {
+                return Some("legacy plan chain 不得混入 v16 publication 节点或 intent".into());
+            }
+            if goal.plan_receipts.iter().any(|receipt| {
+                receipt.plan_sha256 != plan_receipt_sha256(receipt)
+                    || !plan_extensions_are_valid(receipt)
+            }) {
+                return Some("legacy plan chain hash 或单调扩展关系无效".into());
+            }
+            return None;
+        }
+        Some(PLAN_PUBLICATION_POLICY_V1) => {}
+        Some(other) => {
+            return Some(format!("未知 plan_publication_policy: {other}"));
+        }
+    }
+
+    let Some(receipt) = goal.plan_receipts.first() else {
+        return goal
+            .plan_publish_intent
+            .as_ref()
+            .map(|_| "plan publish intent 缺少对应 pending plan 节点".into());
+    };
+    if receipt.baseline_fingerprint != baseline.workspace_fingerprint
+        || receipt.plan_sha256 != plan_receipt_sha256(receipt)
+        || !plan_extensions_are_valid(receipt)
+    {
+        return Some("plan chain 外层 hash、baseline 或单调扩展关系无效".into());
+    }
+
+    let pending_kind = goal.plan_publish_intent.as_ref().map(|intent| intent.kind);
+    let base_state = if pending_kind == Some(PlanPublishIntentKind::Initial) {
+        if !receipt.extensions.is_empty() {
+            return Some("initial pending publication 后不得已有 extension".into());
+        }
+        PlanPublicationState::Pending
+    } else {
+        PlanPublicationState::Committed
+    };
+    let Some(base_publication) = receipt.publication.as_ref() else {
+        return Some("write_ahead_v1 plan receipt 缺少 publication proof".into());
+    };
+    if let Some(error) = publication_error(
+        PublicationExpectation {
+            enclosing_goal_id: &goal.id,
+            allow_unbound_retired_history,
+            kind: PlanPublishIntentKind::Initial,
+            baseline_fingerprint: &receipt.baseline_fingerprint,
+            previous_plan_sha256: None,
+            changed_paths: &receipt.changed_paths,
+            review_priority: &receipt.review_priority,
+            impacted_paths: &receipt.impacted_paths,
+            recommended_checks: &receipt.recommended_checks,
+            state: base_state,
+        },
+        base_publication,
+    ) {
+        return Some(error);
+    }
+    if base_publication.precheck_fingerprint != receipt.baseline_fingerprint {
+        return Some("initial plan publication precheck 必须等于 goal baseline".into());
+    }
+
+    let last_extension = receipt.extensions.len().checked_sub(1);
+    for (index, extension) in receipt.extensions.iter().enumerate() {
+        let state = if pending_kind == Some(PlanPublishIntentKind::Extension)
+            && Some(index) == last_extension
+        {
+            PlanPublicationState::Pending
+        } else {
+            PlanPublicationState::Committed
+        };
+        let Some(publication) = extension.publication.as_ref() else {
+            return Some(format!(
+                "write_ahead_v1 extension {} 缺少 publication proof",
+                index + 1
+            ));
+        };
+        if let Some(error) = publication_error(
+            PublicationExpectation {
+                enclosing_goal_id: &goal.id,
+                allow_unbound_retired_history,
+                kind: PlanPublishIntentKind::Extension,
+                baseline_fingerprint: &receipt.baseline_fingerprint,
+                previous_plan_sha256: Some(&extension.previous_plan_sha256),
+                changed_paths: &extension.changed_paths,
+                review_priority: &extension.review_priority,
+                impacted_paths: &extension.impacted_paths,
+                recommended_checks: &extension.recommended_checks,
+                state,
+            },
+            publication,
+        ) {
+            return Some(format!("extension {}: {error}", index + 1));
+        }
+    }
+
+    if let Some(intent) = goal.plan_publish_intent.as_ref() {
+        if (intent.goal_id != goal.id
+            && !(allow_unbound_retired_history && intent.goal_id.is_empty()))
+            || intent.intent_sha256 != plan_publish_intent_sha256(intent)
+            || intent.baseline_fingerprint != baseline.workspace_fingerprint
+            || plan_timestamp("plan publish intent prepared_at", &intent.prepared_at).is_err()
+        {
+            return Some("plan publish intent hash、goal、timestamp 或 baseline 绑定无效".into());
+        }
+        let publication = match intent.kind {
+            PlanPublishIntentKind::Initial => base_publication,
+            PlanPublishIntentKind::Extension => {
+                let Some(extension) = receipt.extensions.last() else {
+                    return Some("extension intent 缺少 pending 链尾".into());
+                };
+                extension
+                    .publication
+                    .as_ref()
+                    .expect("extension publication checked above")
+            }
+        };
+        if publication.intent_sha256 != intent.intent_sha256
+            || publication.goal_id != intent.goal_id
+            || publication.precheck_fingerprint != intent.precheck_fingerprint
+            || publication.published_at != intent.prepared_at
+        {
+            return Some("pending publication 与 persisted intent 不匹配".into());
+        }
+    } else if base_publication.state == PlanPublicationState::Pending
+        || receipt.extensions.iter().any(|extension| {
+            extension
+                .publication
+                .as_ref()
+                .is_some_and(|proof| proof.state == PlanPublicationState::Pending)
+        })
+    {
+        return Some("pending publication 缺少 persisted intent".into());
+    }
+
+    let created_at = match plan_timestamp("goal.created_at", &goal.created_at) {
+        Ok(value) => value,
+        Err(error) => return Some(error),
+    };
+    let baseline_at = match plan_timestamp("goal.baseline.recorded_at", &baseline.recorded_at) {
+        Ok(value) => value,
+        Err(error) => return Some(error),
+    };
+    let updated_at = match plan_timestamp("goal.updated_at", &goal.updated_at) {
+        Ok(value) => value,
+        Err(error) => return Some(error),
+    };
+    let receipt_at = match plan_timestamp("plan receipt recorded_at", &receipt.recorded_at) {
+        Ok(value) => value,
+        Err(error) => return Some(error),
+    };
+    let base_published_at = match plan_timestamp(
+        "plan publication published_at",
+        &base_publication.published_at,
+    ) {
+        Ok(value) => value,
+        Err(error) => return Some(error),
+    };
+    let mut previous_end = match publication_end_timestamp(base_publication) {
+        Ok(value) => value,
+        Err(error) => return Some(error),
+    };
+    if baseline_at < created_at
+        || receipt_at < baseline_at
+        || base_published_at < receipt_at
+        || previous_end < base_published_at
+    {
+        return Some(
+            "plan publication 时间顺序必须满足 goal <= baseline <= receipt <= published <= committed"
+                .into(),
+        );
+    }
+    for (index, extension) in receipt.extensions.iter().enumerate() {
+        let recorded_at = match plan_timestamp(
+            &format!("plan extension {} recorded_at", index + 1),
+            &extension.recorded_at,
+        ) {
+            Ok(value) => value,
+            Err(error) => return Some(error),
+        };
+        let publication = extension
+            .publication
+            .as_ref()
+            .expect("extension publication checked above");
+        let published_at = match plan_timestamp(
+            &format!("plan extension {} published_at", index + 1),
+            &publication.published_at,
+        ) {
+            Ok(value) => value,
+            Err(error) => return Some(error),
+        };
+        let end = match publication_end_timestamp(publication) {
+            Ok(value) => value,
+            Err(error) => return Some(error),
+        };
+        if recorded_at < previous_end || published_at < recorded_at || end < published_at {
+            return Some(format!(
+                "plan extension {} 时间顺序必须位于前一 publication 之后",
+                index + 1
+            ));
+        }
+        previous_end = end;
+    }
+    if updated_at < previous_end {
+        return Some("goal.updated_at 不得早于最终 plan publication".into());
+    }
+    None
 }
 
 fn review_priority_rank(priority: &str) -> Option<u8> {
@@ -340,6 +831,8 @@ impl GoalStore {
             updated_at: now,
             baseline,
             plan_receipts: Vec::new(),
+            plan_publish_intent: None,
+            plan_publication_policy: Some(PLAN_PUBLICATION_POLICY_V1.to_string()),
             review_receipts: Vec::new(),
             authority_receipts: Vec::new(),
             work_packages: Vec::new(),
@@ -353,7 +846,19 @@ impl GoalStore {
         Ok(goal)
     }
 
-    pub fn record_plan(&self, id: &str, mut submission: PlanReceiptSubmission) -> Result<Goal> {
+    pub fn record_plan(&self, id: &str, submission: PlanReceiptSubmission) -> Result<Goal> {
+        self.record_plan_with_before_confirm(id, submission, || {})
+    }
+
+    fn record_plan_with_before_confirm<F>(
+        &self,
+        id: &str,
+        mut submission: PlanReceiptSubmission,
+        before_confirm: F,
+    ) -> Result<Goal>
+    where
+        F: FnOnce(),
+    {
         if !matches!(
             submission.review_priority.as_str(),
             "normal" | "broad" | "high"
@@ -382,7 +887,95 @@ impl GoalStore {
         let Some(baseline) = goal.baseline.as_ref() else {
             bail!("目标缺少开工 baseline；请新建目标后在首次修改前执行 goal plan");
         };
+        if goal.plan_publication_policy.as_deref() != Some(PLAN_PUBLICATION_POLICY_V1) {
+            bail!(
+                "goal 不属于 {PLAN_PUBLICATION_POLICY_V1} plan publication epoch；旧 goal 只能读取或退休，不能追加计划"
+            );
+        }
+        if let Some(error) = plan_chain_error(&goal) {
+            bail!("goal plan publication contract invalid: {error}");
+        }
+        let mut receipt = PlanReceipt {
+            recorded_at: now_iso(),
+            baseline_fingerprint: baseline.workspace_fingerprint.clone(),
+            changed_paths: submission.changed_paths.clone(),
+            review_priority: submission.review_priority.clone(),
+            impacted_paths: submission.impacted_paths.clone(),
+            recommended_checks: submission.recommended_checks.clone(),
+            publication: None,
+            plan_sha256: String::new(),
+            extensions: Vec::new(),
+        };
         let current = workspace_baseline(&self.root)?;
+        if let Some(intent) = goal.plan_publish_intent.as_ref() {
+            let matching = intent.kind == PlanPublishIntentKind::Initial
+                && intent.baseline_fingerprint == baseline.workspace_fingerprint
+                && intent.precheck_fingerprint == current.workspace_fingerprint
+                && intent.previous_plan_sha256.is_none()
+                && intent.changed_paths == submission.changed_paths
+                && intent.review_priority == submission.review_priority
+                && intent.impacted_paths == submission.impacted_paths
+                && intent.recommended_checks == submission.recommended_checks
+                && intent.intent_sha256 == plan_publish_intent_sha256(intent);
+            let pending_receipt = goal.plan_receipts.first();
+            let receipt_matches = pending_receipt.is_some_and(|pending| {
+                goal.plan_receipts.len() == 1
+                    && pending.extensions.is_empty()
+                    && pending.baseline_fingerprint == intent.baseline_fingerprint
+                    && pending.changed_paths == intent.changed_paths
+                    && pending.review_priority == intent.review_priority
+                    && pending.impacted_paths == intent.impacted_paths
+                    && pending.recommended_checks == intent.recommended_checks
+                    && pending.publication.as_ref().is_some_and(|publication| {
+                        publication.state == PlanPublicationState::Pending
+                            && publication.intent_sha256 == intent.intent_sha256
+                            && publication.publication_sha256
+                                == plan_publication_sha256(publication)
+                    })
+                    && pending.plan_sha256 == plan_receipt_sha256(pending)
+            });
+            if !matching || !receipt_matches {
+                bail!(
+                    "goal 存在未完成且与本次调用不匹配的 plan publish intent；拒绝覆盖，必须恢复 intent 的 precheck 快照后用同一计划重试或退休该 goal"
+                );
+            }
+            let pending = goal
+                .plan_receipts
+                .first_mut()
+                .expect("checked pending plan");
+            let publication = pending
+                .publication
+                .as_mut()
+                .expect("checked pending publication");
+            commit_plan_publication(publication, &current.workspace_fingerprint);
+            pending.plan_sha256 = plan_receipt_sha256(pending);
+            goal.plan_publish_intent = None;
+            goal.updated_at = now_iso();
+            write_json(&path, &goal)?;
+            return Ok(goal);
+        }
+        receipt.plan_sha256 = plan_receipt_sha256(&receipt);
+        if let Some(existing) = goal.plan_receipts.first() {
+            if goal.plan_receipts.len() != 1 {
+                bail!("目标包含多个 plan receipt；拒绝继续使用可拆分绕过的计划状态");
+            }
+            if existing.baseline_fingerprint == receipt.baseline_fingerprint
+                && existing.changed_paths == receipt.changed_paths
+                && existing.review_priority == receipt.review_priority
+                && existing.impacted_paths == receipt.impacted_paths
+                && existing.recommended_checks == receipt.recommended_checks
+                && existing.publication.as_ref().is_some_and(|publication| {
+                    publication.state == PlanPublicationState::Committed
+                        && publication.publication_sha256 == plan_publication_sha256(publication)
+                })
+                && existing.plan_sha256 == plan_receipt_sha256(existing)
+            {
+                return Ok(goal);
+            }
+            bail!(
+                "goal plan 是首次修改前的一次性聚合合同，不能追加或拆分；请在变更前一次列出完整路径"
+            );
+        }
         if current.workspace_fingerprint != baseline.workspace_fingerprint {
             bail!(
                 "工作区已偏离 goal 开工 baseline；拒绝事后补 plan。baseline={} current={}",
@@ -390,29 +983,53 @@ impl GoalStore {
                 current.workspace_fingerprint
             );
         }
-        let mut receipt = PlanReceipt {
-            recorded_at: now_iso(),
+
+        let mut intent = PlanPublishIntent {
+            goal_id: goal.id.clone(),
+            prepared_at: now_iso(),
+            kind: PlanPublishIntentKind::Initial,
             baseline_fingerprint: baseline.workspace_fingerprint.clone(),
+            precheck_fingerprint: current.workspace_fingerprint.clone(),
+            previous_plan_sha256: None,
             changed_paths: submission.changed_paths,
             review_priority: submission.review_priority,
             impacted_paths: submission.impacted_paths,
             recommended_checks: submission.recommended_checks,
-            plan_sha256: String::new(),
-            extensions: Vec::new(),
+            intent_sha256: String::new(),
         };
+        intent.intent_sha256 = plan_publish_intent_sha256(&intent);
+        receipt.publication = Some(pending_plan_publication(&intent));
         receipt.plan_sha256 = plan_receipt_sha256(&receipt);
-        if let Some(existing) = goal.plan_receipts.first() {
-            if goal.plan_receipts.len() != 1 {
-                bail!("目标包含多个 plan receipt；拒绝继续使用可拆分绕过的计划状态");
-            }
-            if existing.plan_sha256 == receipt.plan_sha256 {
-                return Ok(goal);
-            }
+        goal.plan_publish_intent = Some(intent);
+        goal.plan_receipts.push(receipt);
+        goal.updated_at = now_iso();
+        write_json(&path, &goal)?;
+
+        // The write above is the plan publication linearization point.  The
+        // final compare detects a source writer that raced the precheck.  On
+        // drift the intent deliberately remains persisted and every normal
+        // gate fails closed; silently deleting it would permit a post-hoc
+        // retry against the already changed tree.
+        before_confirm();
+        let confirmed = workspace_baseline(&self.root)?;
+        if confirmed.workspace_fingerprint != current.workspace_fingerprint {
             bail!(
-                "goal plan 是首次修改前的一次性聚合合同，不能追加或拆分；请在变更前一次列出完整路径"
+                "源码在 plan 发布 CAS 窗口内发生变化；已保留 fail-closed plan publish intent（precheck={} confirmed={}），恢复原快照后用同一计划重试或退休该 goal",
+                current.workspace_fingerprint,
+                confirmed.workspace_fingerprint
             );
         }
-        goal.plan_receipts.push(receipt);
+        let receipt = goal
+            .plan_receipts
+            .first_mut()
+            .expect("pending plan was published");
+        let publication = receipt
+            .publication
+            .as_mut()
+            .expect("pending plan publication was published");
+        commit_plan_publication(publication, &confirmed.workspace_fingerprint);
+        receipt.plan_sha256 = plan_receipt_sha256(receipt);
+        goal.plan_publish_intent = None;
         goal.updated_at = now_iso();
         write_json(&path, &goal)?;
         Ok(goal)
@@ -421,7 +1038,19 @@ impl GoalStore {
     /// Widen an existing aggregate plan without allowing post-hoc coverage.
     /// Already changed paths must be covered by the previous effective plan,
     /// and every newly added path must still match the goal baseline.
-    pub fn extend_plan(&self, id: &str, mut submission: PlanReceiptSubmission) -> Result<Goal> {
+    pub fn extend_plan(&self, id: &str, submission: PlanReceiptSubmission) -> Result<Goal> {
+        self.extend_plan_with_before_confirm(id, submission, || {})
+    }
+
+    fn extend_plan_with_before_confirm<F>(
+        &self,
+        id: &str,
+        mut submission: PlanReceiptSubmission,
+        before_confirm: F,
+    ) -> Result<Goal>
+    where
+        F: FnOnce(),
+    {
         if review_priority_rank(&submission.review_priority).is_none() {
             bail!("未知 review_priority: {}", submission.review_priority);
         }
@@ -447,10 +1076,104 @@ impl GoalStore {
         let Some(baseline) = goal.baseline.as_ref() else {
             bail!("目标缺少开工 baseline，不能扩展 plan");
         };
+        if goal.plan_publication_policy.as_deref() != Some(PLAN_PUBLICATION_POLICY_V1) {
+            bail!(
+                "goal 不属于 {PLAN_PUBLICATION_POLICY_V1} plan publication epoch；旧 goal 只能读取或退休，不能扩展计划"
+            );
+        }
         if goal.plan_receipts.len() != 1 {
             bail!("goal plan --extend 要求恰好一个基础聚合 plan receipt");
         }
-        let receipt = goal.plan_receipts.first_mut().expect("checked one plan");
+        if let Some(error) = plan_chain_error(&goal) {
+            bail!("goal plan publication contract invalid: {error}");
+        }
+        let current = workspace_baseline(&self.root)?;
+
+        if let Some(intent) = goal.plan_publish_intent.as_ref() {
+            if intent.kind != PlanPublishIntentKind::Extension
+                || current.workspace_fingerprint != intent.precheck_fingerprint
+            {
+                bail!(
+                    "goal 存在未完成且与当前源码不匹配的 plan extension intent；必须恢复 intent 的 precheck 快照后用同一扩展重试或退休该 goal"
+                );
+            }
+            let receipt = goal.plan_receipts.first().expect("checked one plan");
+            let pending_index = receipt
+                .extensions
+                .len()
+                .checked_sub(1)
+                .expect("validated extension intent has a pending tail");
+            let (prior_changed, prior_impacted, prior_checks, prior_priority, prior_sha256) =
+                if pending_index == 0 {
+                    (
+                        receipt.changed_paths.as_slice(),
+                        receipt.impacted_paths.as_slice(),
+                        receipt.recommended_checks.as_slice(),
+                        receipt.review_priority.as_str(),
+                        receipt.plan_sha256.as_str(),
+                    )
+                } else {
+                    let prior = &receipt.extensions[pending_index - 1];
+                    (
+                        prior.changed_paths.as_slice(),
+                        prior.impacted_paths.as_slice(),
+                        prior.recommended_checks.as_slice(),
+                        prior.review_priority.as_str(),
+                        prior.extension_sha256.as_str(),
+                    )
+                };
+            let prior_set = prior_changed.iter().cloned().collect::<BTreeSet<_>>();
+            let additions = submission
+                .changed_paths
+                .iter()
+                .filter(|candidate| !prior_set.contains(*candidate))
+                .cloned()
+                .collect::<Vec<_>>();
+            let mut expected_changed = prior_changed.to_vec();
+            expected_changed.extend(additions);
+            normalize_path_list(&mut expected_changed);
+            let mut expected_impacted = prior_impacted.to_vec();
+            expected_impacted.extend(submission.impacted_paths.clone());
+            normalize_path_list(&mut expected_impacted);
+            let mut expected_checks = prior_checks.to_vec();
+            expected_checks.extend(submission.recommended_checks.clone());
+            expected_checks.sort();
+            expected_checks.dedup();
+            let expected_priority =
+                max_review_priority(prior_priority, &submission.review_priority)?;
+            let matching = intent.baseline_fingerprint == baseline.workspace_fingerprint
+                && intent.previous_plan_sha256.as_deref() == Some(prior_sha256)
+                && intent.changed_paths == expected_changed
+                && intent.review_priority == expected_priority
+                && intent.impacted_paths == expected_impacted
+                && intent.recommended_checks == expected_checks
+                && intent.intent_sha256 == plan_publish_intent_sha256(intent);
+            if !matching {
+                bail!(
+                    "goal 存在未完成且与本次调用不匹配的 plan extension intent；拒绝覆盖，必须用原扩展参数重试或退休该 goal"
+                );
+            }
+            let extension = goal
+                .plan_receipts
+                .first_mut()
+                .expect("checked one plan")
+                .extensions
+                .last_mut()
+                .expect("validated pending extension");
+            let publication = extension
+                .publication
+                .as_mut()
+                .expect("validated pending extension publication");
+            commit_plan_publication(publication, &current.workspace_fingerprint);
+            extension.extension_sha256 =
+                plan_extension_sha256(&baseline.workspace_fingerprint, extension);
+            goal.plan_publish_intent = None;
+            goal.updated_at = now_iso();
+            write_json(&path, &goal)?;
+            return Ok(goal);
+        }
+
+        let receipt = goal.plan_receipts.first().expect("checked one plan");
         let existing = receipt
             .effective_changed_paths()
             .iter()
@@ -466,7 +1189,6 @@ impl GoalStore {
             return Ok(goal);
         }
 
-        let current = workspace_baseline(&self.root)?;
         let actual = workspace_delta(baseline, &current);
         let prior_unplanned = actual
             .iter()
@@ -509,11 +1231,59 @@ impl GoalStore {
             review_priority,
             impacted_paths,
             recommended_checks,
+            publication: None,
             extension_sha256: String::new(),
         };
+        let mut intent = PlanPublishIntent {
+            goal_id: goal.id.clone(),
+            prepared_at: now_iso(),
+            kind: PlanPublishIntentKind::Extension,
+            baseline_fingerprint: baseline.workspace_fingerprint.clone(),
+            precheck_fingerprint: current.workspace_fingerprint.clone(),
+            previous_plan_sha256: Some(extension.previous_plan_sha256.clone()),
+            changed_paths: extension.changed_paths.clone(),
+            review_priority: extension.review_priority.clone(),
+            impacted_paths: extension.impacted_paths.clone(),
+            recommended_checks: extension.recommended_checks.clone(),
+            intent_sha256: String::new(),
+        };
+        intent.intent_sha256 = plan_publish_intent_sha256(&intent);
+        extension.publication = Some(pending_plan_publication(&intent));
         extension.extension_sha256 =
             plan_extension_sha256(&baseline.workspace_fingerprint, &extension);
-        receipt.extensions.push(extension);
+        goal.plan_publish_intent = Some(intent);
+        goal.plan_receipts
+            .first_mut()
+            .expect("checked one plan")
+            .extensions
+            .push(extension);
+        goal.updated_at = now_iso();
+        write_json(&path, &goal)?;
+
+        before_confirm();
+        let confirmed = workspace_baseline(&self.root)?;
+        if confirmed.workspace_fingerprint != current.workspace_fingerprint {
+            bail!(
+                "源码在 plan extension 发布 CAS 窗口内发生变化；已保留 fail-closed plan publish intent（precheck={} confirmed={}），恢复原快照后用同一扩展重试或退休该 goal",
+                current.workspace_fingerprint,
+                confirmed.workspace_fingerprint
+            );
+        }
+        let extension = goal
+            .plan_receipts
+            .first_mut()
+            .expect("checked one plan")
+            .extensions
+            .last_mut()
+            .expect("pending extension was published");
+        let publication = extension
+            .publication
+            .as_mut()
+            .expect("pending extension publication was published");
+        commit_plan_publication(publication, &confirmed.workspace_fingerprint);
+        extension.extension_sha256 =
+            plan_extension_sha256(&baseline.workspace_fingerprint, extension);
+        goal.plan_publish_intent = None;
         goal.updated_at = now_iso();
         write_json(&path, &goal)?;
         Ok(goal)
@@ -828,48 +1598,30 @@ impl GoalStore {
                 actual_proof.as_str()
             );
         }
-        // baseline 缺失时整个 plan/差量门禁曾被静默跳过（无 else 分支），于是这类
-        // 目标可以吸收任意未声明变更并仍写出 receipt。文档承诺此类目标"永远不
-        // gate-ready"，写入侧同样必须 fail-closed。
-        let Some(baseline) = goal.baseline.as_ref() else {
-            bail!(
-                "目标 {id} 缺少开工 baseline，无法核对实际变更；请用新的 baseline-bound goal supersede，或将已完成记录显式 archive"
-            );
-        };
         let current = workspace_baseline(&self.root)?;
-        let actual = workspace_delta(baseline, &current);
-        let valid_plans = goal
-            .plan_receipts
-            .iter()
-            .filter(|plan| {
-                plan.baseline_fingerprint == baseline.workspace_fingerprint
-                    && plan.plan_sha256 == plan_receipt_sha256(plan)
-                    && plan_extensions_are_valid(plan)
-            })
-            .collect::<Vec<_>>();
-        if actual.len() >= 2 && valid_plans.is_empty() {
+        let plan_delta = goal_plan_delta(&goal, &current)?;
+        if plan_delta.plan_required && !plan_delta.plan_recorded {
             bail!(
                 "实际变更 {} 个文件但缺少首次修改前的 goal plan receipt",
-                actual.len()
+                plan_delta.actual_changed_paths.len()
             );
         }
-        let planned = valid_plans
-            .iter()
-            .flat_map(|plan| plan.effective_changed_paths().iter().cloned())
-            .collect::<BTreeSet<_>>();
-        let unplanned = actual
-            .iter()
-            .filter(|changed| !planned.contains(*changed))
-            .cloned()
-            .collect::<Vec<_>>();
-        if !valid_plans.is_empty() && !unplanned.is_empty() {
-            bail!("validation 拒绝未计划的实际变更: {}", unplanned.join(", "));
+        if plan_delta.plan_recorded && !plan_delta.unplanned_changed_paths.is_empty() {
+            bail!(
+                "validation 拒绝未计划的实际变更: {}",
+                plan_delta.unplanned_changed_paths.join(", ")
+            );
         }
-        if !valid_plans.is_empty() {
+        if plan_delta.plan_recorded {
             let undeclared_plan = impact_paths
                 .iter()
                 .map(|path| path.replace('\\', "/"))
-                .filter(|changed| !planned.contains(changed))
+                .filter(|changed| {
+                    plan_delta
+                        .planned_changed_paths
+                        .binary_search(changed)
+                        .is_err()
+                })
                 .collect::<Vec<_>>();
             if !undeclared_plan.is_empty() {
                 bail!(
@@ -1131,7 +1883,12 @@ impl GoalStore {
                 "active goal 不能直接归档；先 `rayman goal close {id} --status partial`（或 blocked）如实记录结果，再归档"
             );
         }
-        if let Some(error) = goal.current_schema_error() {
+        let retiring_non_success = matches!(goal.status, GoalStatus::Partial | GoalStatus::Blocked);
+        // A structurally valid pending plan publication is deliberately a
+        // readiness blocker while current.  For an honest partial/blocked
+        // retirement, validate the atomic archived candidate below instead of
+        // demanding that the current record first erase or commit the intent.
+        if !retiring_non_success && let Some(error) = goal.current_schema_error() {
             bail!("目标合约无效，不能归档: {error}");
         }
         let current_fingerprint = workspace_fingerprint(&self.root)?;
@@ -1186,6 +1943,12 @@ impl GoalStore {
             migration,
             receipt_policy,
         ));
+        if let Some(error) = goal.current_schema_error() {
+            bail!("归档后的目标合约无效: {error}");
+        }
+        if let Some(error) = goal.lifecycle_proof_error(&self.root) {
+            bail!("归档后的 lifecycle proof 无效: {error}");
+        }
         write_json(&path, &goal)?;
         Ok(goal)
     }
@@ -1642,6 +2405,8 @@ fn goal_from_legacy(legacy: LegacyGoal) -> Goal {
         created_at,
         baseline: None,
         plan_receipts: Vec::new(),
+        plan_publish_intent: None,
+        plan_publication_policy: None,
         review_receipts: Vec::new(),
         authority_receipts: Vec::new(),
         work_packages: Vec::new(),

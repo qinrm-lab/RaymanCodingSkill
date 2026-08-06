@@ -41,9 +41,20 @@ pub(super) fn legacy_lifecycle_contract_sha256(goal: &Goal) -> String {
     let workflow_extended = !goal.work_packages.is_empty()
         || !goal.progress_receipts.is_empty()
         || !goal.lanes.is_empty();
+    let publication_extended = goal.plan_publication_policy.is_some()
+        || goal.plan_publish_intent.is_some()
+        || goal.plan_receipts.iter().any(|receipt| {
+            receipt.publication.is_some()
+                || receipt
+                    .extensions
+                    .iter()
+                    .any(|extension| extension.publication.is_some())
+        });
     lifecycle_hash_str(
         &mut hasher,
-        if workflow_extended {
+        if publication_extended {
+            "rayman.lifecycle-contract.v7"
+        } else if workflow_extended {
             "rayman.lifecycle-contract.v6"
         } else if replacement_extended {
             "rayman.lifecycle-contract.v5"
@@ -62,6 +73,13 @@ pub(super) fn legacy_lifecycle_contract_sha256(goal: &Goal) -> String {
     lifecycle_hash_str(&mut hasher, goal.lifecycle.as_str());
     lifecycle_hash_optional_str(&mut hasher, goal.lifecycle_reason.as_deref());
     lifecycle_hash_optional_str(&mut hasher, goal.superseded_by.as_deref());
+    if publication_extended {
+        lifecycle_hash_optional_str(&mut hasher, goal.plan_publication_policy.as_deref());
+        hasher.update([u8::from(goal.plan_publish_intent.is_some())]);
+        if let Some(intent) = goal.plan_publish_intent.as_ref() {
+            lifecycle_hash_str(&mut hasher, &intent.intent_sha256);
+        }
+    }
     lifecycle_hash_str(&mut hasher, &goal.created_at);
     lifecycle_hash_str(&mut hasher, &goal.updated_at);
     if extended {
@@ -312,13 +330,43 @@ pub(super) fn legacy_lifecycle_contract_sha256(goal: &Goal) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-fn lifecycle_contract_sha256(goal: &Goal, receipt_policy: Option<&str>) -> String {
+fn has_goal_bound_plan_publication(goal: &Goal) -> bool {
+    goal.plan_publish_intent
+        .as_ref()
+        .is_some_and(|intent| !intent.goal_id.is_empty())
+        || goal.plan_receipts.iter().any(|receipt| {
+            receipt
+                .publication
+                .as_ref()
+                .is_some_and(|publication| !publication.goal_id.is_empty())
+                || receipt.extensions.iter().any(|extension| {
+                    extension
+                        .publication
+                        .as_ref()
+                        .is_some_and(|publication| !publication.goal_id.is_empty())
+                })
+        })
+}
+
+fn lifecycle_contract_sha256(
+    goal: &Goal,
+    receipt_policy: Option<&str>,
+    proof_recorded_at: Option<&str>,
+) -> String {
     let legacy_contract = legacy_lifecycle_contract_sha256(goal);
     let Some(receipt_policy) = receipt_policy else {
         return legacy_contract;
     };
     let mut hasher = Sha256::new();
-    lifecycle_hash_str(&mut hasher, "rayman.lifecycle-proof-policy.v1");
+    if has_goal_bound_plan_publication(goal) {
+        lifecycle_hash_str(&mut hasher, "rayman.lifecycle-proof-policy.v2");
+        lifecycle_hash_str(
+            &mut hasher,
+            proof_recorded_at.expect("goal-bound lifecycle proof must bind recorded_at"),
+        );
+    } else {
+        lifecycle_hash_str(&mut hasher, "rayman.lifecycle-proof-policy.v1");
+    }
     lifecycle_hash_str(&mut hasher, receipt_policy);
     lifecycle_hash_str(&mut hasher, &legacy_contract);
     format!("{:x}", hasher.finalize())
@@ -330,10 +378,15 @@ pub(super) fn issue_lifecycle_proof(
     migration: Option<String>,
     receipt_policy: Option<String>,
 ) -> LifecycleProof {
+    let recorded_at = now_iso();
     LifecycleProof {
-        recorded_at: now_iso(),
+        contract_sha256: lifecycle_contract_sha256(
+            goal,
+            receipt_policy.as_deref(),
+            Some(&recorded_at),
+        ),
+        recorded_at,
         workspace_fingerprint: fingerprint,
-        contract_sha256: lifecycle_contract_sha256(goal, receipt_policy.as_deref()),
         migration,
         receipt_policy,
     }
@@ -496,6 +549,63 @@ pub fn workspace_delta(baseline: &WorkspaceBaseline, current: &WorkspaceBaseline
     paths
 }
 
+/// Reconcile a current workspace snapshot against the goal-owned baseline and
+/// the effective aggregate plan.  Callers use this same comparison during
+/// prepare, validation, and readiness checks so plan scope cannot drift
+/// between lifecycle stages.
+pub fn goal_plan_delta(goal: &Goal, current: &WorkspaceBaseline) -> Result<GoalPlanDelta> {
+    if !goal.is_current_schema() {
+        bail!(
+            "目标 {} 不是当前 schema，不能作为 plan reconciliation authority",
+            goal.id
+        );
+    }
+    if let Some(error) = goal.current_schema_error() {
+        bail!("goal {} 合约无效: {error}", goal.id);
+    }
+    let Some(baseline) = goal.baseline.as_ref() else {
+        bail!(
+            "目标 {} 缺少开工 baseline；不能核对实际变更，请用新的 baseline-bound goal supersede，或将已完成记录显式 archive",
+            goal.id
+        );
+    };
+    if fingerprint_for_files(&current.files) != current.workspace_fingerprint {
+        bail!("当前 workspace snapshot 的文件清单与 fingerprint 不匹配");
+    }
+
+    let actual_changed_paths = workspace_delta(baseline, current);
+    let planned_changed_paths = goal
+        .plan_receipts
+        .iter()
+        .flat_map(|receipt| receipt.effective_changed_paths().iter().cloned())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let unplanned_changed_paths = actual_changed_paths
+        .iter()
+        .filter(|path| planned_changed_paths.binary_search(path).is_err())
+        .cloned()
+        .collect::<Vec<_>>();
+    let plan_recorded = !goal.plan_receipts.is_empty();
+    let plan_required = actual_changed_paths.len() >= 2;
+    let covered = if plan_recorded {
+        unplanned_changed_paths.is_empty()
+    } else {
+        !plan_required
+    };
+
+    Ok(GoalPlanDelta {
+        baseline_fingerprint: baseline.workspace_fingerprint.clone(),
+        current_fingerprint: current.workspace_fingerprint.clone(),
+        actual_changed_paths,
+        planned_changed_paths,
+        unplanned_changed_paths,
+        plan_recorded,
+        plan_required,
+        covered,
+    })
+}
+
 pub fn goal_planning_gaps(goal: &Goal, root: &Path, current_fingerprint: &str) -> Vec<String> {
     let Some(baseline) = goal.baseline.as_ref() else {
         return if goal.is_current_schema() && goal.lifecycle == GoalLifecycle::Current {
@@ -523,33 +633,25 @@ pub fn goal_planning_gaps(goal: &Goal, root: &Path, current_fingerprint: &str) -
         gaps.push("goal 规划检查与调用方当前 fingerprint 不一致".into());
         return gaps;
     }
-    let actual = workspace_delta(baseline, &current);
-    let valid_plans = goal
-        .plan_receipts
-        .iter()
-        .filter(|receipt| {
-            receipt.baseline_fingerprint == baseline.workspace_fingerprint
-                && receipt.plan_sha256 == plan_receipt_sha256(receipt)
-                && plan_extensions_are_valid(receipt)
-        })
-        .collect::<Vec<_>>();
-    if actual.len() >= 2 && valid_plans.is_empty() {
+    let delta = match goal_plan_delta(goal, &current) {
+        Ok(delta) => delta,
+        Err(error) => {
+            gaps.push(format!("无法核对 goal plan: {error}"));
+            return gaps;
+        }
+    };
+    let actual = &delta.actual_changed_paths;
+    if delta.plan_required && !delta.plan_recorded {
         gaps.push(format!(
             "实际变更 {} 个文件但缺少首次修改前的 goal plan receipt",
             actual.len()
         ));
     }
-    let planned = valid_plans
-        .iter()
-        .flat_map(|receipt| receipt.effective_changed_paths().iter().cloned())
-        .collect::<BTreeSet<_>>();
-    let unplanned = actual
-        .iter()
-        .filter(|path| !planned.contains(*path))
-        .cloned()
-        .collect::<Vec<_>>();
-    if !valid_plans.is_empty() && !unplanned.is_empty() {
-        gaps.push(format!("实际变更超出 plan: {}", unplanned.join(", ")));
+    if delta.plan_recorded && !delta.unplanned_changed_paths.is_empty() {
+        gaps.push(format!(
+            "实际变更超出 plan: {}",
+            delta.unplanned_changed_paths.join(", ")
+        ));
     }
 
     let mut validated = BTreeSet::new();
@@ -587,7 +689,8 @@ pub fn goal_planning_gaps(goal: &Goal, root: &Path, current_fingerprint: &str) -
         ));
     }
 
-    if valid_plans
+    if goal
+        .plan_receipts
         .iter()
         .any(|receipt| receipt.effective_review_priority() == "high")
         && !goal
@@ -940,8 +1043,6 @@ impl Goal {
                         receipt.review_priority.as_str(),
                         "normal" | "broad" | "high"
                     )
-                    || receipt.plan_sha256 != plan_receipt_sha256(receipt)
-                    || !plan_extensions_are_valid(receipt)
                 {
                     return Some("goal plan receipt 无效、未规范化或未绑定 baseline".into());
                 }
@@ -984,6 +1085,7 @@ impl Goal {
                 }
             }
         } else if !self.plan_receipts.is_empty()
+            || self.plan_publish_intent.is_some()
             || !self.review_receipts.is_empty()
             || !self.authority_receipts.is_empty()
             || !self.work_packages.is_empty()
@@ -1023,6 +1125,19 @@ impl Goal {
                 return Some("lifecycle-only replacement proof 结构或摘要无效".into());
             }
         }
+        if let Some(error) = plan_chain_error(self) {
+            return Some(format!("goal plan publication contract invalid: {error}"));
+        }
+        let retired_pending_publication = self.lifecycle == GoalLifecycle::Archived
+            && matches!(self.status, GoalStatus::Partial | GoalStatus::Blocked);
+        if let Some(intent) = self.plan_publish_intent.as_ref()
+            && !retired_pending_publication
+        {
+            return Some(format!(
+                "goal 存在未完成的 plan publish intent（kind={:?} intent_sha256={}）；源码可能在计划发布窗口内漂移，必须恢复原快照后重试或退休该 goal",
+                intent.kind, intent.intent_sha256
+            ));
+        }
         None
     }
 
@@ -1036,7 +1151,22 @@ impl Goal {
         if !is_sha256(&proof.workspace_fingerprint) || !is_sha256(&proof.contract_sha256) {
             return Some("lifecycle_proof 包含非法摘要".into());
         }
-        let expected = lifecycle_contract_sha256(self, proof.receipt_policy.as_deref());
+        let proof_recorded_at = match chrono::DateTime::parse_from_rfc3339(&proof.recorded_at) {
+            Ok(value) => value,
+            Err(_) => return Some("lifecycle_proof.recorded_at 必须是 RFC3339 timestamp".into()),
+        };
+        let goal_updated_at = match chrono::DateTime::parse_from_rfc3339(&self.updated_at) {
+            Ok(value) => value,
+            Err(_) => return Some("goal.updated_at 必须是 RFC3339 timestamp".into()),
+        };
+        if proof_recorded_at < goal_updated_at {
+            return Some("lifecycle_proof.recorded_at 不得早于 goal.updated_at".into());
+        }
+        let expected = lifecycle_contract_sha256(
+            self,
+            proof.receipt_policy.as_deref(),
+            Some(&proof.recorded_at),
+        );
         if proof.contract_sha256 != expected {
             return Some("lifecycle_proof 与当前 goal 合约不匹配".into());
         }
@@ -1159,8 +1289,18 @@ pub(super) fn must_transfer_multiset<'a>(
 /// a plain replacement it had previously refused.
 pub(super) fn transfer_goal_contract_sha256(goal: &Goal) -> String {
     let mut hasher = Sha256::new();
-    lifecycle_hash_str(&mut hasher, "rayman.transfer-goal-contract.v3");
+    lifecycle_hash_str(
+        &mut hasher,
+        if goal.plan_publication_policy.is_some() {
+            "rayman.transfer-goal-contract.v4"
+        } else {
+            "rayman.transfer-goal-contract.v3"
+        },
+    );
     hasher.update(goal.schema_version.to_le_bytes());
+    if goal.plan_publication_policy.is_some() {
+        lifecycle_hash_optional_str(&mut hasher, goal.plan_publication_policy.as_deref());
+    }
     lifecycle_hash_str(&mut hasher, &goal.id);
     lifecycle_hash_str(&mut hasher, &goal.title);
     lifecycle_hash_str(&mut hasher, &goal.created_at);
@@ -1199,8 +1339,18 @@ pub(super) fn transfer_goal_contract_sha256(goal: &Goal) -> String {
 /// must be pinned by the proof that certifies it.
 pub(super) fn replacement_contract_sha256(goal: &Goal) -> String {
     let mut hasher = Sha256::new();
-    lifecycle_hash_str(&mut hasher, "rayman.lifecycle-only-replacement-contract.v2");
+    lifecycle_hash_str(
+        &mut hasher,
+        if goal.plan_publication_policy.is_some() {
+            "rayman.lifecycle-only-replacement-contract.v3"
+        } else {
+            "rayman.lifecycle-only-replacement-contract.v2"
+        },
+    );
     hasher.update(goal.schema_version.to_le_bytes());
+    if goal.plan_publication_policy.is_some() {
+        lifecycle_hash_optional_str(&mut hasher, goal.plan_publication_policy.as_deref());
+    }
     lifecycle_hash_str(&mut hasher, &goal.id);
     lifecycle_hash_str(&mut hasher, &goal.title);
     lifecycle_hash_str(&mut hasher, goal.status.as_str());

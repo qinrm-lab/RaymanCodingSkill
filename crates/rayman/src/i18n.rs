@@ -239,7 +239,6 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "目标 {id} 已关闭为 success，不能降级为 {status}；请用新的 baseline-bound goal supersede，或将该记录 archive",
     "目标 {id} 已隔离为 untrusted history；隔离是单向降级，审计记录必须保留，不能恢复为 current",
     "目标 {id} 已隔离为 untrusted history；隔离是单向降级，审计记录必须保留，不能用 migration 刷新为可信历史",
-    "目标 {id} 缺少开工 baseline，无法核对实际变更；请用新的 baseline-bound goal supersede，或将已完成记录显式 archive",
     "目标不能 supersede 自己",
     "目标包含多个 plan receipt；拒绝继续使用可拆分绕过的计划状态",
     "目标合约无效，不能 supersede: {error}",
@@ -273,6 +272,11 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "  状态写探针: 可写；清理探针失败: {}",
     "  状态写探针: 状态目录不存在，未探测",
     "  状态写探针: 可写",
+    "  激活元数据写探针: 就绪（原授权元数据 staging 已验证，激活文件未变）",
+    "  激活元数据写探针: 无激活合同或平台不支持，未探测",
+    "  激活元数据写探针: 失败 phase={:?} class={:?} os_error={} activation_unchanged={:?} cleanup_complete={:?}: {}",
+    "workspace 激活合同结构上可 rebind，且当前 activation metadata staging 探针已就绪：运行 `{command}`",
+    "workspace 激活合同结构上可 rebind，但当前 activation metadata staging 探针未就绪（phase={:?}, failure_class={}）；先按 failure_class 处理该 action-specific 能力边界，再运行 `{command}`",
     "RaymanCodingSkill 工作区未显式激活（status={}）：运行 `rayman workspace activate --skill-file <canonical-SKILL.md> --yes`；历史 .RaymanCodingSkill 状态不会自动激活 skill",
     "finish 要求当前稳定 authority receipt；先运行 `rayman goal validate {goal_id} --req <req> --message <evidence> --command <project-gate> --changed <path> --authority --repeat 2`",
     "`rayman audit` 已退役；工作区门禁使用 `rayman check --profile standard`，任务交付使用 `rayman finish --goal <id>`，状态卫生使用 `rayman state audit --check`",
@@ -287,7 +291,6 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "workspace 未激活：运行 `rayman workspace activate --skill-file <canonical-SKILL.md> --yes`",
     "workspace SKILL.md 与记录的 skill_sha256 不一致：SKILL.md 改动后需重新 activate 重绑",
     "最终 checkpoint 失败，active 状态已尝试回滚但计划任务重注册失败：checkpoint={checkpoint_error}; register={register_error}",
-    "未知 pending kind: {value}（可用: machine_actionable | human_input | external_wait | destructive_boundary | hard_gate | repair_exhausted）",
     "RaymanCodingSkill v2：多语言的上下文索引 / 目标 / 检查 / 恢复工作流\nMultilingual context / goal / check / recovery workflow",
     "`rayman context os{suffix}` 已退役；使用 `rayman context refresh` 更新内容索引，使用 `rayman check --goal <id>` 验证任务",
     "停止状态已写入，但最终 checkpoint 失败且 active 状态回滚失败：checkpoint={checkpoint_error}; state={state_error}",
@@ -381,7 +384,6 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "索引已刷新: 共 {} 个文件（复用 {}，重算 {}，移除 {}）",
     "goal {} package {} progress receipt {} 已记录（non-authoritative）",
     "historical goal {} lifecycle={} 已保留但不参与当前 readiness{}",
-    "human owner 只允许 human_input/destructive_boundary/repair_exhausted",
     "validation 不覆盖 {}；需要同一条当前成功 receipt 绑定 {}",
     "  仓库源码产物: 未由 doctor 检查；交接/CI 由 `{}` 验证",
     "  资产: 过时候选 {}，未完成标记 {}（提示，不阻塞）",
@@ -471,7 +473,6 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "lifecycle authority --repeat 必须在 2..=10 范围内",
     "lifecycle-only replacement source fingerprint 已过期",
     "pending.json 第 {} 项（id={}）合同无效: {error}",
-    "workspace_skill.yaml 必须是普通非链接文件: {}",
     "显式 v1 receipt policy proof 缺少受控迁移标记",
     "agent-owned pending 不能伪装成人工/外部边界",
     "lifecycle-only replacement proof 结构或摘要无效",
@@ -638,7 +639,6 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "无法规范化受管状态目录: {}",
     "无法读取{label}元数据: {shown}",
     "无法读取允许的状态文件: {}",
-    "无法读取工作区激活合同: {}",
     "状态锁不是安全普通文件: {}",
     "archived goal 缺少 lifecycle_proof",
     "goal 包含重复 requirement id: {}",
@@ -689,7 +689,6 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "无托管临时目录可清理。",
     "无法取得 checkpoint 独占锁",
     "无法提交 checkpoint: {} -> {}",
-    "无法检查 workspace_skill.yaml",
     "至少提供一个变更路径。",
     "需求不存在: {requirement_id}",
     "验证命令缺少可执行程序",
@@ -844,7 +843,6 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "workspace rebind 拒绝无法原样安全写回的 skill_file",
     "workspace rebind 拒绝格式无效的旧身份字段",
     "workspace rebind 缺少 skill_file",
-    "workspace 激活身份可安全重绑：运行 `{command}`",
     "workspace_skill.yaml 在 rebind 发布前发生并发变化",
     "workspace_skill.yaml 必须是有效 UTF-8",
     "写入后的 workspace rebind 合同仍无效: {}",
@@ -853,6 +851,99 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "无法复查 skill_file: {}",
     "无法规范化 skill_file: {}",
     "无法读取 skill_file 路径组件: {}",
+    "`goal pending present` 已退役：代理不能自证用户展示。使用 `rayman goal pending render --current` 生成 workspace aggregate，并由当前 Codex Stop 事件严格核对 last_assistant_message",
+    "agent pending 不需要 capability-bound legacy migration",
+    "capability-bound pending 必须绑定 --goal",
+    "capability-bound pending 必须绑定 goal_id",
+    "capability_key 与 boundary_class 必须使用稳定规范化形式",
+    "capability_key 与 boundary_class 必须同时存在或同时缺省",
+    "committed plan publication 必须证明 confirmed==precheck 并记录 committed_at",
+    "committed plan publication 的 committed_at 必须是 RFC3339 且不早于 published_at",
+    "execution-context requirement 未满足（仅约束本次 doctor 检查，不构成提权或 ACL 授权）：{}",
+    "extension intent 缺少 pending 链尾",
+    "goal {} 当前不能 render Stop candidate: decision={:?} consultation={:?} reason={}",
+    "goal 不属于 {PLAN_PUBLICATION_POLICY_V1} plan publication epoch；旧 goal 只能读取或退休，不能扩展计划",
+    "goal 不属于 {PLAN_PUBLICATION_POLICY_V1} plan publication epoch；旧 goal 只能读取或退休，不能追加计划",
+    "goal 存在未完成且与当前源码不匹配的 plan extension intent；必须恢复 intent 的 precheck 快照后用同一扩展重试或退休该 goal",
+    "goal 存在未完成且与本次调用不匹配的 plan extension intent；拒绝覆盖，必须用原扩展参数重试或退休该 goal",
+    "goal 存在未完成且与本次调用不匹配的 plan publish intent；拒绝覆盖，必须恢复 intent 的 precheck 快照后用同一计划重试或退休该 goal",
+    "goal 存在未完成的 plan publish intent（kind={:?} intent_sha256={}）；源码可能在计划发布窗口内漂移，必须恢复原快照后重试或退休该 goal",
+    "goal.updated_at 不得早于最终 plan publication",
+    "goal.updated_at 必须是 RFC3339 timestamp",
+    "human owner 只允许 human_input/destructive_boundary/repair_exhausted/execution_context",
+    "initial pending publication 后不得已有 extension",
+    "initial plan publication precheck 必须等于 goal baseline",
+    "legacy agent presentation assertion 只允许绑定 owner=human",
+    "legacy agent presentation assertion 必须使用稳定规范化形式",
+    "legacy agent presentation assertion 必须绑定明确 goal_id",
+    "legacy assertion channel 必须是长度不超过 128 的单行非控制字符文本",
+    "legacy assertion reference 必须缺省或为长度不超过 2048 的单行非控制字符文本",
+    "legacy assertion 未绑定 migration proof 中的旧 package hash",
+    "legacy assertion 未绑定其 legacy stored solution package hash",
+    "legacy migration goal 不匹配；拒绝改绑历史 package",
+    "legacy migration proof 与当前 v2 package identity 不匹配",
+    "legacy migration proof 只能附着在 v2 pending",
+    "legacy migration proof 必须使用稳定规范化形式",
+    "legacy migration proof 必须声明 from_contract_version=0",
+    "legacy pending package hash 不匹配: expected={} supplied={}",
+    "legacy pending {id} 缺少完整 solution package",
+    "legacy plan chain hash 或单调扩展关系无效",
+    "legacy plan chain 不得混入 v16 publication 节点或 intent",
+    "legacy plan chain 只允许作为 rollout {PLAN_PUBLICATION_ROLLOUT_AT} 前产生且已退休的历史记录",
+    "lifecycle_proof.recorded_at 不得早于 goal.updated_at",
+    "lifecycle_proof.recorded_at 必须是 RFC3339 timestamp",
+    "non-agent capability boundary 必须绑定 --goal",
+    "package_sha256 必须使用小写规范化形式",
+    "pending capability contract conflict: ({}, {}) 已由 {} 使用",
+    "pending plan publication 不得携带 confirmed/committed 字段",
+    "pending publication 与 persisted intent 不匹配",
+    "pending publication 缺少 persisted intent",
+    "pending render --current 发现损坏的 goal state: {}",
+    "pending render --current 没有当前可咨询的 goal",
+    "pending render 必须且只能指定 --goal <id> 或 --current",
+    "pending render 没有当前可咨询的 v2 human solution package",
+    "pending render 至少需要一个 goal",
+    "pending {id} 已是当前或未知版本，拒绝 legacy migration",
+    "pending {} stored package hash 已漂移",
+    "pending 不存在: {id}",
+    "pending.json (goal_id, capability_key) 重复: 第 {} 项（id={}）与第 {} 项（id={}）都声明了 ({}, {})",
+    "plan chain 外层 hash、baseline 或单调扩展关系无效",
+    "plan extension {} 时间顺序必须位于前一 publication 之后",
+    "plan publication hash 或必需字段无效",
+    "plan publication 时间顺序必须满足 goal <= baseline <= receipt <= published <= committed",
+    "plan publication 未绑定 enclosing goal_id",
+    "plan publication 未绑定对应 plan payload",
+    "plan publish intent hash、goal、timestamp 或 baseline 绑定无效",
+    "plan publish intent 缺少对应 pending plan 节点",
+    "prepare 发现实际变更 {} 个文件但缺少首次修改前的 goal plan receipt: {}。prepare 不会事后补 plan；先将这些路径恢复到 goal baseline，再按 program/args 逐参数调用: {}",
+    "prepare 发现未计划的实际变更: {}。prepare 不会自动扩展 plan；先将这些路径恢复到 goal baseline，再按 program/args 逐参数调用: {}",
+    "prepare 最终重验时 goal 已不存在: {goal_id}",
+    "prepare 期间源码发生变化，context index 与 goal delta 不属于同一快照: {}；请在源码稳定后重试",
+    "prepare 核心验证后 workspace 或 goal 状态发生变化；snapshot readiness 已失效，请重试（workspace {} -> {}；goal {} -> {}）",
+    "stored package_sha256 与 solution package 不匹配: stored={} expected={}",
+    "v2 human/external pending 必须绑定 goal_id、capability_key 与 boundary_class",
+    "v2 pending 必须携带 canonical package_sha256",
+    "write_ahead_v1 extension {} 缺少 publication proof",
+    "write_ahead_v1 plan receipt 缺少 publication proof",
+    "{label} 不能为空",
+    "{label} 必须是 1..=256 字节的小写稳定标识，仅允许 a-z、0-9、.、_、:、/、-，且首尾必须是字母或数字",
+    "{label} 必须是 64 位十六进制 SHA-256",
+    "{label} 必须是 RFC3339 timestamp",
+    "不支持的 pending contract_version={}（当前只接受 legacy 0 或 v{}）",
+    "已迁移 legacy pending {}。",
+    "带 package_sha256 的 pending solution package 必须使用稳定规范化形式",
+    "归档后的 lifecycle proof 无效: {error}",
+    "归档后的目标合约无效: {error}",
+    "当前 workspace snapshot 的文件清单与 fingerprint 不匹配",
+    "无法从同一 no-follow 文件句柄读取 workspace_skill.yaml",
+    "无法核对 goal plan: {error}",
+    "未知 pending kind: {value}（可用: machine_actionable | human_input | external_wait | destructive_boundary | hard_gate | repair_exhausted | execution_context）",
+    "未知 plan_publication_policy: {other}",
+    "源码在 plan extension 发布 CAS 窗口内发生变化；已保留 fail-closed plan publish intent（precheck={} confirmed={}），恢复原快照后用同一扩展重试或退休该 goal",
+    "源码在 plan 发布 CAS 窗口内发生变化；已保留 fail-closed plan publish intent（precheck={} confirmed={}），恢复原快照后用同一计划重试或退休该 goal",
+    "目标 {} 不是当前 schema，不能作为 plan reconciliation authority",
+    "目标 {} 缺少开工 baseline；不能核对实际变更，请用新的 baseline-bound goal supersede，或将已完成记录显式 archive",
+    "缺少 baseline 的 goal 不得携带 plan publication state",
 ];
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
@@ -1654,6 +1745,409 @@ const MESSAGE_PREFIX_CATALOG: &[(&str, &str)] = &[
 // evidence text are reinserted byte-for-byte after the static template is translated.
 const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     (
+        "未知 pending owner: {value}（可用: agent | human | external）",
+        "unknown pending owner: {value} (available: agent | human | external)",
+    ),
+    (
+        "未知 pending kind: {value}（可用: machine_actionable | human_input | external_wait | destructive_boundary | hard_gate | repair_exhausted | execution_context）",
+        "unknown pending kind: {value} (available: machine_actionable | human_input | external_wait | destructive_boundary | hard_gate | repair_exhausted | execution_context)",
+    ),
+    (
+        "pending.json 第 {} 项（id={}）合同无效: {error}",
+        "pending.json item {} (id={}) has an invalid contract: {error}",
+    ),
+    (
+        "pending title 与 detail 都不能为空",
+        "pending title and detail must both be non-empty",
+    ),
+    (
+        "capability-bound pending 必须绑定 --goal",
+        "capability-bound pending must be bound to --goal",
+    ),
+    (
+        "non-agent capability boundary 必须绑定 --goal",
+        "non-agent capability boundary must be bound to --goal",
+    ),
+    ("pending 不存在: {id}", "pending does not exist: {id}"),
+    (
+        "legacy pending {id} 缺少完整 solution package",
+        "legacy pending {id} is missing a complete solution package",
+    ),
+    (
+        "legacy pending package hash 不匹配: expected={} supplied={}",
+        "legacy pending package hash mismatch: expected={} supplied={}",
+    ),
+    (
+        "pending capability contract conflict: ({}, {}) 已由 {} 使用",
+        "pending capability contract conflict: ({}, {}) is already used by {}",
+    ),
+    (
+        "pending render 至少需要一个 goal",
+        "pending render requires at least one goal",
+    ),
+    (
+        "human owner 只允许 human_input/destructive_boundary/repair_exhausted/execution_context",
+        "human owner only allows human_input/destructive_boundary/repair_exhausted/execution_context",
+    ),
+    (
+        "不支持的 pending contract_version={}（当前只接受 legacy 0 或 v{}）",
+        "unsupported pending contract_version={} (only legacy 0 or v{} is currently accepted)",
+    ),
+    (
+        "capability-bound pending 必须绑定 goal_id",
+        "capability-bound pending must be bound to goal_id",
+    ),
+    (
+        "v2 human/external pending 必须绑定 goal_id、capability_key 与 boundary_class",
+        "v2 human/external pending must be bound to goal_id, capability_key, and boundary_class",
+    ),
+    (
+        "stored package_sha256 与 solution package 不匹配: stored={} expected={}",
+        "stored package_sha256 does not match the solution package: stored={} expected={}",
+    ),
+    (
+        "legacy migration proof 必须声明 from_contract_version=0",
+        "legacy migration proof must declare from_contract_version=0",
+    ),
+    (
+        "legacy migration proof 与当前 v2 package identity 不匹配",
+        "legacy migration proof does not match the current v2 package identity",
+    ),
+    (
+        "legacy agent presentation assertion 只允许绑定 owner=human",
+        "legacy agent presentation assertion may only be bound to owner=human",
+    ),
+    ("{label} 不能为空", "{label} must not be empty"),
+    (
+        "{label} 必须是 RFC3339 timestamp",
+        "{label} must be an RFC3339 timestamp",
+    ),
+    (
+        "pending 绑定的 goal 不存在: {goal_id}",
+        "pending-bound goal does not exist: {goal_id}",
+    ),
+    (
+        "    BLOCKER: pending.json 不可读取: {error}",
+        "    BLOCKER: pending.json is unreadable: {error}",
+    ),
+    (
+        "goal.updated_at 必须是 RFC3339 timestamp",
+        "goal.updated_at must be an RFC3339 timestamp",
+    ),
+    (
+        "lifecycle_proof.recorded_at 必须是 RFC3339 timestamp",
+        "lifecycle_proof.recorded_at must be an RFC3339 timestamp",
+    ),
+    (
+        "pending publication 与 persisted intent 不匹配",
+        "pending publication does not match the persisted intent",
+    ),
+    (
+        "pending publication 缺少 persisted intent",
+        "pending publication is missing the persisted intent",
+    ),
+    (
+        "plan publish intent hash、goal、timestamp 或 baseline 绑定无效",
+        "plan publish intent hash, goal, timestamp, or baseline binding is invalid",
+    ),
+    (
+        "write_ahead_v1 extension {} 缺少 publication proof",
+        "write_ahead_v1 extension {} is missing publication proof",
+    ),
+    (
+        "write_ahead_v1 plan receipt 缺少 publication proof",
+        "write_ahead_v1 plan receipt is missing publication proof",
+    ),
+    (
+        "当前 workspace snapshot 的文件清单与 fingerprint 不匹配",
+        "the current workspace snapshot's file list does not match its fingerprint",
+    ),
+    (
+        "未知 plan_publication_policy: {other}",
+        "unknown plan_publication_policy: {other}",
+    ),
+    (
+        "execution-context requirement 未满足（仅约束本次 doctor 检查，不构成提权或 ACL 授权）：{}",
+        "execution-context requirement was not met (this applies only to the current doctor check and does not grant elevation or ACL authorization): {}",
+    ),
+    (
+        "目标 {} 不是当前 schema，不能作为 plan reconciliation authority",
+        "goal {} is not on the current schema and cannot serve as plan reconciliation authority",
+    ),
+    (
+        "目标 {} 缺少开工 baseline；不能核对实际变更，请用新的 baseline-bound goal supersede，或将已完成记录显式 archive",
+        "goal {} is missing its starting baseline; actual changes cannot be reconciled; use a new baseline-bound goal to supersede it, or explicitly archive the completed record",
+    ),
+    (
+        "无法核对 goal plan: {error}",
+        "unable to reconcile goal plan: {error}",
+    ),
+    (
+        "goal 存在未完成的 plan publish intent（kind={:?} intent_sha256={}）；源码可能在计划发布窗口内漂移，必须恢复原快照后重试或退休该 goal",
+        "goal has an unfinished plan publish intent (kind={:?} intent_sha256={}); source may have drifted during the plan publication window; restore the original snapshot and retry or retire the goal",
+    ),
+    (
+        "lifecycle_proof.recorded_at 不得早于 goal.updated_at",
+        "lifecycle_proof.recorded_at must not precede goal.updated_at",
+    ),
+    (
+        "pending.json (goal_id, capability_key) 重复: 第 {} 项（id={}）与第 {} 项（id={}）都声明了 ({}, {})",
+        "pending.json contains a duplicate (goal_id, capability_key): item {} (id={}) and item {} (id={}) both declare ({}, {})",
+    ),
+    (
+        "pending {id} 已是当前或未知版本，拒绝 legacy migration",
+        "pending {id} is already current or has an unknown version; legacy migration is refused",
+    ),
+    (
+        "agent pending 不需要 capability-bound legacy migration",
+        "agent-owned pending packages do not need capability-bound legacy migration",
+    ),
+    (
+        "legacy migration goal 不匹配；拒绝改绑历史 package",
+        "legacy migration goal does not match; refusing to rebind the historical package",
+    ),
+    (
+        "goal {} 当前不能 render Stop candidate: decision={:?} consultation={:?} reason={}",
+        "goal {} cannot currently render a Stop candidate: decision={:?} consultation={:?} reason={}",
+    ),
+    (
+        "pending render 没有当前可咨询的 v2 human solution package",
+        "pending render found no currently consultable v2 human solution package",
+    ),
+    (
+        "pending {} stored package hash 已漂移",
+        "pending {} stored package hash has drifted",
+    ),
+    (
+        "{label} 必须是 1..=256 字节的小写稳定标识，仅允许 a-z、0-9、.、_、:、/、-，且首尾必须是字母或数字",
+        "{label} must be a stable lowercase identifier of 1..=256 bytes, using only a-z, 0-9, ., _, :, /, or -, and must begin and end with a letter or digit",
+    ),
+    (
+        "{label} 必须是 64 位十六进制 SHA-256",
+        "{label} must be a 64-character hexadecimal SHA-256",
+    ),
+    (
+        "capability_key 与 boundary_class 必须使用稳定规范化形式",
+        "capability_key and boundary_class must use stable normalized forms",
+    ),
+    (
+        "capability_key 与 boundary_class 必须同时存在或同时缺省",
+        "capability_key and boundary_class must either both be present or both be absent",
+    ),
+    (
+        "v2 pending 必须携带 canonical package_sha256",
+        "v2 pending must carry the canonical package_sha256",
+    ),
+    (
+        "package_sha256 必须使用小写规范化形式",
+        "package_sha256 must use lowercase normalized form",
+    ),
+    (
+        "带 package_sha256 的 pending solution package 必须使用稳定规范化形式",
+        "a pending solution package with package_sha256 must use stable normalized form",
+    ),
+    (
+        "legacy migration proof 只能附着在 v2 pending",
+        "legacy migration proof may be attached only to a v2 pending package",
+    ),
+    (
+        "legacy migration proof 必须使用稳定规范化形式",
+        "legacy migration proof must use stable normalized form",
+    ),
+    (
+        "legacy agent presentation assertion 必须绑定明确 goal_id",
+        "legacy agent presentation assertion must bind an explicit goal_id",
+    ),
+    (
+        "legacy agent presentation assertion 必须使用稳定规范化形式",
+        "legacy agent presentation assertion must use stable normalized form",
+    ),
+    (
+        "legacy assertion channel 必须是长度不超过 128 的单行非控制字符文本",
+        "legacy assertion channel must be single-line, control-character-free text no longer than 128 characters",
+    ),
+    (
+        "legacy assertion reference 必须缺省或为长度不超过 2048 的单行非控制字符文本",
+        "legacy assertion reference must be absent or single-line, control-character-free text no longer than 2048 characters",
+    ),
+    (
+        "legacy assertion 未绑定其 legacy stored solution package hash",
+        "legacy assertion is not bound to its legacy stored solution package hash",
+    ),
+    (
+        "legacy assertion 未绑定 migration proof 中的旧 package hash",
+        "legacy assertion is not bound to the old package hash in the migration proof",
+    ),
+    (
+        "plan publication 未绑定 enclosing goal_id",
+        "plan publication is not bound to its enclosing goal_id",
+    ),
+    (
+        "plan publication hash 或必需字段无效",
+        "plan publication hash or required fields are invalid",
+    ),
+    (
+        "pending plan publication 不得携带 confirmed/committed 字段",
+        "pending plan publication must not carry confirmed/committed fields",
+    ),
+    (
+        "committed plan publication 必须证明 confirmed==precheck 并记录 committed_at",
+        "committed plan publication must prove confirmed==precheck and record committed_at",
+    ),
+    (
+        "committed plan publication 的 committed_at 必须是 RFC3339 且不早于 published_at",
+        "committed plan publication committed_at must be RFC3339 and must not precede published_at",
+    ),
+    (
+        "plan publication 未绑定对应 plan payload",
+        "plan publication is not bound to its corresponding plan payload",
+    ),
+    (
+        "缺少 baseline 的 goal 不得携带 plan publication state",
+        "a goal without a baseline must not carry plan publication state",
+    ),
+    (
+        "legacy plan chain 只允许作为 rollout {PLAN_PUBLICATION_ROLLOUT_AT} 前产生且已退休的历史记录",
+        "legacy plan chain is permitted only for a retired historical record created before rollout {PLAN_PUBLICATION_ROLLOUT_AT}",
+    ),
+    (
+        "legacy plan chain 不得混入 v16 publication 节点或 intent",
+        "legacy plan chain must not contain v16 publication nodes or intents",
+    ),
+    (
+        "legacy plan chain hash 或单调扩展关系无效",
+        "legacy plan chain hash or monotonic extension relationship is invalid",
+    ),
+    (
+        "plan publish intent 缺少对应 pending plan 节点",
+        "plan publish intent is missing its corresponding pending plan node",
+    ),
+    (
+        "plan chain 外层 hash、baseline 或单调扩展关系无效",
+        "plan chain outer hash, baseline, or monotonic extension relationship is invalid",
+    ),
+    (
+        "initial pending publication 后不得已有 extension",
+        "initial pending publication must not already have an extension",
+    ),
+    (
+        "initial plan publication precheck 必须等于 goal baseline",
+        "initial plan publication precheck must equal the goal baseline",
+    ),
+    (
+        "extension intent 缺少 pending 链尾",
+        "extension intent is missing the pending chain tail",
+    ),
+    (
+        "plan publication 时间顺序必须满足 goal <= baseline <= receipt <= published <= committed",
+        "plan publication timestamps must satisfy goal <= baseline <= receipt <= published <= committed",
+    ),
+    (
+        "plan extension {} 时间顺序必须位于前一 publication 之后",
+        "plan extension {} must be timestamped after the preceding publication",
+    ),
+    (
+        "goal.updated_at 不得早于最终 plan publication",
+        "goal.updated_at must not precede the final plan publication",
+    ),
+    (
+        "goal 不属于 {PLAN_PUBLICATION_POLICY_V1} plan publication epoch；旧 goal 只能读取或退休，不能追加计划",
+        "goal does not belong to the {PLAN_PUBLICATION_POLICY_V1} plan publication epoch; old goals may only be read or retired and cannot have plans appended",
+    ),
+    (
+        "goal 存在未完成且与本次调用不匹配的 plan publish intent；拒绝覆盖，必须恢复 intent 的 precheck 快照后用同一计划重试或退休该 goal",
+        "goal has an unfinished plan publish intent that does not match this invocation; refusing to overwrite it; restore the intent's precheck snapshot and retry with the same plan, or retire the goal",
+    ),
+    (
+        "源码在 plan 发布 CAS 窗口内发生变化；已保留 fail-closed plan publish intent（precheck={} confirmed={}），恢复原快照后用同一计划重试或退休该 goal",
+        "source changed during the plan publication CAS window; the fail-closed plan publish intent was retained (precheck={} confirmed={}); restore the original snapshot and retry with the same plan, or retire the goal",
+    ),
+    (
+        "goal 不属于 {PLAN_PUBLICATION_POLICY_V1} plan publication epoch；旧 goal 只能读取或退休，不能扩展计划",
+        "goal does not belong to the {PLAN_PUBLICATION_POLICY_V1} plan publication epoch; old goals may only be read or retired and cannot have their plans extended",
+    ),
+    (
+        "goal 存在未完成且与当前源码不匹配的 plan extension intent；必须恢复 intent 的 precheck 快照后用同一扩展重试或退休该 goal",
+        "goal has an unfinished plan extension intent that does not match the current source; restore the intent's precheck snapshot and retry with the same extension, or retire the goal",
+    ),
+    (
+        "goal 存在未完成且与本次调用不匹配的 plan extension intent；拒绝覆盖，必须用原扩展参数重试或退休该 goal",
+        "goal has an unfinished plan extension intent that does not match this invocation; refusing to overwrite it; retry with the original extension arguments or retire the goal",
+    ),
+    (
+        "源码在 plan extension 发布 CAS 窗口内发生变化；已保留 fail-closed plan publish intent（precheck={} confirmed={}），恢复原快照后用同一扩展重试或退休该 goal",
+        "source changed during the plan extension publication CAS window; the fail-closed plan publish intent was retained (precheck={} confirmed={}); restore the original snapshot and retry with the same extension, or retire the goal",
+    ),
+    (
+        "归档后的目标合约无效: {error}",
+        "archived goal contract is invalid: {error}",
+    ),
+    (
+        "归档后的 lifecycle proof 无效: {error}",
+        "archived lifecycle proof is invalid: {error}",
+    ),
+    (
+        "pending render --current 发现损坏的 goal state: {}",
+        "pending render --current found corrupt goal state: {}",
+    ),
+    (
+        "pending render --current 没有当前可咨询的 goal",
+        "pending render --current found no currently consultable goal",
+    ),
+    (
+        "pending render 必须且只能指定 --goal <id> 或 --current",
+        "pending render must specify exactly one of --goal <id> or --current",
+    ),
+    ("已迁移 legacy pending {}。", "migrated legacy pending {}."),
+    (
+        "`goal pending present` 已退役：代理不能自证用户展示。使用 `rayman goal pending render --current` 生成 workspace aggregate，并由当前 Codex Stop 事件严格核对 last_assistant_message",
+        "`goal pending present` has been retired: an agent cannot self-attest that it presented content to the user. Use `rayman goal pending render --current` to generate the workspace aggregate, then have the current Codex Stop event strictly verify it against last_assistant_message",
+    ),
+    (
+        "prepare 发现未计划的实际变更: {}。prepare 不会自动扩展 plan；先将这些路径恢复到 goal baseline，再按 program/args 逐参数调用: {}",
+        "prepare found unplanned actual changes: {}. prepare will not extend the plan automatically; first restore these paths to the goal baseline, then invoke the provided program with each args item passed as a separate argument: {}",
+    ),
+    (
+        "prepare 发现实际变更 {} 个文件但缺少首次修改前的 goal plan receipt: {}。prepare 不会事后补 plan；先将这些路径恢复到 goal baseline，再按 program/args 逐参数调用: {}",
+        "prepare found {} actually changed files but no goal plan receipt recorded before the first modification: {}. prepare will not add a plan retroactively; first restore these paths to the goal baseline, then invoke the provided program with each args item passed as a separate argument: {}",
+    ),
+    (
+        "prepare 期间源码发生变化，context index 与 goal delta 不属于同一快照: {}；请在源码稳定后重试",
+        "source changed during prepare, so the context index and goal delta do not belong to the same snapshot: {}; retry after the source stabilizes",
+    ),
+    (
+        "prepare 最终重验时 goal 已不存在: {goal_id}",
+        "the goal no longer exists during prepare's final revalidation: {goal_id}",
+    ),
+    (
+        "prepare 核心验证后 workspace 或 goal 状态发生变化；snapshot readiness 已失效，请重试（workspace {} -> {}；goal {} -> {}）",
+        "workspace or goal state changed after prepare's core verification; snapshot readiness is no longer valid, so retry (workspace {} -> {}; goal {} -> {})",
+    ),
+    (
+        "无法从同一 no-follow 文件句柄读取 workspace_skill.yaml",
+        "could not read workspace_skill.yaml from the same no-follow file handle",
+    ),
+    (
+        "激活元数据写探针: 就绪（原授权元数据 staging 已验证，激活文件未变）",
+        "activation-metadata write probe: ready (original authorization metadata staging verified; activation unchanged)",
+    ),
+    (
+        "激活元数据写探针: 无激活合同或平台不支持，未探测",
+        "activation-metadata write probe: not probed (activation contract absent or platform unsupported)",
+    ),
+    (
+        "激活元数据写探针: 失败 phase={:?} class={:?} os_error={} activation_unchanged={:?} cleanup_complete={:?}: {}",
+        "activation-metadata write probe: failed phase={:?} class={:?} os_error={} activation_unchanged={:?} cleanup_complete={:?}: {}",
+    ),
+    (
+        "workspace 激活合同结构上可 rebind，且当前 activation metadata staging 探针已就绪：运行 `{command}`",
+        "workspace activation contract is structurally rebindable and the current activation-metadata staging probe is ready: run `{command}`",
+    ),
+    (
+        "workspace 激活合同结构上可 rebind，但当前 activation metadata staging 探针未就绪（phase={:?}, failure_class={}）；先按 failure_class 处理该 action-specific 能力边界，再运行 `{command}`",
+        "workspace activation contract is structurally rebindable, but the current activation-metadata staging probe is not ready (phase={:?}, failure_class={}); handle that action-specific capability boundary according to failure_class before running `{command}`",
+    ),
+    (
         "RaymanCodingSkill 工作区激活身份已漂移（status={}）：运行 `{command}`",
         "RaymanCodingSkill workspace activation identity has drifted (status={}): run `{command}`",
     ),
@@ -1721,10 +2215,6 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     (
         "workspace rebind 缺少 skill_file",
         "workspace rebind is missing skill_file",
-    ),
-    (
-        "workspace 激活身份可安全重绑：运行 `{command}`",
-        "workspace activation identity can be safely rebound: run `{command}`",
     ),
     (
         "workspace_skill.yaml 在 rebind 发布前发生并发变化",
@@ -2686,10 +3176,6 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     (
         "目标 {id} 已隔离为 untrusted history；隔离是单向降级，审计记录必须保留，不能用 migration 刷新为可信历史",
         "goal {id} is quarantined as untrusted history; the quarantine is a one-way downgrade, the audit record must be retained, and a migration must not refresh it into trusted history",
-    ),
-    (
-        "目标 {id} 缺少开工 baseline，无法核对实际变更；请用新的 baseline-bound goal supersede，或将已完成记录显式 archive",
-        "goal {id} has no starting baseline, so its actual changes cannot be checked; supersede it with a new baseline-bound goal, or archive the finished record explicitly",
     ),
     ("目标不能 supersede 自己", "a goal cannot supersede itself"),
     (
@@ -3855,6 +4341,23 @@ const MESSAGE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     ),
     ("受限沙箱下用", "under a restricted sandbox use"),
     ("状态写探针", "state-write probe"),
+    ("激活元数据写探针", "activation-metadata write probe"),
+    (
+        "原授权元数据 staging 已验证，激活文件未变",
+        "authorization-metadata staging verified; activation unchanged",
+    ),
+    (
+        "无激活合同或平台不支持，未探测",
+        "activation absent or platform unsupported, not probed",
+    ),
+    (
+        "workspace 激活合同结构上可 rebind",
+        "workspace activation contract is structurally rebindable",
+    ),
+    (
+        "且当前 activation metadata staging 探针已就绪",
+        "and the current activation-metadata staging probe is ready",
+    ),
     ("可写", "writable"),
     (
         "运行 `rayman context refresh`",

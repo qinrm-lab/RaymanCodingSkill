@@ -31,6 +31,9 @@ const ACTIVATION_FIELDS: &[&str] = &[
 ];
 const MAX_ACTIVATION_TEMP_ATTEMPTS: usize = 64;
 static ACTIVATION_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
+const ACTIVATION_METADATA_PROBE_BYTES: &[u8] = b"rayman-activation-metadata-probe";
+pub const ACTIVATION_METADATA_CAPABILITY_KEY: &str = "activation/metadata-preserving-staging";
+pub const ACTIVATION_METADATA_BOUNDARY_CLASS: &str = "filesystem_acl";
 
 #[derive(Debug, Clone, Serialize)]
 pub struct WorkspaceActivationReport {
@@ -71,6 +74,57 @@ pub struct WorkspaceRebindReport {
     #[serde(flatten)]
     pub activation: WorkspaceActivationReport,
     pub changed: bool,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ActivationMetadataProbePhase {
+    NotApplicable,
+    Lock,
+    Capture,
+    StageCreate,
+    StageWrite,
+    MetadataApply,
+    Verify,
+    Cleanup,
+    TargetRecheck,
+    Complete,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ActivationMetadataFailureClass {
+    Contention,
+    PermissionDenied,
+    OwnerAssignmentDenied,
+    PrivilegeNotHeld,
+    UnsafeTarget,
+    UnsupportedPlatform,
+    MetadataMismatch,
+    CleanupFailed,
+    ConcurrentChange,
+    IoError,
+}
+
+/// Action-specific, non-destructive proof that the current process can create
+/// and clean a staging inode carrying the activation file's authorization
+/// metadata. This is deliberately separate from the generic managed-tmp write
+/// probe and never authorizes or caches a later activation transaction.
+#[derive(Debug, Clone, Serialize)]
+pub struct ActivationMetadataCapabilityProbe {
+    pub applicable: bool,
+    pub probed: bool,
+    pub ready: bool,
+    pub scope: String,
+    pub capability_key: String,
+    pub boundary_class: String,
+    pub target: Option<String>,
+    pub phase: ActivationMetadataProbePhase,
+    pub failure_class: Option<ActivationMetadataFailureClass>,
+    pub os_error_code: Option<i32>,
+    pub activation_unchanged: Option<bool>,
+    pub cleanup_complete: Option<bool>,
+    pub error: Option<String>,
 }
 
 fn scalar(value: &str, line_number: usize) -> Result<String> {
@@ -942,7 +996,7 @@ fn activation_metadata_from_handle(
         ) -> i32;
     }
 
-    let handle = file.as_raw_handle() as *mut c_void;
+    let handle = file.as_raw_handle();
     let mut needed = 0_u32;
     let first = unsafe {
         GetKernelObjectSecurity(
@@ -1076,6 +1130,7 @@ fn read_bound_activation_metadata(path: &Path) -> Result<(ActivationMetadata, Fi
 fn create_activation_temp_file(
     path: &Path,
     metadata: Option<&ActivationMetadata>,
+    delete_on_close: bool,
 ) -> io::Result<fs::File> {
     use std::ffi::c_void;
     use std::os::windows::ffi::OsStrExt as _;
@@ -1089,6 +1144,7 @@ fn create_activation_temp_file(
             .create_new(true)
             .access_mode(0xc001_0000)
             .share_mode(1)
+            .custom_flags(if delete_on_close { 0x0400_0000 } else { 0 })
             .open(path);
     };
 
@@ -1117,6 +1173,7 @@ fn create_activation_temp_file(
     const DELETE_ACCESS: u32 = 0x0001_0000;
     const CREATE_NEW: u32 = 1;
     const FILE_ATTRIBUTE_NORMAL: u32 = 0x0000_0080;
+    const FILE_FLAG_DELETE_ON_CLOSE: u32 = 0x0400_0000;
     const INVALID_HANDLE_VALUE: *mut c_void = -1_isize as *mut c_void;
 
     let path = path
@@ -1136,7 +1193,12 @@ fn create_activation_temp_file(
             1,
             &attributes,
             CREATE_NEW,
-            FILE_ATTRIBUTE_NORMAL,
+            FILE_ATTRIBUTE_NORMAL
+                | if delete_on_close {
+                    FILE_FLAG_DELETE_ON_CLOSE
+                } else {
+                    0
+                },
             std::ptr::null_mut(),
         )
     };
@@ -1151,6 +1213,7 @@ fn create_activation_temp_file(
 fn create_activation_temp_file(
     transaction: &ActivationTransaction,
     _: Option<&ActivationMetadata>,
+    _: bool,
 ) -> io::Result<fs::File> {
     use std::os::fd::{AsRawFd as _, FromRawFd as _};
 
@@ -1171,7 +1234,11 @@ fn create_activation_temp_file(
 }
 
 #[cfg(not(any(windows, target_os = "linux")))]
-fn create_activation_temp_file(_: &Path, _: Option<&ActivationMetadata>) -> io::Result<fs::File> {
+fn create_activation_temp_file(
+    _: &Path,
+    _: Option<&ActivationMetadata>,
+    _: bool,
+) -> io::Result<fs::File> {
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
         "anonymous activation staging is unsupported on this platform",
@@ -1522,6 +1589,371 @@ fn read_optional_activation_snapshot(path: &Path) -> Result<Option<FileSnapshot>
     }
 }
 
+fn activation_metadata_scope() -> &'static str {
+    #[cfg(windows)]
+    return "owner_group_dacl_file_attributes";
+    #[cfg(target_os = "linux")]
+    return "uid_gid_mode_xattrs_inode_flags";
+    #[cfg(not(any(windows, target_os = "linux")))]
+    "unsupported_platform"
+}
+
+fn activation_metadata_platform_supported() -> bool {
+    cfg!(any(windows, target_os = "linux"))
+}
+
+fn empty_activation_metadata_probe() -> ActivationMetadataCapabilityProbe {
+    ActivationMetadataCapabilityProbe {
+        applicable: false,
+        probed: false,
+        ready: false,
+        scope: activation_metadata_scope().to_string(),
+        capability_key: ACTIVATION_METADATA_CAPABILITY_KEY.to_string(),
+        boundary_class: ACTIVATION_METADATA_BOUNDARY_CLASS.to_string(),
+        target: None,
+        phase: ActivationMetadataProbePhase::NotApplicable,
+        failure_class: None,
+        os_error_code: None,
+        activation_unchanged: None,
+        cleanup_complete: None,
+        error: None,
+    }
+}
+
+fn activation_probe_os_error(error: &anyhow::Error) -> Option<i32> {
+    error.chain().find_map(|cause| {
+        cause
+            .downcast_ref::<io::Error>()
+            .and_then(io::Error::raw_os_error)
+    })
+}
+
+fn activation_probe_io_kind(error: &anyhow::Error, kind: io::ErrorKind) -> bool {
+    error.chain().any(|cause| {
+        cause
+            .downcast_ref::<io::Error>()
+            .is_some_and(|source| source.kind() == kind)
+    })
+}
+
+fn classify_activation_probe_failure(
+    phase: ActivationMetadataProbePhase,
+    error: &anyhow::Error,
+) -> ActivationMetadataFailureClass {
+    use ActivationMetadataFailureClass as Class;
+    use ActivationMetadataProbePhase as Phase;
+
+    if phase == Phase::NotApplicable {
+        return Class::UnsupportedPlatform;
+    }
+    if phase == Phase::Cleanup {
+        return Class::CleanupFailed;
+    }
+    if phase == Phase::Verify {
+        return Class::MetadataMismatch;
+    }
+    if phase == Phase::TargetRecheck {
+        return Class::ConcurrentChange;
+    }
+    if activation_probe_io_kind(error, io::ErrorKind::Unsupported) {
+        return Class::UnsupportedPlatform;
+    }
+    if activation_probe_io_kind(error, io::ErrorKind::WouldBlock) {
+        return Class::Contention;
+    }
+    match activation_probe_os_error(error) {
+        Some(32 | 33) => return Class::Contention,
+        Some(1307 | 1308) => return Class::OwnerAssignmentDenied,
+        Some(1314) => return Class::PrivilegeNotHeld,
+        _ => {}
+    }
+    if activation_probe_io_kind(error, io::ErrorKind::PermissionDenied) {
+        return Class::PermissionDenied;
+    }
+    let message = format!("{error:#}");
+    if phase == Phase::Capture
+        && (activation_probe_io_kind(error, io::ErrorKind::NotFound)
+            || message.contains("changed during")
+            || message.contains("changed identity during"))
+    {
+        return Class::ConcurrentChange;
+    }
+    if phase == Phase::Capture
+        && [
+            "link",
+            "reparse",
+            "not an ordinary file",
+            "not a real directory",
+        ]
+        .iter()
+        .any(|needle| message.contains(needle))
+    {
+        return Class::UnsafeTarget;
+    }
+    Class::IoError
+}
+
+fn failed_activation_metadata_probe(
+    mut probe: ActivationMetadataCapabilityProbe,
+    phase: ActivationMetadataProbePhase,
+    error: anyhow::Error,
+) -> ActivationMetadataCapabilityProbe {
+    probe.phase = phase;
+    probe.os_error_code = activation_probe_os_error(&error);
+    probe.failure_class = Some(classify_activation_probe_failure(phase, &error));
+    probe.error = Some(format!("{error:#}"));
+    probe.ready = false;
+    probe
+}
+
+#[cfg(windows)]
+fn probe_activation_metadata_stage(
+    target: &Path,
+    metadata: &ActivationMetadata,
+    phase: &mut ActivationMetadataProbePhase,
+    cleanup_complete: &mut Option<bool>,
+) -> Result<()> {
+    let (mut file, path) = loop {
+        *phase = ActivationMetadataProbePhase::StageCreate;
+        let path = activation_temp_path(target)?;
+        match create_activation_temp_file(&path, Some(metadata), true) {
+            Ok(file) => break (file, path),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                *cleanup_complete = Some(true);
+                return Err(error).with_context(|| {
+                    format!(
+                        "cannot create a delete-on-close activation metadata probe beside {}",
+                        display_path(target)
+                    )
+                });
+            }
+        }
+    };
+
+    let operation = (|| -> Result<()> {
+        *phase = ActivationMetadataProbePhase::StageWrite;
+        file.write_all(ACTIVATION_METADATA_PROBE_BYTES)
+            .and_then(|_| file.sync_all())
+            .with_context(|| {
+                format!(
+                    "cannot write the activation metadata probe beside {}",
+                    display_path(target)
+                )
+            })?;
+        *phase = ActivationMetadataProbePhase::MetadataApply;
+        apply_activation_metadata(&file, target, metadata)?;
+        file.sync_all()?;
+        *phase = ActivationMetadataProbePhase::Verify;
+        let snapshot = read_file_snapshot_from_handle(&file, target)?;
+        if snapshot.bytes != ACTIVATION_METADATA_PROBE_BYTES || &snapshot.metadata != metadata {
+            bail!("activation metadata probe stage did not preserve bytes and metadata");
+        }
+        Ok(())
+    })();
+    let operation_phase = *phase;
+
+    drop(file);
+    *phase = ActivationMetadataProbePhase::Cleanup;
+    let cleanup = match fs::symlink_metadata(&path) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).context("cannot verify delete-on-close probe cleanup"),
+        Ok(_) => bail!(
+            "delete-on-close activation metadata probe still exists: {}",
+            display_path(&path)
+        ),
+    };
+    *cleanup_complete = Some(cleanup.is_ok());
+    match (operation, cleanup) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(error), Ok(())) => {
+            *phase = operation_phase;
+            Err(error)
+        }
+        (Ok(()), Err(cleanup)) => Err(cleanup),
+        (Err(operation), Err(cleanup)) => Err(anyhow::anyhow!(
+            "activation metadata probe failed and cleanup also failed: operation={operation:#}; cleanup={cleanup:#}"
+        )),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn probe_activation_metadata_stage(
+    target: &Path,
+    metadata: &ActivationMetadata,
+    phase: &mut ActivationMetadataProbePhase,
+    cleanup_complete: &mut Option<bool>,
+) -> Result<()> {
+    *phase = ActivationMetadataProbePhase::StageCreate;
+    let transaction = ActivationTransaction::open(target)?;
+    let mut file =
+        create_activation_temp_file(&transaction, Some(metadata), true).with_context(|| {
+            format!(
+                "cannot create an anonymous activation metadata probe beside {}",
+                display_path(target)
+            )
+        })?;
+    let operation = (|| -> Result<()> {
+        *phase = ActivationMetadataProbePhase::StageWrite;
+        file.write_all(ACTIVATION_METADATA_PROBE_BYTES)
+            .and_then(|_| file.sync_all())?;
+        *phase = ActivationMetadataProbePhase::MetadataApply;
+        apply_activation_metadata(&file, target, metadata)?;
+        file.sync_all()?;
+        *phase = ActivationMetadataProbePhase::Verify;
+        let snapshot = read_file_snapshot_from_handle(&file, target)?;
+        if snapshot.bytes != ACTIVATION_METADATA_PROBE_BYTES || &snapshot.metadata != metadata {
+            bail!("activation metadata probe stage did not preserve bytes and metadata");
+        }
+        Ok(())
+    })();
+    let operation_phase = *phase;
+    drop(file);
+    *cleanup_complete = Some(true);
+    *phase = operation_phase;
+    operation
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+fn probe_activation_metadata_stage(
+    _: &Path,
+    _: &ActivationMetadata,
+    phase: &mut ActivationMetadataProbePhase,
+    _: &mut Option<bool>,
+) -> Result<()> {
+    *phase = ActivationMetadataProbePhase::StageCreate;
+    bail!("activation metadata probes require Linux or Windows handle-bound staging")
+}
+
+fn activation_metadata_capability_probe_with<S>(
+    root: &Path,
+    mut stage_probe: S,
+) -> ActivationMetadataCapabilityProbe
+where
+    S: FnMut(
+        &Path,
+        &ActivationMetadata,
+        &mut ActivationMetadataProbePhase,
+        &mut Option<bool>,
+    ) -> Result<()>,
+{
+    let mut probe = empty_activation_metadata_probe();
+    let target = match state_paths::managed_state_file(root, Path::new(ACTIVATION_RELATIVE), false)
+    {
+        Ok(path) => path,
+        Err(error) => {
+            probe.probed = true;
+            return failed_activation_metadata_probe(
+                probe,
+                ActivationMetadataProbePhase::Capture,
+                error,
+            );
+        }
+    };
+    match fs::symlink_metadata(&target) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return probe,
+        Err(error) => {
+            probe.applicable = true;
+            probe.probed = true;
+            probe.target = Some(display_path(&target));
+            return failed_activation_metadata_probe(
+                probe,
+                ActivationMetadataProbePhase::Capture,
+                error.into(),
+            );
+        }
+        Ok(metadata) if is_link_or_reparse(&metadata) || !metadata.file_type().is_file() => {
+            probe.applicable = true;
+            probe.probed = true;
+            probe.target = Some(display_path(&target));
+            return failed_activation_metadata_probe(
+                probe,
+                ActivationMetadataProbePhase::Capture,
+                anyhow::anyhow!(
+                    "activation metadata probe target is a link, reparse point, or non-file: {}",
+                    display_path(&target)
+                ),
+            );
+        }
+        Ok(_) => {}
+    }
+
+    probe.target = Some(display_path(&target));
+    if !activation_metadata_platform_supported() {
+        return failed_activation_metadata_probe(
+            probe,
+            ActivationMetadataProbePhase::NotApplicable,
+            anyhow::anyhow!(
+                "activation metadata probes are unsupported on this platform: {}",
+                display_path(&target)
+            ),
+        );
+    }
+    probe.applicable = true;
+    probe.probed = true;
+    probe.phase = ActivationMetadataProbePhase::Lock;
+    let _lock = match crate::state_lock::acquire_state_lock(&target) {
+        Ok(lock) => lock,
+        Err(error) => {
+            return failed_activation_metadata_probe(
+                probe,
+                ActivationMetadataProbePhase::Lock,
+                error,
+            );
+        }
+    };
+    probe.phase = ActivationMetadataProbePhase::Capture;
+    let before = match read_file_snapshot(&target) {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            return failed_activation_metadata_probe(
+                probe,
+                ActivationMetadataProbePhase::Capture,
+                error,
+            );
+        }
+    };
+
+    let mut phase = ActivationMetadataProbePhase::StageCreate;
+    let mut cleanup_complete = None;
+    let stage_error = stage_probe(&target, &before.metadata, &mut phase, &mut cleanup_complete)
+        .err()
+        .map(|error| (phase, error));
+    probe.cleanup_complete = cleanup_complete;
+
+    probe.phase = ActivationMetadataProbePhase::TargetRecheck;
+    let after = match read_file_snapshot(&target) {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            return failed_activation_metadata_probe(
+                probe,
+                ActivationMetadataProbePhase::TargetRecheck,
+                error,
+            );
+        }
+    };
+    if !snapshots_match(&before, &after) {
+        probe.activation_unchanged = Some(false);
+        return failed_activation_metadata_probe(
+            probe,
+            ActivationMetadataProbePhase::TargetRecheck,
+            anyhow::anyhow!("activation changed during the metadata capability probe"),
+        );
+    }
+    probe.activation_unchanged = Some(true);
+    if let Some((failure_phase, error)) = stage_error {
+        return failed_activation_metadata_probe(probe, failure_phase, error);
+    }
+
+    probe.phase = ActivationMetadataProbePhase::Complete;
+    probe.ready = true;
+    probe
+}
+
+pub fn activation_metadata_capability_probe(root: &Path) -> ActivationMetadataCapabilityProbe {
+    activation_metadata_capability_probe_with(root, probe_activation_metadata_stage)
+}
+
 fn create_owned_activation_temp(
     transaction: &ActivationTransaction,
     bytes: &[u8],
@@ -1532,11 +1964,11 @@ fn create_owned_activation_temp(
         #[cfg(windows)]
         let named_path = activation_temp_path(target)?;
         #[cfg(windows)]
-        let created = create_activation_temp_file(named_path.as_path(), metadata);
+        let created = create_activation_temp_file(named_path.as_path(), metadata, false);
         #[cfg(target_os = "linux")]
-        let created = create_activation_temp_file(transaction, metadata);
+        let created = create_activation_temp_file(transaction, metadata, false);
         #[cfg(not(any(windows, target_os = "linux")))]
-        let created = create_activation_temp_file(target, metadata);
+        let created = create_activation_temp_file(target, metadata, false);
         let mut file = match created {
             Ok(file) => file,
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
@@ -2061,14 +2493,14 @@ fn cleanup_owned_activation_temp(temp: OwnedActivationTemp, action: &str) -> Res
             )
         })?;
         drop(temp);
-        return match fs::symlink_metadata(&path) {
+        match fs::symlink_metadata(&path) {
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
             Err(error) => Err(error).context("cannot verify handle-bound staging cleanup"),
             Ok(_) => bail!(
                 "activation staging path still exists after handle-bound cleanup: {}",
                 display_path(&path)
             ),
-        };
+        }
     }
     #[cfg(not(any(windows, target_os = "linux")))]
     bail!("handle-bound activation cleanup is unsupported on this platform")
@@ -2651,14 +3083,14 @@ fn finalize_captured_activation(
             return Ok(Some(evidence));
         }
         drop(captured.file);
-        return match fs::symlink_metadata(&captured.path) {
+        match fs::symlink_metadata(&captured.path) {
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
             Err(error) => Err(error).context("cannot verify captured activation handle cleanup"),
             Ok(_) => bail!(
                 "captured activation path still exists after exact-handle cleanup: {}",
                 display_path(&captured.path)
             ),
-        };
+        }
     }
     #[cfg(not(any(windows, target_os = "linux")))]
     bail!("captured activation finalization is unsupported on this platform")
@@ -3310,14 +3742,14 @@ where
     });
     match verified {
         Ok(mut report) => {
-            if let Some(original) = original {
-                if let Some(evidence) = finalize_captured_activation(
+            if let Some(original) = original
+                && let Some(evidence) = finalize_captured_activation(
                     &transaction,
                     original,
                     "activation contract preserved prior activation",
-                )? {
-                    report.retained_evidence.push(evidence);
-                }
+                )?
+            {
+                report.retained_evidence.push(evidence);
             }
             Ok(report)
         }
@@ -4926,6 +5358,107 @@ mod tests {
         assert_eq!(actual, expected);
         #[cfg(windows)]
         assert_protected_distinct_dacl(&actual);
+    }
+
+    #[test]
+    fn activation_metadata_probe_preserves_platform_metadata_and_target() {
+        let (root, binding, original) = stale_rebind_fixture();
+        let expected = set_distinct_activation_metadata(&binding);
+        let before = read_file_snapshot(&binding).unwrap();
+
+        let probe = activation_metadata_capability_probe(root.path());
+
+        assert!(probe.applicable, "{probe:?}");
+        assert!(probe.probed, "{probe:?}");
+        assert!(probe.ready, "{probe:?}");
+        assert_eq!(probe.phase, ActivationMetadataProbePhase::Complete);
+        assert_eq!(probe.activation_unchanged, Some(true));
+        assert_eq!(probe.cleanup_complete, Some(true));
+        assert_eq!(fs::read(&binding).unwrap(), original);
+        let after = read_file_snapshot(&binding).unwrap();
+        assert!(snapshots_match(&before, &after));
+        assert_eq!(after.metadata, expected);
+        #[cfg(windows)]
+        assert_protected_distinct_dacl(&after.metadata);
+        assert!(
+            fs::read_dir(binding.parent().unwrap())
+                .unwrap()
+                .filter_map(std::result::Result::ok)
+                .all(|entry| {
+                    !entry
+                        .file_name()
+                        .to_string_lossy()
+                        .starts_with(".workspace_skill.yaml.rayman-")
+                }),
+            "activation metadata probe left a named sidecar"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn activation_metadata_probe_classifies_invalid_owner_without_touching_target() {
+        let (root, binding, original) = stale_rebind_fixture();
+        let probe = activation_metadata_capability_probe_with(
+            root.path(),
+            |_, _, phase, cleanup_complete| {
+                *phase = ActivationMetadataProbePhase::StageCreate;
+                *cleanup_complete = Some(true);
+                Err(io::Error::from_raw_os_error(1307).into())
+            },
+        );
+
+        assert!(!probe.ready, "{probe:?}");
+        assert_eq!(
+            probe.failure_class,
+            Some(ActivationMetadataFailureClass::OwnerAssignmentDenied)
+        );
+        assert_eq!(probe.os_error_code, Some(1307));
+        assert_eq!(probe.activation_unchanged, Some(true));
+        assert_eq!(probe.cleanup_complete, Some(true));
+        assert_eq!(fs::read(binding).unwrap(), original);
+    }
+
+    #[test]
+    fn activation_metadata_probe_treats_cleanup_failure_as_not_ready() {
+        let (root, binding, original) = stale_rebind_fixture();
+        let probe = activation_metadata_capability_probe_with(
+            root.path(),
+            |_, _, phase, cleanup_complete| {
+                *phase = ActivationMetadataProbePhase::Cleanup;
+                *cleanup_complete = Some(false);
+                bail!("injected activation metadata probe cleanup failure")
+            },
+        );
+
+        assert!(!probe.ready, "{probe:?}");
+        assert_eq!(
+            probe.failure_class,
+            Some(ActivationMetadataFailureClass::CleanupFailed)
+        );
+        assert_eq!(probe.activation_unchanged, Some(true));
+        assert_eq!(probe.cleanup_complete, Some(false));
+        assert_eq!(fs::read(binding).unwrap(), original);
+    }
+
+    #[test]
+    fn activation_metadata_probe_classifies_capture_races_and_lock_timeouts() {
+        let capture_race = anyhow::anyhow!(
+            "activation bytes, identity, or authorization metadata changed during handle-bound capture"
+        );
+        assert_eq!(
+            classify_activation_probe_failure(ActivationMetadataProbePhase::Capture, &capture_race),
+            ActivationMetadataFailureClass::ConcurrentChange
+        );
+
+        let lock_timeout = anyhow::Error::new(io::Error::new(
+            io::ErrorKind::WouldBlock,
+            "injected state-lock contention",
+        ))
+        .context("state-lock timeout");
+        assert_eq!(
+            classify_activation_probe_failure(ActivationMetadataProbePhase::Lock, &lock_timeout),
+            ActivationMetadataFailureClass::Contention
+        );
     }
 
     #[cfg(target_os = "linux")]

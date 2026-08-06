@@ -10,6 +10,204 @@ fn pending_roundtrip() {
     assert!(store.list().unwrap().is_empty());
 }
 
+fn complete_human_submission(goal_id: &str, detail: &str) -> PendingSubmission {
+    PendingSubmission {
+        title: "owner decision".into(),
+        detail: detail.into(),
+        goal_id: Some(goal_id.into()),
+        owner: PendingOwner::Human,
+        kind: PendingKind::HumanInput,
+        attempts: vec!["completed every safe local path".into()],
+        evidence_paths: vec!["reports/decision.md".into()],
+        minimum_input: Some("choose A or B".into()),
+        recommended_action: Some("choose A".into()),
+        alternatives: vec!["choose B".into()],
+        risk: Some("the product behavior differs".into()),
+        resume_command: Some("rayman prepare --goal owner".into()),
+        auto_resume_condition: Some("the owner choice is recorded".into()),
+        consultation_timing: ConsultationTiming::Immediate,
+        background_mechanism: None,
+        background_authority_evidence: None,
+        background_isolation_evidence: None,
+    }
+}
+
+#[test]
+fn capability_bound_pending_is_idempotent_and_rejects_contract_drift() {
+    let dir = tempfile::tempdir().unwrap();
+    let goals = GoalStore::new(dir.path());
+    let goal = goals
+        .start("stable boundary", &[("obtain owner choice".into(), true)])
+        .unwrap();
+    let pending = PendingStore::new(dir.path());
+    let submission = complete_human_submission(&goal.id, "two incompatible directions");
+
+    let first = pending
+        .add_capability_bound(
+            submission.clone(),
+            Some("owner/decision".into()),
+            Some("owner_decision".into()),
+        )
+        .unwrap();
+    let replay = pending
+        .add_capability_bound(
+            submission.clone(),
+            Some("OWNER/DECISION".into()),
+            Some("OWNER_DECISION".into()),
+        )
+        .unwrap();
+    assert_eq!(replay.id, first.id);
+    assert_eq!(replay.package_sha256, first.package_sha256);
+    assert_eq!(pending.list().unwrap().len(), 1);
+
+    let mut drifted = submission;
+    drifted.detail = "silently changed question".into();
+    let error = pending
+        .add_capability_bound(
+            drifted,
+            Some("owner/decision".into()),
+            Some("owner_decision".into()),
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("contract conflict"), "{error}");
+    assert_eq!(pending.list().unwrap(), std::slice::from_ref(&first));
+
+    let second_goal = goals
+        .start("second boundary", &[("obtain owner choice".into(), true)])
+        .unwrap();
+    let second = pending
+        .add_capability_bound(
+            complete_human_submission(&second_goal.id, "independent goal choice"),
+            Some("owner/decision".into()),
+            Some("owner_decision".into()),
+        )
+        .unwrap();
+    assert_ne!(second.id, first.id);
+    assert_eq!(pending.list().unwrap().len(), 2);
+}
+
+#[test]
+fn legacy_migration_is_explicit_atomic_auditable_and_does_not_self_present() {
+    let dir = tempfile::tempdir().unwrap();
+    let goals = GoalStore::new(dir.path());
+    let goal = goals
+        .start("present once", &[("obtain owner choice".into(), true)])
+        .unwrap();
+    let pending = PendingStore::new(dir.path());
+    let item = pending
+        .add_capability_bound(
+            complete_human_submission(&goal.id, "legacy-compatible package"),
+            Some("owner/legacy-choice".into()),
+            Some("owner_decision".into()),
+        )
+        .unwrap();
+    let path = dir.path().join(PENDING_PATH);
+
+    // Simulate a readable v0 package with a historical agent assertion. It
+    // remains non-authoritative until the explicit hash-bound migration.
+    let mut legacy: PendingList = read_json(&path).unwrap().unwrap();
+    legacy.items[0].contract_version = 0;
+    legacy.items[0].capability_key = None;
+    legacy.items[0].boundary_class = None;
+    legacy.items[0].legacy_migration = None;
+    let legacy_sha256 = legacy.items[0].expected_package_sha256().unwrap();
+    legacy.items[0].package_sha256 = Some(legacy_sha256.clone());
+    legacy.items[0].legacy_agent_assertion_untrusted = Some(LegacyAgentPresentationAssertion {
+        presented_at: now_iso(),
+        package_sha256: legacy_sha256.clone(),
+        channel: "codex".into(),
+        reference: Some("historical-agent-claim".into()),
+    });
+    write_json(&path, &legacy).unwrap();
+    let before = fs::read(&path).unwrap();
+    assert_eq!(pending.list().unwrap()[0].contract_version, 0);
+    assert_eq!(fs::read(&path).unwrap(), before);
+    let frontier = pending.frontier(&goal).unwrap();
+    assert_eq!(frontier.decision, FrontierDecision::Continue);
+    assert!(!frontier.ask_user_allowed);
+    assert!(
+        pending
+            .render_for_goals(std::slice::from_ref(&goal))
+            .is_err()
+    );
+
+    assert!(
+        pending
+            .migrate_legacy(
+                &item.id,
+                &goal.id,
+                &"0".repeat(64),
+                "owner/legacy-choice",
+                "owner_decision",
+            )
+            .is_err()
+    );
+    assert_eq!(fs::read(&path).unwrap(), before);
+
+    let migrated = pending
+        .migrate_legacy(
+            &item.id,
+            &goal.id,
+            &legacy_sha256,
+            "owner/legacy-choice",
+            "owner_decision",
+        )
+        .unwrap();
+    let proof = migrated.legacy_migration.as_ref().unwrap();
+    assert_eq!(proof.from_contract_version, 0);
+    assert_eq!(proof.legacy_package_sha256, legacy_sha256);
+    assert_eq!(proof.goal_id, goal.id);
+    assert_eq!(proof.capability_key, "owner/legacy-choice");
+    assert_eq!(
+        Some(proof.new_package_sha256.as_str()),
+        migrated.package_sha256.as_deref()
+    );
+    assert!(migrated.legacy_agent_assertion_untrusted.is_some());
+    let frontier = pending.frontier(&goal).unwrap();
+    assert_eq!(frontier.decision, FrontierDecision::AskUser);
+    assert_eq!(frontier.consultation, FrontierConsultation::Ready);
+    let rendered = pending.render_for_goals(&[goal]).unwrap();
+    assert!(rendered.text.contains(&item.id));
+}
+
+#[test]
+fn pending_capability_identity_is_unique_only_within_one_goal() {
+    let dir = tempfile::tempdir().unwrap();
+    let goals = GoalStore::new(dir.path());
+    let first_goal = goals
+        .start("first", &[("first choice".into(), true)])
+        .unwrap();
+    let second_goal = goals
+        .start("second", &[("second choice".into(), true)])
+        .unwrap();
+    let pending = PendingStore::new(dir.path());
+    pending
+        .add_capability_bound(
+            complete_human_submission(&first_goal.id, "first package"),
+            Some("shared/decision".into()),
+            Some("owner_decision".into()),
+        )
+        .unwrap();
+    pending
+        .add_capability_bound(
+            complete_human_submission(&second_goal.id, "second package"),
+            Some("shared/decision".into()),
+            Some("owner_decision".into()),
+        )
+        .unwrap();
+
+    assert_eq!(pending.list().unwrap().len(), 2);
+
+    let path = dir.path().join(PENDING_PATH);
+    let mut tampered: PendingList = read_json(&path).unwrap().unwrap();
+    tampered.items[1].goal_id = Some(first_goal.id.clone());
+    tampered.items[1].package_sha256 = Some(tampered.items[1].expected_package_sha256().unwrap());
+    write_json(&path, &tampered).unwrap();
+    let error = pending.list().unwrap_err().to_string();
+    assert!(error.contains("(goal_id, capability_key) 重复"), "{error}");
+}
+
 #[test]
 fn structured_frontier_never_asks_while_agent_work_remains() {
     let dir = tempfile::tempdir().unwrap();
@@ -52,32 +250,41 @@ fn structured_frontier_never_asks_while_agent_work_remains() {
             .is_err(),
         "a human boundary without a solution package must fail closed"
     );
-    pending
-        .add_structured(PendingSubmission {
-            title: "need decision".into(),
-            detail: "two incompatible product choices".into(),
-            goal_id: Some(goal.id.clone()),
-            owner: PendingOwner::Human,
-            kind: PendingKind::HumanInput,
-            attempts: vec!["tested both local variants".into()],
-            evidence_paths: vec!["reports/options.md".into()],
-            minimum_input: Some("choose A or B".into()),
-            recommended_action: Some("choose A".into()),
-            alternatives: vec!["choose B".into()],
-            risk: Some("A favors safety; B favors speed".into()),
-            resume_command: Some("rayman prepare --goal owner".into()),
-            auto_resume_condition: Some("resume when the choice is recorded".into()),
-            consultation_timing: ConsultationTiming::Deferred,
-            background_mechanism: None,
-            background_authority_evidence: None,
-            background_isolation_evidence: None,
-        })
+    let choice = pending
+        .add_capability_bound(
+            PendingSubmission {
+                title: "need decision".into(),
+                detail: "two incompatible product choices".into(),
+                goal_id: Some(goal.id.clone()),
+                owner: PendingOwner::Human,
+                kind: PendingKind::HumanInput,
+                attempts: vec!["tested both local variants".into()],
+                evidence_paths: vec!["reports/options.md".into()],
+                minimum_input: Some("choose A or B".into()),
+                recommended_action: Some("choose A".into()),
+                alternatives: vec!["choose B".into()],
+                risk: Some("A favors safety; B favors speed".into()),
+                resume_command: Some("rayman prepare --goal owner".into()),
+                auto_resume_condition: Some("resume when the choice is recorded".into()),
+                consultation_timing: ConsultationTiming::Deferred,
+                background_mechanism: None,
+                background_authority_evidence: None,
+                background_isolation_evidence: None,
+            },
+            Some("owner/choice".into()),
+            Some("owner_decision".into()),
+        )
         .unwrap();
     let frontier = pending.frontier(&goal).unwrap();
     assert_eq!(frontier.decision, FrontierDecision::AskUser);
     assert!(frontier.ask_user_allowed);
     assert_eq!(frontier.execution, FrontierExecution::PausedForUser);
-    assert_eq!(frontier.consultation, FrontierConsultation::Presented);
+    assert_eq!(frontier.consultation, FrontierConsultation::Ready);
+    let rendered = pending
+        .render_for_goals(std::slice::from_ref(&goal))
+        .unwrap();
+    assert!(rendered.text.contains(&choice.id));
+    assert_eq!(pending.frontier(&goal).unwrap(), frontier);
     assert_eq!(
         goals.close(&goal.id, "blocked").unwrap().status,
         GoalStatus::Blocked
@@ -85,7 +292,7 @@ fn structured_frontier_never_asks_while_agent_work_remains() {
 }
 
 #[test]
-fn structured_frontier_keeps_presented_questions_out_of_foreground_progress() {
+fn structured_frontier_renders_current_candidates_without_persisting_presentation() {
     let dir = tempfile::tempdir().unwrap();
     let goals = GoalStore::new(dir.path());
     let goal = goals
@@ -118,12 +325,11 @@ fn structured_frontier_keeps_presented_questions_out_of_foreground_progress() {
         };
 
     let deferred = pending
-        .add_structured(human_submission(
-            ConsultationTiming::Deferred,
-            None,
-            None,
-            None,
-        ))
+        .add_capability_bound(
+            human_submission(ConsultationTiming::Deferred, None, None, None),
+            Some("owner/deferred-choice".into()),
+            Some("owner_decision".into()),
+        )
         .unwrap();
     let frontier = pending.frontier(&goal).unwrap();
     assert_eq!(frontier.decision, FrontierDecision::Continue);
@@ -134,43 +340,107 @@ fn structured_frontier_keeps_presented_questions_out_of_foreground_progress() {
 
     assert!(
         pending
-            .add_structured(human_submission(
-                ConsultationTiming::Immediate,
-                Some("worktree task".into()),
-                Some("user instruction codex://threads/test".into()),
-                None,
-            ))
+            .add_capability_bound(
+                human_submission(
+                    ConsultationTiming::Immediate,
+                    Some("worktree task".into()),
+                    Some("user instruction codex://threads/test".into()),
+                    None,
+                ),
+                Some("owner/partial-background".into()),
+                Some("owner_decision".into()),
+            )
             .is_err(),
         "partial background proof must fail closed"
     );
 
     let immediate = pending
-        .add_structured(human_submission(
-            ConsultationTiming::Immediate,
-            None,
-            None,
-            None,
-        ))
+        .add_capability_bound(
+            human_submission(ConsultationTiming::Immediate, None, None, None),
+            Some("owner/immediate-choice".into()),
+            Some("owner_decision".into()),
+        )
         .unwrap();
     let frontier = pending.frontier(&goal).unwrap();
     assert_eq!(frontier.execution, FrontierExecution::PausedForUser);
-    assert_eq!(frontier.consultation, FrontierConsultation::Presented);
+    assert_eq!(frontier.consultation, FrontierConsultation::Ready);
     assert!(frontier.ask_user_allowed);
+    let rendered = pending
+        .render_for_goals(std::slice::from_ref(&goal))
+        .unwrap();
+    assert!(rendered.text.contains(&immediate.id));
+    assert_eq!(pending.frontier(&goal).unwrap(), frontier);
     pending.resolve(&immediate.id).unwrap();
 
-    pending
-        .add_structured(human_submission(
-            ConsultationTiming::Immediate,
-            Some("isolated worktree task task_123".into()),
-            Some("user instruction codex://threads/test".into()),
-            Some("isolated worktree task task_123".into()),
-        ))
+    let background = pending
+        .add_capability_bound(
+            human_submission(
+                ConsultationTiming::Immediate,
+                Some("isolated worktree task task_123".into()),
+                Some("user instruction codex://threads/test".into()),
+                Some("isolated worktree task task_123".into()),
+            ),
+            Some("owner/background-choice".into()),
+            Some("owner_decision".into()),
+        )
         .unwrap();
     let frontier = pending.frontier(&goal).unwrap();
     assert_eq!(frontier.execution, FrontierExecution::ContinueBackground);
-    assert_eq!(frontier.consultation, FrontierConsultation::Presented);
+    assert_eq!(frontier.consultation, FrontierConsultation::Ready);
     assert!(frontier.background_execution_allowed);
+    let rendered = pending
+        .render_for_goals(std::slice::from_ref(&goal))
+        .unwrap();
+    assert!(rendered.text.contains(&background.id));
+    assert_eq!(pending.frontier(&goal).unwrap(), frontier);
     assert!(pending.resolve(&deferred.id).unwrap());
+}
+
+#[test]
+fn aggregate_render_is_deterministic_complete_and_goal_scoped() {
+    let dir = tempfile::tempdir().unwrap();
+    let goals = GoalStore::new(dir.path());
+    let goal_a = goals
+        .start("aggregate A", &[("choose".into(), true)])
+        .unwrap();
+    let goal_b = goals
+        .start("aggregate B", &[("choose".into(), true)])
+        .unwrap();
+    let pending = PendingStore::new(dir.path());
+    let item_a = pending
+        .add_capability_bound(
+            complete_human_submission(&goal_a.id, "choice A"),
+            Some("owner/shared-choice".into()),
+            Some("owner_decision".into()),
+        )
+        .unwrap();
+    let item_b = pending
+        .add_capability_bound(
+            complete_human_submission(&goal_b.id, "choice B"),
+            Some("owner/shared-choice".into()),
+            Some("owner_decision".into()),
+        )
+        .unwrap();
+
+    let first = pending
+        .render_for_goals(&[goal_b.clone(), goal_a.clone()])
+        .unwrap();
+    let replay = pending
+        .render_for_goals(&[goal_a.clone(), goal_b.clone()])
+        .unwrap();
+    let partial = pending
+        .render_for_goals(std::slice::from_ref(&goal_a))
+        .unwrap();
+
+    assert_eq!(first, replay);
+    let mut expected_goal_ids = vec![goal_a.id, goal_b.id];
+    expected_goal_ids.sort();
+    assert_eq!(first.goal_ids, expected_goal_ids);
+    assert_eq!(first.pending_ids.len(), 2);
+    assert!(first.text.contains(&item_a.id));
+    assert!(first.text.contains(&item_b.id));
+    assert_ne!(partial.text, first.text);
+    assert_ne!(partial.render_sha256, first.render_sha256);
 }
 
 #[test]
@@ -456,27 +726,35 @@ fn pending_store_rejects_hand_tampered_owner_kind_contract() {
 #[test]
 fn pending_store_rejects_hand_tampered_incomplete_solution_package() {
     let dir = tempfile::tempdir().unwrap();
+    let goals = GoalStore::new(dir.path());
+    let goal = goals
+        .start("tamper target", &[("obtain owner choice".into(), true)])
+        .unwrap();
     let store = PendingStore::new(dir.path());
     let item = store
-        .add_structured(PendingSubmission {
-            title: "owner choice".into(),
-            detail: "two incompatible requirements".into(),
-            goal_id: None,
-            owner: PendingOwner::Human,
-            kind: PendingKind::HumanInput,
-            attempts: vec!["tested both variants".into()],
-            evidence_paths: vec!["reports/options.md".into()],
-            minimum_input: Some("choose A or B".into()),
-            recommended_action: Some("choose A".into()),
-            alternatives: vec!["choose B".into()],
-            risk: Some("B weakens safety".into()),
-            resume_command: Some("rayman prepare --goal goal_x".into()),
-            auto_resume_condition: Some("choice recorded".into()),
-            consultation_timing: ConsultationTiming::Deferred,
-            background_mechanism: None,
-            background_authority_evidence: None,
-            background_isolation_evidence: None,
-        })
+        .add_capability_bound(
+            PendingSubmission {
+                title: "owner choice".into(),
+                detail: "two incompatible requirements".into(),
+                goal_id: Some(goal.id),
+                owner: PendingOwner::Human,
+                kind: PendingKind::HumanInput,
+                attempts: vec!["tested both variants".into()],
+                evidence_paths: vec!["reports/options.md".into()],
+                minimum_input: Some("choose A or B".into()),
+                recommended_action: Some("choose A".into()),
+                alternatives: vec!["choose B".into()],
+                risk: Some("B weakens safety".into()),
+                resume_command: Some("rayman prepare --goal goal_x".into()),
+                auto_resume_condition: Some("choice recorded".into()),
+                consultation_timing: ConsultationTiming::Deferred,
+                background_mechanism: None,
+                background_authority_evidence: None,
+                background_isolation_evidence: None,
+            },
+            Some("owner/tamper-target".into()),
+            Some("owner_decision".into()),
+        )
         .unwrap();
     let path = dir.path().join(PENDING_PATH);
     let mut tampered: PendingList = read_json(&path).unwrap().unwrap();
@@ -1174,6 +1452,125 @@ fn an_honestly_closed_goal_can_be_retired_without_ever_claiming_success() {
         as_active.status = GoalStatus::Active;
         assert!(as_active.current_schema_error().is_some());
     }
+}
+
+#[test]
+fn pending_initial_publication_can_be_archived_losslessly_as_partial() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    fs::write(root.join("a.txt"), "a0").unwrap();
+    let store = GoalStore::new(root);
+    let goal = store
+        .start("pending initial", &[("ship".into(), true)])
+        .unwrap();
+    let submission = PlanReceiptSubmission {
+        changed_paths: vec!["a.txt".into()],
+        review_priority: "high".into(),
+        impacted_paths: vec!["a.txt".into()],
+        recommended_checks: vec!["focused".into()],
+    };
+    store
+        .record_plan_with_before_confirm(&goal.id, submission, || {
+            fs::write(root.join("a.txt"), "raced").unwrap();
+        })
+        .unwrap_err();
+    let pending = store.get(&goal.id).unwrap().unwrap();
+    let intent = pending.plan_publish_intent.clone();
+    let plans = pending.plan_receipts.clone();
+
+    store.close(&goal.id, "partial").unwrap();
+    let archived = store
+        .archive(
+            &goal.id,
+            "publication raced; retain exact forensic state",
+            false,
+        )
+        .unwrap();
+    assert_eq!(archived.lifecycle, GoalLifecycle::Archived);
+    assert_eq!(archived.status, GoalStatus::Partial);
+    assert_eq!(archived.plan_publish_intent, intent);
+    assert_eq!(archived.plan_receipts, plans);
+    assert!(archived.current_schema_error().is_none());
+    assert!(archived.lifecycle_proof_error(root).is_none());
+
+    let current = store.mark_current(&goal.id).unwrap();
+    assert!(
+        current.current_schema_error().is_some(),
+        "restoring the record must restore the pending-publication blocker"
+    );
+}
+
+#[test]
+fn pending_extension_publication_can_be_archived_losslessly_as_blocked() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    fs::write(root.join("a.txt"), "a0").unwrap();
+    fs::write(root.join("b.txt"), "b0").unwrap();
+    let store = GoalStore::new(root);
+    let goal = store
+        .start("pending extension", &[("ship".into(), true)])
+        .unwrap();
+    store
+        .record_plan(
+            &goal.id,
+            PlanReceiptSubmission {
+                changed_paths: vec!["a.txt".into()],
+                review_priority: "normal".into(),
+                impacted_paths: vec!["a.txt".into()],
+                recommended_checks: vec!["base".into()],
+            },
+        )
+        .unwrap();
+    fs::write(root.join("a.txt"), "planned").unwrap();
+    store
+        .extend_plan_with_before_confirm(
+            &goal.id,
+            PlanReceiptSubmission {
+                changed_paths: vec!["b.txt".into()],
+                review_priority: "high".into(),
+                impacted_paths: vec!["b.txt".into()],
+                recommended_checks: vec!["extension".into()],
+            },
+            || {
+                fs::write(root.join("b.txt"), "raced").unwrap();
+            },
+        )
+        .unwrap_err();
+    PendingStore::new(root)
+        .add_capability_bound(
+            complete_human_submission(&goal.id, "external direction is required"),
+            Some("owner/publication-race".into()),
+            Some("owner_decision".into()),
+        )
+        .unwrap();
+    let pending = store.get(&goal.id).unwrap().unwrap();
+    let intent = pending.plan_publish_intent.clone();
+    let plans = pending.plan_receipts.clone();
+
+    store.close(&goal.id, "blocked").unwrap();
+    let archived = store
+        .archive(
+            &goal.id,
+            "blocked publication retired without repair",
+            false,
+        )
+        .unwrap();
+    assert_eq!(archived.status, GoalStatus::Blocked);
+    assert_eq!(archived.plan_publish_intent, intent);
+    assert_eq!(archived.plan_receipts, plans);
+    assert!(archived.current_schema_error().is_none());
+    assert!(archived.lifecycle_proof_error(root).is_none());
+    assert!(
+        goal_gate_verdict(
+            &archived,
+            &store.list().unwrap(),
+            root,
+            Some(&workspace_fingerprint(root).unwrap()),
+        )
+        .blockers
+        .is_empty(),
+        "retired non-success history must leave readiness without becoming authority"
+    );
 }
 
 /// Retiring a non-success goal must never become a completion or authority

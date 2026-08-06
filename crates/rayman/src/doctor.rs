@@ -5,6 +5,25 @@ use serde_json::json;
 
 use crate::cli::DoctorCmd;
 
+fn activation_rebind_recovery_message(
+    probe: &rayman::workspace::ActivationMetadataCapabilityProbe,
+    command: &str,
+) -> String {
+    if probe.ready {
+        return format!(
+            "workspace 激活合同结构上可 rebind，且当前 activation metadata staging 探针已就绪：运行 `{command}`"
+        );
+    }
+    let failure_class = probe
+        .failure_class
+        .map(|class| format!("{class:?}"))
+        .unwrap_or_else(|| "unknown".into());
+    format!(
+        "workspace 激活合同结构上可 rebind，但当前 activation metadata staging 探针未就绪（phase={:?}, failure_class={}）；先按 failure_class 处理该 action-specific 能力边界，再运行 `{command}`",
+        probe.phase, failure_class
+    )
+}
+
 pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> {
     let running = std::env::current_exe().context("无法定位当前 rayman 二进制")?;
     let running_hash = rayman::hash::sha256_file(&running)?;
@@ -17,7 +36,9 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
 
     let activation = rayman::workspace::activation_status(root)?;
     let state_write = rayman::state_paths::state_write_probe(root);
+    let activation_metadata = rayman::workspace::activation_metadata_capability_probe(root);
     let host_patch = rayman::codex_host::patch_probe(None);
+    let execution_context = rayman::codex_host::execution_context_probe();
     let toolchain = rayman::toolchain::toolchain_probe(root);
     let skill_path = activation
         .skill_file
@@ -57,10 +78,18 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
     // Doctor proves the installed identity tuple only. Source-to-artifact byte
     // identity belongs to the explicit clean-checkout repository verifier.
     let identity_ready = path_matches_running && activation.active && metadata_matches;
+    let context_requirement_present = execution_context.required_sid.is_some()
+        || execution_context.required_account.is_some()
+        || execution_context.required_profile.is_some();
+    let context_check_ready = !context_requirement_present
+        || execution_context.status == rayman::codex_host::ExecutionContextStatus::Match;
+    let doctor_check_ready = identity_ready && context_check_ready;
     let report = json!({
         "workspace_activation": &activation,
         "state_write": &state_write,
+        "activation_metadata": &activation_metadata,
         "host_patch": &host_patch,
+        "execution_context": &execution_context,
         "toolchain": &toolchain,
         "contract": rayman::CLI_CONTRACT,
         "version": rayman::CLI_VERSION,
@@ -88,6 +117,13 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
             "ready": identity_ready,
             "scope": "running_binary_path_command_and_workspace_skill_identity",
         },
+        "doctor_check": {
+            "ready": doctor_check_ready,
+            "identity_ready": identity_ready,
+            "context_requirement_present": context_requirement_present,
+            "context_ready": context_check_ready,
+            "scope": "installed_identity_and_supplied_execution_context_requirement",
+        },
         "source_fresh": {
             "verified": false,
             "status": "not_checked_by_doctor",
@@ -109,7 +145,9 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
             println!("  workspace recovery: `{command}`");
         }
         crate::print_state_write_probe(&state_write);
+        crate::print_activation_metadata_probe(&activation_metadata);
         crate::print_host_patch_probe(&host_patch);
+        crate::print_execution_context_probe(&execution_context);
         print_toolchain(&toolchain);
         println!(
             "  仓库源码产物: 未由 doctor 检查；交接/CI 由 `{}` 验证",
@@ -117,6 +155,7 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
         );
         println!("  workspace SKILL 一致: {metadata_matches}");
         println!("  已安装身份 READY: {identity_ready}");
+        println!("  doctor --check READY: {doctor_check_ready}");
         println!(
             "  源码新鲜度: 未由 doctor 证明；交接/CI 必须运行 `{}`",
             crate::SOURCE_FRESH_VERIFIER
@@ -130,7 +169,10 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
         // skill_sha256 instead.
         let mut causes = Vec::new();
         if let Some(command) = &activation.recovery_command {
-            causes.push(format!("workspace 激活身份可安全重绑：运行 `{command}`"));
+            causes.push(activation_rebind_recovery_message(
+                &activation_metadata,
+                command,
+            ));
         }
         if !path_matches_running {
             causes.push(
@@ -153,6 +195,12 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
             }
         }
         bail!("已安装身份契约不一致：{}", causes.join("；"));
+    }
+    if cmd.check && !context_check_ready {
+        bail!(
+            "execution-context requirement 未满足（仅约束本次 doctor 检查，不构成提权或 ACL 授权）：{}",
+            execution_context.reason
+        );
     }
     Ok(())
 }
@@ -187,5 +235,38 @@ fn print_toolchain(probes: &[rayman::toolchain::ToolProbe]) {
             }
             (false, false) => println!("  工具 {}: 不可达，本工作区不需要", probe.name),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rayman::workspace::{
+        ActivationMetadataCapabilityProbe, ActivationMetadataFailureClass,
+        ActivationMetadataProbePhase,
+    };
+
+    #[test]
+    fn rebind_recovery_message_reports_the_actual_capability_failure() {
+        let probe = ActivationMetadataCapabilityProbe {
+            applicable: true,
+            probed: true,
+            ready: false,
+            scope: "owner_group_dacl_file_attributes".into(),
+            capability_key: "activation/metadata-preserving-staging".into(),
+            boundary_class: "filesystem_acl".into(),
+            target: Some("workspace_skill.yaml".into()),
+            phase: ActivationMetadataProbePhase::Lock,
+            failure_class: Some(ActivationMetadataFailureClass::Contention),
+            os_error_code: None,
+            activation_unchanged: None,
+            cleanup_complete: None,
+            error: Some("lock timeout".into()),
+        };
+        let message = activation_rebind_recovery_message(&probe, "rayman workspace rebind --yes");
+
+        assert!(message.contains("phase=Lock"), "{message}");
+        assert!(message.contains("failure_class=Contention"), "{message}");
+        assert!(!message.contains("权限边界"), "{message}");
     }
 }
