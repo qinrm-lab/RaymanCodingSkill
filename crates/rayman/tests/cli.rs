@@ -2951,6 +2951,162 @@ fn typed_relevance_cannot_be_combined_with_an_unscoped_receipt() {
 }
 
 #[test]
+fn legacy_success_current_can_be_archived_through_cli() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+
+    let goal = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "legacy current success",
+            "--must",
+            "preserve historical result",
+        ],
+    );
+    let id = goal["id"].as_str().unwrap();
+    validate_goal(root, id, "req_1", "legacy result validated", &[]);
+    assert_eq!(run(root, &["goal", "close", id]).status, 0);
+
+    let goal_path = root
+        .join(".RaymanCodingSkill/goals")
+        .join(format!("{id}.json"));
+    let mut persisted: Value = serde_json::from_slice(&std::fs::read(&goal_path).unwrap()).unwrap();
+    persisted["created_at"] = Value::String("2026-08-05T10:00:00Z".into());
+    persisted["baseline"]["recorded_at"] = Value::String("2026-08-05T10:05:00Z".into());
+    persisted
+        .as_object_mut()
+        .unwrap()
+        .remove("plan_publication_policy");
+    let legacy: rayman::goal::Goal = serde_json::from_value(persisted.clone()).unwrap();
+    persisted["requirements"][0]["validations"][0]["receipt"]["contract_sha256"] =
+        Value::String(rayman::goal::validation_contract_sha256(&legacy, "req_1").unwrap());
+    std::fs::write(&goal_path, serde_json::to_vec_pretty(&persisted).unwrap()).unwrap();
+
+    let archived = run_json(
+        root,
+        &[
+            "goal",
+            "archive",
+            id,
+            "--reason",
+            "retire pre-publication-policy success",
+        ],
+    );
+    assert_eq!(archived["lifecycle"], "archived");
+    assert_eq!(archived["status"], "success");
+    assert_eq!(
+        archived["lifecycle_proof"]["receipt_policy"],
+        "receipt_integrity_v2"
+    );
+    assert_eq!(run(root, &["check", "--profile", "standard"]).status, 0);
+}
+
+#[test]
+fn legacy_success_archive_english_multi_gap_is_fully_localized() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 41 }\n");
+    run_json(root, &["context", "refresh"]);
+
+    let goal = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "legacy English failure",
+            "--must",
+            "preserve historical result",
+        ],
+    );
+    let id = goal["id"].as_str().unwrap();
+    rayman::goal::GoalStore::new(root)
+        .record_plan(
+            id,
+            rayman::goal::PlanReceiptSubmission {
+                changed_paths: vec!["src/lib.rs".into()],
+                review_priority: "high".into(),
+                impacted_paths: vec!["src/lib.rs".into()],
+                recommended_checks: Vec::new(),
+            },
+        )
+        .unwrap();
+    write(root, "src/lib.rs", "pub fn answer() -> i32 { 42 }\n");
+    run_json(root, &["context", "refresh"]);
+    validate_goal(
+        root,
+        id,
+        "req_1",
+        "legacy source validated",
+        &["src/lib.rs"],
+    );
+    run_json(
+        root,
+        &[
+            "goal",
+            "review",
+            id,
+            "--reviewer",
+            "integration-review",
+            "--message",
+            "reviewed final source",
+        ],
+    );
+    assert_eq!(run(root, &["goal", "close", id]).status, 0);
+
+    let goal_path = root
+        .join(".RaymanCodingSkill/goals")
+        .join(format!("{id}.json"));
+    let mut legacy: rayman::goal::Goal =
+        serde_json::from_slice(&std::fs::read(&goal_path).unwrap()).unwrap();
+    legacy.created_at = "2026-08-05T10:00:00Z".into();
+    legacy.baseline.as_mut().unwrap().recorded_at = "2026-08-05T10:05:00Z".into();
+    legacy.plan_publication_policy = None;
+    legacy.review_receipts.clear();
+    let plan = &mut legacy.plan_receipts[0];
+    plan.recorded_at = "2026-08-05T10:10:00Z".into();
+    plan.publication = None;
+    plan.plan_sha256 = rayman::goal::plan_receipt_sha256(plan);
+    let contract_sha256 = rayman::goal::validation_contract_sha256(&legacy, "req_1").unwrap();
+    legacy.requirements[0].validations[0]
+        .receipt
+        .as_mut()
+        .unwrap()
+        .contract_sha256 = contract_sha256;
+    std::fs::write(&goal_path, serde_json::to_vec_pretty(&legacy).unwrap()).unwrap();
+    write(root, "outside.txt", "unplanned post-validation change\n");
+    let before = std::fs::read(&goal_path).unwrap();
+
+    let failed = run(
+        root,
+        &[
+            "--language",
+            "en",
+            "goal",
+            "archive",
+            id,
+            "--reason",
+            "reject multi-gap legacy history",
+        ],
+    );
+    assert_eq!(failed.status, 1, "stderr={}", failed.stderr);
+    let rendered = format!("{}\n{}", failed.stdout, failed.stderr);
+    assert!(rendered.contains("actual changes exceed"), "{rendered}");
+    assert!(rendered.contains("high-priority plan"), "{rendered}");
+    assert!(
+        !rendered.chars().any(|character| matches!(
+            character as u32,
+            0x3400..=0x4dbf | 0x4e00..=0x9fff | 0xf900..=0xfaff
+        )),
+        "{rendered}"
+    );
+    assert_eq!(std::fs::read(&goal_path).unwrap(), before);
+}
+
+#[test]
 fn goal_lifecycle_preserves_history_without_hiding_unfinished_work() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();

@@ -423,7 +423,7 @@ impl GoalStore {
         requirement_ids.dedup();
         let path = self.goal_path(id)?;
         let _lock = acquire_state_lock(&path)?;
-        let Some(mut goal) = Self::load_goal_file(&path)? else {
+        let Some(mut goal) = Self::load_goal_file_for_update(&path)? else {
             bail!("目标不存在: {id}");
         };
         if !goal.is_current_schema()
@@ -456,6 +456,7 @@ impl GoalStore {
                 bail!("work package 指向未知 requirement: {requirement}");
             }
         }
+        let event_at = goal_event_timestamp(&goal)?;
         goal.work_packages.push(WorkPackage {
             id: package_id.to_string(),
             title: title.trim().to_string(),
@@ -469,7 +470,7 @@ impl GoalStore {
         if let Some(error) = work_package_graph_error(&goal) {
             bail!("work package 图无效: {error}");
         }
-        goal.updated_at = now_iso();
+        goal.updated_at = event_at;
         write_json(&path, &goal)?;
         Ok(goal)
     }
@@ -494,7 +495,7 @@ impl GoalStore {
         let expected_fingerprint = submission.workspace_fingerprint_after.clone();
         let path = self.goal_path(id)?;
         let _lock = acquire_state_lock(&path)?;
-        let Some(mut goal) = Self::load_goal_file(&path)? else {
+        let Some(mut goal) = Self::load_goal_file_for_update(&path)? else {
             bail!("目标不存在: {id}");
         };
         if !goal.is_current_schema()
@@ -516,11 +517,12 @@ impl GoalStore {
         if package.status != WorkPackageStatus::Open {
             bail!("work package {package_id} 已完成，不能追加 progress receipt");
         }
+        let event_at = goal_event_timestamp(&goal)?;
         let invocation_sha256 = progress_invocation_sha256(id, package_id, &submission);
         let receipt = ProgressReceipt {
             id: format!("progress_{}", &invocation_sha256[..12]),
             package_id: package_id.to_string(),
-            recorded_at: now_iso(),
+            recorded_at: event_at.clone(),
             message: submission.message.trim().to_string(),
             command: submission.command.trim().to_string(),
             exit_code: submission.exit_code,
@@ -538,7 +540,7 @@ impl GoalStore {
             .any(|existing| existing.id == receipt.id)
         {
             goal.progress_receipts.push(receipt);
-            goal.updated_at = now_iso();
+            goal.updated_at = event_at;
             if workspace_fingerprint(&self.root)? != expected_fingerprint {
                 bail!("progress receipt 写入前源码快照发生漂移");
             }
@@ -555,7 +557,7 @@ impl GoalStore {
     ) -> Result<Goal> {
         let path = self.goal_path(id)?;
         let _lock = acquire_state_lock(&path)?;
-        let Some(mut goal) = Self::load_goal_file(&path)? else {
+        let Some(mut goal) = Self::load_goal_file_for_update(&path)? else {
             bail!("目标不存在: {id}");
         };
         if !goal.is_current_schema()
@@ -573,6 +575,7 @@ impl GoalStore {
             bail!("work package 完成要求同包且绑定当前源码快照的 progress receipt");
         };
         let receipt_id = receipt.id.clone();
+        let event_at = goal_event_timestamp(&goal)?;
         let Some(package) = goal
             .work_packages
             .iter_mut()
@@ -582,14 +585,14 @@ impl GoalStore {
         };
         package.status = WorkPackageStatus::Complete;
         package.progress_receipt_ids = vec![receipt_id];
-        package.completed_at = Some(now_iso());
+        package.completed_at = Some(event_at.clone());
         if let Some(error) = work_package_graph_error(&goal) {
             bail!("work package 图无效: {error}");
         }
         if workspace_fingerprint(&self.root)? != current {
             bail!("work package 完成写入前源码快照发生漂移");
         }
-        goal.updated_at = now_iso();
+        goal.updated_at = event_at;
         write_json(&path, &goal)?;
         Ok(goal)
     }
@@ -623,7 +626,7 @@ impl GoalStore {
         }
         let path = self.goal_path(id)?;
         let _lock = acquire_state_lock(&path)?;
-        let Some(mut goal) = Self::load_goal_file(&path)? else {
+        let Some(mut goal) = Self::load_goal_file_for_update(&path)? else {
             bail!("目标不存在: {id}");
         };
         if !goal.is_current_schema()
@@ -635,11 +638,17 @@ impl GoalStore {
         if goal.lanes.iter().any(|lane| lane.id == lane_id) {
             bail!("lane id 已存在: {lane_id}");
         }
+        let opening_baseline = workspace_baseline(&self.root)?;
+        let event_at = goal_event_timestamp_after(
+            &goal,
+            "lane opening baseline recorded_at",
+            &opening_baseline.recorded_at,
+        )?;
         goal.lanes.push(LaneRecord {
             id: lane_id.to_string(),
             mode,
-            opened_at: now_iso(),
-            opening_baseline: workspace_baseline(&self.root)?,
+            opened_at: event_at.clone(),
+            opening_baseline,
             allowed_paths,
             status: LaneStatus::Open,
             closed_at: None,
@@ -648,7 +657,7 @@ impl GoalStore {
             violation: None,
             authoritative: false,
         });
-        goal.updated_at = now_iso();
+        goal.updated_at = event_at;
         write_json(&path, &goal)?;
         Ok(goal)
     }
@@ -656,7 +665,7 @@ impl GoalStore {
     pub fn close_lane(&self, id: &str, lane_id: &str) -> Result<Goal> {
         let path = self.goal_path(id)?;
         let _lock = acquire_state_lock(&path)?;
-        let Some(mut goal) = Self::load_goal_file(&path)? else {
+        let Some(mut goal) = Self::load_goal_file_for_update(&path)? else {
             bail!("目标不存在: {id}");
         };
         // `open_lane` and every sibling work-package/progress mutator refuse a
@@ -667,12 +676,18 @@ impl GoalStore {
             bail!("只有 current-schema current 目标可以关闭 lane");
         }
         let current = workspace_baseline(&self.root)?;
-        let Some(lane) = goal.lanes.iter_mut().find(|lane| lane.id == lane_id) else {
+        let Some(lane_index) = goal.lanes.iter().position(|lane| lane.id == lane_id) else {
             bail!("lane 不存在: {lane_id}");
         };
-        if lane.status != LaneStatus::Open {
+        if goal.lanes[lane_index].status != LaneStatus::Open {
             return Ok(goal);
         }
+        let event_at = goal_event_timestamp_after(
+            &goal,
+            "lane closing baseline recorded_at",
+            &current.recorded_at,
+        )?;
+        let lane = &mut goal.lanes[lane_index];
         let delta = workspace_delta(&lane.opening_baseline, &current);
         let violation = match lane.mode {
             LaneMode::AdvisoryReadOnly | LaneMode::FinalReviewer if !delta.is_empty() => {
@@ -691,7 +706,7 @@ impl GoalStore {
         };
         if let Some(violation) = violation {
             lane.violation = Some(violation.clone());
-            goal.updated_at = now_iso();
+            goal.updated_at = event_at;
             write_json(&path, &goal)?;
             bail!("lane {lane_id} 关闭被拒绝：{violation}");
         }
@@ -699,11 +714,11 @@ impl GoalStore {
             bail!("lane {lane_id} 关闭检查期间源码快照发生漂移");
         }
         lane.status = LaneStatus::Closed;
-        lane.closed_at = Some(now_iso());
+        lane.closed_at = Some(event_at.clone());
         lane.closing_fingerprint = Some(current.workspace_fingerprint);
         lane.delta_paths = delta;
         lane.violation = None;
-        goal.updated_at = now_iso();
+        goal.updated_at = event_at;
         write_json(&path, &goal)?;
         Ok(goal)
     }
@@ -842,6 +857,95 @@ mod tests {
         assert_eq!(writer.status, LaneStatus::Closed);
         assert_eq!(writer.delta_paths, vec!["src/lib.rs"]);
         assert!(!writer.authoritative);
+    }
+
+    #[test]
+    fn long_task_mutators_share_one_monotonic_time_under_clock_rollback() {
+        const FUTURE: &str = "2099-01-01T00:00:00Z";
+
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::write(root.join("README.md"), "base\n").unwrap();
+        let store = GoalStore::new(root);
+        let mut goal = store
+            .start("future long task", &[("coordinate".into(), true)])
+            .unwrap();
+        goal.updated_at = FUTURE.into();
+        let path = store.goal_path(&goal.id).unwrap();
+        write_json(&path, &goal).unwrap();
+
+        let packaged = store
+            .add_work_package(
+                &goal.id,
+                "future",
+                "future package",
+                None,
+                vec!["req_1".into()],
+                false,
+            )
+            .unwrap();
+        assert_eq!(packaged.updated_at, FUTURE);
+
+        let fingerprint = workspace_fingerprint(root).unwrap();
+        let progressed = store
+            .record_progress_receipt(
+                &goal.id,
+                "future",
+                ProgressReceiptSubmission {
+                    message: "future progress".into(),
+                    command: "cargo test -p rayman".into(),
+                    exit_code: 0,
+                    cwd: root.display().to_string(),
+                    workspace_fingerprint_before: fingerprint.clone(),
+                    workspace_fingerprint_after: fingerprint,
+                    stdout_sha256: "a".repeat(64),
+                    stderr_sha256: "b".repeat(64),
+                },
+            )
+            .unwrap();
+        assert_eq!(progressed.updated_at, FUTURE);
+        assert_eq!(progressed.progress_receipts[0].recorded_at, FUTURE);
+        let receipt_id = progressed.progress_receipts[0].id.clone();
+
+        let completed = store
+            .complete_work_package(&goal.id, "future", &receipt_id)
+            .unwrap();
+        assert_eq!(completed.updated_at, FUTURE);
+        assert_eq!(
+            completed.work_packages[0].completed_at.as_deref(),
+            Some(FUTURE)
+        );
+
+        let opened = store
+            .open_lane(&goal.id, "audit", LaneMode::AdvisoryReadOnly, Vec::new())
+            .unwrap();
+        assert_eq!(opened.updated_at, FUTURE);
+        assert_eq!(opened.lanes[0].opened_at, FUTURE);
+        let closed = store.close_lane(&goal.id, "audit").unwrap();
+        assert_eq!(closed.updated_at, FUTURE);
+        assert_eq!(closed.lanes[0].closed_at.as_deref(), Some(FUTURE));
+
+        store
+            .open_lane(
+                &goal.id,
+                "writer",
+                LaneMode::Writer,
+                vec!["allowed.txt".into()],
+            )
+            .unwrap();
+        std::fs::write(root.join("README.md"), "drift\n").unwrap();
+        assert!(store.close_lane(&goal.id, "writer").is_err());
+        let violated = store.get(&goal.id).unwrap().unwrap();
+        assert_eq!(violated.updated_at, FUTURE);
+        assert!(
+            violated
+                .lanes
+                .iter()
+                .find(|lane| lane.id == "writer")
+                .unwrap()
+                .violation
+                .is_some()
+        );
     }
 
     #[test]

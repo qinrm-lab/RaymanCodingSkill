@@ -1649,18 +1649,13 @@ fn classify_activation_probe_failure(
     if phase == Phase::Cleanup {
         return Class::CleanupFailed;
     }
-    if phase == Phase::Verify {
-        return Class::MetadataMismatch;
-    }
-    if phase == Phase::TargetRecheck {
-        return Class::ConcurrentChange;
-    }
     if activation_probe_io_kind(error, io::ErrorKind::Unsupported) {
         return Class::UnsupportedPlatform;
     }
     if activation_probe_io_kind(error, io::ErrorKind::WouldBlock) {
         return Class::Contention;
     }
+    #[cfg(windows)]
     match activation_probe_os_error(error) {
         Some(32 | 33) => return Class::Contention,
         Some(1307 | 1308) => return Class::OwnerAssignmentDenied,
@@ -1689,6 +1684,12 @@ fn classify_activation_probe_failure(
         .any(|needle| message.contains(needle))
     {
         return Class::UnsafeTarget;
+    }
+    if phase == Phase::Verify {
+        return Class::MetadataMismatch;
+    }
+    if phase == Phase::TargetRecheck {
+        return Class::ConcurrentChange;
     }
     Class::IoError
 }
@@ -5437,6 +5438,84 @@ mod tests {
         );
         assert_eq!(probe.activation_unchanged, Some(true));
         assert_eq!(probe.cleanup_complete, Some(false));
+        assert_eq!(fs::read(binding).unwrap(), original);
+    }
+
+    #[test]
+    fn activation_metadata_probe_preserves_actionable_verification_failures() {
+        use ActivationMetadataFailureClass as Class;
+        use ActivationMetadataProbePhase as Phase;
+
+        for phase in [Phase::Verify, Phase::TargetRecheck] {
+            let unsupported = anyhow::Error::new(io::Error::from(io::ErrorKind::Unsupported));
+            assert_eq!(
+                classify_activation_probe_failure(phase, &unsupported),
+                Class::UnsupportedPlatform
+            );
+
+            let denied = anyhow::Error::new(io::Error::from(io::ErrorKind::PermissionDenied));
+            assert_eq!(
+                classify_activation_probe_failure(phase, &denied),
+                Class::PermissionDenied
+            );
+
+            let contention = anyhow::Error::new(io::Error::from(io::ErrorKind::WouldBlock));
+            assert_eq!(
+                classify_activation_probe_failure(phase, &contention),
+                Class::Contention
+            );
+
+            #[cfg(windows)]
+            for (code, expected) in [
+                (32, Class::Contention),
+                (33, Class::Contention),
+                (1307, Class::OwnerAssignmentDenied),
+                (1308, Class::OwnerAssignmentDenied),
+                (1314, Class::PrivilegeNotHeld),
+            ] {
+                let error = anyhow::Error::new(io::Error::from_raw_os_error(code));
+                assert_eq!(classify_activation_probe_failure(phase, &error), expected);
+            }
+        }
+
+        #[cfg(unix)]
+        {
+            let broken_pipe = anyhow::Error::new(io::Error::from_raw_os_error(32));
+            assert_eq!(
+                classify_activation_probe_failure(Phase::Verify, &broken_pipe),
+                Class::MetadataMismatch
+            );
+            assert_eq!(
+                classify_activation_probe_failure(Phase::TargetRecheck, &broken_pipe),
+                Class::ConcurrentChange
+            );
+        }
+
+        let mismatch = anyhow::anyhow!("activation metadata probe stage did not preserve metadata");
+        assert_eq!(
+            classify_activation_probe_failure(Phase::Verify, &mismatch),
+            Class::MetadataMismatch
+        );
+        let changed = anyhow::anyhow!("activation changed during the metadata capability probe");
+        assert_eq!(
+            classify_activation_probe_failure(Phase::TargetRecheck, &changed),
+            Class::ConcurrentChange
+        );
+
+        let (root, binding, original) = stale_rebind_fixture();
+        let probe = activation_metadata_capability_probe_with(
+            root.path(),
+            |_, _, phase, cleanup_complete| {
+                *phase = Phase::Verify;
+                *cleanup_complete = Some(true);
+                Err(io::Error::from(io::ErrorKind::PermissionDenied).into())
+            },
+        );
+        assert!(!probe.ready, "{probe:?}");
+        assert_eq!(probe.phase, Phase::Verify);
+        assert_eq!(probe.failure_class, Some(Class::PermissionDenied));
+        assert_eq!(probe.activation_unchanged, Some(true));
+        assert_eq!(probe.cleanup_complete, Some(true));
         assert_eq!(fs::read(binding).unwrap(), original);
     }
 

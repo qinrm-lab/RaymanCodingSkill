@@ -2448,6 +2448,7 @@ fn legacy_plan_history_is_frozen_before_rollout_and_never_current() {
 
     let mut legacy = committed;
     legacy.created_at = "2026-08-05T10:00:00Z".into();
+    legacy.baseline.as_mut().unwrap().recorded_at = "2026-08-05T10:05:00Z".into();
     legacy.plan_publication_policy = None;
     let receipt = &mut legacy.plan_receipts[0];
     receipt.recorded_at = "2026-08-05T10:10:00Z".into();
@@ -2624,3 +2625,6 @@ fn must_transfer_key_distinguishes_typed_proof_obligations() {
 
 #[path = "tests/workflow.rs"]
 mod workflow;
+
+#[path = "tests/legacy_success.rs"]
+mod legacy_success;

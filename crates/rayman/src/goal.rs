@@ -47,12 +47,14 @@ mod model;
 pub use model::*;
 
 mod handoff;
+mod legacy;
 mod lifecycle;
 mod pending;
 mod rebind;
 mod validation;
 
 pub use handoff::*;
+use legacy::*;
 pub use lifecycle::*;
 pub use pending::*;
 pub use rebind::*;
@@ -221,11 +223,25 @@ fn pending_plan_publication(intent: &PlanPublishIntent) -> PlanPublicationProof 
     publication
 }
 
-fn commit_plan_publication(publication: &mut PlanPublicationProof, confirmed_fingerprint: &str) {
+fn commit_plan_publication(
+    publication: &mut PlanPublicationProof,
+    confirmed_fingerprint: &str,
+    committed_at: &str,
+) -> Result<()> {
+    let published_at = plan_timestamp("plan publication published_at", &publication.published_at)
+        .map_err(anyhow::Error::msg)?;
+    let committed = plan_timestamp("plan publication committed_at", committed_at)
+        .map_err(anyhow::Error::msg)?;
+    if committed < published_at {
+        bail!(
+            "plan publication 时间顺序必须满足 goal <= baseline <= receipt <= published <= committed"
+        );
+    }
     publication.state = PlanPublicationState::Committed;
     publication.confirmed_fingerprint = Some(confirmed_fingerprint.to_string());
-    publication.committed_at = Some(now_iso());
+    publication.committed_at = Some(committed_at.to_string());
     publication.publication_sha256 = plan_publication_sha256(publication);
+    Ok(())
 }
 
 fn plan_publish_intent_sha256(intent: &PlanPublishIntent) -> String {
@@ -266,6 +282,177 @@ fn plan_timestamp(
         .map_err(|_| format!("{label} 必须是 RFC3339 timestamp"))
 }
 
+fn latest_timestamp<'a>(bounds: impl IntoIterator<Item = (&'a str, &'a str)>) -> Result<String> {
+    let now = now_iso();
+    let mut latest_at = chrono::DateTime::parse_from_rfc3339(&now)
+        .expect("now_iso must always produce an RFC3339 timestamp");
+    let mut latest = now;
+    for (label, value) in bounds {
+        let parsed = plan_timestamp(label, value).map_err(anyhow::Error::msg)?;
+        if parsed > latest_at {
+            latest_at = parsed;
+            latest = value.to_string();
+        }
+    }
+    Ok(latest)
+}
+
+fn latest_valid_timestamp<'a>(bounds: impl IntoIterator<Item = (&'a str, &'a str)>) -> String {
+    let now = now_iso();
+    let mut latest_at = chrono::DateTime::parse_from_rfc3339(&now)
+        .expect("now_iso must always produce an RFC3339 timestamp");
+    let mut latest = now;
+    for (_, value) in bounds {
+        let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(value) else {
+            continue;
+        };
+        if parsed > latest_at {
+            latest_at = parsed;
+            latest = value.to_string();
+        }
+    }
+    latest
+}
+
+pub(super) fn goal_ledger_timestamp_bounds(goal: &Goal) -> Vec<(&'static str, &str)> {
+    let mut bounds = vec![
+        ("goal.created_at", goal.created_at.as_str()),
+        ("goal.updated_at", goal.updated_at.as_str()),
+    ];
+    if let Some(baseline) = goal.baseline.as_ref() {
+        bounds.push(("goal.baseline.recorded_at", baseline.recorded_at.as_str()));
+    }
+    if let Some(intent) = goal.plan_publish_intent.as_ref() {
+        bounds.push((
+            "goal.plan_publish_intent.prepared_at",
+            intent.prepared_at.as_str(),
+        ));
+    }
+    for receipt in &goal.plan_receipts {
+        bounds.push((
+            "goal.plan_receipt.recorded_at",
+            receipt.recorded_at.as_str(),
+        ));
+        if let Some(publication) = receipt.publication.as_ref() {
+            bounds.push((
+                "goal.plan_receipt.publication.published_at",
+                publication.published_at.as_str(),
+            ));
+            if let Some(committed_at) = publication.committed_at.as_deref() {
+                bounds.push(("goal.plan_receipt.publication.committed_at", committed_at));
+            }
+        }
+        for extension in &receipt.extensions {
+            bounds.push((
+                "goal.plan_extension.recorded_at",
+                extension.recorded_at.as_str(),
+            ));
+            if let Some(publication) = extension.publication.as_ref() {
+                bounds.push((
+                    "goal.plan_extension.publication.published_at",
+                    publication.published_at.as_str(),
+                ));
+                if let Some(committed_at) = publication.committed_at.as_deref() {
+                    bounds.push(("goal.plan_extension.publication.committed_at", committed_at));
+                }
+            }
+        }
+    }
+    for receipt in &goal.review_receipts {
+        bounds.push((
+            "goal.review_receipt.recorded_at",
+            receipt.recorded_at.as_str(),
+        ));
+    }
+    for receipt in &goal.authority_receipts {
+        bounds.push((
+            "goal.authority_receipt.recorded_at",
+            receipt.recorded_at.as_str(),
+        ));
+    }
+    for requirement in &goal.requirements {
+        for validation in &requirement.validations {
+            bounds.push((
+                "goal.validation_evidence.recorded_at",
+                validation.recorded_at.as_str(),
+            ));
+        }
+        for impact in &requirement.impacts {
+            bounds.push((
+                "goal.impact_evidence.recorded_at",
+                impact.recorded_at.as_str(),
+            ));
+        }
+    }
+    for package in &goal.work_packages {
+        if let Some(completed_at) = package.completed_at.as_deref() {
+            bounds.push(("goal.work_package.completed_at", completed_at));
+        }
+    }
+    for receipt in &goal.progress_receipts {
+        bounds.push((
+            "goal.progress_receipt.recorded_at",
+            receipt.recorded_at.as_str(),
+        ));
+    }
+    for lane in &goal.lanes {
+        bounds.push(("goal.lane.opened_at", lane.opened_at.as_str()));
+        bounds.push((
+            "goal.lane.opening_baseline.recorded_at",
+            lane.opening_baseline.recorded_at.as_str(),
+        ));
+        if let Some(closed_at) = lane.closed_at.as_deref() {
+            bounds.push(("goal.lane.closed_at", closed_at));
+        }
+    }
+    if let Some(handoff) = goal.handoff.as_ref() {
+        bounds.push(("goal.handoff.created_at", handoff.created_at.as_str()));
+    }
+    if let Some(proof) = goal.lifecycle_proof.as_ref() {
+        bounds.push((
+            "goal.lifecycle_proof.recorded_at",
+            proof.recorded_at.as_str(),
+        ));
+    }
+    if let Some(proof) = goal.replacement_authority.as_ref() {
+        bounds.push((
+            "goal.replacement_authority.recorded_at",
+            proof.recorded_at.as_str(),
+        ));
+        bounds.push((
+            "goal.replacement_authority.live_authority.recorded_at",
+            proof.live_authority.recorded_at.as_str(),
+        ));
+    }
+    bounds
+}
+
+fn goal_event_timestamp(goal: &Goal) -> Result<String> {
+    latest_timestamp(goal_ledger_timestamp_bounds(goal))
+}
+
+fn quarantine_event_timestamp(goal: &Goal) -> String {
+    // Quarantine is the one recovery path whose input is expected to contain
+    // an invalid lifecycle/receipt ledger.  Unparseable timestamps have no
+    // sortable lower bound; retain the exact proof failure in the quarantine
+    // reason and clamp the replacement envelope to every valid timestamp.
+    latest_valid_timestamp(goal_ledger_timestamp_bounds(goal))
+}
+
+fn goal_event_timestamp_after_all(
+    goal: &Goal,
+    additional_bounds: &[(&str, &str)],
+) -> Result<String> {
+    let lower_bound = goal_event_timestamp(goal)?;
+    let mut bounds = vec![("goal event lower bound", lower_bound.as_str())];
+    bounds.extend_from_slice(additional_bounds);
+    latest_timestamp(bounds)
+}
+
+fn goal_event_timestamp_after(goal: &Goal, label: &str, reference: &str) -> Result<String> {
+    goal_event_timestamp_after_all(goal, &[(label, reference)])
+}
+
 fn publication_end_timestamp(
     publication: &PlanPublicationProof,
 ) -> std::result::Result<chrono::DateTime<chrono::FixedOffset>, String> {
@@ -278,16 +465,186 @@ fn publication_end_timestamp(
     )
 }
 
+fn legacy_plan_chronology_error(goal: &Goal, baseline: &WorkspaceBaseline) -> Option<String> {
+    let created_at = match plan_timestamp("goal.created_at", &goal.created_at) {
+        Ok(value) => value,
+        Err(error) => return Some(error),
+    };
+    let baseline_at = match plan_timestamp("goal.baseline.recorded_at", &baseline.recorded_at) {
+        Ok(value) => value,
+        Err(error) => return Some(error),
+    };
+    let updated_at = match plan_timestamp("goal.updated_at", &goal.updated_at) {
+        Ok(value) => value,
+        Err(error) => return Some(error),
+    };
+    if baseline_at < created_at {
+        return Some(
+            "legacy plan 时间顺序必须满足 goal <= baseline <= receipt <= extensions <= updated"
+                .into(),
+        );
+    }
+
+    let mut previous = baseline_at;
+    for receipt in &goal.plan_receipts {
+        let receipt_at =
+            match plan_timestamp("legacy plan receipt recorded_at", &receipt.recorded_at) {
+                Ok(value) => value,
+                Err(error) => return Some(error),
+            };
+        if receipt_at < previous {
+            return Some(
+                "legacy plan 时间顺序必须满足 goal <= baseline <= receipt <= extensions <= updated"
+                    .into(),
+            );
+        }
+        previous = receipt_at;
+        for extension in &receipt.extensions {
+            let extension_at =
+                match plan_timestamp("legacy plan extension recorded_at", &extension.recorded_at) {
+                    Ok(value) => value,
+                    Err(error) => return Some(error),
+                };
+            if extension_at < previous {
+                return Some(
+                    "legacy plan 时间顺序必须满足 goal <= baseline <= receipt <= extensions <= updated"
+                        .into(),
+                );
+            }
+            previous = extension_at;
+        }
+    }
+    if updated_at < previous {
+        return Some(
+            "legacy plan 时间顺序必须满足 goal <= baseline <= receipt <= extensions <= updated"
+                .into(),
+        );
+    }
+    None
+}
+
+fn write_ahead_plan_chronology_error(goal: &Goal, baseline: &WorkspaceBaseline) -> Option<String> {
+    let receipt = goal.plan_receipts.first()?;
+    let created_at = match plan_timestamp("goal.created_at", &goal.created_at) {
+        Ok(value) => value,
+        Err(error) => return Some(error),
+    };
+    let baseline_at = match plan_timestamp("goal.baseline.recorded_at", &baseline.recorded_at) {
+        Ok(value) => value,
+        Err(error) => return Some(error),
+    };
+    let updated_at = match plan_timestamp("goal.updated_at", &goal.updated_at) {
+        Ok(value) => value,
+        Err(error) => return Some(error),
+    };
+    let receipt_at = match plan_timestamp("plan receipt recorded_at", &receipt.recorded_at) {
+        Ok(value) => value,
+        Err(error) => return Some(error),
+    };
+    if baseline_at < created_at || receipt_at < baseline_at {
+        return Some(
+            "plan publication 时间顺序必须满足 goal <= baseline <= receipt <= published <= committed"
+                .into(),
+        );
+    }
+
+    // A structurally incomplete publication remains invalid after an update,
+    // so chronology validation follows every timestamp that is actually
+    // present without turning retirement into a repair path for other defects.
+    let mut previous_end = receipt_at;
+    if let Some(base_publication) = receipt.publication.as_ref() {
+        let base_published_at = match plan_timestamp(
+            "plan publication published_at",
+            &base_publication.published_at,
+        ) {
+            Ok(value) => value,
+            Err(error) => return Some(error),
+        };
+        let end = match publication_end_timestamp(base_publication) {
+            Ok(value) => value,
+            Err(error) => return Some(error),
+        };
+        if base_published_at < receipt_at || end < base_published_at {
+            return Some(
+                "plan publication 时间顺序必须满足 goal <= baseline <= receipt <= published <= committed"
+                    .into(),
+            );
+        }
+        previous_end = end;
+    }
+
+    for (index, extension) in receipt.extensions.iter().enumerate() {
+        let recorded_at = match plan_timestamp(
+            &format!("plan extension {} recorded_at", index + 1),
+            &extension.recorded_at,
+        ) {
+            Ok(value) => value,
+            Err(error) => return Some(error),
+        };
+        if recorded_at < previous_end {
+            return Some(format!(
+                "plan extension {} 时间顺序必须位于前一 publication 之后",
+                index + 1
+            ));
+        }
+        previous_end = recorded_at;
+        if let Some(publication) = extension.publication.as_ref() {
+            let published_at = match plan_timestamp(
+                &format!("plan extension {} published_at", index + 1),
+                &publication.published_at,
+            ) {
+                Ok(value) => value,
+                Err(error) => return Some(error),
+            };
+            let end = match publication_end_timestamp(publication) {
+                Ok(value) => value,
+                Err(error) => return Some(error),
+            };
+            if published_at < recorded_at || end < published_at {
+                return Some(format!(
+                    "plan extension {} 时间顺序必须位于前一 publication 之后",
+                    index + 1
+                ));
+            }
+            previous_end = end;
+        }
+    }
+    if updated_at < previous_end {
+        return Some("goal.updated_at 不得早于最终 plan publication".into());
+    }
+    None
+}
+
+fn plan_chronology_error_before_update(goal: &Goal) -> Option<String> {
+    let baseline = goal.baseline.as_ref()?;
+    match goal.plan_publication_policy.as_deref() {
+        None => legacy_plan_chronology_error(goal, baseline),
+        Some(PLAN_PUBLICATION_POLICY_V1) => write_ahead_plan_chronology_error(goal, baseline),
+        Some(_) => None,
+    }
+}
+
+fn ensure_plan_chronology_before_update(goal: &Goal) -> Result<()> {
+    if let Some(error) = plan_chronology_error_before_update(goal) {
+        bail!(error);
+    }
+    Ok(())
+}
+
 fn legacy_plan_publication_eligible(goal: &Goal) -> bool {
     if goal.lifecycle == GoalLifecycle::Current {
         return false;
     }
+    let Some(baseline) = goal.baseline.as_ref() else {
+        return false;
+    };
     let Ok(created) = chrono::DateTime::parse_from_rfc3339(&goal.created_at) else {
         return false;
     };
     let rollout = chrono::DateTime::parse_from_rfc3339(PLAN_PUBLICATION_ROLLOUT_AT)
         .expect("plan publication rollout timestamp must be valid");
     created < rollout
+        && timestamp_before(&baseline.recorded_at, &rollout)
         && goal.plan_receipts.iter().all(|receipt| {
             timestamp_before(&receipt.recorded_at, &rollout)
                 && receipt
@@ -427,6 +784,9 @@ pub(super) fn plan_chain_error(goal: &Goal) -> Option<String> {
             }) {
                 return Some("legacy plan chain hash 或单调扩展关系无效".into());
             }
+            if let Some(error) = legacy_plan_chronology_error(goal, baseline) {
+                return Some(error);
+            }
             return None;
         }
         Some(PLAN_PUBLICATION_POLICY_V1) => {}
@@ -554,78 +914,7 @@ pub(super) fn plan_chain_error(goal: &Goal) -> Option<String> {
         return Some("pending publication 缺少 persisted intent".into());
     }
 
-    let created_at = match plan_timestamp("goal.created_at", &goal.created_at) {
-        Ok(value) => value,
-        Err(error) => return Some(error),
-    };
-    let baseline_at = match plan_timestamp("goal.baseline.recorded_at", &baseline.recorded_at) {
-        Ok(value) => value,
-        Err(error) => return Some(error),
-    };
-    let updated_at = match plan_timestamp("goal.updated_at", &goal.updated_at) {
-        Ok(value) => value,
-        Err(error) => return Some(error),
-    };
-    let receipt_at = match plan_timestamp("plan receipt recorded_at", &receipt.recorded_at) {
-        Ok(value) => value,
-        Err(error) => return Some(error),
-    };
-    let base_published_at = match plan_timestamp(
-        "plan publication published_at",
-        &base_publication.published_at,
-    ) {
-        Ok(value) => value,
-        Err(error) => return Some(error),
-    };
-    let mut previous_end = match publication_end_timestamp(base_publication) {
-        Ok(value) => value,
-        Err(error) => return Some(error),
-    };
-    if baseline_at < created_at
-        || receipt_at < baseline_at
-        || base_published_at < receipt_at
-        || previous_end < base_published_at
-    {
-        return Some(
-            "plan publication 时间顺序必须满足 goal <= baseline <= receipt <= published <= committed"
-                .into(),
-        );
-    }
-    for (index, extension) in receipt.extensions.iter().enumerate() {
-        let recorded_at = match plan_timestamp(
-            &format!("plan extension {} recorded_at", index + 1),
-            &extension.recorded_at,
-        ) {
-            Ok(value) => value,
-            Err(error) => return Some(error),
-        };
-        let publication = extension
-            .publication
-            .as_ref()
-            .expect("extension publication checked above");
-        let published_at = match plan_timestamp(
-            &format!("plan extension {} published_at", index + 1),
-            &publication.published_at,
-        ) {
-            Ok(value) => value,
-            Err(error) => return Some(error),
-        };
-        let end = match publication_end_timestamp(publication) {
-            Ok(value) => value,
-            Err(error) => return Some(error),
-        };
-        if recorded_at < previous_end || published_at < recorded_at || end < published_at {
-            return Some(format!(
-                "plan extension {} 时间顺序必须位于前一 publication 之后",
-                index + 1
-            ));
-        }
-        previous_end = end;
-    }
-    if updated_at < previous_end {
-        return Some("goal.updated_at 不得早于最终 plan publication".into());
-    }
-    None
+    write_ahead_plan_chronology_error(goal, baseline)
 }
 
 fn review_priority_rank(priority: &str) -> Option<u8> {
@@ -816,7 +1105,11 @@ impl GoalStore {
                 impacts: Vec::new(),
             })
             .collect();
-        let baseline = Some(workspace_baseline(&self.root)?);
+        let baseline = workspace_baseline(&self.root)?;
+        let updated_at = latest_timestamp([
+            ("goal.created_at", now.as_str()),
+            ("goal.baseline.recorded_at", baseline.recorded_at.as_str()),
+        ])?;
         let goal = Goal {
             schema_version: GOAL_SCHEMA_VERSION,
             id: id.clone(),
@@ -828,8 +1121,8 @@ impl GoalStore {
             lifecycle_proof: None,
             replacement_authority: None,
             created_at: now.clone(),
-            updated_at: now,
-            baseline,
+            updated_at,
+            baseline: Some(baseline),
             plan_receipts: Vec::new(),
             plan_publish_intent: None,
             plan_publication_policy: Some(PLAN_PUBLICATION_POLICY_V1.to_string()),
@@ -875,7 +1168,7 @@ impl GoalStore {
 
         let path = self.goal_path(id)?;
         let _lock = acquire_state_lock(&path)?;
-        let Some(mut goal) = Self::load_goal_file(&path)? else {
+        let Some(mut goal) = Self::load_goal_file_for_update(&path)? else {
             bail!("目标不存在: {id}");
         };
         if !goal.is_current_schema() {
@@ -895,8 +1188,14 @@ impl GoalStore {
         if let Some(error) = plan_chain_error(&goal) {
             bail!("goal plan publication contract invalid: {error}");
         }
+        let current = workspace_baseline(&self.root)?;
+        let event_at = goal_event_timestamp_after(
+            &goal,
+            "plan precheck baseline recorded_at",
+            &current.recorded_at,
+        )?;
         let mut receipt = PlanReceipt {
-            recorded_at: now_iso(),
+            recorded_at: event_at.clone(),
             baseline_fingerprint: baseline.workspace_fingerprint.clone(),
             changed_paths: submission.changed_paths.clone(),
             review_priority: submission.review_priority.clone(),
@@ -906,7 +1205,6 @@ impl GoalStore {
             plan_sha256: String::new(),
             extensions: Vec::new(),
         };
-        let current = workspace_baseline(&self.root)?;
         if let Some(intent) = goal.plan_publish_intent.as_ref() {
             let matching = intent.kind == PlanPublishIntentKind::Initial
                 && intent.baseline_fingerprint == baseline.workspace_fingerprint
@@ -947,10 +1245,10 @@ impl GoalStore {
                 .publication
                 .as_mut()
                 .expect("checked pending publication");
-            commit_plan_publication(publication, &current.workspace_fingerprint);
+            commit_plan_publication(publication, &current.workspace_fingerprint, &event_at)?;
             pending.plan_sha256 = plan_receipt_sha256(pending);
             goal.plan_publish_intent = None;
-            goal.updated_at = now_iso();
+            goal.updated_at = event_at;
             write_json(&path, &goal)?;
             return Ok(goal);
         }
@@ -986,7 +1284,7 @@ impl GoalStore {
 
         let mut intent = PlanPublishIntent {
             goal_id: goal.id.clone(),
-            prepared_at: now_iso(),
+            prepared_at: event_at.clone(),
             kind: PlanPublishIntentKind::Initial,
             baseline_fingerprint: baseline.workspace_fingerprint.clone(),
             precheck_fingerprint: current.workspace_fingerprint.clone(),
@@ -1002,7 +1300,7 @@ impl GoalStore {
         receipt.plan_sha256 = plan_receipt_sha256(&receipt);
         goal.plan_publish_intent = Some(intent);
         goal.plan_receipts.push(receipt);
-        goal.updated_at = now_iso();
+        goal.updated_at = event_at;
         write_json(&path, &goal)?;
 
         // The write above is the plan publication linearization point.  The
@@ -1019,6 +1317,11 @@ impl GoalStore {
                 confirmed.workspace_fingerprint
             );
         }
+        let commit_at = goal_event_timestamp_after(
+            &goal,
+            "plan confirmation baseline recorded_at",
+            &confirmed.recorded_at,
+        )?;
         let receipt = goal
             .plan_receipts
             .first_mut()
@@ -1027,10 +1330,10 @@ impl GoalStore {
             .publication
             .as_mut()
             .expect("pending plan publication was published");
-        commit_plan_publication(publication, &confirmed.workspace_fingerprint);
+        commit_plan_publication(publication, &confirmed.workspace_fingerprint, &commit_at)?;
         receipt.plan_sha256 = plan_receipt_sha256(receipt);
         goal.plan_publish_intent = None;
-        goal.updated_at = now_iso();
+        goal.updated_at = commit_at;
         write_json(&path, &goal)?;
         Ok(goal)
     }
@@ -1064,7 +1367,7 @@ impl GoalStore {
 
         let path = self.goal_path(id)?;
         let _lock = acquire_state_lock(&path)?;
-        let Some(mut goal) = Self::load_goal_file(&path)? else {
+        let Some(mut goal) = Self::load_goal_file_for_update(&path)? else {
             bail!("目标不存在: {id}");
         };
         if !goal.is_current_schema()
@@ -1088,6 +1391,11 @@ impl GoalStore {
             bail!("goal plan publication contract invalid: {error}");
         }
         let current = workspace_baseline(&self.root)?;
+        let event_at = goal_event_timestamp_after(
+            &goal,
+            "plan extension precheck baseline recorded_at",
+            &current.recorded_at,
+        )?;
 
         if let Some(intent) = goal.plan_publish_intent.as_ref() {
             if intent.kind != PlanPublishIntentKind::Extension
@@ -1164,11 +1472,11 @@ impl GoalStore {
                 .publication
                 .as_mut()
                 .expect("validated pending extension publication");
-            commit_plan_publication(publication, &current.workspace_fingerprint);
+            commit_plan_publication(publication, &current.workspace_fingerprint, &event_at)?;
             extension.extension_sha256 =
                 plan_extension_sha256(&baseline.workspace_fingerprint, extension);
             goal.plan_publish_intent = None;
-            goal.updated_at = now_iso();
+            goal.updated_at = event_at;
             write_json(&path, &goal)?;
             return Ok(goal);
         }
@@ -1225,7 +1533,7 @@ impl GoalStore {
         )?;
         let previous_plan_sha256 = receipt.effective_plan_sha256().to_string();
         let mut extension = PlanExtensionReceipt {
-            recorded_at: now_iso(),
+            recorded_at: event_at.clone(),
             previous_plan_sha256,
             changed_paths,
             review_priority,
@@ -1236,7 +1544,7 @@ impl GoalStore {
         };
         let mut intent = PlanPublishIntent {
             goal_id: goal.id.clone(),
-            prepared_at: now_iso(),
+            prepared_at: event_at.clone(),
             kind: PlanPublishIntentKind::Extension,
             baseline_fingerprint: baseline.workspace_fingerprint.clone(),
             precheck_fingerprint: current.workspace_fingerprint.clone(),
@@ -1257,7 +1565,7 @@ impl GoalStore {
             .expect("checked one plan")
             .extensions
             .push(extension);
-        goal.updated_at = now_iso();
+        goal.updated_at = event_at;
         write_json(&path, &goal)?;
 
         before_confirm();
@@ -1269,6 +1577,11 @@ impl GoalStore {
                 confirmed.workspace_fingerprint
             );
         }
+        let commit_at = goal_event_timestamp_after(
+            &goal,
+            "plan extension confirmation baseline recorded_at",
+            &confirmed.recorded_at,
+        )?;
         let extension = goal
             .plan_receipts
             .first_mut()
@@ -1280,11 +1593,11 @@ impl GoalStore {
             .publication
             .as_mut()
             .expect("pending extension publication was published");
-        commit_plan_publication(publication, &confirmed.workspace_fingerprint);
+        commit_plan_publication(publication, &confirmed.workspace_fingerprint, &commit_at)?;
         extension.extension_sha256 =
             plan_extension_sha256(&baseline.workspace_fingerprint, extension);
         goal.plan_publish_intent = None;
-        goal.updated_at = now_iso();
+        goal.updated_at = commit_at;
         write_json(&path, &goal)?;
         Ok(goal)
     }
@@ -1295,7 +1608,7 @@ impl GoalStore {
         }
         let path = self.goal_path(id)?;
         let _lock = acquire_state_lock(&path)?;
-        let Some(mut goal) = Self::load_goal_file(&path)? else {
+        let Some(mut goal) = Self::load_goal_file_for_update(&path)? else {
             bail!("目标不存在: {id}");
         };
         if !goal.is_current_schema()
@@ -1307,8 +1620,9 @@ impl GoalStore {
         if goal.plan_receipts.is_empty() {
             bail!("review receipt 必须绑定已记录的 goal plan");
         }
+        let event_at = goal_event_timestamp(&goal)?;
         let receipt = ReviewReceipt {
-            recorded_at: now_iso(),
+            recorded_at: event_at.clone(),
             source_fingerprint: workspace_fingerprint(&self.root)?,
             reviewer: reviewer.trim().to_string(),
             summary: summary.trim().to_string(),
@@ -1319,7 +1633,7 @@ impl GoalStore {
                 && existing.summary == receipt.summary
         }) {
             goal.review_receipts.push(receipt);
-            goal.updated_at = now_iso();
+            goal.updated_at = event_at;
             write_json(&path, &goal)?;
         }
         Ok(goal)
@@ -1450,6 +1764,16 @@ impl GoalStore {
         }
     }
 
+    /// Load an existing goal for mutation without allowing an `updated_at`
+    /// refresh to repair a previously invalid plan ledger chronology.
+    fn load_goal_file_for_update(path: &Path) -> Result<Option<Goal>> {
+        let goal = Self::load_goal_file(path)?;
+        if let Some(goal) = goal.as_ref() {
+            ensure_plan_chronology_before_update(goal)?;
+        }
+        Ok(goal)
+    }
+
     /// 记录某个需求的证据、验证命令和变更影响快照，并标记完成。
     ///
     /// 这是 SKILL.md 描述的"evidence-only completion"那一层的输入路径：它写出的
@@ -1465,7 +1789,7 @@ impl GoalStore {
     ) -> Result<Goal> {
         let path = self.goal_path(id)?;
         let _lock = acquire_state_lock(&path)?;
-        let Some(mut goal) = Self::load_goal_file(&path)? else {
+        let Some(mut goal) = Self::load_goal_file_for_update(&path)? else {
             bail!("目标不存在: {id}");
         };
         if goal.lifecycle != GoalLifecycle::Current {
@@ -1481,6 +1805,16 @@ impl GoalStore {
                 "目标 {id} 已关闭为 success，不能再追加人工证据；请用 `goal validate` 写入带 receipt 的验证，或先 supersede/archive"
             );
         }
+        let impact_times = impacts
+            .iter()
+            .map(|impact| {
+                (
+                    "new impact evidence recorded_at",
+                    impact.recorded_at.as_str(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let event_at = goal_event_timestamp_after_all(&goal, &impact_times)?;
         let Some(req) = goal.requirements.iter_mut().find(|req| req.id == req_id) else {
             bail!("需求不存在: {req_id}");
         };
@@ -1490,7 +1824,6 @@ impl GoalStore {
                 proof_kind.as_str()
             );
         }
-        let now = now_iso();
         req.evidence = Some(evidence.into());
         let impact_paths = impacts
             .iter()
@@ -1502,7 +1835,7 @@ impl GoalStore {
             if !req.validations.iter().any(|v| v.command == command) {
                 req.validations.push(ValidationEvidence {
                     command,
-                    recorded_at: now.clone(),
+                    recorded_at: event_at.clone(),
                     impact_paths: impact_paths.clone(),
                     impact_scopes: impact_scopes.clone(),
                     non_code: impacts.is_empty(),
@@ -1512,7 +1845,7 @@ impl GoalStore {
         }
         req.impacts.extend(impacts);
         req.status = RequirementStatus::Done;
-        goal.updated_at = now;
+        goal.updated_at = event_at;
         write_json(&path, &goal)?;
         Ok(goal)
     }
@@ -1572,7 +1905,7 @@ impl GoalStore {
         }
         let path = self.goal_path(id)?;
         let _lock = acquire_state_lock(&path)?;
-        let Some(mut goal) = Self::load_goal_file(&path)? else {
+        let Some(mut goal) = Self::load_goal_file_for_update(&path)? else {
             bail!("目标不存在: {id}");
         };
         if !goal.is_current_schema() {
@@ -1669,14 +2002,29 @@ impl GoalStore {
                 bail!("authority receipt 未证明同一 workspace fingerprint 上的重复稳定 PASS");
             }
         }
+        let mut new_event_times = impacts
+            .iter()
+            .map(|impact| {
+                (
+                    "new impact evidence recorded_at",
+                    impact.recorded_at.as_str(),
+                )
+            })
+            .collect::<Vec<_>>();
+        if let Some(authority) = authority.as_ref() {
+            new_event_times.push((
+                "new authority receipt recorded_at",
+                authority.recorded_at.as_str(),
+            ));
+        }
+        let event_at = goal_event_timestamp_after_all(&goal, &new_event_times)?;
         let Some(req) = goal.requirements.iter_mut().find(|req| req.id == req_id) else {
             bail!("需求不存在: {req_id}");
         };
-        let now = now_iso();
         req.evidence = Some(evidence);
         req.validations.push(ValidationEvidence {
             command,
-            recorded_at: now.clone(),
+            recorded_at: event_at.clone(),
             impact_paths,
             impact_scopes,
             non_code,
@@ -1687,7 +2035,7 @@ impl GoalStore {
         if let Some(authority) = authority {
             goal.authority_receipts.push(authority);
         }
-        goal.updated_at = now;
+        goal.updated_at = event_at;
         write_json(&path, &goal)?;
         Ok(goal)
     }
@@ -1706,7 +2054,7 @@ impl GoalStore {
         };
         let path = self.goal_path(id)?;
         let _lock = acquire_state_lock(&path)?;
-        let Some(mut goal) = Self::load_goal_file(&path)? else {
+        let Some(mut goal) = Self::load_goal_file_for_update(&path)? else {
             bail!("目标不存在: {id}");
         };
         if goal.lifecycle != GoalLifecycle::Current {
@@ -1769,7 +2117,7 @@ impl GoalStore {
             }
             goal.status = status;
         }
-        goal.updated_at = now_iso();
+        goal.updated_at = goal_event_timestamp(&goal)?;
         write_json(&path, &goal)?;
         Ok(goal)
     }
@@ -1798,9 +2146,10 @@ impl GoalStore {
         }
         let path = self.goal_path(id)?;
         let _lock = acquire_state_lock(&path)?;
-        let Some(mut goal) = Self::load_goal_file(&path)? else {
+        let Some(mut goal) = Self::load_goal_file_for_update(&path)? else {
             bail!("目标不存在: {id}");
         };
+        let event_at = goal_event_timestamp(&goal)?;
         if goal.lifecycle == GoalLifecycle::Archived && migrate_unreceipted {
             // Same one-way rule `mark_current` enforces: this branch is the only
             // other lifecycle_proof rewriter, and it would re-bless a quarantined
@@ -1819,13 +2168,14 @@ impl GoalStore {
             goal.lifecycle_reason = Some(reason.trim().to_string());
             goal.superseded_by = None;
             goal.lifecycle_proof = None;
-            goal.updated_at = now_iso();
+            goal.updated_at = event_at.clone();
             let fingerprint = workspace_fingerprint(&self.root)?;
-            goal.lifecycle_proof = Some(issue_lifecycle_proof(
+            goal.lifecycle_proof = Some(issue_lifecycle_proof_at(
                 &goal,
                 fingerprint,
                 Some(PRE_RECEIPT_MIGRATION.to_string()),
                 Some(RECEIPT_POLICY_V2.to_string()),
+                event_at,
             ));
             write_json(&path, &goal)?;
             return Ok(goal);
@@ -1857,12 +2207,13 @@ impl GoalStore {
             goal.lifecycle_reason = Some(reason.trim().to_string());
             goal.superseded_by = None;
             goal.lifecycle_proof = None;
-            goal.updated_at = now_iso();
-            goal.lifecycle_proof = Some(issue_lifecycle_proof(
+            goal.updated_at = event_at.clone();
+            goal.lifecycle_proof = Some(issue_lifecycle_proof_at(
                 &goal,
                 fingerprint,
                 Some(RECEIPT_POLICY_V1_MIGRATION.to_string()),
                 Some(RECEIPT_POLICY_V1.to_string()),
+                event_at,
             ));
             write_json(&path, &goal)?;
             return Ok(goal);
@@ -1884,40 +2235,103 @@ impl GoalStore {
             );
         }
         let retiring_non_success = matches!(goal.status, GoalStatus::Partial | GoalStatus::Blocked);
-        // A structurally valid pending plan publication is deliberately a
-        // readiness blocker while current.  For an honest partial/blocked
-        // retirement, validate the atomic archived candidate below instead of
-        // demanding that the current record first erase or commit the intent.
+        let mut retiring_legacy_success = false;
+        // A pre-rollout legacy plan is intentionally invalid while current and
+        // becomes readable only after retirement.  Permit exactly that
+        // transition by checking the unchanged plan chain through an archived
+        // view.  Preserve the ordinary guard for every other defect: archive
+        // must not wash lifecycle proof corruption or repair chronology merely
+        // by replacing lifecycle fields and updated_at below.
         if !retiring_non_success && let Some(error) = goal.current_schema_error() {
-            bail!("目标合约无效，不能归档: {error}");
+            let mut archived_view = goal.clone();
+            archived_view.lifecycle = GoalLifecycle::Archived;
+            retiring_legacy_success = goal.lifecycle_error().is_none()
+                && goal.plan_publication_policy.is_none()
+                && plan_chain_error(&archived_view).is_none();
+            if !retiring_legacy_success {
+                bail!("目标合约无效，不能归档: {error}");
+            }
         }
         let current_fingerprint = workspace_fingerprint(&self.root)?;
         let mut proof_fingerprint = current_fingerprint.clone();
         let mut migration = None;
         let mut receipt_policy = Some(RECEIPT_POLICY_V2.to_string());
+        let legacy_unreceipted_migration_gaps = if retiring_legacy_success {
+            goal_retiring_legacy_success_unreceipted_migration_gaps(
+                &goal,
+                &self.root,
+                &current_fingerprint,
+            )
+        } else {
+            Vec::new()
+        };
+        let legacy_v1_migration_gaps = if retiring_legacy_success {
+            goal_retiring_legacy_success_v1_migration_gaps(&goal, &self.root, &current_fingerprint)
+        } else {
+            Vec::new()
+        };
         // Receipt integrity is a *success* contract: it exists so an archived
         // success can later serve as lifecycle-only authority. A goal retired as
         // partial/blocked makes no such claim and is refused by every consumer
         // of archived evidence, so demanding success receipts from it only
         // stranded abandoned work with nowhere to go.
         if !goal.loaded_from_legacy && goal.status == GoalStatus::Success {
-            let gaps = goal_success_receipt_gaps(&goal, &self.root, &current_fingerprint);
-            if !gaps.is_empty() {
-                if migrate_unreceipted && pre_receipt_migration_eligible(&goal) {
-                    migration = Some(PRE_RECEIPT_MIGRATION.to_string());
-                } else if let Some(historical) = historical_success_fingerprint(
+            let gaps = if retiring_legacy_success {
+                // The archived-view plan chain was validated above.  Receipt
+                // integrity at the live fingerprint must still enforce current
+                // command security plus baseline/plan/review reconciliation.
+                // Only the known legacy plan-publication schema defect is
+                // bypassed by the dedicated planning path.
+                goal_success_receipt_gaps_for_retiring_legacy_success(
                     &goal,
                     &self.root,
-                    ReceiptValidationPolicy::CurrentV2,
-                ) {
+                    &current_fingerprint,
+                )
+            } else {
+                goal_success_receipt_gaps(&goal, &self.root, &current_fingerprint)
+            };
+            if !gaps.is_empty() {
+                if migrate_unreceipted && pre_receipt_migration_eligible(&goal) {
+                    if !legacy_unreceipted_migration_gaps.is_empty() {
+                        bail!(
+                            "legacy success migration 不能修复当前 command/plan/review 缺口: {}",
+                            legacy_unreceipted_migration_gaps.join("; ")
+                        );
+                    }
+                    migration = Some(PRE_RECEIPT_MIGRATION.to_string());
+                } else if let Some(historical) = if retiring_legacy_success {
+                    historical_success_fingerprint_for_retiring_legacy_success(
+                        &goal,
+                        &self.root,
+                        ReceiptValidationPolicy::CurrentV2,
+                        Some(&current_fingerprint),
+                    )
+                } else {
+                    historical_success_fingerprint(
+                        &goal,
+                        &self.root,
+                        ReceiptValidationPolicy::CurrentV2,
+                    )
+                } {
                     proof_fingerprint = historical;
                 } else if migrate_receipt_policy == Some(RECEIPT_POLICY_V1)
                     && receipt_policy_v1_migration_eligible(&goal)
-                    && let Some(historical) = historical_success_fingerprint(
-                        &goal,
-                        &self.root,
-                        ReceiptValidationPolicy::LegacyV1,
-                    )
+                    && let Some(historical) = if retiring_legacy_success {
+                        historical_success_fingerprint_for_retiring_legacy_success(
+                            &goal,
+                            &self.root,
+                            ReceiptValidationPolicy::LegacyV1,
+                            (!legacy_v1_migration_gaps.is_empty())
+                                .then_some(current_fingerprint.as_str()),
+                        )
+                    } else {
+                        historical_success_fingerprint_excluding(
+                            &goal,
+                            &self.root,
+                            ReceiptValidationPolicy::LegacyV1,
+                            None,
+                        )
+                    }
                 {
                     proof_fingerprint = historical;
                     migration = Some(RECEIPT_POLICY_V1_MIGRATION.to_string());
@@ -1936,12 +2350,13 @@ impl GoalStore {
         goal.lifecycle_reason = Some(reason.trim().to_string());
         goal.superseded_by = None;
         goal.lifecycle_proof = None;
-        goal.updated_at = now_iso();
-        goal.lifecycle_proof = Some(issue_lifecycle_proof(
+        goal.updated_at = event_at.clone();
+        goal.lifecycle_proof = Some(issue_lifecycle_proof_at(
             &goal,
             proof_fingerprint,
             migration,
             receipt_policy,
+            event_at,
         ));
         if let Some(error) = goal.current_schema_error() {
             bail!("归档后的目标合约无效: {error}");
@@ -1965,7 +2380,7 @@ impl GoalStore {
         }
         let path = self.goal_path(id)?;
         let _lock = acquire_state_lock(&path)?;
-        let Some(mut goal) = Self::load_goal_file(&path)? else {
+        let Some(mut goal) = Self::load_goal_file_for_update(&path)? else {
             bail!("目标不存在: {id}");
         };
         if goal.lifecycle != GoalLifecycle::Archived || goal.status != GoalStatus::Success {
@@ -1999,18 +2414,20 @@ impl GoalStore {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .unwrap_or("archived success");
+        let event_at = quarantine_event_timestamp(&goal);
         goal.lifecycle_reason = Some(format!(
             "{previous_reason}; quarantine: {} [invalid proof: {proof_error}]",
             reason.trim()
         ));
         goal.superseded_by = None;
         goal.lifecycle_proof = None;
-        goal.updated_at = now_iso();
-        goal.lifecycle_proof = Some(issue_lifecycle_proof(
+        goal.updated_at = event_at.clone();
+        goal.lifecycle_proof = Some(issue_lifecycle_proof_at(
             &goal,
             old_proof.workspace_fingerprint,
             Some(INTEGRITY_QUARANTINE_MIGRATION.to_string()),
             Some(RECEIPT_POLICY_INTEGRITY_QUARANTINED.to_string()),
+            event_at,
         ));
         write_json(&path, &goal)?;
         Ok(goal)
@@ -2055,7 +2472,7 @@ impl GoalStore {
         // 之间的并发单目标提交会被本函数的陈旧内存态覆盖（丢更新）。锁序固定
         // 为 .store → per-goal；单目标写者不反向等待 .store，无死锁环。
         let _goal_lock = acquire_state_lock(&path)?;
-        let Some(mut replacement) = Self::load_goal_file(&path)? else {
+        let Some(mut replacement) = Self::load_goal_file_for_update(&path)? else {
             bail!("替代目标不存在: {id}");
         };
         if replacement.lifecycle != GoalLifecycle::Current
@@ -2125,7 +2542,7 @@ impl GoalStore {
         let Some(authority_lifecycle) = authority.lifecycle_proof.as_ref() else {
             bail!("authority goal 缺少 lifecycle proof");
         };
-        let fingerprint = current.workspace_fingerprint;
+        let fingerprint = current.workspace_fingerprint.clone();
         if authority.lifecycle != GoalLifecycle::Archived
             || authority.status != GoalStatus::Success
             || !authority.is_current_schema()
@@ -2186,18 +2603,42 @@ impl GoalStore {
             bail!("live lifecycle authority 未证明当前源码上的重复稳定仓库 gate");
         }
 
-        let now = now_iso();
+        let authority_event_at = goal_event_timestamp(&authority)?;
+        let predecessor_event_times = predecessors
+            .iter()
+            .map(goal_event_timestamp)
+            .collect::<Result<Vec<_>>>()?;
+        let mut causal_times = vec![
+            (
+                "replacement live authority recorded_at",
+                live_authority.recorded_at.as_str(),
+            ),
+            (
+                "replacement workspace baseline recorded_at",
+                current.recorded_at.as_str(),
+            ),
+            (
+                "replacement authority goal ledger",
+                authority_event_at.as_str(),
+            ),
+        ];
+        causal_times.extend(
+            predecessor_event_times
+                .iter()
+                .map(|timestamp| ("replacement predecessor goal ledger", timestamp.as_str())),
+        );
+        let event_at = goal_event_timestamp_after_all(&replacement, &causal_times)?;
         let evidence = format!(
             "lifecycle-only exact must transfer authorized by archived goal {authority_goal_id}"
         );
         replacement.status = GoalStatus::Success;
-        replacement.updated_at = now.clone();
+        replacement.updated_at = event_at.clone();
         for requirement in &mut replacement.requirements {
             requirement.status = RequirementStatus::Done;
             requirement.evidence = Some(evidence.clone());
         }
         let mut proof = ReplacementAuthorityProof {
-            recorded_at: now,
+            recorded_at: event_at,
             workspace_identity: workspace_identity(&self.root),
             workspace_fingerprint: fingerprint.clone(),
             authority_goal_id: authority_goal_id.to_string(),
@@ -2242,10 +2683,11 @@ impl GoalStore {
         if let Some(error) = replacement.current_schema_error() {
             bail!("替代目标 {replacement_id} 合约无效: {error}");
         }
+        let replacement_event_at = goal_event_timestamp(&replacement)?;
 
         let path = self.goal_path(id)?;
         let _lock = acquire_state_lock(&path)?;
-        let Some(mut goal) = Self::load_goal_file(&path)? else {
+        let Some(mut goal) = Self::load_goal_file_for_update(&path)? else {
             bail!("目标不存在: {id}");
         };
         if goal.lifecycle != GoalLifecycle::Current {
@@ -2286,13 +2728,19 @@ impl GoalStore {
         goal.lifecycle = GoalLifecycle::Superseded;
         goal.lifecycle_reason = Some(format!("superseded by {replacement_id}"));
         goal.superseded_by = Some(replacement_id.to_string());
+        let event_at = goal_event_timestamp_after(
+            &goal,
+            "superseding replacement goal ledger",
+            &replacement_event_at,
+        )?;
         goal.lifecycle_proof = None;
-        goal.updated_at = now_iso();
-        goal.lifecycle_proof = Some(issue_lifecycle_proof(
+        goal.updated_at = event_at.clone();
+        goal.lifecycle_proof = Some(issue_lifecycle_proof_at(
             &goal,
             proof_fingerprint,
             None,
             Some(lifecycle_receipt_policy.to_string()),
+            event_at,
         ));
         write_json(&path, &goal)?;
         Ok(goal)
@@ -2302,7 +2750,7 @@ impl GoalStore {
     pub fn mark_current(&self, id: &str) -> Result<Goal> {
         let path = self.goal_path(id)?;
         let _lock = acquire_state_lock(&path)?;
-        let Some(mut goal) = Self::load_goal_file(&path)? else {
+        let Some(goal) = Self::load_goal_file_for_update(&path)? else {
             bail!("目标不存在: {id}");
         };
         // quarantine 是单向 evidence 降级：mark_current 会清空 lifecycle_proof
@@ -2313,13 +2761,23 @@ impl GoalStore {
                 "目标 {id} 已隔离为 untrusted history；隔离是单向降级，审计记录必须保留，不能恢复为 current"
             );
         }
-        goal.lifecycle = GoalLifecycle::Current;
-        goal.lifecycle_reason = None;
-        goal.superseded_by = None;
-        goal.lifecycle_proof = None;
-        goal.updated_at = now_iso();
-        write_json(&path, &goal)?;
-        Ok(goal)
+        let event_at = goal_event_timestamp(&goal)?;
+        let mut candidate = goal;
+        candidate.lifecycle = GoalLifecycle::Current;
+        candidate.lifecycle_reason = None;
+        candidate.superseded_by = None;
+        candidate.lifecycle_proof = None;
+        // A governed pending publication is intentionally restorable so it
+        // becomes a visible current blocker again. A retired legacy plan has
+        // no valid current form, however, and must remain immutable history.
+        if candidate.plan_publication_policy.is_none()
+            && let Some(error) = plan_chain_error(&candidate)
+        {
+            bail!("{error}");
+        }
+        candidate.updated_at = event_at;
+        write_json(&path, &candidate)?;
+        Ok(candidate)
     }
 }
 

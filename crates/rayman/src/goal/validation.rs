@@ -980,6 +980,14 @@ pub(super) enum ReceiptValidationPolicy {
     CurrentV2,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GoalPlanningValidationPolicy {
+    Skip,
+    Current,
+    RetiringLegacySuccess,
+    HistoricalLegacySuccess,
+}
+
 pub fn validation_has_current_receipt(
     validation: &ValidationEvidence,
     goal: &Goal,
@@ -1568,6 +1576,7 @@ pub fn validation_relevance_gaps(
         current_fingerprint,
         true,
         ReceiptValidationPolicy::CurrentV2,
+        false,
     )
 }
 
@@ -1578,6 +1587,7 @@ fn validation_relevance_gaps_for_fingerprint(
     fingerprint: &str,
     enforce_current_security: bool,
     policy: ReceiptValidationPolicy,
+    require_plan_contained: bool,
 ) -> Vec<String> {
     let Ok(contract_sha256) = validation_contract_sha256(goal, &requirement.id) else {
         return vec!["validation contract 无法计算".into()];
@@ -1589,20 +1599,24 @@ fn validation_relevance_gaps_for_fingerprint(
             continue;
         };
         let covered = requirement.validations.iter().any(|validation| {
-            validation_has_receipt_for_fingerprint(
-                validation,
-                root,
-                fingerprint,
-                &contract_sha256,
-                enforce_current_security,
-                policy,
-            ) && validation.impact_scopes.iter().any(|scope| {
-                scope.changed_path.replace('\\', "/") == impact.changed_path.replace('\\', "/")
-                    && scope.package == impact.package
-                    && scope.manifest_path.as_deref().map(normalized_path_text)
-                        == impact.manifest_path.as_deref().map(normalized_path_text)
-            }) && parse_validation_command(&validation.command)
-                .is_ok_and(|parsed| validation_matches_impact(root, &parsed, impact))
+            (!require_plan_contained
+                || validation_is_plan_contained_for_historical_legacy_success(goal, validation))
+                && validation_has_receipt_for_fingerprint(
+                    validation,
+                    root,
+                    fingerprint,
+                    &contract_sha256,
+                    enforce_current_security,
+                    policy,
+                )
+                && validation.impact_scopes.iter().any(|scope| {
+                    scope.changed_path.replace('\\', "/") == impact.changed_path.replace('\\', "/")
+                        && scope.package == impact.package
+                        && scope.manifest_path.as_deref().map(normalized_path_text)
+                            == impact.manifest_path.as_deref().map(normalized_path_text)
+                })
+                && parse_validation_command(&validation.command)
+                    .is_ok_and(|parsed| validation_matches_impact(root, &parsed, impact))
         });
         if !covered {
             gaps.push(format!(
@@ -1641,6 +1655,91 @@ pub(super) fn goal_success_receipt_gaps_for_policy(
     enforce_current_security: bool,
     policy: ReceiptValidationPolicy,
 ) -> Vec<String> {
+    let planning_policy = if enforce_current_security {
+        GoalPlanningValidationPolicy::Current
+    } else if goal.lifecycle == GoalLifecycle::Archived && goal.plan_publication_policy.is_none() {
+        GoalPlanningValidationPolicy::HistoricalLegacySuccess
+    } else {
+        GoalPlanningValidationPolicy::Skip
+    };
+    goal_success_receipt_gaps_with_policy(
+        goal,
+        root,
+        fingerprint,
+        enforce_current_security,
+        planning_policy,
+        policy,
+    )
+}
+
+pub(super) fn goal_success_receipt_gaps_for_retiring_legacy_success(
+    goal: &Goal,
+    root: &Path,
+    fingerprint: &str,
+) -> Vec<String> {
+    goal_success_receipt_gaps_with_policy(
+        goal,
+        root,
+        fingerprint,
+        true,
+        GoalPlanningValidationPolicy::RetiringLegacySuccess,
+        ReceiptValidationPolicy::CurrentV2,
+    )
+}
+
+pub(super) fn goal_success_receipt_gaps_for_historical_legacy_success(
+    goal: &Goal,
+    root: &Path,
+    fingerprint: &str,
+    policy: ReceiptValidationPolicy,
+) -> Vec<String> {
+    goal_success_receipt_gaps_with_policy(
+        goal,
+        root,
+        fingerprint,
+        false,
+        GoalPlanningValidationPolicy::HistoricalLegacySuccess,
+        policy,
+    )
+}
+
+pub(super) fn goal_retiring_legacy_success_unreceipted_migration_gaps(
+    goal: &Goal,
+    root: &Path,
+    fingerprint: &str,
+) -> Vec<String> {
+    goal_plan_governance_gaps_for_retiring_legacy_success(goal, root, fingerprint)
+}
+
+pub(super) fn goal_retiring_legacy_success_v1_migration_gaps(
+    goal: &Goal,
+    root: &Path,
+    fingerprint: &str,
+) -> Vec<String> {
+    let mut gaps = goal_v1_governance_gaps_for_retiring_legacy_success(goal, root, fingerprint);
+    // Migration needs one complete *safe* LegacyV1 proof set, not a promise
+    // that every historical receipt sharing the fingerprint remains usable.
+    // Unsafe extras contribute no must/relevance/delta coverage, but they also
+    // must not poison an otherwise complete safe set.
+    gaps.extend(goal_success_receipt_gaps_with_policy(
+        goal,
+        root,
+        fingerprint,
+        true,
+        GoalPlanningValidationPolicy::Skip,
+        ReceiptValidationPolicy::LegacyV1,
+    ));
+    gaps
+}
+
+fn goal_success_receipt_gaps_with_policy(
+    goal: &Goal,
+    root: &Path,
+    fingerprint: &str,
+    enforce_current_security: bool,
+    planning_policy: GoalPlanningValidationPolicy,
+    policy: ReceiptValidationPolicy,
+) -> Vec<String> {
     let mut gaps = Vec::new();
     if goal.status != GoalStatus::Success {
         gaps.push(format!("goal 状态为 {}，不是 success", goal.status));
@@ -1653,6 +1752,8 @@ pub(super) fn goal_success_receipt_gaps_for_policy(
         }
         return gaps;
     }
+    let require_plan_contained =
+        planning_policy == GoalPlanningValidationPolicy::HistoricalLegacySuccess;
     for requirement in &goal.requirements {
         if requirement.kind != RequirementKind::Must {
             // 读门禁（goal_gate_verdict）对所有需求种类检查 Done-无-receipt 与
@@ -1680,6 +1781,7 @@ pub(super) fn goal_success_receipt_gaps_for_policy(
                 fingerprint,
                 enforce_current_security,
                 policy,
+                require_plan_contained,
             ) {
                 gaps.push(format!("需求 {} {gap}", requirement.id));
             }
@@ -1708,19 +1810,22 @@ pub(super) fn goal_success_receipt_gaps_for_policy(
         // and a write path weaker than the read path persists — and reports —
         // a success the tool's own validator rejects.
         if !requirement.validations.iter().any(|validation| {
-            proof_kind_matches(
-                requirement.proof_kind,
-                validation_proof_kind(root, &validation.command)
-                    .ok()
-                    .unwrap_or_default(),
-            ) && validation_has_receipt_for_fingerprint(
-                validation,
-                root,
-                fingerprint,
-                &contract_sha256,
-                enforce_current_security,
-                policy,
-            )
+            (!require_plan_contained
+                || validation_is_plan_contained_for_historical_legacy_success(goal, validation))
+                && proof_kind_matches(
+                    requirement.proof_kind,
+                    validation_proof_kind(root, &validation.command)
+                        .ok()
+                        .unwrap_or_default(),
+                )
+                && validation_has_receipt_for_fingerprint(
+                    validation,
+                    root,
+                    fingerprint,
+                    &contract_sha256,
+                    enforce_current_security,
+                    policy,
+                )
         }) {
             gaps.push(format!(
                 "must {} 缺少当前成功 validation receipt",
@@ -1734,10 +1839,29 @@ pub(super) fn goal_success_receipt_gaps_for_policy(
             fingerprint,
             enforce_current_security,
             policy,
+            require_plan_contained,
         ));
     }
-    if enforce_current_security {
-        gaps.extend(goal_planning_gaps(goal, root, fingerprint));
+    match planning_policy {
+        GoalPlanningValidationPolicy::Skip => {}
+        GoalPlanningValidationPolicy::Current => {
+            gaps.extend(goal_planning_gaps(goal, root, fingerprint));
+        }
+        GoalPlanningValidationPolicy::RetiringLegacySuccess => {
+            gaps.extend(goal_planning_gaps_for_retiring_legacy_success(
+                goal,
+                root,
+                fingerprint,
+            ));
+        }
+        GoalPlanningValidationPolicy::HistoricalLegacySuccess => {
+            gaps.extend(goal_historical_planning_gaps_for_legacy_success(
+                goal,
+                root,
+                fingerprint,
+                policy,
+            ));
+        }
     }
     gaps
 }

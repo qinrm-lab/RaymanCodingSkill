@@ -61,6 +61,14 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "lifecycle-only replacement 必须保持 pristine 且只能包含 open must",
     "lifecycle-only replacement 至少需要一个 --supersedes 目标",
     "live lifecycle authority 未证明当前源码上的重复稳定仓库 gate",
+    "lifecycle-only authority {label} 不得晚于 replacement_authority.recorded_at",
+    "lifecycle-only replacement authority proof 无效: {error}",
+    "replacement_authority.recorded_at 不得晚于 goal.updated_at",
+    "{label} 不得晚于 replacement_authority.recorded_at",
+    "目标 {} 的 supersession 不得早于 replacement_authority.recorded_at",
+    "被转移目标 {id} 的 supersession proof 无效: {error}",
+    "被转移目标 {id} 的 supersession 不得早于 replacement_authority.recorded_at",
+    "被转移目标 {id} 缺少 supersession proof",
     "manifest file_count={} 与完整性条目数={} 不一致",
     "manifest total_bytes={} 与文件完整性总和={} 不一致",
     "manifest 包含重复路径: {}",
@@ -69,6 +77,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "orphan restore transaction 没有 journal 却仍存有备份文件，无从判断该回滚哪些目标；已保留供人工恢复。恢复步骤：检查该目录 backups/ 子目录中的原件、取回仍需要的文件，再删除整个目录以解除对 save/restore/autosave 的阻塞：{}",
     "orphan restore transaction 自动回滚不完整，已保留并拒绝继续: {}",
     "pre-receipt migration 与 receipt-policy migration 不能同时使用",
+    "legacy success migration 不能修复当前 command/plan/review 缺口: {}",
     "replacement must 必须与 --supersedes 目标 must（含 typed proof 义务）的精确并集一致",
     "replacement、authority goal 与被转移目标必须彼此不同",
     "restore journal committed 阶段条目状态不完整",
@@ -235,6 +244,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "目标 {id} lifecycle={}，不能追加证据；先用 `goal current {id}` 恢复为 current",
     "目标 {id} 不是当前 schema，不能写入可验证 receipt；请新建目标",
     "目标 {id} 不是当前 schema，不能记录 plan receipt",
+    "目标 {} 不满足 retiring legacy-success plan reconciliation 条件",
     "目标 {id} 已关闭为 success，不能再追加人工证据；请用 `goal validate` 写入带 receipt 的验证，或先 supersede/archive",
     "目标 {id} 已关闭为 success，不能降级为 {status}；请用新的 baseline-bound goal supersede，或将该记录 archive",
     "目标 {id} 已隔离为 untrusted history；隔离是单向降级，审计记录必须保留，不能恢复为 current",
@@ -375,6 +385,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "验证命令不能启动 shell；请直接提供要执行的程序及参数",
     "archived -MaintenanceOrchestrationCycle 不是 cycle-qualified JSON 路径",
     "high-priority plan 缺少绑定最终源码 fingerprint 的 review receipt",
+    "legacy plan 时间顺序必须满足 goal <= baseline <= receipt <= extensions <= updated",
     "  质量: profile={} ready={} errors={} warnings={} covered_sources={}/{}",
     "状态正在被另一个 rayman 进程修改: {}；等待锁超过 {} 秒",
     "lifecycle-only replacement 合约、baseline 或专用迁移形态无效",
@@ -1338,15 +1349,32 @@ fn localize_authored_message(content: &str, language: ActiveLanguage) -> Option<
     localize_authored_message_within(content, language, 0)
 }
 
+fn localize_authored_capture(
+    capture: &str,
+    language: ActiveLanguage,
+    depth: usize,
+) -> Option<String> {
+    let segments = capture.split("; ").collect::<Vec<_>>();
+    if segments.len() > 1
+        && let Some(localized) = segments
+            .iter()
+            .map(|segment| localize_authored_message_within(segment, language, depth))
+            .collect::<Option<Vec<_>>>()
+    {
+        return Some(localized.join("; "));
+    }
+    localize_authored_message_within(capture, language, depth)
+}
+
 /// Authored messages compose: `doctor` and `check` pass other framework-authored
 /// Chinese (a toolchain state, a required_for reason, a blocker) *through* a
 /// placeholder. Reinserting captures byte-for-byte therefore left framework text
 /// untranslated in en output even though every individual message is covered by
 /// the catalog and the coverage test passes.
 ///
-/// A capture is re-localized only when it matches an authored template in full
-/// and that template translates Han-free — user content (goal titles,
-/// requirement text, paths) matches no template and is still reinserted
+/// A capture is re-localized only when it matches an authored template in full.
+/// Framework gap lists are split only when every `; `-separated segment matches,
+/// so user content (goal titles, requirement text, paths) is still reinserted
 /// verbatim. `depth` bounds the recursion in case a template ever degenerates to
 /// a capture as long as its input.
 fn localize_authored_message_within(
@@ -1379,7 +1407,7 @@ fn localize_authored_message_within(
             captures
                 .iter()
                 .map(|capture| {
-                    localize_authored_message_within(capture, language, depth + 1)
+                    localize_authored_capture(capture, language, depth + 1)
                         .unwrap_or_else(|| capture.clone())
                 })
                 .collect()
@@ -1744,6 +1772,50 @@ const MESSAGE_PREFIX_CATALOG: &[(&str, &str)] = &[
 // have been extracted. Short entries are therefore safe: user titles, paths, and
 // evidence text are reinserted byte-for-byte after the static template is translated.
 const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
+    (
+        "lifecycle-only authority {label} 不得晚于 replacement_authority.recorded_at",
+        "lifecycle-only authority {label} must not be later than replacement_authority.recorded_at",
+    ),
+    (
+        "lifecycle-only replacement authority proof 无效: {error}",
+        "lifecycle-only replacement authority proof is invalid: {error}",
+    ),
+    (
+        "replacement_authority.recorded_at 不得晚于 goal.updated_at",
+        "replacement_authority.recorded_at must not be later than goal.updated_at",
+    ),
+    (
+        "{label} 不得晚于 replacement_authority.recorded_at",
+        "{label} must not be later than replacement_authority.recorded_at",
+    ),
+    (
+        "目标 {} 的 supersession 不得早于 replacement_authority.recorded_at",
+        "goal {} supersession must not be earlier than replacement_authority.recorded_at",
+    ),
+    (
+        "被转移目标 {id} 的 supersession proof 无效: {error}",
+        "transferred goal {id} has an invalid supersession proof: {error}",
+    ),
+    (
+        "被转移目标 {id} 的 supersession 不得早于 replacement_authority.recorded_at",
+        "transferred goal {id} supersession must not be earlier than replacement_authority.recorded_at",
+    ),
+    (
+        "被转移目标 {id} 缺少 supersession proof",
+        "transferred goal {id} is missing its supersession proof",
+    ),
+    (
+        "legacy success migration 不能修复当前 command/plan/review 缺口: {}",
+        "legacy success migration cannot repair current command/plan/review gaps: {}",
+    ),
+    (
+        "legacy plan 时间顺序必须满足 goal <= baseline <= receipt <= extensions <= updated",
+        "legacy plan chronology must satisfy goal <= baseline <= receipt <= extensions <= updated",
+    ),
+    (
+        "目标 {} 不满足 retiring legacy-success plan reconciliation 条件",
+        "goal {} does not satisfy the retiring legacy-success plan reconciliation conditions",
+    ),
     (
         "未知 pending owner: {value}（可用: agent | human | external）",
         "unknown pending owner: {value} (available: agent | human | external)",
@@ -5097,6 +5169,20 @@ mod tests {
             matches!(character as u32, 0x3400..=0x4dbf | 0x4e00..=0x9fff | 0xf900..=0xfaff)
         })
     }
+
+    #[test]
+    fn composed_authored_gap_lists_localize_every_segment() {
+        let localized = localize_line_for(
+            "目标 success receipt 未通过当前或历史完整性复核: 实际变更超出 plan: outside.txt; high-priority plan 缺少绑定最终源码 fingerprint 的 review receipt。仅对应 rollout 前历史可显式使用 --migrate-unreceipted 或 --migrate-receipt-policy receipt_integrity_v1"
+                .into(),
+            ActiveLanguage::En,
+            false,
+        );
+        assert!(localized.contains("outside.txt"), "{localized}");
+        assert!(localized.contains("high-priority plan"), "{localized}");
+        assert!(!contains_han(&localized), "{localized}");
+    }
+
     #[derive(Debug)]
     struct SourceLiteral {
         line: usize,
