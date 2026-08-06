@@ -2,7 +2,8 @@
 
 <!-- AGENT_CONTRACT: rayman-shared-v1 -->
 
-Before non-trivial work, read and follow [AGENTS.md](AGENTS.md). For
+Before non-trivial work, read and follow
+[AGENT_CONTRACT.md](AGENT_CONTRACT.md). For
 standard/release work and any goal, blocker, checkpoint, concurrency, or
 evidence operation, also read
 [references/workflow-contract.md](references/workflow-contract.md).
@@ -13,8 +14,12 @@ Use the shared `rayman` CLI when it is available, but do not assume Codex Stop
 hook behavior exists in Claude Code. Preserve Claude-specific platform safety
 requirements when they are stricter than the shared contract.
 
-Do not duplicate shared workflow rules here; update `AGENTS.md` or the shared
-workflow reference instead.
+Do not duplicate shared workflow rules here; update `AGENT_CONTRACT.md` or the
+shared workflow reference instead.
+
+Do not execute the Codex-scoped managed block in `AGENTS.md`. The
+workspace-local managed block below is the Claude Code checkpoint registration;
+do not hand-edit it.
 
 <!-- save-work-status:managed-begin v5 -->
 $save-work-status active

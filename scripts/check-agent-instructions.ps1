@@ -23,6 +23,7 @@ function Read-StrictUtf8 {
     }
 }
 
+$contract = Read-StrictUtf8 'AGENT_CONTRACT.md'
 $agents = Read-StrictUtf8 'AGENTS.md'
 $skill = Read-StrictUtf8 'SKILL.md'
 $claude = Read-StrictUtf8 'CLAUDE.md'
@@ -40,21 +41,31 @@ if ($skillBytes.Length -ne $canonicalSkillBytes.Length -or
 }
 
 $marker = 'AGENT_CONTRACT: rayman-shared-v1'
-foreach ($entry in @{ 'AGENTS.md' = $agents; 'SKILL.md' = $skill; 'CLAUDE.md' = $claude }.GetEnumerator()) {
+foreach ($entry in @{
+        'AGENT_CONTRACT.md' = $contract
+        'AGENTS.md' = $agents
+        'SKILL.md' = $skill
+        'CLAUDE.md' = $claude
+    }.GetEnumerator()) {
     $count = ([regex]::Matches($entry.Value, [regex]::Escape($marker))).Count
     if ($count -ne 1) {
         throw "Agent contract marker must appear exactly once: $($entry.Key)"
     }
 }
 
-foreach ($entry in @{ 'SKILL.md' = $skill; 'CLAUDE.md' = $claude }.GetEnumerator()) {
-    foreach ($required in @('AGENTS.md', 'references/workflow-contract.md')) {
-        if (-not $entry.Value.Contains($required, [StringComparison]::Ordinal)) {
+$adapterRoutes = @{
+    'AGENTS.md' = @{ Text = $agents; Required = @('AGENT_CONTRACT.md', 'SKILL.md', 'references/workflow-contract.md') }
+    'SKILL.md' = @{ Text = $skill; Required = @('AGENTS.md', 'references/workflow-contract.md') }
+    'CLAUDE.md' = @{ Text = $claude; Required = @('AGENT_CONTRACT.md', 'references/workflow-contract.md') }
+}
+foreach ($entry in $adapterRoutes.GetEnumerator()) {
+    foreach ($required in $entry.Value.Required) {
+        if (-not $entry.Value.Text.Contains($required, [StringComparison]::Ordinal)) {
             throw "Client adapter is missing '$required': $($entry.Key)"
         }
     }
     foreach ($forbidden in @('## Shared working rules', '## Shared workflow authority')) {
-        if ($entry.Value.Contains($forbidden, [StringComparison]::Ordinal)) {
+        if ($entry.Value.Text.Contains($forbidden, [StringComparison]::Ordinal)) {
             throw "Client adapter duplicates shared policy '$forbidden': $($entry.Key)"
         }
     }
@@ -63,11 +74,50 @@ foreach ($entry in @{ 'SKILL.md' = $skill; 'CLAUDE.md' = $claude }.GetEnumerator
 if (($skill -split "`n").Count -gt 100 -or ($claude -split "`n").Count -gt 60) {
     throw 'Client adapters are too large; move client-neutral workflow detail to the shared reference.'
 }
-if (-not $agents.Contains('references/workflow-contract.md', [StringComparison]::Ordinal)) {
-    throw 'AGENTS.md must route non-trivial workflow claims to the shared reference.'
+if (-not $contract.Contains('references/workflow-contract.md', [StringComparison]::Ordinal)) {
+    throw 'AGENT_CONTRACT.md must route non-trivial workflow claims to the shared reference.'
 }
-if (-not $agents.Contains('Do not permit direct or indirect skill-invocation cycles.', [StringComparison]::Ordinal)) {
-    throw 'AGENTS.md must prohibit direct and indirect skill-invocation cycles.'
+if (-not $contract.Contains('Do not permit direct or indirect skill-invocation cycles.', [StringComparison]::Ordinal)) {
+    throw 'AGENT_CONTRACT.md must prohibit direct and indirect skill-invocation cycles.'
+}
+if ($contract.Contains('save-work-status:managed-', [StringComparison]::Ordinal) -or
+    $contract -match '(?m)(?<![A-Za-z0-9_])[A-Za-z]:[\\/]') {
+    throw 'Published AGENT_CONTRACT.md must not contain a managed block or an absolute Windows path.'
+}
+
+function Get-ManagedBlock {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$Text
+    )
+    $pattern = '(?ms)^<!-- save-work-status:managed-begin v5 -->\r?\n.*?^<!-- save-work-status:managed-end v5 -->'
+    $matches = [regex]::Matches($Text, $pattern)
+    if ($matches.Count -ne 1) {
+        throw "Client entrypoint must contain exactly one v5 managed block: $Name"
+    }
+    return $matches[0].Value
+}
+
+$codexBlock = Get-ManagedBlock -Name 'AGENTS.md' -Text $agents
+$claudeBlock = Get-ManagedBlock -Name 'CLAUDE.md' -Text $claude
+$normalizeAgent = {
+    param([string]$Text)
+    return [regex]::Replace($Text, '--agent\s+(?:codex|claude-code)', '--agent <client>')
+}
+if ((& $normalizeAgent $codexBlock) -cne (& $normalizeAgent $claudeBlock)) {
+    throw 'Codex and Claude Code managed blocks may differ only in the --agent value.'
+}
+if ($codexBlock -notmatch '--agent\s+codex(?:\s|$)' -or
+    $codexBlock -match '--agent\s+claude-code(?:\s|$)' -or
+    $claudeBlock -notmatch '--agent\s+claude-code(?:\s|$)' -or
+    $claudeBlock -match '--agent\s+codex(?:\s|$)') {
+    throw 'Managed block ownership does not match its client entrypoint.'
+}
+if (-not $agents.Contains('Codex checkpoint registration', [StringComparison]::Ordinal) -or
+    -not $agents.Contains('Claude Code must not execute it', [StringComparison]::Ordinal) -or
+    -not $claude.Contains('Claude Code checkpoint registration', [StringComparison]::Ordinal) -or
+    -not $claude.Contains('Do not execute the Codex-scoped managed block', [StringComparison]::Ordinal)) {
+    throw 'Client entrypoints must state explicit managed-block ownership and exclusion.'
 }
 foreach ($required in @('--must-proof KIND::TEXT', 'goal handoff start', 'Unbound `rayman check`', 'checkpoint save')) {
     if (-not $workflow.Contains($required, [StringComparison]::OrdinalIgnoreCase)) {
@@ -127,7 +177,7 @@ if ($manifest.clients.claude_code.deployment_scope -ne 'repository_entrypoint_on
 }
 
 $expected = @(
-    'AGENTS.md|AGENTS.md'
+    'AGENT_CONTRACT.md|AGENTS.md'
     'SKILL.md|SKILL.md'
     'references/workflow-contract.md|references/workflow-contract.md'
 ) | Sort-Object

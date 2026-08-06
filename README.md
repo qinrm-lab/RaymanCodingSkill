@@ -20,15 +20,18 @@ Operational runtime/task state is local under `.RaymanCodingSkill/` and normally
 
 ## Codex and Claude Code compatibility
 
-Shared repository rules live in [AGENTS.md](AGENTS.md). Codex enters through
-[SKILL.md](SKILL.md); Claude Code enters through [CLAUDE.md](CLAUDE.md). These
-native entry files reference [references/workflow-contract.md](references/workflow-contract.md)
-rather than copying client-neutral workflow policy. [install-manifest.json](install-manifest.json)
-is the deployment authority: Codex receives the declared global skill resources,
-while Claude Code remains a repository-only entrypoint and is not advertised as
-a global install. Run `pwsh ./scripts/check-agent-instructions.ps1` to verify the
-UTF-8 adapters, shared marker, manifest schema, exact resource set, and deployment
-scopes; `scripts/check-repo.ps1` runs the same check.
+Client-neutral rules live in [AGENT_CONTRACT.md](AGENT_CONTRACT.md). The
+repository [AGENTS.md](AGENTS.md) is the Codex workspace entrypoint,
+[SKILL.md](SKILL.md) is the installed Codex adapter, and
+[CLAUDE.md](CLAUDE.md) is the Claude Code entrypoint. Each adapter routes to the
+shared contract and
+[references/workflow-contract.md](references/workflow-contract.md) instead of
+copying policy. [install-manifest.json](install-manifest.json) is the deployment
+authority: it publishes `AGENT_CONTRACT.md` as the installed Codex skill's
+`AGENTS.md`, without either workspace-local checkpoint block, while Claude Code
+remains repository-only. Run `pwsh ./scripts/check-agent-instructions.ps1` to
+verify UTF-8, markers, adapter ownership, managed-block isolation, the manifest
+mapping, and deployment scopes; `scripts/check-repo.ps1` runs the same check.
 
 ## Build
 
@@ -56,7 +59,7 @@ The only supported source-checkout install/upgrade entry point is below. The ins
 
 The repair tool parses the profile, refuses custom `rayman` functions, preserves unrelated profile content, and uses a staged replacement with rollback. Do not run unbounded output-capturing probes such as `$output = rayman --version` while a profile shadow is unresolved; use `pwsh -NoProfile` and the direct application path for diagnosis.
 
-It requires clean Git source, pins the preverified artifact and every manifest resource hash, rechecks them before and after every copy, and replaces only the managed CLI plus the exact `codex_skill_resources` set through same-directory staging; `CLAUDE.md` is intentionally absent from that global set. Candidate and installed `doctor` checks run only in a newly created isolated workspace outside the repository, and each CLI uses `workspace activate --skill-file ... --yes` only in that disposable workspace. The source-fresh proof remains bound to the real repository and the exact artifact and resource hashes; doctor never requires a provisional repository binding. Doctor cleanup holds the terminal temporary-parent lease, verifies the owner marker and root identity, and no-replace renames the entire workspace tree to a reported retained leaf without traversing descendants. The installer itself never recursively deletes or automatically reclaims that retained tree; it reports the exact path for explicit human review and cleanup. Because the tree remains under the host temporary root, it is review evidence rather than a durable archive and remains subject to external host temp-retention policy. Marker, identity, or path-binding drift fails closed, preserves the original or observed tree, releases the leases, and does not retry the isolation.
+It requires clean Git source, pins the preverified artifact and every manifest resource hash, rechecks them before and after every copy, and replaces only the managed CLI plus the exact `codex_skill_resources` set through same-directory staging. The global set maps the publishable `AGENT_CONTRACT.md` to installed `AGENTS.md`; repository `AGENTS.md`, its Codex checkpoint block, and `CLAUDE.md` are intentionally absent. Candidate and installed `doctor` checks run only in a newly created isolated workspace outside the repository, and each CLI uses `workspace activate --skill-file ... --yes` only in that disposable workspace. The source-fresh proof remains bound to the real repository and the exact artifact and resource hashes; doctor never requires a provisional repository binding. Doctor cleanup holds the terminal temporary-parent lease, verifies the owner marker and root identity, and no-replace renames the entire workspace tree to a reported retained leaf without traversing descendants. The installer itself never recursively deletes or automatically reclaims that retained tree; it reports the exact path for explicit human review and cleanup. Because the tree remains under the host temporary root, it is review evidence rather than a durable archive and remains subject to external host temp-retention policy. Marker, identity, or path-binding drift fails closed, preserves the original or observed tree, releases the leases, and does not retry the isolation.
 
 The managed CLI, exact skill resources, and optional Windows user-PATH update form the core transaction. `-AddToUserPath` moves the managed bin directory to the front of the user segment and verifies the effective `Machine PATH + proposed User PATH` ordering without an artificial process-only prepend; the machine-PATH snapshot must remain byte-stable through final core verification, so an older machine-level `rayman` blocks installation at that point. Forward PATH publication and rollback use the same KTM/TxR registry compare-exchange: the exact raw value and kind are checked through a transacted `HKCU\Environment` handle, the desired value is staged in that transaction, and an ordinary concurrent registry operation before commit rolls the transaction back instead of being overwritten. Basic TxR transaction creation, key open/read, and no-op commit capability is probed before any managed file replacement; the real write/commit remains fail-closed at publication, and an unavailable or failed transaction never degrades to a read/set/read sequence. Without it, the current effective PATH must already resolve the destination first, and Linux callers must configure PATH themselves. Every file mutation holds a native lease on the terminal destination parent and operates only on validated relative leaf names beneath that lease. Staging is an exclusive native create. Every raw transition is added to an incremental `PathBindingLedger` with its role, state, expected presence, identity, metadata, and reason; terminal reconciliation reopens active leaves through the held parent, and failure or committed cleanup reports every retained leaf and its observed evidence precisely.
 
