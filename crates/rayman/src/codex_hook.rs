@@ -289,7 +289,7 @@ fn evaluate_stop_event_with_phase_hook(
                     .last_assistant_message
                     .as_deref()
                     .is_some_and(|message| {
-                        crate::goal::normalize_stop_candidate_message(message) == rendered.text
+                        crate::goal::normalize_human_boundary_message(message) == rendered.text
                     })
         });
         if event_matches {
@@ -909,6 +909,13 @@ mod tests {
         let rendered = pending
             .render_for_goals(std::slice::from_ref(&goal))
             .unwrap();
+        assert!(rendered.text.contains("rayman.human-boundary-aggregate.v1"));
+        assert!(
+            rendered
+                .text
+                .contains("\"scope\": \"current_response_only\"")
+        );
+        assert!(!rendered.text.contains("rayman.codex-stop-candidate"));
         assert!(
             evaluate_stop(root.path()).blocks_stop(),
             "an askable package is not a current Stop observation"

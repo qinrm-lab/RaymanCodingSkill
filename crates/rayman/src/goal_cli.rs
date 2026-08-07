@@ -406,8 +406,8 @@ pub fn run_pending(
             if json {
                 print(&serde_json::to_value(&rendered)?);
             } else {
-                // This is protocol text, not a localizable status line: the
-                // Codex Stop guard compares the exact aggregate bytes.
+                // This is client-neutral protocol text, not a localizable
+                // status line. Host adapters may compare the exact bytes.
                 std::println!("{}", rendered.text);
             }
         }
@@ -442,7 +442,7 @@ pub fn run_pending(
             reference: _,
         } => {
             bail!(
-                "`goal pending present` 已退役：代理不能自证用户展示。使用 `rayman goal pending render --current` 生成 workspace aggregate，并由当前 Codex Stop 事件严格核对 last_assistant_message"
+                "`goal pending present` 已退役：代理不能自证用户展示。使用 `rayman goal pending render --current` 生成 client-neutral workspace aggregate；渲染本身不构成展示、送达或完成证据"
             );
         }
         PendingAction::Resolve { id } => {

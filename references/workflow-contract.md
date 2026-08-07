@@ -71,15 +71,17 @@ Every public human/external boundary is goal-bound and carries stable
 `--capability-key` and `--boundary-class` identities; replaying the same
 package is idempotent, while changing its contract under the same key fails.
 Inspect `goal frontier`: `consultation=ready` only authorizes asking. Run `goal
-pending render --current` and emit that exact workspace aggregate as the whole
-final message. Only the current Codex Stop event may compare its exact
-`last_assistant_message` with a freshly rendered aggregate; before allowing the
-stop it must re-list every current goal and pending package and recheck the
-workspace fingerprint. This observation is transient and never becomes a
-persisted or reusable receipt. Never claim that it proves delivery, visibility,
-reading, or user awareness. Background continuation additionally needs explicit
-authority, mechanism, and workspace-isolation evidence. Never report done while
-pending work remains.
+pending render --current` and emit that exact client-neutral workspace aggregate
+as the whole final response. Rendering itself creates no completion observation.
+The active client's native adapter owns its completion boundary. In Codex, only
+the current Codex Stop event may compare its exact `last_assistant_message` with
+a freshly rendered aggregate; before allowing the stop it must re-list every
+current goal and pending package and recheck the workspace fingerprint. Claude
+Code must not execute or emulate that Codex hook. Any native observation is
+transient and never becomes a persisted or reusable receipt. Never claim that
+it proves delivery, visibility, reading, or user awareness. Background
+continuation additionally needs explicit authority, mechanism, and
+workspace-isolation evidence. Never report done while pending work remains.
 
 Commit, push, publish, install, deploy, account changes, payment, deletion, and
 overwriting user-managed state still require user authority.

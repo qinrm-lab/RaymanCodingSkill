@@ -5227,6 +5227,9 @@ fn pending_render_current_matches_the_workspace_aggregate() {
     let aggregate = run_json(root, &["goal", "pending", "render", "--current"]);
     let partial = run_json(root, &["goal", "pending", "render", "--goal", id_a]);
     let aggregate_text = aggregate["text"].as_str().unwrap();
+    assert!(aggregate_text.contains("rayman.human-boundary-aggregate.v1"));
+    assert!(aggregate_text.contains("\"scope\": \"current_response_only\""));
+    assert!(!aggregate_text.contains("rayman.codex-stop-candidate"));
     assert!(aggregate_text.contains(item_a["id"].as_str().unwrap()));
     assert!(aggregate_text.contains(item_b["id"].as_str().unwrap()));
     assert_eq!(aggregate["goal_ids"].as_array().unwrap().len(), 2);
@@ -5267,7 +5270,7 @@ fn pending_render_text_is_protocol_exact_under_the_english_locale() {
     assert_eq!(
         rendered.stdout.trim_end_matches(&['\r', '\n'][..]),
         expected,
-        "text-mode output must remain byte-for-byte compatible with the Stop candidate"
+        "text-mode output must remain byte-for-byte compatible with the client-neutral aggregate"
     );
 }
 

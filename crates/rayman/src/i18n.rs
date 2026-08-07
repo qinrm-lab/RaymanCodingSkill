@@ -862,7 +862,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "无法复查 skill_file: {}",
     "无法规范化 skill_file: {}",
     "无法读取 skill_file 路径组件: {}",
-    "`goal pending present` 已退役：代理不能自证用户展示。使用 `rayman goal pending render --current` 生成 workspace aggregate，并由当前 Codex Stop 事件严格核对 last_assistant_message",
+    "`goal pending present` 已退役：代理不能自证用户展示。使用 `rayman goal pending render --current` 生成 client-neutral workspace aggregate；渲染本身不构成展示、送达或完成证据",
     "agent pending 不需要 capability-bound legacy migration",
     "capability-bound pending 必须绑定 --goal",
     "capability-bound pending 必须绑定 goal_id",
@@ -872,7 +872,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "committed plan publication 的 committed_at 必须是 RFC3339 且不早于 published_at",
     "execution-context requirement 未满足（仅约束本次 doctor 检查，不构成提权或 ACL 授权）：{}",
     "extension intent 缺少 pending 链尾",
-    "goal {} 当前不能 render Stop candidate: decision={:?} consultation={:?} reason={}",
+    "goal {} 当前不能 render human-boundary aggregate: decision={:?} consultation={:?} reason={}",
     "goal 不属于 {PLAN_PUBLICATION_POLICY_V1} plan publication epoch；旧 goal 只能读取或退休，不能扩展计划",
     "goal 不属于 {PLAN_PUBLICATION_POLICY_V1} plan publication epoch；旧 goal 只能读取或退休，不能追加计划",
     "goal 存在未完成且与当前源码不匹配的 plan extension intent；必须恢复 intent 的 precheck 快照后用同一扩展重试或退休该 goal",
@@ -1979,8 +1979,8 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "legacy migration goal does not match; refusing to rebind the historical package",
     ),
     (
-        "goal {} 当前不能 render Stop candidate: decision={:?} consultation={:?} reason={}",
-        "goal {} cannot currently render a Stop candidate: decision={:?} consultation={:?} reason={}",
+        "goal {} 当前不能 render human-boundary aggregate: decision={:?} consultation={:?} reason={}",
+        "goal {} cannot currently render a human-boundary aggregate: decision={:?} consultation={:?} reason={}",
     ),
     (
         "pending render 没有当前可咨询的 v2 human solution package",
@@ -2172,8 +2172,8 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     ),
     ("已迁移 legacy pending {}。", "migrated legacy pending {}."),
     (
-        "`goal pending present` 已退役：代理不能自证用户展示。使用 `rayman goal pending render --current` 生成 workspace aggregate，并由当前 Codex Stop 事件严格核对 last_assistant_message",
-        "`goal pending present` has been retired: an agent cannot self-attest that it presented content to the user. Use `rayman goal pending render --current` to generate the workspace aggregate, then have the current Codex Stop event strictly verify it against last_assistant_message",
+        "`goal pending present` 已退役：代理不能自证用户展示。使用 `rayman goal pending render --current` 生成 client-neutral workspace aggregate；渲染本身不构成展示、送达或完成证据",
+        "`goal pending present` has been retired: an agent cannot self-attest that it presented content to the user. Use `rayman goal pending render --current` to generate the client-neutral workspace aggregate; rendering alone is not evidence of presentation, delivery, or completion",
     ),
     (
         "prepare 发现未计划的实际变更: {}。prepare 不会自动扩展 plan；先将这些路径恢复到 goal baseline，再按 program/args 逐参数调用: {}",

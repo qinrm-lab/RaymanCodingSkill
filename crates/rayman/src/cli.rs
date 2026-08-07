@@ -648,13 +648,13 @@ pub enum PendingAction {
         boundary_class: Option<String>,
     },
     List,
-    /// Render the exact aggregate human-boundary package that the current
-    /// Codex Stop event must observe byte-for-byte.
+    /// Render the exact aggregate human-boundary package for the complete
+    /// current response. A host adapter may apply a stricter native boundary.
     Render {
         #[arg(long, conflicts_with = "current")]
         goal: Option<String>,
-        /// Aggregate every currently askable current goal, matching the Stop
-        /// hook's workspace-wide candidate.
+        /// Aggregate every currently askable current goal into one
+        /// workspace-wide response.
         #[arg(long, conflicts_with = "goal")]
         current: bool,
     },

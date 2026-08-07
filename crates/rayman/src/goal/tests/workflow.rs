@@ -437,6 +437,9 @@ fn aggregate_render_is_deterministic_complete_and_goal_scoped() {
     expected_goal_ids.sort();
     assert_eq!(first.goal_ids, expected_goal_ids);
     assert_eq!(first.pending_ids.len(), 2);
+    assert!(first.text.contains("rayman.human-boundary-aggregate.v1"));
+    assert!(first.text.contains("\"scope\": \"current_response_only\""));
+    assert!(!first.text.contains("rayman.codex-stop-candidate"));
     assert!(first.text.contains(&item_a.id));
     assert!(first.text.contains(&item_b.id));
     assert_ne!(partial.text, first.text);

@@ -22,7 +22,8 @@ pub struct PendingList {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PendingItem {
     /// Version 0 is a readable legacy record. It can be listed, resolved, or
-    /// explicitly migrated, but it can never authorize a frontier or Stop.
+    /// explicitly migrated, but it can never authorize a frontier or native
+    /// completion boundary.
     #[serde(default)]
     pub contract_version: u32,
     pub id: String,
@@ -69,7 +70,8 @@ pub struct PendingItem {
     pub package_sha256: Option<String>,
     /// Historical agent assertion retained for audit only.  `alias` reads the
     /// former `presentation` field, while every subsequent write makes the
-    /// untrusted semantics explicit. It is never consulted by frontier/Stop.
+    /// untrusted semantics explicit. It is never consulted by frontier or a
+    /// native completion boundary.
     #[serde(
         default,
         alias = "presentation",
@@ -591,7 +593,9 @@ impl PendingStore {
     }
 
     /// Render every currently askable human package for the supplied goals as
-    /// one deterministic, locale-independent Stop candidate.
+    /// one deterministic, locale-independent human-boundary aggregate. Host
+    /// adapters decide how the current response is observed; rendering never
+    /// creates a delivery or completion receipt.
     pub fn render_for_goals(&self, goals: &[Goal]) -> Result<PendingRender> {
         if goals.is_empty() {
             bail!("pending render 至少需要一个 goal");
@@ -609,7 +613,7 @@ impl PendingStore {
                 || frontier.consultation != FrontierConsultation::Ready
             {
                 bail!(
-                    "goal {} 当前不能 render Stop candidate: decision={:?} consultation={:?} reason={}",
+                    "goal {} 当前不能 render human-boundary aggregate: decision={:?} consultation={:?} reason={}",
                     goal.id,
                     frontier.decision,
                     frontier.consultation,
@@ -652,27 +656,27 @@ impl PendingStore {
             if item.package_sha256.as_deref() != Some(package_sha256.as_str()) {
                 bail!("pending {} stored package hash 已漂移", item.id);
             }
-            packages.push(StopCandidatePackage {
+            packages.push(HumanBoundaryAggregatePackage {
                 pending_id: item.id.clone(),
                 package_sha256,
                 solution: CanonicalPendingPackage::from_item(item)?,
             });
         }
-        let candidate = CanonicalStopCandidate {
-            schema: "rayman.codex-stop-candidate.v1",
-            scope: "current_stop_event_only",
+        let aggregate = CanonicalHumanBoundaryAggregate {
+            schema: "rayman.human-boundary-aggregate.v1",
+            scope: "current_response_only",
             goal_ids: goal_ids.clone(),
             packages,
         };
-        let candidate_json = serde_json::to_string_pretty(&candidate)?;
+        let aggregate_json = serde_json::to_string_pretty(&aggregate)?;
         let text =
-            format!("Rayman human-boundary solution package\n\n```json\n{candidate_json}\n```");
-        let package_sha256s = candidate
+            format!("Rayman human-boundary solution package\n\n```json\n{aggregate_json}\n```");
+        let package_sha256s = aggregate
             .packages
             .iter()
             .map(|package| package.package_sha256.clone())
             .collect::<Vec<_>>();
-        let pending_ids = candidate
+        let pending_ids = aggregate
             .packages
             .iter()
             .map(|package| package.pending_id.clone())
@@ -780,7 +784,7 @@ fn frontier_report(goal: &Goal, blockers: Vec<PendingItem>) -> FrontierReport {
                 FrontierExecution::ContinueForeground,
                 FrontierConsultation::None,
                 false,
-                "a legacy human/external pending contract cannot authorize consultation or Stop; explicitly migrate it with its legacy package hash and stable capability identity, or resolve and replace it"
+                "a legacy human/external pending contract cannot authorize consultation or completion; explicitly migrate it with its legacy package hash and stable capability identity, or resolve and replace it"
                     .into(),
             )
         } else if !ready_now.is_empty() {
@@ -797,11 +801,11 @@ fn frontier_report(goal: &Goal, blockers: Vec<PendingItem>) -> FrontierReport {
                 FrontierConsultation::Ready,
                 background_execution_allowed,
                 if background_execution_allowed {
-                    "a complete immediate human solution package is ready; emit the exact deterministic `goal pending render` output, then only the current Codex Stop event may observe that candidate while the authorized isolated background mechanism continues"
+                    "a complete immediate human solution package is ready; emit the exact deterministic `goal pending render` output as the complete current response while the authorized isolated background mechanism continues"
                 } else if has_agent {
-                    "a complete immediate human solution package is ready; emit the exact deterministic `goal pending render` output as the final foreground handoff so the current Codex Stop event can observe that candidate"
+                    "a complete immediate human solution package is ready; emit the exact deterministic `goal pending render` output as the complete current foreground response"
                 } else {
-                    "a complete human solution package is ready; emit the exact deterministic `goal pending render` output so the current Codex Stop event can observe that candidate"
+                    "a complete human solution package is ready; emit the exact deterministic `goal pending render` output as the complete current response"
                 }
                 .into(),
             )
@@ -868,15 +872,15 @@ fn frontier_report(goal: &Goal, blockers: Vec<PendingItem>) -> FrontierReport {
 }
 
 #[derive(Serialize)]
-struct CanonicalStopCandidate {
+struct CanonicalHumanBoundaryAggregate {
     schema: &'static str,
     scope: &'static str,
     goal_ids: Vec<String>,
-    packages: Vec<StopCandidatePackage>,
+    packages: Vec<HumanBoundaryAggregatePackage>,
 }
 
 #[derive(Serialize)]
-struct StopCandidatePackage {
+struct HumanBoundaryAggregatePackage {
     pending_id: String,
     package_sha256: String,
     solution: CanonicalPendingPackage,
@@ -1000,7 +1004,7 @@ fn pending_package_sha256(
     CanonicalPendingPackage::from_submission(submission, capability_key, boundary_class)?.sha256()
 }
 
-pub fn normalize_stop_candidate_message(value: &str) -> String {
+pub fn normalize_human_boundary_message(value: &str) -> String {
     let mut normalized = value.replace("\r\n", "\n").replace('\r', "\n");
     if normalized.ends_with('\n') {
         normalized.pop();
