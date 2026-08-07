@@ -171,6 +171,7 @@ jobs:
             ReferenceCliPath = $artifact
             SkillPath = (Join-Path $PWD "SKILL.md")
             WorkspaceSkillPath = (Join-Path $PWD "SKILL.md")
+            SkillResourceMode = "Source"
             RequirePath = $true
             RequireSourceFresh = $true
           }

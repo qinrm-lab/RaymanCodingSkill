@@ -5597,6 +5597,7 @@ try {
             ReferenceCliPath = $artifact
             SkillPath = $canonicalSkill
             WorkspaceSkillPath = $canonicalSkill
+            SkillResourceMode = 'Source'
             DoctorWorkspace = $doctorWorkspaceRecord.Root
             RequireSourceFresh = $true
         }

@@ -12,13 +12,20 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$SkillPath,
 
-    # -SkillPath is the deployed Codex skill root. The doctor may inspect a
-    # different workspace skill (for example the repository SKILL.md while the
-    # deployed resources live under ~/.codex/skills). Omission preserves the
-    # historical single-root behavior.
+    # -SkillPath is interpreted by -SkillResourceMode. The doctor may inspect a
+    # different workspace skill (for example the repository SKILL.md while a
+    # deployed skill is verified). Omission preserves the historical
+    # single-root behavior.
     [Parameter(ParameterSetName = 'Verify')]
     [ValidateNotNullOrEmpty()]
     [string]$WorkspaceSkillPath,
+
+    # Deployed verifies every manifest destination against its repository
+    # source. Source is only for a pre-install artifact: -SkillPath must be the
+    # repository SKILL.md and only the manifest source identities are bound.
+    [Parameter(ParameterSetName = 'Verify')]
+    [ValidateSet('Deployed', 'Source')]
+    [string]$SkillResourceMode = 'Deployed',
 
     [Parameter(ParameterSetName = 'Verify')]
     [ValidateNotNullOrEmpty()]
@@ -236,14 +243,19 @@ function Resolve-SkillIdentitySnapshot {
         [Parameter(Mandatory = $true)]
         [string]$DeploymentSkillPath,
         [Parameter(Mandatory = $true)]
-        [string]$DoctorSkillPath
+        [string]$DoctorSkillPath,
+        [ValidateSet('deployed', 'source')]
+        [string]$PrimarySkillRole = 'deployed'
     )
 
-    $deployment = Resolve-RequiredPath -Path $DeploymentSkillPath -Label 'Deployed canonical skill'
+    $deployment = Resolve-RequiredPath `
+        -Path $DeploymentSkillPath `
+        -Label "$PrimarySkillRole canonical skill"
     $workspace = Resolve-RequiredPath -Path $DoctorSkillPath -Label 'Doctor workspace skill'
     return [pscustomobject]@{
         DeploymentPath = $deployment
         DeploymentHash = Get-Sha256 -Path $deployment
+        PrimarySkillRole = $PrimarySkillRole
         WorkspacePath = $workspace
         WorkspaceHash = Get-Sha256 -Path $workspace
     }
@@ -259,16 +271,92 @@ function Assert-SkillIdentitySnapshot {
 
     $actual = Resolve-SkillIdentitySnapshot `
         -DeploymentSkillPath $DeploymentSkillPath `
-        -DoctorSkillPath $DoctorSkillPath
+        -DoctorSkillPath $DoctorSkillPath `
+        -PrimarySkillRole $Expected.PrimarySkillRole
     if ($actual.DeploymentPath -ne $Expected.DeploymentPath -or
         $actual.DeploymentHash -ne $Expected.DeploymentHash) {
-        throw "$Label deployed skill identity changed during verification."
+        throw "$Label $($Expected.PrimarySkillRole) skill identity changed during verification."
     }
     if ($actual.WorkspacePath -ne $Expected.WorkspacePath -or
         $actual.WorkspaceHash -ne $Expected.WorkspaceHash) {
         throw "$Label workspace skill identity changed during verification."
     }
     return $actual
+}
+
+function Get-ManifestSkillResourceSnapshot {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('Deployed', 'Source')]
+        [string]$Mode,
+        [string]$DeploymentRoot
+    )
+
+    if ($Mode -eq 'Deployed' -and [string]::IsNullOrWhiteSpace($DeploymentRoot)) {
+        throw 'Deployed skill-resource verification requires a deployment root.'
+    }
+    $manifestPath = Resolve-RequiredPath `
+        -Path (Join-Path $repoRoot 'install-manifest.json') `
+        -Label 'Install manifest'
+    $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+    $verified = @()
+    foreach ($resource in @($manifest.codex_skill_resources)) {
+        if ($resource.destination -eq 'SKILL.md') { continue }  # checked independently
+        $sourceResource = Resolve-RequiredPath `
+            -Path (Join-Path $repoRoot $resource.source) `
+            -Label "Repository skill resource $($resource.source)"
+        $sourceResourceHash = Get-Sha256 -Path $sourceResource
+        $deployedResource = $null
+        $deployedResourceHash = $null
+        if ($Mode -eq 'Deployed') {
+            $deployedResource = Resolve-RequiredPath `
+                -Path (Join-Path $DeploymentRoot $resource.destination) `
+                -Label "Deployed skill resource $($resource.destination)"
+            $deployedResourceHash = Get-Sha256 -Path $deployedResource
+            if ($deployedResourceHash -ne $sourceResourceHash) {
+                throw "Deployed $($resource.destination) SHA-256 differs from the repository source $($resource.source): $deployedResourceHash != $sourceResourceHash"
+            }
+        }
+        $verified += [pscustomobject]@{
+            Destination = $resource.destination
+            Source = $resource.source
+            DeployedPath = $deployedResource
+            SourcePath = $sourceResource
+            DeployedHash = $deployedResourceHash
+            SourceHash = $sourceResourceHash
+        }
+    }
+    return $verified
+}
+
+function Assert-ManifestSkillResourceSnapshot {
+    param(
+        [Parameter(Mandatory = $true)][array]$Expected,
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('Deployed', 'Source')]
+        [string]$Mode,
+        [string]$DeploymentRoot,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    foreach ($verified in $Expected) {
+        $finalSource = Resolve-RequiredPath `
+            -Path (Join-Path $repoRoot $verified.Source) `
+            -Label "Repository skill resource $($verified.Source) ($Label)"
+        if ($finalSource -ne $verified.SourcePath -or
+            (Get-Sha256 -Path $finalSource) -ne $verified.SourceHash) {
+            throw "Repository $($verified.Source) identity changed during $Label."
+        }
+        if ($Mode -eq 'Deployed') {
+            $finalDeployed = Resolve-RequiredPath `
+                -Path (Join-Path $DeploymentRoot $verified.Destination) `
+                -Label "Deployed skill resource $($verified.Destination) ($Label)"
+            if ($finalDeployed -ne $verified.DeployedPath -or
+                (Get-Sha256 -Path $finalDeployed) -ne $verified.DeployedHash) {
+                throw "Deployed $($verified.Destination) identity changed during $Label."
+            }
+        }
+    }
 }
 
 function Assert-CanonicalSkillAssetBinding {
@@ -928,6 +1016,55 @@ function Invoke-ReleaseVerifierSelfTest {
             -DoctorSkillPath $workspaceSkillProbe `
             -Label 'Release verifier self-test restoration'
 
+        # The repository AGENTS.md is a Codex entrypoint, while the manifest
+        # deliberately maps publishable AGENT_CONTRACT.md to deployed AGENTS.md.
+        # Source mode must never resolve destination names under the repository;
+        # deployed mode must still reject any destination that is not the mapped
+        # source bytes.
+        $sourceResources = @(Get-ManifestSkillResourceSnapshot -Mode Source)
+        $sourceAgents = @($sourceResources | Where-Object Destination -eq 'AGENTS.md')
+        if ($sourceAgents.Count -ne 1 -or
+            (Split-Path -Leaf $sourceAgents[0].SourcePath) -ne 'AGENT_CONTRACT.md') {
+            throw 'Release verifier self-test failed: source mode lost the AGENT_CONTRACT.md to AGENTS.md mapping.'
+        }
+        $resourceDeploymentRoot = Join-Path $doctorProbeRoot 'deployment-resources'
+        foreach ($resource in $sourceResources) {
+            $destination = Join-Path $resourceDeploymentRoot $resource.Destination
+            $destinationParent = Split-Path -Parent $destination
+            [IO.Directory]::CreateDirectory($destinationParent) | Out-Null
+            [IO.File]::Copy($resource.SourcePath, $destination)
+        }
+        $deployedResources = @(
+            Get-ManifestSkillResourceSnapshot `
+                -Mode Deployed `
+                -DeploymentRoot $resourceDeploymentRoot
+        )
+        $deployedAgents = @($deployedResources | Where-Object Destination -eq 'AGENTS.md')
+        if ($deployedAgents.Count -ne 1) {
+            throw 'Release verifier self-test failed: deployed AGENTS.md was not verified exactly once.'
+        }
+        $repositoryAgents = Join-Path $repoRoot 'AGENTS.md'
+        $mappedAgents = $deployedAgents[0]
+        [IO.File]::WriteAllBytes($mappedAgents.DeployedPath, [IO.File]::ReadAllBytes($repositoryAgents))
+        $mappedDestinationDriftRejected = $false
+        try {
+            $null = Get-ManifestSkillResourceSnapshot `
+                -Mode Deployed `
+                -DeploymentRoot $resourceDeploymentRoot
+        } catch {
+            $mappedDestinationDriftRejected = $_.Exception.Message -match 'Deployed AGENTS.md SHA-256 differs'
+        } finally {
+            [IO.File]::WriteAllBytes($mappedAgents.DeployedPath, [IO.File]::ReadAllBytes($mappedAgents.SourcePath))
+        }
+        if (-not $mappedDestinationDriftRejected) {
+            throw 'Release verifier self-test failed: deployed mode accepted repository AGENTS.md in place of mapped AGENT_CONTRACT.md.'
+        }
+        Assert-ManifestSkillResourceSnapshot `
+            -Expected $deployedResources `
+            -Mode Deployed `
+            -DeploymentRoot $resourceDeploymentRoot `
+            -Label 'self-test restoration'
+
         # Exercise the same wrapper used by each real doctor invocation: a binding
         # mutation after the pre-check must be rejected by the post-check.
         $originalBinding = [IO.File]::ReadAllBytes($bindingProbe)
@@ -1082,7 +1219,7 @@ function Invoke-ReleaseVerifierSelfTest {
         }
     }
 
-    Write-Host 'Release verifier self-test passed: native command shadows, independent deployed/workspace skill drift, packaged canonical skill drift, isolated doctor workspace ancestry/terminal guards, and forged GitHub tag context were verified.'
+    Write-Host 'Release verifier self-test passed: source/deployed manifest-resource modes, native command shadows, independent deployed/workspace skill drift, packaged canonical skill drift, isolated doctor workspace ancestry/terminal guards, and forged GitHub tag context were verified.'
 }
 
 if ($SelfTest) {
@@ -1149,9 +1286,11 @@ $effectiveWorkspaceSkillPath = if ([string]::IsNullOrWhiteSpace($WorkspaceSkillP
 } else {
     $WorkspaceSkillPath
 }
+$primarySkillRole = if ($SkillResourceMode -eq 'Source') { 'source' } else { 'deployed' }
 $skillIdentity = Resolve-SkillIdentitySnapshot `
     -DeploymentSkillPath $SkillPath `
-    -DoctorSkillPath $effectiveWorkspaceSkillPath
+    -DoctorSkillPath $effectiveWorkspaceSkillPath `
+    -PrimarySkillRole $primarySkillRole
 $resolvedSkill = $skillIdentity.DeploymentPath
 $resolvedWorkspaceSkill = $skillIdentity.WorkspacePath
 $doctorWorkspaceSnapshot = $null
@@ -1164,6 +1303,16 @@ $resolvedDoctorWorkspace = if ([string]::IsNullOrWhiteSpace($DoctorWorkspace)) {
 $canonicalSkillBinding = Assert-CanonicalSkillAssetBinding -RepositorySkillPath $canonicalSkill -PackagedSkillPath $packagedCanonicalSkill
 $resolvedCanonicalSkill = $canonicalSkillBinding.RepositoryPath
 $resolvedPackagedCanonicalSkill = $canonicalSkillBinding.PackagedPath
+if ($SkillResourceMode -eq 'Source') {
+    $comparison = if ($IsWindows) {
+        [StringComparison]::OrdinalIgnoreCase
+    } else {
+        [StringComparison]::Ordinal
+    }
+    if (-not $resolvedSkill.Equals($resolvedCanonicalSkill, $comparison)) {
+        throw "Source skill-resource mode requires -SkillPath to resolve to the repository canonical SKILL.md: $resolvedCanonicalSkill"
+    }
+}
 
 $doctor = Assert-DoctorReady `
     -Workspace $resolvedDoctorWorkspace `
@@ -1182,44 +1331,25 @@ $workspaceSkillHash = Get-Sha256 -Path $resolvedWorkspaceSkill
 $canonicalSkillHash = $canonicalSkillBinding.RepositoryHash
 $packagedCanonicalSkillHash = $canonicalSkillBinding.PackagedHash
 if ($deployedSkillHash -ne $canonicalSkillHash) {
-    throw "Deployed SKILL.md SHA-256 differs from the repository canonical skill: $deployedSkillHash != $canonicalSkillHash"
+    throw "$primarySkillRole SKILL.md SHA-256 differs from the repository canonical skill: $deployedSkillHash != $canonicalSkillHash"
 }
 if ($workspaceSkillHash -ne $canonicalSkillHash) {
     throw "Doctor workspace SKILL.md SHA-256 differs from the repository canonical skill: $workspaceSkillHash != $canonicalSkillHash"
 }
 
-# install-manifest.json deploys three Codex skill resources under one rollback
-# transaction, and this script is the artifact-identity primitive the release
-# contract names — but it hashed only SKILL.md, so AGENTS.md and the workflow
-# contract could be arbitrarily stale in the deployed skill and still certify.
-# Verify every resource the manifest actually deploys, relative to the deployed
-# SKILL.md's own directory (that is the deployment root).
-$manifestPath = Resolve-RequiredPath -Path (Join-Path $repoRoot 'install-manifest.json') -Label 'Install manifest'
-$manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
-$deploymentRoot = Split-Path -Parent $resolvedSkill
-$verifiedSkillResources = @()
-foreach ($resource in @($manifest.codex_skill_resources)) {
-    if ($resource.destination -eq 'SKILL.md') { continue }  # already checked above
-    $deployedResource = Resolve-RequiredPath `
-        -Path (Join-Path $deploymentRoot $resource.destination) `
-        -Label "Deployed skill resource $($resource.destination)"
-    $sourceResource = Resolve-RequiredPath `
-        -Path (Join-Path $repoRoot $resource.source) `
-        -Label "Repository skill resource $($resource.source)"
-    $deployedResourceHash = Get-Sha256 -Path $deployedResource
-    $sourceResourceHash = Get-Sha256 -Path $sourceResource
-    if ($deployedResourceHash -ne $sourceResourceHash) {
-        throw "Deployed $($resource.destination) SHA-256 differs from the repository source $($resource.source): $deployedResourceHash != $sourceResourceHash"
-    }
-    $verifiedSkillResources += [pscustomobject]@{
-        Destination = $resource.destination
-        Source = $resource.source
-        DeployedPath = $deployedResource
-        SourcePath = $sourceResource
-        DeployedHash = $deployedResourceHash
-        SourceHash = $sourceResourceHash
-    }
+# A pre-install source artifact has no deployment root yet. Bind every declared
+# source identity without interpreting destination names under the repository.
+# Installed/release mode remains fail-closed over both sides of each mapping.
+$deploymentRoot = if ($SkillResourceMode -eq 'Deployed') {
+    Split-Path -Parent $resolvedSkill
+} else {
+    $null
 }
+$verifiedSkillResources = @(
+    Get-ManifestSkillResourceSnapshot `
+        -Mode $SkillResourceMode `
+        -DeploymentRoot $deploymentRoot
+)
 
 $sourceFreshHash = $null
 if ($RequireSourceFresh) {
@@ -1313,25 +1443,14 @@ if ($finalSkillPath -ne $resolvedSkill -or
     (Get-Sha256 -Path $finalWorkspaceSkillPath) -ne $workspaceSkillHash -or
     (Get-Sha256 -Path $finalCanonicalSkill) -ne $canonicalSkillHash -or
     (Get-Sha256 -Path $finalPackagedCanonicalSkill) -ne $packagedCanonicalSkillHash) {
-    throw 'Deployed, repository, or packaged canonical SKILL.md identity changed during verification.'
+    throw "$primarySkillRole, repository, or packaged canonical SKILL.md identity changed during verification."
 }
-# Every other supplied/deployed identity is re-resolved and re-hashed here so a
-# concurrent replacement cannot inherit an already-validated digest. The other
-# manifest-deployed skill resources must obey the same rule as SKILL.md.
-foreach ($verified in $verifiedSkillResources) {
-    $finalDeployed = Resolve-RequiredPath `
-        -Path (Join-Path $deploymentRoot $verified.Destination) `
-        -Label "Deployed skill resource $($verified.Destination) (final check)"
-    $finalSource = Resolve-RequiredPath `
-        -Path (Join-Path $repoRoot $verified.Source) `
-        -Label "Repository skill resource $($verified.Source) (final check)"
-    if ($finalDeployed -ne $verified.DeployedPath -or
-        $finalSource -ne $verified.SourcePath -or
-        (Get-Sha256 -Path $finalDeployed) -ne $verified.DeployedHash -or
-        (Get-Sha256 -Path $finalSource) -ne $verified.SourceHash) {
-        throw "Deployed or repository $($verified.Destination) identity changed during verification."
-    }
-}
+# Re-resolve and re-hash the exact resource identities selected by the mode.
+Assert-ManifestSkillResourceSnapshot `
+    -Expected $verifiedSkillResources `
+    -Mode $SkillResourceMode `
+    -DeploymentRoot $deploymentRoot `
+    -Label 'terminal verification'
 if ($RequirePath) {
     $finalPathCli = Resolve-EffectiveRaymanApplication
     if ($finalPathCli -ne $pathCli -or (Get-Sha256 -Path $finalPathCli) -ne $pathHash) {
@@ -1373,7 +1492,7 @@ foreach ($name in @($toolIdentity.Keys | Sort-Object)) {
     }
 }
 
-if ($RequirePath) {
+if ($RequirePath -and $SkillResourceMode -eq 'Deployed') {
     Write-Host "Installed release identity verified: rayman $expectedVersion (MSRV $expectedMsrv)"
 } else {
     Write-Host "Release artifact contract verified: rayman $expectedVersion (MSRV $expectedMsrv)"
@@ -1382,7 +1501,8 @@ Write-Host "  CLI SHA-256: $cliHash"
 if ($resolvedReference) {
     Write-Host "  Reference artifact: $resolvedReference"
 }
-Write-Host "  Deployed canonical SKILL.md: $resolvedSkill"
+Write-Host "  $primarySkillRole canonical SKILL.md: $resolvedSkill"
+Write-Host "  Skill resource mode: $SkillResourceMode"
 Write-Host "  Doctor workspace SKILL.md: $resolvedWorkspaceSkill"
 if ($RequirePath) {
     Write-Host '  PATH identity: verified'
