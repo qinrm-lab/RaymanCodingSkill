@@ -29,9 +29,11 @@ shared contract and
 copying policy. [install-manifest.json](install-manifest.json) is the deployment
 authority: it publishes `AGENT_CONTRACT.md` as the installed Codex skill's
 `AGENTS.md`, without either workspace-local checkpoint block, while Claude Code
-remains repository-only. Run `pwsh ./scripts/check-agent-instructions.ps1` to
-verify UTF-8, markers, adapter ownership, managed-block isolation, the manifest
-mapping, and deployment scopes; `scripts/check-repo.ps1` runs the same check.
+remains repository-only. Run
+`pwsh ./scripts/check-agent-instructions.ps1 -SelfTest` to verify UTF-8,
+markers, adapter ownership, managed-block isolation, the manifest mapping,
+client-neutral pending semantics, deployment scopes, and fail-closed negative
+fixtures; `scripts/check-repo.ps1` runs the same self-test.
 
 ## Build
 

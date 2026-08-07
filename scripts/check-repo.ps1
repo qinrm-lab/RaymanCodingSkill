@@ -10,7 +10,7 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $repoRoot
 
-& (Join-Path $PSScriptRoot 'check-agent-instructions.ps1')
+& (Join-Path $PSScriptRoot 'check-agent-instructions.ps1') -SelfTest
 & (Join-Path $PSScriptRoot 'release-closeout.ps1') -SelfTest
 # Runs the audit script self-test, then the isolated-advisory-DB dependency
 # policy checks. Doing this before the multi-minute fmt/clippy/test stages

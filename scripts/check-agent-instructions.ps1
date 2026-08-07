@@ -1,5 +1,7 @@
 [CmdletBinding()]
-param()
+param(
+    [switch]$SelfTest
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -23,6 +25,30 @@ function Read-StrictUtf8 {
     }
 }
 
+function Assert-PublishedContractSafe {
+    param([Parameter(Mandatory = $true)][string]$Text)
+    if ($Text.Contains('save-work-status:managed-', [StringComparison]::Ordinal) -or
+        $Text -match '(?m)(?<![A-Za-z0-9_])[A-Za-z]:[\\/]') {
+        throw 'Published AGENT_CONTRACT.md must not contain a managed block or an absolute Windows path.'
+    }
+}
+
+function Assert-Throws {
+    param(
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][scriptblock]$Action
+    )
+    $threw = $false
+    try {
+        & $Action
+    } catch {
+        $threw = $true
+    }
+    if (-not $threw) {
+        throw "Agent-instruction self-test did not fail closed: $Label"
+    }
+}
+
 $contract = Read-StrictUtf8 'AGENT_CONTRACT.md'
 $agents = Read-StrictUtf8 'AGENTS.md'
 $skill = Read-StrictUtf8 'SKILL.md'
@@ -30,6 +56,9 @@ $claude = Read-StrictUtf8 'CLAUDE.md'
 $workflow = Read-StrictUtf8 'references/workflow-contract.md'
 $readme = Read-StrictUtf8 'README.md'
 $manifestText = Read-StrictUtf8 'install-manifest.json'
+$pendingSource = Read-StrictUtf8 'crates/rayman/src/goal/pending.rs'
+$goalCliSource = Read-StrictUtf8 'crates/rayman/src/goal_cli.rs'
+$codexHookSource = Read-StrictUtf8 'crates/rayman/src/codex_hook.rs'
 
 $canonicalSkillAsset = 'crates/rayman/assets/canonical-skill.md'
 $null = Read-StrictUtf8 $canonicalSkillAsset
@@ -80,10 +109,7 @@ if (-not $contract.Contains('references/workflow-contract.md', [StringComparison
 if (-not $contract.Contains('Do not permit direct or indirect skill-invocation cycles.', [StringComparison]::Ordinal)) {
     throw 'AGENT_CONTRACT.md must prohibit direct and indirect skill-invocation cycles.'
 }
-if ($contract.Contains('save-work-status:managed-', [StringComparison]::Ordinal) -or
-    $contract -match '(?m)(?<![A-Za-z0-9_])[A-Za-z]:[\\/]') {
-    throw 'Published AGENT_CONTRACT.md must not contain a managed block or an absolute Windows path.'
-}
+Assert-PublishedContractSafe -Text $contract
 
 function Get-ManagedBlock {
     param(
@@ -98,27 +124,35 @@ function Get-ManagedBlock {
     return $matches[0].Value
 }
 
-$codexBlock = Get-ManagedBlock -Name 'AGENTS.md' -Text $agents
-$claudeBlock = Get-ManagedBlock -Name 'CLAUDE.md' -Text $claude
-$normalizeAgent = {
-    param([string]$Text)
-    return [regex]::Replace($Text, '--agent\s+(?:codex|claude-code)', '--agent <client>')
+function Assert-ManagedBlockIsolation {
+    param(
+        [Parameter(Mandatory = $true)][string]$CodexText,
+        [Parameter(Mandatory = $true)][string]$ClaudeText
+    )
+    $codexBlock = Get-ManagedBlock -Name 'AGENTS.md' -Text $CodexText
+    $claudeBlock = Get-ManagedBlock -Name 'CLAUDE.md' -Text $ClaudeText
+    $normalizeAgent = {
+        param([string]$Text)
+        return [regex]::Replace($Text, '--agent\s+(?:codex|claude-code)', '--agent <client>')
+    }
+    if ((& $normalizeAgent $codexBlock) -cne (& $normalizeAgent $claudeBlock)) {
+        throw 'Codex and Claude Code managed blocks may differ only in the --agent value.'
+    }
+    if ($codexBlock -notmatch '--agent\s+codex(?:\s|$)' -or
+        $codexBlock -match '--agent\s+claude-code(?:\s|$)' -or
+        $claudeBlock -notmatch '--agent\s+claude-code(?:\s|$)' -or
+        $claudeBlock -match '--agent\s+codex(?:\s|$)') {
+        throw 'Managed block ownership does not match its client entrypoint.'
+    }
+    if (-not $CodexText.Contains('Codex checkpoint registration', [StringComparison]::Ordinal) -or
+        -not $CodexText.Contains('Claude Code must not execute it', [StringComparison]::Ordinal) -or
+        -not $ClaudeText.Contains('Claude Code checkpoint registration', [StringComparison]::Ordinal) -or
+        -not $ClaudeText.Contains('Do not execute the Codex-scoped managed block', [StringComparison]::Ordinal)) {
+        throw 'Client entrypoints must state explicit managed-block ownership and exclusion.'
+    }
 }
-if ((& $normalizeAgent $codexBlock) -cne (& $normalizeAgent $claudeBlock)) {
-    throw 'Codex and Claude Code managed blocks may differ only in the --agent value.'
-}
-if ($codexBlock -notmatch '--agent\s+codex(?:\s|$)' -or
-    $codexBlock -match '--agent\s+claude-code(?:\s|$)' -or
-    $claudeBlock -notmatch '--agent\s+claude-code(?:\s|$)' -or
-    $claudeBlock -match '--agent\s+codex(?:\s|$)') {
-    throw 'Managed block ownership does not match its client entrypoint.'
-}
-if (-not $agents.Contains('Codex checkpoint registration', [StringComparison]::Ordinal) -or
-    -not $agents.Contains('Claude Code must not execute it', [StringComparison]::Ordinal) -or
-    -not $claude.Contains('Claude Code checkpoint registration', [StringComparison]::Ordinal) -or
-    -not $claude.Contains('Do not execute the Codex-scoped managed block', [StringComparison]::Ordinal)) {
-    throw 'Client entrypoints must state explicit managed-block ownership and exclusion.'
-}
+
+Assert-ManagedBlockIsolation -CodexText $agents -ClaudeText $claude
 foreach ($required in @('--must-proof KIND::TEXT', 'goal handoff start', 'Unbound `rayman check`', 'checkpoint save')) {
     if (-not $workflow.Contains($required, [StringComparison]::OrdinalIgnoreCase)) {
         throw "Shared workflow reference is missing required contract text: $required"
@@ -145,8 +179,29 @@ foreach ($entry in $publicPendingContracts.GetEnumerator()) {
 }
 if (-not $skill.Contains('current Codex Stop event', [StringComparison]::Ordinal) -or
     -not $workflow.Contains('current Codex Stop event', [StringComparison]::Ordinal) -or
-    -not $readme.Contains('consultation=none|deferred|ready', [StringComparison]::Ordinal)) {
+    $workflow -notmatch 'Claude\s+Code must not execute or emulate that Codex hook' -or
+    -not $readme.Contains('consultation=none|deferred|ready', [StringComparison]::Ordinal) -or
+    -not $readme.Contains('rayman.human-boundary-aggregate.v1', [StringComparison]::Ordinal)) {
     throw 'Public pending contracts must describe current-event observation and the none/deferred/ready frontier.'
+}
+if (-not $pendingSource.Contains('rayman.human-boundary-aggregate.v1', [StringComparison]::Ordinal) -or
+    -not $pendingSource.Contains('current_response_only', [StringComparison]::Ordinal)) {
+    throw 'Shared pending implementation is missing the client-neutral aggregate schema and scope.'
+}
+foreach ($entry in @{
+        'crates/rayman/src/goal/pending.rs' = $pendingSource
+        'crates/rayman/src/goal_cli.rs' = $goalCliSource
+    }.GetEnumerator()) {
+    foreach ($forbidden in @('rayman.codex-stop-candidate', 'current_stop_event_only', 'last_assistant_message', 'current Codex Stop event')) {
+        if ($entry.Value.Contains($forbidden, [StringComparison]::Ordinal)) {
+            throw "Client-neutral pending implementation contains Codex-specific semantics '$forbidden': $($entry.Key)"
+        }
+    }
+}
+foreach ($required in @('last_assistant_message', 'normalize_human_boundary_message', 'codex_stop_candidate_observed')) {
+    if (-not $codexHookSource.Contains($required, [StringComparison]::Ordinal)) {
+        throw "Codex Stop adapter is missing its strict native observation contract: $required"
+    }
 }
 
 $skillLines = $skill -split "`n"
@@ -176,11 +231,22 @@ if ($manifest.clients.claude_code.deployment_scope -ne 'repository_entrypoint_on
     throw 'Claude Code must remain a repository-only entrypoint.'
 }
 
-$expected = @(
-    'AGENT_CONTRACT.md|AGENTS.md'
-    'SKILL.md|SKILL.md'
-    'references/workflow-contract.md|references/workflow-contract.md'
-) | Sort-Object
+function Assert-ManifestResourceSet {
+    param([Parameter(Mandatory = $true)][string[]]$Actual)
+    $expected = @(
+        'AGENT_CONTRACT.md|AGENTS.md'
+        'SKILL.md|SKILL.md'
+        'references/workflow-contract.md|references/workflow-contract.md'
+    ) | Sort-Object
+    $Actual = @($Actual | Sort-Object)
+    if (@(Compare-Object $expected $Actual).Count -ne 0) {
+        throw "Codex install resources differ from the required manifest set: $($Actual -join ', ')"
+    }
+    if ($Actual -match '^CLAUDE.md\|') {
+        throw 'CLAUDE.md must not be advertised as a global installed resource.'
+    }
+}
+
 $actual = @()
 foreach ($resource in @($manifest.codex_skill_resources)) {
     $properties = @($resource.PSObject.Properties.Name | Sort-Object)
@@ -197,12 +263,39 @@ foreach ($resource in @($manifest.codex_skill_resources)) {
     $null = Read-StrictUtf8 $source
     $actual += "$source|$destination"
 }
-$actual = @($actual | Sort-Object)
-if (@(Compare-Object $expected $actual).Count -ne 0) {
-    throw "Codex install resources differ from the required manifest set: $($actual -join ', ')"
-}
-if ($actual -match '^CLAUDE.md\|') {
-    throw 'CLAUDE.md must not be advertised as a global installed resource.'
+Assert-ManifestResourceSet -Actual $actual
+
+if ($SelfTest) {
+    Assert-Throws -Label 'published managed block' -Action {
+        Assert-PublishedContractSafe -Text ($contract + "`n<!-- save-work-status:managed-begin v5 -->")
+    }
+    Assert-Throws -Label 'published absolute checkout path' -Action {
+        Assert-PublishedContractSafe -Text ($contract + "`nC:\private\checkout")
+    }
+    Assert-Throws -Label 'Claude block running as Codex' -Action {
+        $wrongClaude = $claude.Replace('--agent claude-code', '--agent codex')
+        Assert-ManagedBlockIsolation -CodexText $agents -ClaudeText $wrongClaude
+    }
+    Assert-Throws -Label 'missing client ownership exclusion' -Action {
+        $ambiguousCodex = $agents.Replace('Claude Code must not execute it', 'Another client may execute it')
+        Assert-ManagedBlockIsolation -CodexText $ambiguousCodex -ClaudeText $claude
+    }
+    Assert-Throws -Label 'repository AGENTS deployed globally' -Action {
+        Assert-ManifestResourceSet -Actual @(
+            'AGENTS.md|AGENTS.md'
+            'SKILL.md|SKILL.md'
+            'references/workflow-contract.md|references/workflow-contract.md'
+        )
+    }
+    Assert-Throws -Label 'Claude entrypoint deployed globally' -Action {
+        Assert-ManifestResourceSet -Actual @(
+            'AGENT_CONTRACT.md|AGENTS.md'
+            'CLAUDE.md|CLAUDE.md'
+            'SKILL.md|SKILL.md'
+            'references/workflow-contract.md|references/workflow-contract.md'
+        )
+    }
+    Write-Output 'agent-instructions self-test: PASS'
 }
 
 Write-Output 'agent-instructions: PASS'
