@@ -109,6 +109,7 @@ function Get-ReleaseBinding {
     foreach ($name in @(
         'audit-repository.ps1',
         'check-repo.ps1',
+        'repository-quality.ps1',
         'release-closeout.ps1',
         'verify-release-contract.ps1'
     )) {

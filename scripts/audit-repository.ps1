@@ -31,6 +31,7 @@ $ErrorActionPreference = 'Stop'
 if ($PSVersionTable.PSVersion.Major -lt 7) {
     throw 'audit-repository.ps1 requires PowerShell 7+. Run it with pwsh, not Windows PowerShell.'
 }
+. (Join-Path $PSScriptRoot 'repository-quality.ps1')
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $artifactName = if ($IsWindows) { 'rayman.exe' } else { 'rayman' }
@@ -673,9 +674,11 @@ try {
     Write-AuditPhase -Name 'environment_preflight' -Status 'pass'
 
     Write-AuditPhase -Name 'root_quality' -Status 'start'
-    Invoke-NativeChecked $nativeApplications.Cargo.Path @('fmt', '--all', '--check')
-    Invoke-NativeChecked $nativeApplications.Cargo.Path @('clippy', '--locked', '--workspace', '--all-targets', '--all-features', '--', '-D', 'warnings')
-    Invoke-NativeChecked $nativeApplications.Cargo.Path @('test', '--locked', '--workspace', '--all-targets')
+    foreach ($qualityCommand in @(Get-RepositoryQualityCommands -Suite Root)) {
+        Invoke-NativeChecked `
+            -FilePath $nativeApplications.Cargo.Path `
+            -Arguments $qualityCommand.Arguments
+    }
     Write-AuditPhase -Name 'root_quality' -Status 'pass'
 
     # MSRV is mandatory. rustup run fails explicitly when the declared toolchain
@@ -728,9 +731,11 @@ try {
     Write-AuditPhase -Name 'cli_coverage' -Status 'pass'
 
     Write-AuditPhase -Name 'evals' -Status 'start'
-    Invoke-NativeChecked $nativeApplications.Cargo.Path @('fmt', '--manifest-path', 'evals/Cargo.toml', '--all', '--check')
-    Invoke-NativeChecked $nativeApplications.Cargo.Path @('clippy', '--manifest-path', 'evals/Cargo.toml', '--locked', '--all-targets', '--all-features', '--', '-D', 'warnings')
-    Invoke-NativeChecked $nativeApplications.Cargo.Path @('test', '--manifest-path', 'evals/Cargo.toml', '--locked', '--all-targets')
+    foreach ($qualityCommand in @(Get-RepositoryQualityCommands -Suite Evals)) {
+        Invoke-NativeChecked `
+            -FilePath $nativeApplications.Cargo.Path `
+            -Arguments $qualityCommand.Arguments
+    }
 
     Invoke-NativeExpectedFailure $nativeApplications.Cargo.Path @(
         'run', '--manifest-path', 'evals/Cargo.toml', '--locked', '--',

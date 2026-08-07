@@ -25,7 +25,7 @@
     {
       "path": "crates/rayman/src/goal.rs",
       "kind": "large_file",
-      "reason": "GoalStore is the single fail-closed transaction boundary for baseline-bound goal state and write-ahead plan publication; plan-intent hashing, CAS confirmation, legacy-plan quarantine, and atomic persistence share private invariants that are validated together. Focused goal tests, CLI integration tests, and the full repository gate cover this module; this exact exemption keeps the finding visible until plan publication can be extracted as a dedicated reviewed change."
+      "reason": "GoalStore remains the single fail-closed transaction boundary for baseline-bound goal state, workspace CAS checks, legacy quarantine, and atomic persistence. Deterministic plan-publication hashing, state conversion, and envelope validation now live in goal/plan_publication.rs; focused goal tests, CLI integration tests, and the full repository gate cover the remaining transactional module."
     },
     {
       "path": "crates/rayman/src/state_lock.rs",
@@ -45,7 +45,7 @@
     {
       "path": "crates/rayman/src/codex_host.rs",
       "kind": "high_fan_in",
-      "reason": "Codex host capability detection is intentionally centralized so doctor, goal preparation, and hook-facing diagnostics report one conservative read-only contract; focused codex_host tests, CLI integration tests, and the full repository gate cover all consumers."
+      "reason": "Codex home resolution, patch availability, and Windows token fact collection remain one host adapter; client-neutral execution-context normalization and classification now live in execution_context.rs. Focused host/context tests, CLI integration tests, and the full repository gate cover both layers."
     },
     {
       "path": "crates/rayman/src/workspace.rs",

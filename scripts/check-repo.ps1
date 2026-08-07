@@ -6,6 +6,7 @@ $ErrorActionPreference = 'Stop'
 if ($PSVersionTable.PSVersion.Major -lt 7) {
     throw 'check-repo.ps1 requires PowerShell 7+. Run it with pwsh, not Windows PowerShell.'
 }
+. (Join-Path $PSScriptRoot 'repository-quality.ps1')
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $repoRoot
@@ -43,22 +44,11 @@ function Invoke-NativeChecked {
 $cargo = Resolve-NativeApplication -Name 'cargo'
 $git = Resolve-NativeApplication -Name 'git'
 
-Invoke-NativeChecked -Application $cargo -Arguments @('fmt', '--all', '--check')
-Invoke-NativeChecked -Application $cargo -Arguments @(
-    'clippy', '--locked', '--workspace', '--all-targets', '--all-features', '--', '-D', 'warnings'
-)
-Invoke-NativeChecked -Application $cargo -Arguments @(
-    'test', '--locked', '--workspace', '--all-targets'
-)
-Invoke-NativeChecked -Application $cargo -Arguments @(
-    'fmt', '--manifest-path', 'evals/Cargo.toml', '--all', '--check'
-)
-Invoke-NativeChecked -Application $cargo -Arguments @(
-    'clippy', '--manifest-path', 'evals/Cargo.toml', '--locked', '--all-targets', '--all-features', '--', '-D', 'warnings'
-)
-Invoke-NativeChecked -Application $cargo -Arguments @(
-    'test', '--manifest-path', 'evals/Cargo.toml', '--locked', '--all-targets'
-)
+foreach ($suite in @('Root', 'Evals')) {
+    foreach ($qualityCommand in @(Get-RepositoryQualityCommands -Suite $suite)) {
+        Invoke-NativeChecked -Application $cargo -Arguments $qualityCommand.Arguments
+    }
+}
 $raymanName = if ($IsWindows) { 'rayman.exe' } else { 'rayman' }
 # The dogfood gates below must run the binary this script just built. An ambient
 # CARGO_TARGET_DIR redirects cargo's output elsewhere, which left a stale

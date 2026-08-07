@@ -21,14 +21,9 @@ Use this skill when the user explicitly invokes Rayman or when
 canonical file. A leftover state directory without that activation contract
 is orphan state and does not authorize automatic use.
 
-After an installed identity update, `rayman workspace rebind --yes` repairs only complete,
-enabled `raymancodingskill` identity drift when current skill bytes match the canonical
-`SKILL.md` embedded in the running CLI. It updates only the identity scalars under the
-shared activation lock, fails closed otherwise, and never scans other workspaces. On explicit
-Rayman use, rebind a non-read-only task and continue it; read-only work only
-reports recovery. The intent-blind Stop Hook never writes the binding; it still
-evaluates current goals and blocks unfinished Owner Mode work. The shared
-workflow reference defines the exact boundary.
+For explicit non-read-only use, apply the eligible rebind and continuation
+rules in the shared workflow reference. Activation writes remain fail closed;
+this adapter does not redefine their identity or permission contract.
 
 ## Codex adapter
 
@@ -39,53 +34,30 @@ workflow reference defines the exact boundary.
 - Use `rayman codex-hook status|install --yes|uninstall --yes|stop` only for
   the Codex host integration. Preserve unrelated handlers.
 - Claude Code uses the repository `CLAUDE.md` entrypoint; this installer does
-  not claim a global Claude deployment.
+  not claim a global Claude deployment, and Claude Code must not execute or
+  emulate the Codex Stop hook.
+- A human boundary is rendered with `rayman goal pending render --current`.
+  Only the current Codex Stop event may perform the native, event-local output
+  comparison described by the shared workflow; it creates no durable delivery
+  or awareness receipt.
 - Diagnose Codex Windows patch failures by signature: split-root enforcement
   requires the `elevated` sandbox; a `WindowsApps` shim requires the non-MSIX
   Codex install; `helper_unknown_error` is a host boundary. Stop retrying and
   use the managed-scratch `git apply` or whole-file fallback defined in the
   workflow reference.
-- Request escalated permissions upfront for rayman state writes, git
-  stage/commit, repository gates, and installer runs; over-long command
-  lines fail to spawn under the sandbox wrapper, so split them. Details:
-  the sandbox and permission boundaries section of the workflow reference.
 - Keep OS identity separate from elevation transport. Inspect the execution
   principal/profile probe before retrying a broker. A principal fingerprint
-  proves only the SID, not ACL capability; require fresh evidence for the
-  boundary that matters (SID, profile, or an action-specific permission probe)
-  instead of treating elevated, COM, Terminal, or Task Scheduler as evidence.
+  proves only the SID, not ACL capability. The shared workflow defines the
+  required action-specific evidence.
 
-## Working flow
+## Shared workflow
 
-1. Confirm activation, perform an eligible explicit-use rebind when the task is
-   not read-only, then start a goal and run `prepare --goal <id>`. Every later
-   prepare reconciles the live goal-baseline delta with the effective plan; it
-   never auto-extends a plan after the source changed.
-2. Persist a pre-mutation plan for multi-file work and extend it before
-   touching newly discovered paths.
-3. Implement conservatively, run focused project checks, and record staged
-   progress without treating it as authority.
-4. Use atomic `--must-proof KIND::TEXT` requirements and matching
-   `goal validate` receipts for delivery claims.
-5. Record a stable final gate with `--authority --repeat 2`, review a
-   high-priority final fingerprint, close packages and goal, then run
-   `finish --goal <id>`.
-6. For release transfer, create a clean-HEAD `goal handoff start` contract and
-   complete its installation, audit, and source-fresh stages.
-
-Keep working while safe agent-owned work remains. Human/external consultations
-must be complete, capability-keyed solution packages. An askable `ready`
-frontier only authorizes asking: run `goal pending render --current`, emit that
-exact workspace aggregate as the complete final message, and let only the
-current Codex Stop event compare its `last_assistant_message`. No persisted
-receipt proves delivery, visibility, reading, or user awareness. Commit, push,
-install, publish, deploy, destructive deletion, and account changes still require user authority.
-
-## Detailed contract
-
-The shared command, evidence, lifecycle, checkpoint, and release rules live in
-[references/workflow-contract.md](references/workflow-contract.md).
+Goal lifecycle, planning, validation, blocker/frontier handling, checkpoints,
+concurrency, permissions, final authority, release transfer, and degradation
+are governed exclusively by
+[references/workflow-contract.md](references/workflow-contract.md). Follow it
+without copying its shared policy back into this adapter.
 
 ## Degradation and boundary
 
-Prefer `rayman` on PATH, then a built release binary, then `cargo run -p rayman --`; if unavailable, work manually and report that Rayman gates were not verified. This skill never manages host accounts, OAuth, IDE login, or connectors.
+This skill never manages host accounts, OAuth, IDE login, or connectors.

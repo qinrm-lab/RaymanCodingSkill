@@ -38,7 +38,7 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
     let state_write = rayman::state_paths::state_write_probe(root);
     let activation_metadata = rayman::workspace::activation_metadata_capability_probe(root);
     let host_patch = rayman::codex_host::patch_probe(None);
-    let execution_context = rayman::codex_host::execution_context_probe();
+    let execution_context = rayman::execution_context::execution_context_probe();
     let toolchain = rayman::toolchain::toolchain_probe(root);
     let skill_path = activation
         .skill_file
@@ -82,7 +82,7 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
         || execution_context.required_account.is_some()
         || execution_context.required_profile.is_some();
     let context_check_ready = !context_requirement_present
-        || execution_context.status == rayman::codex_host::ExecutionContextStatus::Match;
+        || execution_context.status == rayman::execution_context::ExecutionContextStatus::Match;
     let doctor_check_ready = identity_ready && context_check_ready;
     let report = json!({
         "workspace_activation": &activation,

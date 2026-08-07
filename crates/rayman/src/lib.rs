@@ -10,6 +10,7 @@ pub mod checkpoint;
 pub mod codex_hook;
 pub mod codex_host;
 pub mod context;
+pub mod execution_context;
 pub mod goal;
 pub mod hash;
 pub mod map;

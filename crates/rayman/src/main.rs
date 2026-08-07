@@ -310,7 +310,7 @@ fn run_workspace(root: &Path, json: bool, cmd: WorkspaceCmd) -> Result<()> {
             let state_write = rayman::state_paths::state_write_probe(root);
             let activation_metadata = workspace::activation_metadata_capability_probe(root);
             let host_patch = rayman::codex_host::patch_probe(None);
-            let execution_context = rayman::codex_host::execution_context_probe();
+            let execution_context = rayman::execution_context::execution_context_probe();
             if json {
                 print(&json!({
                     "activation": activation,
@@ -439,7 +439,9 @@ pub(crate) fn print_host_patch_probe(probe: &rayman::codex_host::HostPatchProbe)
 /// Keep execution identity distinct from filesystem elevation. A caller can
 /// bind the relevant identity/profile axis before attempting another broker;
 /// the SID fingerprint alone is never an ACL-capability claim.
-pub(crate) fn print_execution_context_probe(probe: &rayman::codex_host::ExecutionContextProbe) {
+pub(crate) fn print_execution_context_probe(
+    probe: &rayman::execution_context::ExecutionContextProbe,
+) {
     if !probe.applicable {
         return;
     }
@@ -456,7 +458,7 @@ pub(crate) fn print_execution_context_probe(probe: &rayman::codex_host::Executio
         probe.environment_profile_matches_token,
         probe.capability_key_hint.as_deref().unwrap_or("none")
     );
-    use rayman::codex_host::ExecutionContextStatus;
+    use rayman::execution_context::ExecutionContextStatus;
     match probe.status {
         ExecutionContextStatus::PrincipalMismatch => println!(
             "    principal mismatch: a principal-bound retry must prove the required SID/account changed; transport or elevation alone is not evidence — {}",
