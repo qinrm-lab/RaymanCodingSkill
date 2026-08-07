@@ -59,7 +59,7 @@ function Resolve-ApplicationIdentity {
     if ($commands.Count -eq 0 -or $commands[0].CommandType -ne 'Application') {
         throw "$Name must resolve directly to an Application."
     }
-    $path = (Resolve-Path -LiteralPath $commands[0].Source).Path
+    $path = (Resolve-Path -LiteralPath $commands[0].Source).ProviderPath
     $identity = [ordered]@{ path = $path; sha256 = Get-Sha256 $path }
     # Under rustup the toolchain binaries on PATH are shims: `rustc.exe` is
     # byte-identical to `rustup.exe` and never changes when the active toolchain
@@ -123,7 +123,7 @@ function Get-ReleaseBinding {
 
     return [ordered]@{
         schema = 'rayman.release.binding.v1'
-        workspace = (Resolve-Path -LiteralPath $repoRoot).Path
+        workspace = (Resolve-Path -LiteralPath $repoRoot).ProviderPath
         head = $head
         clean = $true
         cli = [ordered]@{ path = $resolvedCli; sha256 = Get-Sha256 $resolvedCli }

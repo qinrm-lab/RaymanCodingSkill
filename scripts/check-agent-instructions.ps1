@@ -59,6 +59,8 @@ $manifestText = Read-StrictUtf8 'install-manifest.json'
 $pendingSource = Read-StrictUtf8 'crates/rayman/src/goal/pending.rs'
 $goalCliSource = Read-StrictUtf8 'crates/rayman/src/goal_cli.rs'
 $codexHookSource = Read-StrictUtf8 'crates/rayman/src/codex_hook.rs'
+$auditDocumentation = Read-StrictUtf8 'docs/AUDIT.md'
+$auditSource = Read-StrictUtf8 'scripts/audit-repository.ps1'
 
 $canonicalSkillAsset = 'crates/rayman/assets/canonical-skill.md'
 $null = Read-StrictUtf8 $canonicalSkillAsset
@@ -110,6 +112,59 @@ if (-not $contract.Contains('Do not permit direct or indirect skill-invocation c
     throw 'AGENT_CONTRACT.md must prohibit direct and indirect skill-invocation cycles.'
 }
 Assert-PublishedContractSafe -Text $contract
+
+function Assert-MsrvAuditDocumentation {
+    param(
+        [Parameter(Mandatory = $true)][string]$Documentation,
+        [Parameter(Mandatory = $true)][string]$Source
+    )
+    foreach ($required in @(
+            'rustup which ... --toolchain 1.88.0',
+            'CARGO_BUILD_RUSTC',
+            'CARGO_TARGET_DIR',
+            '.RaymanCodingSkill/tmp',
+            'ProviderPath'
+        )) {
+        if (-not $Documentation.Contains($required, [StringComparison]::Ordinal)) {
+            throw "MSRV audit documentation is missing required contract text: $required"
+        }
+    }
+    foreach ($required in @(
+            "@('which', `$Name, '--toolchain', `$Toolchain)",
+            'Invoke-IsolatedMsrvChecks',
+            "'CARGO_BUILD_RUSTC'",
+            "New-ManagedAuditDirectory -Label 'msrv-target'",
+            '.ProviderPath'
+        )) {
+        if (-not $Source.Contains($required, [StringComparison]::Ordinal)) {
+            throw "MSRV audit source is missing its documented implementation token: $required"
+        }
+    }
+}
+
+Assert-MsrvAuditDocumentation -Documentation $auditDocumentation -Source $auditSource
+
+function Assert-FileSystemProviderPaths {
+    param(
+        [Parameter(Mandatory = $true)][string]$RelativePath,
+        [Parameter(Mandatory = $true)][string]$Text
+    )
+    if ($Text -match '(?m)Resolve-Path[^\r\n]*\)\.Path(?![A-Za-z])') {
+        throw "$RelativePath uses Resolve-Path.Path for a filesystem identity; use ProviderPath so extended Windows paths remain filesystem paths."
+    }
+}
+
+foreach ($relativePath in @(
+        'scripts/audit-repository.ps1',
+        'scripts/install-rayman.ps1',
+        'scripts/release-closeout.ps1',
+        'scripts/repair-rayman-powershell-profile.ps1',
+        'scripts/verify-release-contract.ps1'
+    )) {
+    Assert-FileSystemProviderPaths `
+        -RelativePath $relativePath `
+        -Text (Read-StrictUtf8 $relativePath)
+}
 
 function Get-ManagedBlock {
     param(
@@ -294,6 +349,16 @@ if ($SelfTest) {
             'SKILL.md|SKILL.md'
             'references/workflow-contract.md|references/workflow-contract.md'
         )
+    }
+    Assert-Throws -Label 'MSRV documentation loses compiler binding' -Action {
+        Assert-MsrvAuditDocumentation `
+            -Documentation $auditDocumentation.Replace('CARGO_BUILD_RUSTC', 'REMOVED_COMPILER_BINDING') `
+            -Source $auditSource
+    }
+    Assert-Throws -Label 'filesystem identity regresses to provider-qualified Path' -Action {
+        Assert-FileSystemProviderPaths `
+            -RelativePath 'scripts/example.ps1' `
+            -Text '$resolved = (Resolve-Path -LiteralPath $path).Path'
     }
     Write-Output 'agent-instructions self-test: PASS'
 }

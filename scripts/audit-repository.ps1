@@ -99,7 +99,7 @@ function Resolve-NativeApplication {
         -not (Test-Path -LiteralPath $effective.Source -PathType Leaf)) {
         throw "$Label did not resolve to an existing application file: $($effective.Source)"
     }
-    $resolved = (Resolve-Path -LiteralPath $effective.Source).Path
+    $resolved = (Resolve-Path -LiteralPath $effective.Source).ProviderPath
     return [pscustomobject]@{
         Name = $Name
         Label = $Label
@@ -173,7 +173,7 @@ function Assert-ExpectedApplicationPath {
     if (-not (Test-Path -LiteralPath $ExpectedPath -PathType Leaf)) {
         throw "$($Identity.Label) expected application is missing: $ExpectedPath"
     }
-    $resolvedExpected = (Resolve-Path -LiteralPath $ExpectedPath).Path
+    $resolvedExpected = (Resolve-Path -LiteralPath $ExpectedPath).ProviderPath
     if (-not $Identity.Path.Equals($resolvedExpected, $pathComparison)) {
         throw "$($Identity.Label) resolved outside its exact managed path: $($Identity.Path) != $resolvedExpected"
     }
@@ -189,6 +189,234 @@ function Assert-NativeApplicationIdentity {
     if (-not $current.Path.Equals($Identity.Path, $pathComparison) -or
         $current.Sha256 -ne $Identity.Sha256) {
         throw "$($Identity.Label) application identity changed during audit: $($Identity.Path) [$($Identity.Sha256)] -> $($current.Path) [$($current.Sha256)]"
+    }
+}
+
+function New-ExactApplicationIdentity {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Label,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+    if ($item.PSIsContainer -or
+        $item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw "$Label must resolve to an ordinary application file: $Path"
+    }
+    $resolved = (Resolve-Path -LiteralPath $item.FullName).ProviderPath
+    return [pscustomobject]@{
+        Name = $Name
+        Label = $Label
+        Path = $resolved
+        Sha256 = Get-FileSha256 -Path $resolved
+    }
+}
+
+function Assert-ExactApplicationIdentity {
+    param(
+        [Parameter(Mandatory = $true)]
+        $Identity
+    )
+
+    $current = New-ExactApplicationIdentity `
+        -Name $Identity.Name `
+        -Label $Identity.Label `
+        -Path $Identity.Path
+    if (-not $current.Path.Equals($Identity.Path, $pathComparison) -or
+        $current.Sha256 -ne $Identity.Sha256) {
+        throw "$($Identity.Label) application identity changed during audit: $($Identity.Path) [$($Identity.Sha256)] -> $($current.Path) [$($current.Sha256)]"
+    }
+}
+
+function Invoke-NativeCaptured {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+        [string[]]$Arguments
+    )
+
+    Write-Host "> $FilePath $($Arguments -join ' ')"
+    $output = & $FilePath @Arguments 2>&1
+    return [pscustomobject]@{
+        ExitCode = $LASTEXITCODE
+        Output = @($output)
+    }
+}
+
+function Resolve-RustupToolchainApplication {
+    param(
+        [Parameter(Mandatory = $true)]
+        $RustupIdentity,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Toolchain,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('cargo', 'rustc')]
+        [string]$Name,
+
+        [scriptblock]$Invoker
+    )
+
+    if ($null -eq $Invoker) {
+        $Invoker = {
+            param([string]$FilePath, [string[]]$Arguments)
+            Invoke-NativeCaptured -FilePath $FilePath -Arguments $Arguments
+        }
+    }
+    $label = "MSRV $Toolchain $Name"
+    $result = & $Invoker `
+        -FilePath $RustupIdentity.Path `
+        -Arguments @('which', $Name, '--toolchain', $Toolchain)
+    if ($null -eq $result -or $result.ExitCode -ne 0) {
+        $detail = if ($null -eq $result) { '<no result>' } else { ($result.Output | Out-String).Trim() }
+        throw "$label resolution through rustup failed: $detail"
+    }
+    $lines = @(
+        $result.Output |
+            ForEach-Object { $_.ToString().Trim() } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    )
+    if ($lines.Count -ne 1) {
+        throw "$label resolution returned $($lines.Count) non-empty lines; expected one exact application path."
+    }
+    return New-ExactApplicationIdentity `
+        -Name $Name `
+        -Label $label `
+        -Path $lines[0]
+}
+
+function Resolve-MsrvToolchainApplications {
+    param(
+        [Parameter(Mandatory = $true)]
+        $RustupIdentity,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Toolchain,
+
+        [scriptblock]$Invoker
+    )
+
+    return [pscustomobject]@{
+        Cargo = Resolve-RustupToolchainApplication `
+            -RustupIdentity $RustupIdentity `
+            -Toolchain $Toolchain `
+            -Name 'cargo' `
+            -Invoker $Invoker
+        Rustc = Resolve-RustupToolchainApplication `
+            -RustupIdentity $RustupIdentity `
+            -Toolchain $Toolchain `
+            -Name 'rustc' `
+            -Invoker $Invoker
+    }
+}
+
+function Assert-RustToolVersion {
+    param(
+        [Parameter(Mandatory = $true)]
+        $Identity,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ExpectedVersion
+    )
+
+    $result = Invoke-NativeCaptured -FilePath $Identity.Path -Arguments @('--version')
+    $text = ($result.Output | Out-String).Trim()
+    $pattern = '^' + [regex]::Escape($Identity.Name) + ' ' + [regex]::Escape($ExpectedVersion) + '(?:\s|$)'
+    if ($result.ExitCode -ne 0 -or $text -notmatch $pattern) {
+        throw "$($Identity.Label) reports '$text', expected exact $($Identity.Name) $ExpectedVersion."
+    }
+}
+
+function Get-EnvironmentSnapshot {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Names
+    )
+
+    $snapshot = @{}
+    foreach ($name in $Names) {
+        $path = "Env:$name"
+        $present = Test-Path -LiteralPath $path
+        $snapshot[$name] = [pscustomobject]@{
+            Present = $present
+            Value = if ($present) { (Get-Item -LiteralPath $path).Value } else { $null }
+        }
+    }
+    return $snapshot
+}
+
+function Restore-EnvironmentSnapshot {
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Snapshot
+    )
+
+    foreach ($name in $Snapshot.Keys) {
+        $path = "Env:$name"
+        if ($Snapshot[$name].Present) {
+            Set-Item -LiteralPath $path -Value $Snapshot[$name].Value
+        } else {
+            Remove-Item -LiteralPath $path -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function Invoke-IsolatedMsrvChecks {
+    param(
+        [Parameter(Mandatory = $true)]
+        $CargoIdentity,
+
+        [Parameter(Mandatory = $true)]
+        $RustcIdentity,
+
+        [scriptblock]$CommandRunner
+    )
+
+    if ($null -eq $CommandRunner) {
+        $CommandRunner = {
+            param([string]$FilePath, [string[]]$Arguments)
+            Invoke-NativeChecked -FilePath $FilePath -Arguments $Arguments
+        }
+    }
+    $environmentNames = @(
+        'RUSTC',
+        'CARGO_BUILD_RUSTC',
+        'CARGO_TARGET_DIR',
+        'RUSTC_WRAPPER',
+        'RUSTC_WORKSPACE_WRAPPER'
+    )
+    $environmentSnapshot = Get-EnvironmentSnapshot -Names $environmentNames
+    $targetDirectory = New-ManagedAuditDirectory -Label 'msrv-target'
+    try {
+        $env:RUSTC = $RustcIdentity.Path
+        $env:CARGO_BUILD_RUSTC = $RustcIdentity.Path
+        $env:CARGO_TARGET_DIR = $targetDirectory
+        Remove-Item Env:RUSTC_WRAPPER -ErrorAction SilentlyContinue
+        Remove-Item Env:RUSTC_WORKSPACE_WRAPPER -ErrorAction SilentlyContinue
+
+        Assert-ExactApplicationIdentity -Identity $CargoIdentity
+        Assert-ExactApplicationIdentity -Identity $RustcIdentity
+        & $CommandRunner `
+            -FilePath $CargoIdentity.Path `
+            -Arguments @('build', '--locked', '--release', '-p', 'rayman')
+        & $CommandRunner `
+            -FilePath $CargoIdentity.Path `
+            -Arguments @('test', '--locked', '--workspace', '--all-targets')
+        Assert-ExactApplicationIdentity -Identity $CargoIdentity
+        Assert-ExactApplicationIdentity -Identity $RustcIdentity
+    } finally {
+        try {
+            Restore-EnvironmentSnapshot -Snapshot $environmentSnapshot
+        } finally {
+            Remove-ManagedAuditDirectory -Path $targetDirectory
+        }
     }
 }
 
@@ -289,7 +517,7 @@ function Resolve-OrCreateRealAuditDirectory {
             throw "$Label ancestor must be a real directory: $current"
         }
     }
-    $resolved = (Resolve-Path -LiteralPath $fullPath).Path
+    $resolved = (Resolve-Path -LiteralPath $fullPath).ProviderPath
     $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
     if (-not $resolved.Equals($fullPath, $comparison)) {
         throw "$Label canonical path escaped the named directory: $fullPath -> $resolved"
@@ -313,8 +541,8 @@ function Remove-ManagedAuditDirectory {
     if (-not (Test-Path -LiteralPath $Path)) {
         return
     }
-    $managedRoot = (Resolve-Path -LiteralPath (Join-Path $repoRoot '.RaymanCodingSkill/tmp')).Path
-    $fullPath = (Resolve-Path -LiteralPath $Path).Path
+    $managedRoot = (Resolve-Path -LiteralPath (Join-Path $repoRoot '.RaymanCodingSkill/tmp')).ProviderPath
+    $fullPath = (Resolve-Path -LiteralPath $Path).ProviderPath
     $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
     $prefix = $managedRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
     $item = Get-Item -LiteralPath $fullPath -Force
@@ -650,6 +878,109 @@ function Invoke-AuditScriptSelfTest {
         throw 'Audit self-test failed: wrong cargo-llvm-cov version was not rejected.'
     }
 
+    $msrvFixture = New-ManagedAuditDirectory -Label 'msrv-selftest'
+    $msrvEnvironmentNames = @(
+        'RUSTC',
+        'CARGO_BUILD_RUSTC',
+        'CARGO_TARGET_DIR',
+        'RUSTC_WRAPPER',
+        'RUSTC_WORKSPACE_WRAPPER'
+    )
+    $msrvOuterEnvironment = Get-EnvironmentSnapshot -Names $msrvEnvironmentNames
+    try {
+        $fakeCargo = Join-Path $msrvFixture 'cargo-fixture'
+        $fakeRustc = Join-Path $msrvFixture 'rustc-fixture'
+        Set-Content -LiteralPath $fakeCargo -Value 'fixture cargo' -Encoding utf8
+        Set-Content -LiteralPath $fakeRustc -Value 'fixture rustc' -Encoding utf8
+        $rustupCalls = [Collections.Generic.List[string]]::new()
+        $rustupInvoker = {
+            param([string]$FilePath, [string[]]$Arguments)
+            $rustupCalls.Add(($Arguments -join ' '))
+            $resolvedPath = if ($Arguments[1] -eq 'cargo') { $fakeCargo } else { $fakeRustc }
+            return [pscustomobject]@{
+                ExitCode = 0
+                Output = @($resolvedPath)
+            }
+        }.GetNewClosure()
+        $msrvApplications = Resolve-MsrvToolchainApplications `
+            -RustupIdentity ([pscustomobject]@{ Path = 'rustup-fixture' }) `
+            -Toolchain '1.88.0' `
+            -Invoker $rustupInvoker
+        if ($rustupCalls.Count -ne 2 -or
+            $rustupCalls[0] -ne 'which cargo --toolchain 1.88.0' -or
+            $rustupCalls[1] -ne 'which rustc --toolchain 1.88.0' -or
+            -not $msrvApplications.Cargo.Path.Equals((Resolve-Path -LiteralPath $fakeCargo).ProviderPath, $pathComparison) -or
+            -not $msrvApplications.Rustc.Path.Equals((Resolve-Path -LiteralPath $fakeRustc).ProviderPath, $pathComparison)) {
+            throw 'Audit self-test failed: MSRV cargo/rustc were not bound to the exact rustup which results.'
+        }
+
+        $env:RUSTC = 'ambient-rustc'
+        Remove-Item Env:CARGO_BUILD_RUSTC -ErrorAction SilentlyContinue
+        $env:CARGO_TARGET_DIR = 'ambient-target'
+        $env:RUSTC_WRAPPER = 'ambient-wrapper'
+        Remove-Item Env:RUSTC_WORKSPACE_WRAPPER -ErrorAction SilentlyContinue
+        $createdTargets = [Collections.Generic.List[string]]::new()
+        $commandCalls = [Collections.Generic.List[string]]::new()
+        $msrvSelfTestPathComparison = $pathComparison
+        $commandRunner = {
+            param([string]$FilePath, [string[]]$Arguments)
+            if ($createdTargets.Count -eq 0) {
+                $createdTargets.Add($env:CARGO_TARGET_DIR)
+            }
+            if (-not [string]::Equals($FilePath, $msrvApplications.Cargo.Path, $msrvSelfTestPathComparison) -or
+                $env:RUSTC -ne $msrvApplications.Rustc.Path -or
+                $env:CARGO_BUILD_RUSTC -ne $msrvApplications.Rustc.Path -or
+                $env:CARGO_TARGET_DIR -ne $createdTargets[0] -or
+                (Test-Path Env:RUSTC_WRAPPER) -or
+                (Test-Path Env:RUSTC_WORKSPACE_WRAPPER)) {
+                throw 'MSRV self-test runner observed an unbound compiler, wrapper, or target directory.'
+            }
+            $commandCalls.Add(($Arguments -join ' '))
+            if ($commandCalls.Count -eq 2) {
+                throw 'intentional MSRV command failure'
+            }
+        }.GetNewClosure()
+
+        $expectedFailureObserved = $false
+        $msrvFailureMessage = '<none>'
+        try {
+            Invoke-IsolatedMsrvChecks `
+                -CargoIdentity $msrvApplications.Cargo `
+                -RustcIdentity $msrvApplications.Rustc `
+                -CommandRunner $commandRunner
+        } catch {
+            $msrvFailureMessage = $_.Exception.Message
+            $expectedFailureObserved = $_.Exception.Message -match 'intentional MSRV command failure'
+        }
+        if (-not $expectedFailureObserved -or
+            $commandCalls.Count -ne 2 -or
+            $commandCalls[0] -ne 'build --locked --release -p rayman' -or
+            $commandCalls[1] -ne 'test --locked --workspace --all-targets' -or
+            $createdTargets.Count -ne 1 -or
+            (Test-Path -LiteralPath $createdTargets[0]) -or
+            $env:RUSTC -ne 'ambient-rustc' -or
+            (Test-Path Env:CARGO_BUILD_RUSTC) -or
+            $env:CARGO_TARGET_DIR -ne 'ambient-target' -or
+            $env:RUSTC_WRAPPER -ne 'ambient-wrapper' -or
+            (Test-Path Env:RUSTC_WORKSPACE_WRAPPER)) {
+            $detail = @(
+                "failure=$msrvFailureMessage",
+                "commands=$($commandCalls -join '|')",
+                "created=$($createdTargets.Count)",
+                "target_exists=$(if ($createdTargets.Count -eq 1) { Test-Path -LiteralPath $createdTargets[0] } else { 'unknown' })",
+                "rustc=$env:RUSTC",
+                "cargo_build_rustc_present=$(Test-Path Env:CARGO_BUILD_RUSTC)",
+                "target=$env:CARGO_TARGET_DIR",
+                "wrapper=$env:RUSTC_WRAPPER",
+                "workspace_wrapper_present=$(Test-Path Env:RUSTC_WORKSPACE_WRAPPER)"
+            ) -join '; '
+            throw "Audit self-test failed: isolated MSRV commands, cleanup, or environment restoration are incomplete: $detail"
+        }
+    } finally {
+        Restore-EnvironmentSnapshot -Snapshot $msrvOuterEnvironment
+        Remove-ManagedAuditDirectory -Path $msrvFixture
+    }
+
     $cargoDenyFixture = New-ManagedAuditDirectory -Label 'cargo-deny-selftest'
     try {
         $fixtureDatabase = Join-Path $cargoDenyFixture 'source-db'
@@ -705,6 +1036,18 @@ db-path = "unexpected"
         Remove-ManagedAuditDirectory -Path $cargoDenyFixture
     }
 
+    $closeout = Join-Path $PSScriptRoot 'release-closeout.ps1'
+    if (-not (Test-Path -LiteralPath $closeout -PathType Leaf)) {
+        throw "Audit self-test cannot find the release closeout: $closeout"
+    }
+    & $closeout -SelfTest
+
+    $installer = Join-Path $PSScriptRoot 'install-rayman.ps1'
+    if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
+        throw "Audit self-test cannot find the installer: $installer"
+    }
+    & $installer -SelfTest
+
     $verifier = Join-Path $PSScriptRoot 'verify-release-contract.ps1'
     if (-not (Test-Path -LiteralPath $verifier -PathType Leaf)) {
         throw "Audit self-test cannot find the release verifier: $verifier"
@@ -720,10 +1063,11 @@ db-path = "unexpected"
     foreach ($identity in $NativeIdentities) {
         Assert-NativeApplicationIdentity -Identity $identity
     }
-    Write-Host 'Audit script self-test passed: native shadow/identity, profile migration, isolated advisory state, and managed coverage guards fail closed.'
+    Write-Host 'Audit script self-test passed: native shadow/identity, exact isolated MSRV, release closeout/installer/verifier/profile regressions, isolated advisory state, and managed coverage guards fail closed.'
 }
 
 $nativeApplications = $null
+$msrvApplications = $null
 # Self-test and the focused dependency-policy lane intentionally avoid the
 # complete-audit MSRV/Git/compiler resolver. A complete audit still requires
 # all five applications, but a missing one now has a structured bootstrap fail.
@@ -758,7 +1102,11 @@ try {
     # costs seconds instead of aborting the audit tens of minutes in.
     Write-AuditPhase -Name 'environment_preflight' -Status 'start'
     Invoke-IsolatedCargoDenyChecks -CargoDenyIdentity $nativeApplications.CargoDeny
-    Invoke-NativeChecked $nativeApplications.Rustup.Path @('run', $MsrvToolchain, 'rustc', '--version')
+    $msrvApplications = Resolve-MsrvToolchainApplications `
+        -RustupIdentity $nativeApplications.Rustup `
+        -Toolchain $MsrvToolchain
+    Assert-RustToolVersion -Identity $msrvApplications.Cargo -ExpectedVersion $MsrvToolchain
+    Assert-RustToolVersion -Identity $msrvApplications.Rustc -ExpectedVersion $MsrvToolchain
     Invoke-NativeChecked $nativeApplications.Rustup.Path @('component', 'add', 'llvm-tools-preview')
     Write-AuditPhase -Name 'environment_preflight' -Status 'pass'
 
@@ -770,12 +1118,13 @@ try {
     }
     Write-AuditPhase -Name 'root_quality' -Status 'pass'
 
-    # MSRV is mandatory. rustup run fails explicitly when the declared toolchain
-    # is unavailable; the complete audit never silently falls back to stable.
+    # MSRV is mandatory. Bind both cargo and rustc to rustup's exact toolchain
+    # paths and isolate its target directory so ambient PATH precedence and
+    # compiler-incompatible metadata from another lane cannot affect this one.
     Write-AuditPhase -Name 'msrv' -Status 'start'
-    Invoke-NativeChecked $nativeApplications.Rustup.Path @('run', $MsrvToolchain, 'rustc', '--version')
-    Invoke-NativeChecked $nativeApplications.Rustup.Path @('run', $MsrvToolchain, 'cargo', 'build', '--locked', '--release', '-p', 'rayman')
-    Invoke-NativeChecked $nativeApplications.Rustup.Path @('run', $MsrvToolchain, 'cargo', 'test', '--locked', '--workspace', '--all-targets')
+    Invoke-IsolatedMsrvChecks `
+        -CargoIdentity $msrvApplications.Cargo `
+        -RustcIdentity $msrvApplications.Rustc
     Write-AuditPhase -Name 'msrv' -Status 'pass'
 
     # Real shipped-CLI coverage. Always install the exact measurement tool into
@@ -919,9 +1268,9 @@ try {
     } else {
         Join-Path $repoRoot 'target'
     }
-    $referenceArtifact = (Resolve-Path -LiteralPath (Join-Path $releaseRoot "release/$artifactName")).Path
-    $resolvedCli = (Resolve-Path -LiteralPath $CliPath).Path
-    $resolvedSkill = (Resolve-Path -LiteralPath $SkillPath).Path
+    $referenceArtifact = (Resolve-Path -LiteralPath (Join-Path $releaseRoot "release/$artifactName")).ProviderPath
+    $resolvedCli = (Resolve-Path -LiteralPath $CliPath).ProviderPath
+    $resolvedSkill = (Resolve-Path -LiteralPath $SkillPath).ProviderPath
 
     # Use the current source artifact explicitly for workspace self-dogfood;
     # installed identity is a separate final contract below.
@@ -951,6 +1300,17 @@ try {
 
     foreach ($identity in $capturedNativeIdentities) {
         Assert-NativeApplicationIdentity -Identity $identity
+    }
+    $terminalMsrvApplications = Resolve-MsrvToolchainApplications `
+        -RustupIdentity $nativeApplications.Rustup `
+        -Toolchain $MsrvToolchain
+    foreach ($name in @('Cargo', 'Rustc')) {
+        $initial = $msrvApplications.$name
+        $terminal = $terminalMsrvApplications.$name
+        if (-not $terminal.Path.Equals($initial.Path, $pathComparison) -or
+            $terminal.Sha256 -ne $initial.Sha256) {
+            throw "$($initial.Label) rustup binding changed during audit: $($initial.Path) [$($initial.Sha256)] -> $($terminal.Path) [$($terminal.Sha256)]"
+        }
     }
     Write-AuditPhase -Name 'installed_release_identity' -Status 'pass'
 } catch {

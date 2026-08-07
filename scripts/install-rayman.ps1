@@ -210,7 +210,7 @@ function Resolve-RequiredApplication {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         throw "$Label is missing: $path"
     }
-    return (Resolve-Path -LiteralPath $path).Path
+    return (Resolve-Path -LiteralPath $path).ProviderPath
 }
 
 function Get-PathComparisonKey {
@@ -844,7 +844,7 @@ function Resolve-ManagedDirectory {
             throw "$Label ancestor changed into a file or reparse point: $current"
         }
     }
-    $resolved = (Resolve-Path -LiteralPath $fullPath).Path
+    $resolved = (Resolve-Path -LiteralPath $fullPath).ProviderPath
     $comparison = if ($IsWindows) {
         [StringComparison]::OrdinalIgnoreCase
     } else {
@@ -885,7 +885,7 @@ function Resolve-ExistingRealDirectory {
             throw "$Label ancestor must be a real directory, not a file or reparse point: $current"
         }
     }
-    $resolved = (Resolve-Path -LiteralPath $fullPath).Path
+    $resolved = (Resolve-Path -LiteralPath $fullPath).ProviderPath
     $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
     if (-not $resolved.Equals($fullPath, $comparison)) {
         throw "$Label canonical path escaped the explicitly named directory: $fullPath -> $resolved"
@@ -1275,6 +1275,14 @@ namespace RaymanInstallerV2
 
         internal static string NormalizeDirectoryPath(string path)
         {
+            if (path.StartsWith("\\\\?\\UNC\\", StringComparison.OrdinalIgnoreCase))
+            {
+                path = "\\\\" + path.Substring(8);
+            }
+            else if (path.StartsWith("\\\\?\\", StringComparison.OrdinalIgnoreCase))
+            {
+                path = path.Substring(4);
+            }
             string full = Path.GetFullPath(path);
             string root = Path.GetPathRoot(full);
             return String.Equals(full, root, StringComparison.OrdinalIgnoreCase)
@@ -5217,7 +5225,7 @@ function Invoke-InstallPathSelfTest {
                     Set-PersistentUserEnvironmentRecord -Record $original -TestStore $store
                     $beforeCommit = {
                         Set-PersistentUserEnvironmentRecord -Record $concurrent -TestStore $store
-                    }.GetNewClosure()
+                    }
                     $raceCommitted = $false
                     $raceRejected = $false
                     try {
@@ -5240,7 +5248,7 @@ function Invoke-InstallPathSelfTest {
                     Set-PersistentUserEnvironmentRecord -Record $original -TestStore $store
                     $afterCommit = {
                         Set-PersistentUserEnvironmentRecord -Record $concurrent -TestStore $store
-                    }.GetNewClosure()
+                    }
                     $postCommitMutation = $false
                     $postCommitRejected = $false
                     try {
@@ -5441,7 +5449,7 @@ function Invoke-InstallPathSelfTest {
 
                     $ordinaryConcurrentWrite = {
                         Set-PersistentUserEnvironmentRecord -Record $concurrent
-                    }.GetNewClosure()
+                    }
                     $raceCommitted = $false
                     $raceRejected = $false
                     try {
@@ -5463,7 +5471,7 @@ function Invoke-InstallPathSelfTest {
                     Set-PersistentUserEnvironmentRecord -Record $original
                     $ordinaryPostCommitWrite = {
                         Set-PersistentUserEnvironmentRecord -Record $concurrent
-                    }.GetNewClosure()
+                    }
                     $postCommitMutation = $false
                     $postCommitRejected = $false
                     try {
@@ -5579,7 +5587,7 @@ try {
         } else {
             Join-Path $repoRoot 'target'
         }
-        $artifact = (Resolve-Path -LiteralPath (Join-Path $releaseRoot "release/$artifactName")).Path
+        $artifact = (Resolve-Path -LiteralPath (Join-Path $releaseRoot "release/$artifactName")).ProviderPath
 
         $artifactHashBeforeVerification = (Get-FileHash -LiteralPath $artifact -Algorithm SHA256).Hash.ToLowerInvariant()
         $resourceHashes = @{}

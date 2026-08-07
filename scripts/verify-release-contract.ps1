@@ -87,7 +87,7 @@ function Resolve-RequiredPath {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         throw "$Label is missing: $Path"
     }
-    return (Resolve-Path -LiteralPath $Path).Path
+    return (Resolve-Path -LiteralPath $Path).ProviderPath
 }
 
 function Resolve-RequiredDirectory {
@@ -130,7 +130,7 @@ function Resolve-RequiredDirectory {
         }
     }
 
-    $resolved = (Resolve-Path -LiteralPath $fullPath).Path.TrimEnd(
+    $resolved = (Resolve-Path -LiteralPath $fullPath).ProviderPath.TrimEnd(
         [IO.Path]::DirectorySeparatorChar,
         [IO.Path]::AltDirectorySeparatorChar
     )
@@ -153,7 +153,7 @@ function Resolve-RequiredRegularFile {
         $item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
         throw "$Label must be a real regular file: $fullPath"
     }
-    $resolved = (Resolve-Path -LiteralPath $fullPath).Path
+    $resolved = (Resolve-Path -LiteralPath $fullPath).ProviderPath
     $comparison = if ($IsWindows) {
         [StringComparison]::OrdinalIgnoreCase
     } else {
@@ -482,7 +482,7 @@ function Remove-SourceFreshBuild {
     if (-not (Test-Path -LiteralPath $TargetDir)) {
         return
     }
-    $tempRoot = (Resolve-Path -LiteralPath ([IO.Path]::GetTempPath())).Path
+    $tempRoot = (Resolve-Path -LiteralPath ([IO.Path]::GetTempPath())).ProviderPath
     $fullTarget = [IO.Path]::GetFullPath($TargetDir)
     $separator = [IO.Path]::DirectorySeparatorChar
     if (-not $tempRoot.EndsWith([string]$separator)) {
@@ -500,7 +500,7 @@ function Remove-SourceFreshBuild {
     if (-not $item.PSIsContainer -or $item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
         throw "Refusing to remove non-directory or reparse-point source-fresh target: $fullTarget"
     }
-    $resolvedTarget = (Resolve-Path -LiteralPath $fullTarget).Path
+    $resolvedTarget = (Resolve-Path -LiteralPath $fullTarget).ProviderPath
     if (-not $resolvedTarget.StartsWith($tempRoot, $comparison)) {
         throw "Refusing to remove source-fresh target resolving outside the system temp root: $resolvedTarget"
     }
@@ -972,7 +972,7 @@ function Invoke-ReleaseVerifierSelfTest {
         )
         $resolvedProbe = Resolve-IsolatedDoctorWorkspace -Path $doctorProbeRoot
         if (-not $resolvedProbe.Workspace.Equals(
-                (Resolve-Path -LiteralPath $doctorProbeRoot).Path,
+                (Resolve-Path -LiteralPath $doctorProbeRoot).ProviderPath,
                 $(if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal })
             )) {
             throw 'Release verifier self-test failed: isolated doctor workspace resolution drifted.'

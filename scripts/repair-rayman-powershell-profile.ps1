@@ -116,7 +116,7 @@ function Get-LegacyProfileMigration {
     if ($item.PSIsContainer -or $item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
         throw "PowerShell profile must be a regular file: $Path"
     }
-    $resolved = (Resolve-Path -LiteralPath $Path).Path
+    $resolved = (Resolve-Path -LiteralPath $Path).ProviderPath
     $bytes = [IO.File]::ReadAllBytes($resolved)
     $encoding = Get-ProfileEncoding -Bytes $bytes
     try {
@@ -221,7 +221,7 @@ function New-RealManagedDirectory {
             throw "$Label ancestor must be a real directory: $current"
         }
     }
-    return (Resolve-Path -LiteralPath $fullPath).Path
+    return (Resolve-Path -LiteralPath $fullPath).ProviderPath
 }
 
 function Invoke-SelfTest {
