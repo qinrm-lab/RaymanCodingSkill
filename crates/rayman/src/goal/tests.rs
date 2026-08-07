@@ -66,6 +66,7 @@ fn set_legacy_evidence_with_commands(
             impact_paths: Vec::new(),
             impact_scopes: Vec::new(),
             non_code: true,
+            workspace_snapshot: false,
             receipt: None,
         });
     }
@@ -110,6 +111,7 @@ fn current_validation(
         recorded_at: now_iso(),
         impact_scopes,
         non_code,
+        workspace_snapshot: false,
         receipt: Some(successful_receipt(
             root,
             goal,
@@ -179,6 +181,7 @@ fn archived_direct_authority_success_for_command(
         repeat: 2,
         impact_scopes: impact_scopes.clone(),
         non_code: false,
+        workspace_snapshot: false,
         invocation_sha256: authority_invocation_sha256(command, "req_1", 2, &impact_scopes, false),
         contract_sha256,
         runs,
@@ -236,6 +239,39 @@ fn live_replacement_authority(
             })
             .collect(),
     }
+}
+
+#[test]
+fn workspace_snapshot_hashes_are_domain_separated_without_legacy_drift() {
+    let command = "cargo test --workspace --all-targets";
+    let scopes = Vec::new();
+    let legacy_validation = validation_invocation_sha256_scoped(command, &scopes, false);
+    assert_eq!(
+        legacy_validation,
+        "54ae48d6092a758fb1a6ce1847862d28fd5a6cb44d096ad4898bd56b9907606a"
+    );
+    assert_eq!(
+        validation_invocation_sha256_scoped_mode(command, &scopes, false, false),
+        legacy_validation
+    );
+    assert_ne!(
+        validation_invocation_sha256_scoped_mode(command, &scopes, false, true),
+        legacy_validation
+    );
+
+    let legacy_authority = authority_invocation_sha256(command, "req_1", 2, &scopes, false);
+    assert_eq!(
+        legacy_authority,
+        "7b4655504d076dc9016e56d2a2c182036a9b9b636817f299c496f8d37a029fc4"
+    );
+    assert_eq!(
+        authority_invocation_sha256_mode(command, "req_1", 2, &scopes, false, false),
+        legacy_authority
+    );
+    assert_ne!(
+        authority_invocation_sha256_mode(command, "req_1", 2, &scopes, false, true),
+        legacy_authority
+    );
 }
 
 #[test]
@@ -623,6 +659,7 @@ fn relevance_requires_one_current_receipt_bound_to_command_and_impact() {
                 impact_paths: vec!["src/lib.rs".into()],
                 impact_scopes: validation_scopes_for_impacts(&[impact("src/lib.rs")]),
                 non_code: false,
+                workspace_snapshot: false,
                 receipt: None,
             },
             // A receipt for an unrelated command cannot cover this source impact.
@@ -632,6 +669,7 @@ fn relevance_requires_one_current_receipt_bound_to_command_and_impact() {
                 impact_paths: vec!["src/lib.rs".into()],
                 impact_scopes: validation_scopes_for_impacts(&[impact("src/lib.rs")]),
                 non_code: false,
+                workspace_snapshot: false,
                 receipt: None,
             },
         ],

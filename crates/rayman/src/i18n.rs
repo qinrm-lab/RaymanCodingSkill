@@ -135,7 +135,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "原子替换目标不是安全普通文件: {}",
     "原本不存在的 restore 目标在发布前出现，拒绝覆盖: {}",
     "发现不安全的 orphan restore transaction，已保留并拒绝继续: {}",
-    "只允许隔离已归档的 success 历史；current/未完成目标不能隐藏",
+    "只允许隔离 proof 已失效的已归档 success，或无法生成可信归档 proof 的完整 current legacy success；有效或尚未结束的 current goal 不能隐藏",
     "只有 active/current 目标可以记录 plan receipt",
     "只有 active/success 的 current-schema 目标可以记录 review receipt",
     "只有 current goal 可以归档；已迁移的 archived goal 可用 --migrate-unreceipted 幂等刷新 proof",
@@ -265,6 +265,8 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "被转移目标 {predecessor_id} 必须是 current 非 success current-schema goal",
     "被转移目标不存在: {predecessor_id}",
     "隔离原因不能为空",
+    "隔离后的 lifecycle proof 无效: {error}",
+    "隔离后的目标合约无效: {error}",
     "需求不存在: {req_id}",
     "非法目标 id: {id}（只允许字母、数字、下划线和连字符）",
     "验证证据说明不能为空",
@@ -294,6 +296,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "authority gate 必须是受检的 check-repo/audit-repository/verify-release-contract 脚本、`cargo test --workspace|--all`，或无路径选择器的全工作区 pytest；且不得使用缩小运行范围的选择器",
     "后台继续必须绑定 immediate human consultation，并同时记录非空 background-mechanism、background-authority-evidence 与 background-isolation-evidence",
     "human/external blocker 必须包含 attempts、evidence-path、minimum-input、recommended、alternative、risk、resume-command 与 auto-resume-condition",
+    "current success 仍可生成可信 archive proof；拒绝降级为 quarantine，请使用普通 archive 或显式历史 receipt migration",
     "current goal 缺少开工 baseline；不能作为当前成功证据，请用新的 baseline-bound goal supersede，或将已完成记录显式 archive",
     "已安装身份契约不一致：{}",
     "PATH 上找不到 rayman：安装器只改持久化 PATH，已经开着的终端不会继承；新开一个终端，或先把安装目录加进本进程 PATH",
@@ -337,7 +340,12 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "`rayman workspace-skill` 已退役；使用 `rayman workspace status|inspect|activate|rebind|deactivate`",
     "共享 quality policy 的父目录必须是工作区内真实目录，不能是链接/reparse: {}",
     "已保存 recovery-only 快照 {} — {} 个文件；它不会成为默认 latest 或完成证据",
-    "validation 必须提供至少一个 `--changed`；非代码需求必须显式使用 `--non-code`",
+    "validation 必须提供至少一个 `--changed`；非代码需求必须显式使用 `--non-code`；零变更 authority 审计使用 `--workspace-snapshot`",
+    "`--workspace-snapshot` 不能与 `--changed` 或 `--non-code` 同时使用",
+    "--workspace-snapshot 只允许与 --authority 一起使用",
+    "--workspace-snapshot 要求 goal baseline delta 为空；发现真实变更: {}。验证命令尚未执行",
+    "workspace snapshot receipt 必须是 authority receipt",
+    "workspace snapshot receipt 要求 goal baseline delta 为空；发现真实变更: {}",
     "托管临时目录: {} (exists={}, entries={}, files={}, dirs={}, {:.1} MB, traversal_errors={})",
     "lifecycle authority 第 {run_index} 次运行前 source fingerprint 漂移；不会写入 proof",
     "停止状态写入失败；计划任务已重新注册，autosave 保持 active：{state_error}",
@@ -804,6 +812,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "缺少 skill_sha256",
     "  建议依据: {}",
     "  待完成项: {}",
+    "  历史待完成项（保留，不阻塞）: {}",
     "  直接依赖: {}",
     "受管状态目录",
     "无待完成项。",
@@ -1535,6 +1544,30 @@ const MESSAGE_PREFIX_CATALOG: &[(&str, &str)] = &[
     (
         "`--non-code` 不能与 `--changed` 同时使用",
         "`--non-code` cannot be used together with `--changed`",
+    ),
+    (
+        "`--workspace-snapshot` 不能与 `--changed` 或 `--non-code` 同时使用",
+        "`--workspace-snapshot` cannot be used together with `--changed` or `--non-code`",
+    ),
+    (
+        "validation 必须提供至少一个 `--changed`；非代码需求必须显式使用 `--non-code`；零变更 authority 审计使用 `--workspace-snapshot`",
+        "validation must provide at least one `--changed`; non-code requirements must explicitly use `--non-code`; use `--workspace-snapshot` for a zero-delta authority audit",
+    ),
+    (
+        "--workspace-snapshot 只允许与 --authority 一起使用",
+        "--workspace-snapshot can only be used together with --authority",
+    ),
+    (
+        "--workspace-snapshot 要求 goal baseline delta 为空；发现真实变更: {}。验证命令尚未执行",
+        "--workspace-snapshot requires an empty goal baseline delta; real changes found: {}. The validation command was not executed",
+    ),
+    (
+        "workspace snapshot receipt 必须是 authority receipt",
+        "a workspace snapshot receipt must be an authority receipt",
+    ),
+    (
+        "workspace snapshot receipt 要求 goal baseline delta 为空；发现真实变更: {}",
+        "a workspace snapshot receipt requires an empty goal baseline delta; real changes found: {}",
     ),
     (
         "受管状态包含退役条目或遍历错误；先审阅 `rayman state audit` 输出",
@@ -2970,8 +3003,12 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "found an unsafe orphan restore transaction; it was kept and the run refuses to continue: {}",
     ),
     (
-        "只允许隔离已归档的 success 历史；current/未完成目标不能隐藏",
-        "only an archived success history may be quarantined; current or unfinished goals cannot be hidden",
+        "只允许隔离 proof 已失效的已归档 success，或无法生成可信归档 proof 的完整 current legacy success；有效或尚未结束的 current goal 不能隐藏",
+        "only an archived success with an invalid proof, or a complete current legacy success with no trusted archive proof, may be quarantined; valid or unfinished current goals cannot be hidden",
+    ),
+    (
+        "历史待完成项（保留，不阻塞）: {}",
+        "Historical pending items (retained, non-blocking): {}",
     ),
     (
         "只有 current goal 可以归档；已迁移的 archived goal 可用 --migrate-unreceipted 幂等刷新 proof",
@@ -3028,6 +3065,10 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     (
         "归档 success 的 lifecycle proof 仍然有效；拒绝把有效证据降级为 quarantine",
         "the archived success still has a valid lifecycle proof; refusing to downgrade valid evidence to a quarantine",
+    ),
+    (
+        "current success 仍可生成可信 archive proof；拒绝降级为 quarantine，请使用普通 archive 或显式历史 receipt migration",
+        "the current success can still produce a trusted archive proof; refusing to downgrade it to quarantine, so use ordinary archive or an explicit historical receipt migration",
     ),
     ("归档原因不能为空", "the archive reason must not be empty"),
     (
@@ -3293,6 +3334,14 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     (
         "隔离原因不能为空",
         "the quarantine reason must not be empty",
+    ),
+    (
+        "隔离后的 lifecycle proof 无效: {error}",
+        "the lifecycle proof is invalid after quarantine: {error}",
+    ),
+    (
+        "隔离后的目标合约无效: {error}",
+        "the goal contract is invalid after quarantine: {error}",
     ),
     (
         "验证证据说明不能为空",

@@ -10,6 +10,68 @@ fn pending_roundtrip() {
     assert!(store.list().unwrap().is_empty());
 }
 
+#[test]
+fn pending_readiness_preserves_retired_history_and_keeps_active_boundaries() {
+    let dir = tempfile::tempdir().unwrap();
+    let goals = GoalStore::new(dir.path());
+    let current = goals
+        .start("current boundary", &[("finish current work".into(), true)])
+        .unwrap();
+    let mut retired = goals
+        .start("retired boundary", &[("old owner choice".into(), true)])
+        .unwrap();
+    retired.lifecycle = GoalLifecycle::Archived;
+
+    let pending = PendingStore::new(dir.path());
+    let current_item = pending
+        .add_capability_bound(
+            complete_human_submission(&current.id, "current owner choice"),
+            Some("owner/current-choice".into()),
+            Some("owner_decision".into()),
+        )
+        .unwrap();
+    let retired_item = pending
+        .add_capability_bound(
+            complete_human_submission(&retired.id, "historical owner choice"),
+            Some("owner/historical-choice".into()),
+            Some("owner_decision".into()),
+        )
+        .unwrap();
+    let unbound_item = pending.add("legacy local work", "still active").unwrap();
+
+    let report = pending.readiness(&[current, retired]).unwrap();
+    assert_eq!(
+        report
+            .active
+            .iter()
+            .map(|item| item.id.as_str())
+            .collect::<Vec<_>>(),
+        vec![current_item.id.as_str(), unbound_item.id.as_str()]
+    );
+    assert_eq!(report.historical, vec![retired_item]);
+    assert_eq!(
+        pending.list().unwrap().len(),
+        3,
+        "scoping must not delete history"
+    );
+}
+
+#[test]
+fn pending_readiness_fails_closed_when_bound_goal_is_missing() {
+    let dir = tempfile::tempdir().unwrap();
+    let pending = PendingStore::new(dir.path());
+    pending
+        .add_capability_bound(
+            complete_human_submission("goal_missing", "missing owner"),
+            Some("owner/missing-goal".into()),
+            Some("owner_decision".into()),
+        )
+        .unwrap();
+
+    let error = pending.readiness(&[]).unwrap_err().to_string();
+    assert!(error.contains("goal_missing"), "{error}");
+}
+
 fn complete_human_submission(goal_id: &str, detail: &str) -> PendingSubmission {
     PendingSubmission {
         title: "owner decision".into(),
@@ -533,6 +595,7 @@ fn stable_authority_receipt_requires_two_identical_workspace_passes() {
         repeat: 2,
         impact_scopes: impact_scopes.clone(),
         non_code: false,
+        workspace_snapshot: false,
         invocation_sha256: authority_invocation_sha256(command, "req_1", 2, &impact_scopes, false),
         contract_sha256,
         runs,

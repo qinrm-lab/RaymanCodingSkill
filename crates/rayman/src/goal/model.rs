@@ -8,6 +8,10 @@ use super::{
     HandoffContract, LaneRecord, ProgressReceipt, ReplacementAuthorityCommandRebind, WorkPackage,
 };
 
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum RequirementKind {
@@ -188,6 +192,10 @@ pub struct ValidationEvidence {
     pub impact_scopes: Vec<ValidationImpactScope>,
     #[serde(default)]
     pub non_code: bool,
+    /// Explicit authority-only scope for auditing an unchanged goal baseline.
+    /// False is omitted so legacy receipt serialization and hashes stay stable.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub workspace_snapshot: bool,
     /// 旧的人工声明没有实际退出码/工作区绑定，只能作为迁移信息保留。
     #[serde(default)]
     pub receipt: Option<ValidationReceipt>,
@@ -385,6 +393,8 @@ pub struct AuthorityReceipt {
     pub repeat: u32,
     pub impact_scopes: Vec<ValidationImpactScope>,
     pub non_code: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub workspace_snapshot: bool,
     pub invocation_sha256: String,
     pub contract_sha256: String,
     pub runs: Vec<AuthorityRunReceipt>,

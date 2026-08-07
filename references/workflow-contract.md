@@ -81,7 +81,10 @@ Code must not execute or emulate that Codex hook. Any native observation is
 transient and never becomes a persisted or reusable receipt. Never claim that
 it proves delivery, visibility, reading, or user awareness. Background
 continuation additionally needs explicit authority, mechanism, and
-workspace-isolation evidence. Never report done while pending work remains.
+workspace-isolation evidence. Never report done while pending work remains for
+a current goal. Goal-bound pending attached to an archived or superseded goal
+remains visible as audit history but does not re-enter current readiness;
+unbound legacy pending remains a global blocker.
 
 Commit, push, publish, install, deploy, account changes, payment, deletion, and
 overwriting user-managed state still require user authority.
@@ -225,7 +228,10 @@ boundaries, not lock contention and not source defects.
 `goal validate` runs one program plus argv from the workspace root. Shell
 control operators, nested shell hosts, nonzero exits, source mutation, stale
 fingerprints, irrelevant scopes, and zero-test receipts fail closed. Pytest
-requires independent collect proof and a matching terminal summary.
+requires independent collect proof and a matching terminal summary. A pure
+zero-delta audit uses the authority-only `--workspace-snapshot` scope: the goal
+baseline delta must be empty before any validation program starts, and any real
+change still requires ordinary `--changed` coverage.
 
 Authority accepts only a reviewed repository gate, selector-free workspace
 Cargo tests, or selector-free workspace pytest, repeated on one unchanged

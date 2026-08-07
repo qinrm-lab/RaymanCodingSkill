@@ -189,8 +189,9 @@ pub fn task_name(root: &Path) -> String {
 
 /// 工作是否“全部完成”：至少有一个 current 目标，且**存储里的每一个目标**
 /// ——包括 archived/superseded 记录——都通过同一份 `goal_gate_verdict`，
-/// 没有待完成项。退休记录并不被跳过：它们同样必须无 blocker，否则一条损坏的
+/// 没有 current/unbound 待完成项。退休记录并不被跳过：它们同样必须无 blocker，否则一条损坏的
 /// 历史记录会让自动快照永远停不下来，这一点与只看 current 目标的直觉不同。
+/// 但绑定到已退休目标的 pending 只作为可审计历史保留，不能重新激活该目标。
 /// 没有任何 current 目标时返回 false（无从判断完成，交给显式 `stop`）。
 /// 任何状态文件读不出来都按“未完成”处理：损坏的 active 目标被当成不存在
 /// 会导致自动快照在工作进行中自停并注销。
@@ -220,7 +221,7 @@ pub fn work_is_complete(root: &Path) -> bool {
     }) {
         return false;
     }
-    matches!(PendingStore::new(root).list(), Ok(items) if items.is_empty())
+    matches!(PendingStore::new(root).readiness(&goals), Ok(report) if report.active.is_empty())
 }
 
 fn dir_override(state_dir: &Option<String>) -> Option<PathBuf> {
@@ -1112,6 +1113,60 @@ mod tests {
 
         // 加一个 pending → 又变未完成。
         PendingStore::new(root).add("leftover", "todo").unwrap();
+        assert!(!work_is_complete(root));
+    }
+
+    #[test]
+    fn work_is_complete_ignores_pending_bound_to_retired_goal() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let goals = GoalStore::new(root);
+        let retired = goals
+            .start("retired boundary", &[("obtain owner input".into(), true)])
+            .unwrap();
+        let pending = PendingStore::new(root);
+        pending
+            .add_capability_bound(
+                crate::goal::PendingSubmission {
+                    title: "owner decision".into(),
+                    detail: "historical owner choice".into(),
+                    goal_id: Some(retired.id.clone()),
+                    owner: crate::goal::PendingOwner::Human,
+                    kind: crate::goal::PendingKind::HumanInput,
+                    attempts: vec!["completed every safe local path".into()],
+                    evidence_paths: vec!["reports/decision.md".into()],
+                    minimum_input: Some("choose A or B".into()),
+                    recommended_action: Some("choose A".into()),
+                    alternatives: vec!["choose B".into()],
+                    risk: Some("the product behavior differs".into()),
+                    resume_command: Some("rayman prepare --goal owner".into()),
+                    auto_resume_condition: Some("the owner choice is recorded".into()),
+                    consultation_timing: crate::goal::ConsultationTiming::Immediate,
+                    background_mechanism: None,
+                    background_authority_evidence: None,
+                    background_isolation_evidence: None,
+                },
+                Some("owner/historical-autosave".into()),
+                Some("owner_decision".into()),
+            )
+            .unwrap();
+        goals.close(&retired.id, "blocked").unwrap();
+        goals
+            .archive(&retired.id, "retired boundary retained", false)
+            .unwrap();
+
+        let current = goals
+            .start("current", &[("finish current work".into(), true)])
+            .unwrap();
+        record_non_code_success(&goals, root, &current);
+        assert!(work_is_complete(root));
+        assert_eq!(
+            pending.list().unwrap().len(),
+            1,
+            "history must remain listed"
+        );
+
+        pending.add("unbound work", "still active").unwrap();
         assert!(!work_is_complete(root));
     }
 

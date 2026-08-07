@@ -1669,6 +1669,7 @@ impl GoalStore {
                     impact_paths: impact_paths.clone(),
                     impact_scopes: impact_scopes.clone(),
                     non_code: impacts.is_empty(),
+                    workspace_snapshot: false,
                     receipt: None,
                 });
             }
@@ -1719,17 +1720,31 @@ impl GoalStore {
             impacts,
             non_code,
         } = submission;
+        let workspace_snapshot = authority
+            .as_ref()
+            .is_some_and(|receipt| receipt.workspace_snapshot);
         if evidence.trim().is_empty() {
             bail!("验证证据说明不能为空");
         }
-        validate_command_for_impacts(&self.root, &command, &impacts, non_code)?;
+        validate_command_for_scope(&self.root, &command, &impacts, non_code, workspace_snapshot)?;
+        if workspace_snapshot && authority.is_none() {
+            bail!("workspace snapshot receipt 必须是 authority receipt");
+        }
+        if workspace_snapshot {
+            validate_authority_command(&self.root, &command)?;
+        }
         let impact_paths = impacts
             .iter()
             .map(|impact| impact.changed_path.clone())
             .collect::<Vec<_>>();
         let impact_scopes = validation_scopes_for_impacts(&impacts);
         if receipt.invocation_sha256
-            != validation_invocation_sha256_scoped(&command, &impact_scopes, non_code)
+            != validation_invocation_sha256_scoped_mode(
+                &command,
+                &impact_scopes,
+                non_code,
+                workspace_snapshot,
+            )
         {
             bail!("validation receipt 与命令/影响路径不匹配");
         }
@@ -1775,6 +1790,12 @@ impl GoalStore {
                 plan_delta.unplanned_changed_paths.join(", ")
             );
         }
+        if workspace_snapshot && !plan_delta.actual_changed_paths.is_empty() {
+            bail!(
+                "workspace snapshot receipt 要求 goal baseline delta 为空；发现真实变更: {}",
+                plan_delta.actual_changed_paths.join(", ")
+            );
+        }
         if plan_delta.plan_recorded {
             let undeclared_plan = impact_paths
                 .iter()
@@ -1803,6 +1824,7 @@ impl GoalStore {
                 || authority.contract_sha256 != expected_contract
                 || authority.impact_scopes != impact_scopes
                 || authority.non_code != non_code
+                || authority.workspace_snapshot != workspace_snapshot
             {
                 bail!("authority receipt 与 requirement/command/scope 合同不匹配");
             }
@@ -1810,12 +1832,13 @@ impl GoalStore {
                 bail!("authority receipt 必须包含至少两次完整稳定执行");
             }
             if authority.invocation_sha256
-                != authority_invocation_sha256(
+                != authority_invocation_sha256_mode(
                     &command,
                     req_id,
                     authority.repeat,
                     &impact_scopes,
                     non_code,
+                    workspace_snapshot,
                 )
             {
                 bail!("authority receipt invocation hash 无效");
@@ -1858,6 +1881,7 @@ impl GoalStore {
             impact_paths,
             impact_scopes,
             non_code,
+            workspace_snapshot,
             receipt: Some(receipt),
         });
         req.impacts.extend(impacts);
@@ -2198,12 +2222,15 @@ impl GoalStore {
         Ok(goal)
     }
 
-    /// Retain an invalid archived success as explicitly untrusted history.
+    /// Retain an invalid completed success as explicitly untrusted history.
     ///
-    /// This is a one-way evidence downgrade, never a repair of the archived
-    /// receipts. The requirements and validation ledger remain untouched, the
-    /// original historical workspace fingerprint is retained, and every
-    /// replacement/supersession consumer rejects the quarantine policy.
+    /// This is a one-way evidence downgrade, never a repair of the receipts.
+    /// An already archived success retains its original historical fingerprint.
+    /// A current pre-publication-policy success may be atomically retired only
+    /// when retirement fixes its sole schema boundary and every trusted archive
+    /// or migration path still fails. The requirements and validation ledger
+    /// remain untouched, and every replacement/supersession consumer rejects the
+    /// quarantine policy.
     pub fn quarantine_invalid_history(&self, id: &str, reason: &str) -> Result<Goal> {
         if reason.trim().is_empty() {
             bail!("隔离原因不能为空");
@@ -2213,29 +2240,118 @@ impl GoalStore {
         let Some(mut goal) = Self::load_goal_file_for_update(&path)? else {
             bail!("目标不存在: {id}");
         };
-        if goal.lifecycle != GoalLifecycle::Archived || goal.status != GoalStatus::Success {
-            bail!("只允许隔离已归档的 success 历史；current/未完成目标不能隐藏");
+        if goal.status != GoalStatus::Success
+            || !matches!(
+                goal.lifecycle,
+                GoalLifecycle::Current | GoalLifecycle::Archived
+            )
+        {
+            bail!(
+                "只允许隔离 proof 已失效的已归档 success，或无法生成可信归档 proof 的完整 current legacy success；有效或尚未结束的 current goal 不能隐藏"
+            );
         }
-        if let Some(error) = goal.current_schema_error() {
-            bail!("目标合约无效，不能隔离 historical receipt: {error}");
-        }
-        if !integrity_quarantine_eligible(&goal) {
-            bail!("只有 must 已完整结束的 current-schema archived success 可以隔离");
-        }
-        let Some(old_proof) = goal.lifecycle_proof.clone() else {
-            bail!("历史目标缺少旧 lifecycle proof，不能证明该归档证据曾经失效");
-        };
-        if matches!(
-            old_proof.receipt_policy.as_deref(),
-            Some(RECEIPT_POLICY_QUARANTINED | RECEIPT_POLICY_INTEGRITY_QUARANTINED)
-        ) {
-            bail!("目标已经是 untrusted history quarantine，不能重复隔离");
-        }
-        if !is_sha256(&old_proof.workspace_fingerprint) {
-            bail!("历史 lifecycle proof 的 workspace fingerprint 非法，不能生成可核验隔离记录");
-        }
-        let Some(proof_error) = goal.lifecycle_proof_error(&self.root) else {
-            bail!("归档 success 的 lifecycle proof 仍然有效；拒绝把有效证据降级为 quarantine");
+
+        let (proof_fingerprint, proof_error) = if goal.lifecycle == GoalLifecycle::Current {
+            let Some(current_error) = goal.current_schema_error() else {
+                bail!(
+                    "只允许隔离 proof 已失效的已归档 success，或无法生成可信归档 proof 的完整 current legacy success；有效或尚未结束的 current goal 不能隐藏"
+                );
+            };
+            if let Some(error) = goal.lifecycle_error() {
+                bail!("目标合约无效，不能隔离 historical receipt: {error}");
+            }
+
+            // A legacy plan is invalid while current by design.  Quarantine may
+            // retire exactly that otherwise immutable record, but must not wash
+            // any unrelated plan/schema defect merely by flipping lifecycle.
+            let mut archived_view = goal.clone();
+            archived_view.lifecycle = GoalLifecycle::Archived;
+            archived_view.lifecycle_reason = Some("current success quarantine candidate".into());
+            archived_view.superseded_by = None;
+            archived_view.lifecycle_proof = None;
+            if goal.plan_publication_policy.is_some()
+                || plan_chain_error(&archived_view).is_some()
+                || !integrity_quarantine_eligible(&archived_view)
+            {
+                bail!(
+                    "目标合约无效，不能隔离 historical receipt: {error}",
+                    error = current_error
+                );
+            }
+
+            let current_fingerprint = workspace_fingerprint(&self.root)?;
+            let current_gaps = goal_success_receipt_gaps_for_retiring_legacy_success(
+                &goal,
+                &self.root,
+                &current_fingerprint,
+            );
+            let historical_v2 = historical_success_fingerprint_for_retiring_legacy_success(
+                &goal,
+                &self.root,
+                ReceiptValidationPolicy::CurrentV2,
+                Some(&current_fingerprint),
+            );
+            let unreceipted_migration_works = pre_receipt_migration_eligible(&goal)
+                && goal_retiring_legacy_success_unreceipted_migration_gaps(
+                    &goal,
+                    &self.root,
+                    &current_fingerprint,
+                )
+                .is_empty();
+            let v1_current_gaps = goal_retiring_legacy_success_v1_migration_gaps(
+                &goal,
+                &self.root,
+                &current_fingerprint,
+            );
+            let historical_v1 = receipt_policy_v1_migration_eligible(&goal).then(|| {
+                historical_success_fingerprint_for_retiring_legacy_success(
+                    &goal,
+                    &self.root,
+                    ReceiptValidationPolicy::LegacyV1,
+                    (!v1_current_gaps.is_empty()).then_some(current_fingerprint.as_str()),
+                )
+            });
+            if current_gaps.is_empty()
+                || historical_v2.is_some()
+                || unreceipted_migration_works
+                || historical_v1.flatten().is_some()
+            {
+                bail!(
+                    "current success 仍可生成可信 archive proof；拒绝降级为 quarantine，请使用普通 archive 或显式历史 receipt migration"
+                );
+            }
+
+            goal = archived_view;
+            (
+                current_fingerprint,
+                format!(
+                    "{current_error}; success receipt proof invalid: {}",
+                    current_gaps.join("; ")
+                ),
+            )
+        } else {
+            if let Some(error) = goal.current_schema_error() {
+                bail!("目标合约无效，不能隔离 historical receipt: {error}");
+            }
+            if !integrity_quarantine_eligible(&goal) {
+                bail!("只有 must 已完整结束的 current-schema archived success 可以隔离");
+            }
+            let Some(old_proof) = goal.lifecycle_proof.clone() else {
+                bail!("历史目标缺少旧 lifecycle proof，不能证明该归档证据曾经失效");
+            };
+            if matches!(
+                old_proof.receipt_policy.as_deref(),
+                Some(RECEIPT_POLICY_QUARANTINED | RECEIPT_POLICY_INTEGRITY_QUARANTINED)
+            ) {
+                bail!("目标已经是 untrusted history quarantine，不能重复隔离");
+            }
+            if !is_sha256(&old_proof.workspace_fingerprint) {
+                bail!("历史 lifecycle proof 的 workspace fingerprint 非法，不能生成可核验隔离记录");
+            }
+            let Some(proof_error) = goal.lifecycle_proof_error(&self.root) else {
+                bail!("归档 success 的 lifecycle proof 仍然有效；拒绝把有效证据降级为 quarantine");
+            };
+            (old_proof.workspace_fingerprint, proof_error)
         };
 
         let previous_reason = goal
@@ -2254,11 +2370,17 @@ impl GoalStore {
         goal.updated_at = event_at.clone();
         goal.lifecycle_proof = Some(issue_lifecycle_proof_at(
             &goal,
-            old_proof.workspace_fingerprint,
+            proof_fingerprint,
             Some(INTEGRITY_QUARANTINE_MIGRATION.to_string()),
             Some(RECEIPT_POLICY_INTEGRITY_QUARANTINED.to_string()),
             event_at,
         ));
+        if let Some(error) = goal.current_schema_error() {
+            bail!("隔离后的目标合约无效: {error}");
+        }
+        if let Some(error) = goal.lifecycle_proof_error(&self.root) {
+            bail!("隔离后的 lifecycle proof 无效: {error}");
+        }
         write_json(&path, &goal)?;
         Ok(goal)
     }
@@ -2668,6 +2790,7 @@ fn goal_from_legacy(legacy: LegacyGoal) -> Goal {
                         impact_paths: Vec::new(),
                         impact_scopes: Vec::new(),
                         non_code: false,
+                        workspace_snapshot: false,
                         receipt: None,
                     })
                     .collect(),

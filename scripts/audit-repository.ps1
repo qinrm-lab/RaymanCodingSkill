@@ -108,6 +108,59 @@ function Resolve-NativeApplication {
     }
 }
 
+function Resolve-AuditNativeApplications {
+    param(
+        [Parameter(Mandatory = $true)]
+        [bool]$IncludeCompleteAuditTools,
+        [scriptblock]$Resolver
+    )
+
+    if ($null -eq $Resolver) {
+        $Resolver = {
+            param([string]$Name, [string]$Label)
+            Resolve-NativeApplication -Name $Name -Label $Label
+        }
+    }
+    $applications = [ordered]@{
+        Cargo = & $Resolver -Name 'cargo' -Label 'Cargo'
+        CargoDeny = & $Resolver -Name 'cargo-deny' -Label 'cargo-deny'
+    }
+    if ($IncludeCompleteAuditTools) {
+        $applications.Rustup = & $Resolver -Name 'rustup' -Label 'rustup'
+        $applications.Git = & $Resolver -Name 'git' -Label 'Git'
+        $applications.Rustc = & $Resolver -Name 'rustc' -Label 'rustc'
+    }
+    return $applications
+}
+
+function Invoke-AuditBootstrap {
+    param(
+        [Parameter(Mandatory = $true)]
+        [bool]$IncludeCompleteAuditTools,
+        [Parameter(Mandatory = $true)]
+        [ref]$Applications,
+        [scriptblock]$Resolver,
+        [scriptblock]$PhaseWriter
+    )
+
+    if ($null -eq $PhaseWriter) {
+        $PhaseWriter = {
+            param([string]$Name, [string]$Status, [string]$Detail)
+            Write-AuditPhase -Name $Name -Status $Status -Detail $Detail
+        }
+    }
+    & $PhaseWriter -Name 'bootstrap' -Status 'start' -Detail $null
+    try {
+        $Applications.Value = Resolve-AuditNativeApplications `
+            -IncludeCompleteAuditTools $IncludeCompleteAuditTools `
+            -Resolver $Resolver
+        & $PhaseWriter -Name 'bootstrap' -Status 'pass' -Detail $null
+    } catch {
+        & $PhaseWriter -Name 'bootstrap' -Status 'fail' -Detail $_.Exception.Message
+        throw
+    }
+}
+
 function Assert-ExpectedApplicationPath {
     param(
         [Parameter(Mandatory = $true)]
@@ -486,6 +539,48 @@ function Invoke-AuditScriptSelfTest {
         [array]$NativeIdentities
     )
 
+    $bootstrapRecords = [Collections.Generic.List[object]]::new()
+    $bootstrapWriter = {
+        param([string]$Name, [string]$Status, [string]$Detail)
+        $bootstrapRecords.Add([pscustomobject]@{
+            Name = $Name
+            Status = $Status
+            Detail = $Detail
+        })
+    }.GetNewClosure()
+    $missingRustupResolver = {
+        param([string]$Name, [string]$Label)
+        if ($Name -eq 'rustup') {
+            throw 'rustup application is missing from PATH: rustup'
+        }
+        return [pscustomobject]@{
+            Name = $Name
+            Label = $Label
+            Path = "self-test-$Name"
+            Sha256 = ('a' * 64)
+        }
+    }
+    $bootstrapApplications = $null
+    $missingRustupRejected = $false
+    try {
+        Invoke-AuditBootstrap `
+            -IncludeCompleteAuditTools $true `
+            -Applications ([ref]$bootstrapApplications) `
+            -Resolver $missingRustupResolver `
+            -PhaseWriter $bootstrapWriter
+    } catch {
+        $missingRustupRejected = $_.Exception.Message -match 'rustup application is missing'
+    }
+    if (-not $missingRustupRejected -or
+        $bootstrapRecords.Count -ne 2 -or
+        $bootstrapRecords[0].Name -ne 'bootstrap' -or
+        $bootstrapRecords[0].Status -ne 'start' -or
+        $bootstrapRecords[1].Name -ne 'bootstrap' -or
+        $bootstrapRecords[1].Status -ne 'fail' -or
+        $bootstrapRecords[1].Detail -notmatch 'rustup application is missing') {
+        throw 'Audit self-test failed: missing rustup did not produce a structured bootstrap start/fail pair.'
+    }
+
     foreach ($identity in $NativeIdentities) {
         Assert-ShadowRejection -Identity $identity
         # The injected Function is local to Assert-ShadowRejection and is gone
@@ -628,19 +723,13 @@ db-path = "unexpected"
     Write-Host 'Audit script self-test passed: native shadow/identity, profile migration, isolated advisory state, and managed coverage guards fail closed.'
 }
 
-$nativeApplications = [ordered]@{
-    Cargo = Resolve-NativeApplication -Name 'cargo' -Label 'Cargo'
-    CargoDeny = Resolve-NativeApplication -Name 'cargo-deny' -Label 'cargo-deny'
-}
-# The focused dependency-policy lane executes only Cargo-independent
-# cargo-deny checks (plus the generic script self-test, which binds Cargo and
-# cargo-deny). Requiring the complete-audit MSRV/Git/compiler toolset here made
-# that focused lane fail on supported MSI Rust installations with no rustup.
-if (-not $DependencyPolicyOnly) {
-    $nativeApplications.Rustup = Resolve-NativeApplication -Name 'rustup' -Label 'rustup'
-    $nativeApplications.Git = Resolve-NativeApplication -Name 'git' -Label 'Git'
-    $nativeApplications.Rustc = Resolve-NativeApplication -Name 'rustc' -Label 'rustc'
-}
+$nativeApplications = $null
+# Self-test and the focused dependency-policy lane intentionally avoid the
+# complete-audit MSRV/Git/compiler resolver. A complete audit still requires
+# all five applications, but a missing one now has a structured bootstrap fail.
+Invoke-AuditBootstrap `
+    -IncludeCompleteAuditTools (-not ($DependencyPolicyOnly -or $SelfTest)) `
+    -Applications ([ref]$nativeApplications)
 $capturedNativeIdentities = @($nativeApplications.Values)
 Write-AuditPhase -Name 'script_self_test' -Status 'start'
 Invoke-AuditScriptSelfTest -NativeIdentities $capturedNativeIdentities
@@ -856,6 +945,7 @@ try {
         -CliPath $resolvedCli `
         -ReferenceCliPath $referenceArtifact `
         -SkillPath $resolvedSkill `
+        -WorkspaceSkillPath (Join-Path $repoRoot 'SKILL.md') `
         -RequirePath `
         -RequireSourceFresh
 

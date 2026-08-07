@@ -93,6 +93,17 @@ fn legacy_success_archive_preserves_a_valid_plan_ledger() {
     let plan_ledger = goal.plan_receipts.clone();
     let requirements = goal.requirements.clone();
 
+    let before = fs::read(&path).unwrap();
+    let error = store
+        .quarantine_invalid_history(&goal.id, "must use trusted archive")
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("仍可生成可信 archive proof"),
+        "error={error}"
+    );
+    assert_eq!(fs::read(&path).unwrap(), before);
+
     let archived = store
         .archive(&goal.id, "retire valid pre-rollout plan", false)
         .unwrap();
@@ -106,6 +117,55 @@ fn legacy_success_archive_preserves_a_valid_plan_ledger() {
     let before = fs::read(&path).unwrap();
     let error = store.mark_current(&goal.id).unwrap_err().to_string();
     assert!(error.contains("legacy plan chain"), "error={error}");
+    assert_eq!(fs::read(&path).unwrap(), before);
+}
+
+#[test]
+fn invalid_current_legacy_success_can_be_quarantined_atomically() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = GoalStore::new(dir.path());
+    let mut goal = as_pre_rollout_legacy_plan(planned_non_code_success(&store, dir.path()));
+    goal.requirements[0].validations[0].command =
+        "pwsh -NoProfile -File missing-validation.ps1".into();
+    let command = goal.requirements[0].validations[0].command.clone();
+    goal.requirements[0].validations[0].receipt = Some(successful_receipt(
+        dir.path(),
+        &goal,
+        "req_1",
+        &command,
+        &[],
+        true,
+    ));
+    let path = dir.path().join(GOALS_DIR).join(format!("{}.json", goal.id));
+    write_json(&path, &goal).unwrap();
+    let requirements = goal.requirements.clone();
+    let plan_ledger = goal.plan_receipts.clone();
+
+    let quarantined = store
+        .quarantine_invalid_history(&goal.id, "retire invalid current receipt history")
+        .unwrap();
+    assert_eq!(quarantined.lifecycle, GoalLifecycle::Archived);
+    assert_eq!(quarantined.status, GoalStatus::Success);
+    assert_eq!(quarantined.requirements, requirements);
+    assert_eq!(quarantined.plan_receipts, plan_ledger);
+    assert_eq!(quarantined.lifecycle_proof_error(dir.path()), None);
+    assert_eq!(
+        quarantined
+            .lifecycle_proof
+            .as_ref()
+            .and_then(|proof| proof.receipt_policy.as_deref()),
+        Some(RECEIPT_POLICY_INTEGRITY_QUARANTINED)
+    );
+    assert!(
+        quarantined
+            .lifecycle_reason
+            .as_deref()
+            .is_some_and(|value| value.contains("success receipt proof invalid")),
+        "the retained reason must explain why trusted receipt integrity failed"
+    );
+
+    let before = fs::read(&path).unwrap();
+    assert!(store.mark_current(&goal.id).is_err());
     assert_eq!(fs::read(&path).unwrap(), before);
 }
 
@@ -1013,6 +1073,7 @@ fn incoming_authority_time_is_validated_and_bounds_the_atomic_goal_event() {
                 repeat: 2,
                 impact_scopes: impact_scopes.clone(),
                 non_code: false,
+                workspace_snapshot: false,
                 invocation_sha256: authority_invocation_sha256(
                     command,
                     "req_1",

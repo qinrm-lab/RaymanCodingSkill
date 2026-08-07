@@ -14,7 +14,7 @@ The Rust manifest and the command parser are the implementation sources of truth
 
 - Unbound `rayman check --profile release` is a **workspace strict-quality** result. Goal-bound `check --goal <id>`/`finish --goal <id>` additionally proves that exact task's current receipt state. Neither proves an installed executable, PATH identity, or source freshness.
 - `rayman doctor --check` proves the installed binary/PATH/workspace-SKILL **identity tuple**. It explicitly does not prove that the artifact was rebuilt from the current source.
-- `scripts/verify-release-contract.ps1 -RequireSourceFresh` is the artifact-identity primitive used by handoff/CI. `-SkillPath` is mandatory. It verifies reported version, runtime contract label, and SHA-256 identity; it deliberately does not re-assert the command surface from help text or inspect installer source text. It rejects native-command shadows and known ambient compiler/linker/profile overrides, pins every Cargo/Git/rustc application it uses by path and hash, records clean `HEAD` and active `rustc -vV`, rebuilds in an isolated target, then terminally re-resolves/re-hashes every tool and supplied/deployed/PATH identity. User/parent Cargo config is intentionally not isolated. This proves current-source byte identity under the active rustc and active Cargo configuration context; it does not attest toolchain/config provenance or a hermetic repository-default build.
+- `scripts/verify-release-contract.ps1 -RequireSourceFresh` is the artifact-identity primitive used by handoff/CI. `-SkillPath` is the mandatory global deployment root; `-WorkspaceSkillPath` independently binds the skill reported by doctor and defaults to `-SkillPath` only for backward compatibility. It verifies reported version, runtime contract label, and SHA-256 identity; it deliberately does not re-assert the command surface from help text or inspect installer source text. It rejects native-command shadows and known ambient compiler/linker/profile overrides, pins every Cargo/Git/rustc application it uses by path and hash, records clean `HEAD` and active `rustc -vV`, rebuilds in an isolated target, then terminally re-resolves/re-hashes every tool and supplied/deployed/workspace/PATH identity. User/parent Cargo config is intentionally not isolated. This proves current-source byte identity under the active rustc and active Cargo configuration context; it does not attest toolchain/config provenance or a hermetic repository-default build.
 
 A matching version string, filename, copied binary, or workspace strict-quality result without the source-fresh check is not release evidence.
 
@@ -37,6 +37,7 @@ $skillHash = (Get-FileHash ./SKILL.md -Algorithm SHA256).Hash.ToLowerInvariant()
   -CliPath $artifact `
   -ReferenceCliPath $artifact `
   -SkillPath ./SKILL.md `
+  -WorkspaceSkillPath ./SKILL.md `
   -RequirePath `
   -RequireSourceFresh
 ```
@@ -85,11 +86,12 @@ $installed = $commands[0].Source
   -CliPath $installed `
   -ReferenceCliPath $artifact `
   -SkillPath <path-to-deployed-canonical-SKILL.md> `
+  -WorkspaceSkillPath ./SKILL.md `
   -RequirePath `
   -RequireSourceFresh
 ```
 
-The reference and installed executables must have the same SHA-256, and both must match an isolated locked rebuild from the clean current source. The supplied deployed skill must have the same SHA-256 as this repository's canonical `SKILL.md`. If any check fails, use `scripts/install-rayman.ps1`; do not repair the tuple by copying one file manually.
+The reference and installed executables must have the same SHA-256, and both must match an isolated locked rebuild from the clean current source. The supplied deployed skill and doctor-reported workspace skill must each have the same SHA-256 as this repository's canonical `SKILL.md`; manifest resources are resolved only relative to the deployed root. If any check fails, use `scripts/install-rayman.ps1`; do not repair the tuple by copying one file manually.
 
 An intentionally different bootstrap wrapper is not the canonical skill and must not be passed as `-SkillPath`; first inspect where it points, then verify the canonical target. This prevents a wrapper's version prose from being mistaken for the workflow contract.
 

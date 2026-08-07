@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
-use super::{Goal, GoalStatus, acquire_state_lock, short_id};
+use super::{Goal, GoalLifecycle, GoalStatus, acquire_state_lock, short_id};
 use crate::file_io::{read_json, write_json};
 use crate::hash::sha256_bytes;
 use crate::state_paths;
@@ -277,6 +277,16 @@ pub struct PendingRender {
     pub package_sha256s: Vec<String>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PendingReadiness {
+    /// Unbound legacy entries and entries attached to current goals still
+    /// participate in workspace readiness.
+    pub active: Vec<PendingItem>,
+    /// Goal-bound entries attached to archived or superseded goals remain
+    /// available through `pending list`, but cannot reactivate retired work.
+    pub historical: Vec<PendingItem>,
+}
+
 pub struct PendingStore {
     root: PathBuf,
 }
@@ -325,6 +335,32 @@ impl PendingStore {
 
     pub fn list(&self) -> Result<Vec<PendingItem>> {
         Ok(self.load()?.items)
+    }
+
+    /// Partition pending state by the lifecycle of its owning goal without
+    /// deleting or rewriting any record. A missing owner is fail-closed:
+    /// otherwise deleting/corrupting a goal file could silently retire its
+    /// still-active boundary.
+    pub fn readiness(&self, goals: &[Goal]) -> Result<PendingReadiness> {
+        let lifecycles = goals
+            .iter()
+            .map(|goal| (goal.id.as_str(), goal.lifecycle))
+            .collect::<BTreeMap<_, _>>();
+        let mut report = PendingReadiness::default();
+        for item in self.list()? {
+            let Some(goal_id) = item.goal_id.as_deref() else {
+                report.active.push(item);
+                continue;
+            };
+            match lifecycles.get(goal_id) {
+                Some(GoalLifecycle::Current) => report.active.push(item),
+                Some(GoalLifecycle::Archived | GoalLifecycle::Superseded) => {
+                    report.historical.push(item);
+                }
+                None => bail!("pending 绑定的 goal 不存在: {goal_id}"),
+            }
+        }
+        Ok(report)
     }
 
     pub fn add(&self, title: &str, detail: &str) -> Result<PendingItem> {

@@ -746,7 +746,20 @@ pub fn validation_invocation_sha256_scoped(
     impact_scopes: &[ValidationImpactScope],
     non_code: bool,
 ) -> String {
+    validation_invocation_sha256_scoped_mode(command, impact_scopes, non_code, false)
+}
+
+pub fn validation_invocation_sha256_scoped_mode(
+    command: &str,
+    impact_scopes: &[ValidationImpactScope],
+    non_code: bool,
+    workspace_snapshot: bool,
+) -> String {
     let mut hasher = Sha256::new();
+    if workspace_snapshot {
+        hasher.update(b"rayman.workspace-snapshot-validation.v1");
+        hasher.update([0]);
+    }
     hasher.update(command.as_bytes());
     hasher.update([0]);
     hasher.update([u8::from(non_code)]);
@@ -778,12 +791,31 @@ pub fn authority_invocation_sha256(
     impact_scopes: &[ValidationImpactScope],
     non_code: bool,
 ) -> String {
+    authority_invocation_sha256_mode(
+        command,
+        requirement_id,
+        repeat,
+        impact_scopes,
+        non_code,
+        false,
+    )
+}
+
+pub fn authority_invocation_sha256_mode(
+    command: &str,
+    requirement_id: &str,
+    repeat: u32,
+    impact_scopes: &[ValidationImpactScope],
+    non_code: bool,
+    workspace_snapshot: bool,
+) -> String {
     let mut hasher = Sha256::new();
     hasher.update(b"rayman.authority-validation.v1");
-    hasher.update(validation_invocation_sha256_scoped(
+    hasher.update(validation_invocation_sha256_scoped_mode(
         command,
         impact_scopes,
         non_code,
+        workspace_snapshot,
     ));
     hasher.update([0]);
     hasher.update(requirement_id.as_bytes());
@@ -833,18 +865,25 @@ pub(super) fn direct_stable_authority_receipt_is_valid(
     let Ok(contract_sha256) = validation_contract_sha256(goal, &authority.requirement_id) else {
         return false;
     };
+    let snapshot_delta_is_empty = !authority.workspace_snapshot
+        || workspace_baseline(root)
+            .and_then(|current| goal_plan_delta(goal, &current))
+            .is_ok_and(|delta| delta.actual_changed_paths.is_empty());
     authority.repeat >= 2
         && authority.runs.len() == authority.repeat as usize
         && authority.workspace_fingerprint == fingerprint
         && authority.contract_sha256 == contract_sha256
         && authority.invocation_sha256
-            == authority_invocation_sha256(
+            == authority_invocation_sha256_mode(
                 &authority.command,
                 &authority.requirement_id,
                 authority.repeat,
                 &authority.impact_scopes,
                 authority.non_code,
+                authority.workspace_snapshot,
             )
+        && authority_scope_is_well_formed(authority)
+        && snapshot_delta_is_empty
         && validate_authority_command(root, &authority.command).is_ok()
         && authority.runs.iter().all(|run| {
             run.exit_code == 0
@@ -967,8 +1006,25 @@ fn validation_scope_is_well_formed(validation: &ValidationEvidence) -> bool {
         .map(|scope| scope.changed_path.replace('\\', "/"))
         .collect::<Vec<_>>();
     paths == scope_paths
-        && ((validation.non_code && validation.impact_scopes.is_empty())
-            || (!validation.non_code && !validation.impact_scopes.is_empty()))
+        && ((validation.workspace_snapshot
+            && !validation.non_code
+            && validation.impact_scopes.is_empty())
+            || (!validation.workspace_snapshot
+                && validation.non_code
+                && validation.impact_scopes.is_empty())
+            || (!validation.workspace_snapshot
+                && !validation.non_code
+                && !validation.impact_scopes.is_empty()))
+}
+
+pub(super) fn authority_scope_is_well_formed(authority: &AuthorityReceipt) -> bool {
+    (authority.workspace_snapshot && !authority.non_code && authority.impact_scopes.is_empty())
+        || (!authority.workspace_snapshot
+            && authority.non_code
+            && authority.impact_scopes.is_empty())
+        || (!authority.workspace_snapshot
+            && !authority.non_code
+            && !authority.impact_scopes.is_empty())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -995,6 +1051,13 @@ pub fn validation_has_current_receipt(
     root: &Path,
     current_fingerprint: &str,
 ) -> bool {
+    if validation.workspace_snapshot
+        && !workspace_baseline(root)
+            .and_then(|current| goal_plan_delta(goal, &current))
+            .is_ok_and(|delta| delta.actual_changed_paths.is_empty())
+    {
+        return false;
+    }
     if !proof_kind_matches(
         requirement.proof_kind,
         validation_proof_kind(root, &validation.command)
@@ -1044,10 +1107,11 @@ pub(super) fn validation_has_receipt_for_fingerprint(
         && receipt.contract_sha256 == contract_sha256
         && is_sha256(&receipt.contract_sha256)
         && receipt.invocation_sha256
-            == validation_invocation_sha256_scoped(
+            == validation_invocation_sha256_scoped_mode(
                 &validation.command,
                 &validation.impact_scopes,
                 validation.non_code,
+                validation.workspace_snapshot,
             )
         && validation_scope_is_well_formed(validation)
         && (!(match policy {
@@ -1526,9 +1590,15 @@ fn validate_scope_declaration(
     command: &ParsedValidationCommand,
     impacts: &[ImpactEvidence],
     non_code: bool,
+    workspace_snapshot: bool,
 ) -> Result<()> {
-    if impacts.is_empty() && !non_code {
-        bail!("validation 必须提供至少一个 `--changed`；非代码需求必须显式使用 `--non-code`");
+    if workspace_snapshot && (!impacts.is_empty() || non_code) {
+        bail!("`--workspace-snapshot` 不能与 `--changed` 或 `--non-code` 同时使用");
+    }
+    if impacts.is_empty() && !non_code && !workspace_snapshot {
+        bail!(
+            "validation 必须提供至少一个 `--changed`；非代码需求必须显式使用 `--non-code`；零变更 authority 审计使用 `--workspace-snapshot`"
+        );
     }
     if !impacts.is_empty() && non_code {
         bail!("`--non-code` 不能与 `--changed` 同时使用");
@@ -1545,9 +1615,19 @@ pub fn validate_command_for_impacts(
     impacts: &[ImpactEvidence],
     non_code: bool,
 ) -> Result<()> {
+    validate_command_for_scope(root, command, impacts, non_code, false)
+}
+
+pub fn validate_command_for_scope(
+    root: &Path,
+    command: &str,
+    impacts: &[ImpactEvidence],
+    non_code: bool,
+    workspace_snapshot: bool,
+) -> Result<()> {
     let parsed = parse_validation_command(command)?;
     validate_command_security(root, &parsed)?;
-    validate_scope_declaration(&parsed, impacts, non_code)?;
+    validate_scope_declaration(&parsed, impacts, non_code, workspace_snapshot)?;
     for impact in impacts {
         let Some(expectation) = validation_expectation_for_path(&impact.changed_path) else {
             continue;

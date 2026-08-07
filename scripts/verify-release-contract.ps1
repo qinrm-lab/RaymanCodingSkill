@@ -12,6 +12,14 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$SkillPath,
 
+    # -SkillPath is the deployed Codex skill root. The doctor may inspect a
+    # different workspace skill (for example the repository SKILL.md while the
+    # deployed resources live under ~/.codex/skills). Omission preserves the
+    # historical single-root behavior.
+    [Parameter(ParameterSetName = 'Verify')]
+    [ValidateNotNullOrEmpty()]
+    [string]$WorkspaceSkillPath,
+
     [Parameter(ParameterSetName = 'Verify')]
     [ValidateNotNullOrEmpty()]
     [string]$DoctorWorkspace,
@@ -221,6 +229,46 @@ function Get-Sha256 {
     param([string]$Path)
 
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Resolve-SkillIdentitySnapshot {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$DeploymentSkillPath,
+        [Parameter(Mandatory = $true)]
+        [string]$DoctorSkillPath
+    )
+
+    $deployment = Resolve-RequiredPath -Path $DeploymentSkillPath -Label 'Deployed canonical skill'
+    $workspace = Resolve-RequiredPath -Path $DoctorSkillPath -Label 'Doctor workspace skill'
+    return [pscustomobject]@{
+        DeploymentPath = $deployment
+        DeploymentHash = Get-Sha256 -Path $deployment
+        WorkspacePath = $workspace
+        WorkspaceHash = Get-Sha256 -Path $workspace
+    }
+}
+
+function Assert-SkillIdentitySnapshot {
+    param(
+        [Parameter(Mandatory = $true)]$Expected,
+        [Parameter(Mandatory = $true)][string]$DeploymentSkillPath,
+        [Parameter(Mandatory = $true)][string]$DoctorSkillPath,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $actual = Resolve-SkillIdentitySnapshot `
+        -DeploymentSkillPath $DeploymentSkillPath `
+        -DoctorSkillPath $DoctorSkillPath
+    if ($actual.DeploymentPath -ne $Expected.DeploymentPath -or
+        $actual.DeploymentHash -ne $Expected.DeploymentHash) {
+        throw "$Label deployed skill identity changed during verification."
+    }
+    if ($actual.WorkspacePath -ne $Expected.WorkspacePath -or
+        $actual.WorkspaceHash -ne $Expected.WorkspaceHash) {
+        throw "$Label workspace skill identity changed during verification."
+    }
+    return $actual
 }
 
 function Assert-CanonicalSkillAssetBinding {
@@ -584,7 +632,7 @@ function Assert-DoctorReady {
             $ExpectedSkillPath,
             $(if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal })
         )) {
-        throw "doctor workspace skill path differs from -SkillPath: $doctorSkill != $ExpectedSkillPath"
+        throw "doctor workspace skill path differs from -WorkspaceSkillPath: $doctorSkill != $ExpectedSkillPath"
     }
     return $doctor
 }
@@ -842,6 +890,44 @@ function Invoke-ReleaseVerifierSelfTest {
             throw 'Release verifier self-test failed: isolated doctor workspace resolution drifted.'
         }
 
+        $deploymentSkillRoot = Join-Path $doctorProbeRoot 'deployment-skill'
+        $workspaceSkillRoot = Join-Path $doctorProbeRoot 'workspace-skill'
+        New-Item -ItemType Directory -Path $deploymentSkillRoot, $workspaceSkillRoot -Force | Out-Null
+        $deploymentSkillProbe = Join-Path $deploymentSkillRoot 'SKILL.md'
+        $workspaceSkillProbe = Join-Path $workspaceSkillRoot 'SKILL.md'
+        [IO.File]::WriteAllText($deploymentSkillProbe, "deployment`n", [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText($workspaceSkillProbe, "workspace`n", [Text.UTF8Encoding]::new($false))
+        $skillSnapshot = Resolve-SkillIdentitySnapshot `
+            -DeploymentSkillPath $deploymentSkillProbe `
+            -DoctorSkillPath $workspaceSkillProbe
+        foreach ($probe in @(
+            @{ Path = $deploymentSkillProbe; Pattern = 'deployed skill identity changed' },
+            @{ Path = $workspaceSkillProbe; Pattern = 'workspace skill identity changed' }
+        )) {
+            $originalSkillBytes = [IO.File]::ReadAllBytes($probe.Path)
+            $driftRejected = $false
+            try {
+                [IO.File]::WriteAllText($probe.Path, "drifted`n", [Text.UTF8Encoding]::new($false))
+                $null = Assert-SkillIdentitySnapshot `
+                    -Expected $skillSnapshot `
+                    -DeploymentSkillPath $deploymentSkillProbe `
+                    -DoctorSkillPath $workspaceSkillProbe `
+                    -Label 'Release verifier self-test'
+            } catch {
+                $driftRejected = $_.Exception.Message -match $probe.Pattern
+            } finally {
+                [IO.File]::WriteAllBytes($probe.Path, $originalSkillBytes)
+            }
+            if (-not $driftRejected) {
+                throw "Release verifier self-test failed: independent skill drift was not rejected for $($probe.Path)."
+            }
+        }
+        $null = Assert-SkillIdentitySnapshot `
+            -Expected $skillSnapshot `
+            -DeploymentSkillPath $deploymentSkillProbe `
+            -DoctorSkillPath $workspaceSkillProbe `
+            -Label 'Release verifier self-test restoration'
+
         # Exercise the same wrapper used by each real doctor invocation: a binding
         # mutation after the pre-check must be rejected by the post-check.
         $originalBinding = [IO.File]::ReadAllBytes($bindingProbe)
@@ -996,7 +1082,7 @@ function Invoke-ReleaseVerifierSelfTest {
         }
     }
 
-    Write-Host 'Release verifier self-test passed: native command shadows, packaged canonical skill drift, isolated doctor workspace ancestry/terminal guards, and forged GitHub tag context were verified.'
+    Write-Host 'Release verifier self-test passed: native command shadows, independent deployed/workspace skill drift, packaged canonical skill drift, isolated doctor workspace ancestry/terminal guards, and forged GitHub tag context were verified.'
 }
 
 if ($SelfTest) {
@@ -1058,7 +1144,16 @@ $script:resolvedCli = Resolve-RequiredPath -Path $CliPath -Label 'CLI artifact'
 $resolvedReference = if ($ReferenceCliPath) {
     Resolve-RequiredPath -Path $ReferenceCliPath -Label 'Reference CLI artifact'
 }
-$resolvedSkill = Resolve-RequiredPath -Path $SkillPath -Label 'Deployed canonical skill'
+$effectiveWorkspaceSkillPath = if ([string]::IsNullOrWhiteSpace($WorkspaceSkillPath)) {
+    $SkillPath
+} else {
+    $WorkspaceSkillPath
+}
+$skillIdentity = Resolve-SkillIdentitySnapshot `
+    -DeploymentSkillPath $SkillPath `
+    -DoctorSkillPath $effectiveWorkspaceSkillPath
+$resolvedSkill = $skillIdentity.DeploymentPath
+$resolvedWorkspaceSkill = $skillIdentity.WorkspacePath
 $doctorWorkspaceSnapshot = $null
 $resolvedDoctorWorkspace = if ([string]::IsNullOrWhiteSpace($DoctorWorkspace)) {
     Resolve-RequiredDirectory -Path $repoRoot -Label 'Repository doctor workspace'
@@ -1072,7 +1167,7 @@ $resolvedPackagedCanonicalSkill = $canonicalSkillBinding.PackagedPath
 
 $doctor = Assert-DoctorReady `
     -Workspace $resolvedDoctorWorkspace `
-    -ExpectedSkillPath $resolvedSkill `
+    -ExpectedSkillPath $resolvedWorkspaceSkill `
     -ExpectedIsolatedSnapshot $doctorWorkspaceSnapshot
 $cliHash = Get-Sha256 -Path $script:resolvedCli
 if ($resolvedReference) {
@@ -1083,10 +1178,14 @@ if ($resolvedReference) {
 }
 
 $deployedSkillHash = Get-Sha256 -Path $resolvedSkill
+$workspaceSkillHash = Get-Sha256 -Path $resolvedWorkspaceSkill
 $canonicalSkillHash = $canonicalSkillBinding.RepositoryHash
 $packagedCanonicalSkillHash = $canonicalSkillBinding.PackagedHash
 if ($deployedSkillHash -ne $canonicalSkillHash) {
     throw "Deployed SKILL.md SHA-256 differs from the repository canonical skill: $deployedSkillHash != $canonicalSkillHash"
+}
+if ($workspaceSkillHash -ne $canonicalSkillHash) {
+    throw "Doctor workspace SKILL.md SHA-256 differs from the repository canonical skill: $workspaceSkillHash != $canonicalSkillHash"
 }
 
 # install-manifest.json deploys three Codex skill resources under one rollback
@@ -1198,13 +1297,20 @@ if ($resolvedReference) {
         throw 'Reference CLI artifact identity changed during release-contract verification.'
     }
 }
-$finalSkillPath = Resolve-RequiredPath -Path $SkillPath -Label 'Deployed canonical skill (final check)'
+$finalSkillIdentity = Assert-SkillIdentitySnapshot `
+    -Expected $skillIdentity `
+    -DeploymentSkillPath $SkillPath `
+    -DoctorSkillPath $effectiveWorkspaceSkillPath `
+    -Label 'Terminal'
+$finalSkillPath = $finalSkillIdentity.DeploymentPath
+$finalWorkspaceSkillPath = $finalSkillIdentity.WorkspacePath
 $finalCanonicalSkill = Resolve-RequiredPath -Path $canonicalSkill -Label 'Repository canonical skill (final check)'
 $finalPackagedCanonicalSkill = Resolve-RequiredPath -Path $packagedCanonicalSkill -Label 'Packaged canonical skill asset (final check)'
 if ($finalSkillPath -ne $resolvedSkill -or
     $finalCanonicalSkill -ne $resolvedCanonicalSkill -or
     $finalPackagedCanonicalSkill -ne $resolvedPackagedCanonicalSkill -or
     (Get-Sha256 -Path $finalSkillPath) -ne $deployedSkillHash -or
+    (Get-Sha256 -Path $finalWorkspaceSkillPath) -ne $workspaceSkillHash -or
     (Get-Sha256 -Path $finalCanonicalSkill) -ne $canonicalSkillHash -or
     (Get-Sha256 -Path $finalPackagedCanonicalSkill) -ne $packagedCanonicalSkillHash) {
     throw 'Deployed, repository, or packaged canonical SKILL.md identity changed during verification.'
@@ -1256,7 +1362,7 @@ if ($null -ne $doctorWorkspaceSnapshot) {
 }
 $null = Assert-DoctorReady `
     -Workspace $resolvedDoctorWorkspace `
-    -ExpectedSkillPath $finalSkillPath `
+    -ExpectedSkillPath $finalWorkspaceSkillPath `
     -ExpectedIsolatedSnapshot $doctorWorkspaceSnapshot
 
 foreach ($name in @($toolIdentity.Keys | Sort-Object)) {
@@ -1276,7 +1382,8 @@ Write-Host "  CLI SHA-256: $cliHash"
 if ($resolvedReference) {
     Write-Host "  Reference artifact: $resolvedReference"
 }
-Write-Host "  Canonical SKILL.md: $resolvedSkill"
+Write-Host "  Deployed canonical SKILL.md: $resolvedSkill"
+Write-Host "  Doctor workspace SKILL.md: $resolvedWorkspaceSkill"
 if ($RequirePath) {
     Write-Host '  PATH identity: verified'
 }

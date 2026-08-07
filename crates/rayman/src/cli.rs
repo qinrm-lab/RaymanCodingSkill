@@ -471,6 +471,13 @@ pub enum GoalAction {
         /// 明确声明这是非代码需求；与 --changed 互斥
         #[arg(long, conflicts_with = "changed")]
         non_code: bool,
+        /// 对 goal baseline 零增量的完整工作区快照执行 authority gate；与 --changed/--non-code 互斥
+        #[arg(
+            long,
+            conflicts_with_all = ["changed", "non_code"],
+            requires = "authority"
+        )]
+        workspace_snapshot: bool,
         /// 作为单一程序 + argv 直接执行；拒绝 shell 控制符，非零退出不会写入 receipt
         #[arg(long)]
         command: String,
@@ -498,7 +505,7 @@ pub enum GoalAction {
         /// Explicitly preserve a pre-policy-v2 goal whose real v1 receipts still pass v1 integrity
         #[arg(long, value_name = "POLICY", conflicts_with = "migrate_unreceipted")]
         migrate_receipt_policy: Option<String>,
-        /// Preserve a narrowly eligible misclassified legacy archive as untrusted history.
+        /// Preserve an invalid archived success, or a complete current legacy success with no trusted archive path, as untrusted history.
         #[arg(
             long,
             conflicts_with_all = ["migrate_unreceipted", "migrate_receipt_policy"]

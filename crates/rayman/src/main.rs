@@ -809,6 +809,7 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
             message,
             changed,
             non_code,
+            workspace_snapshot,
             command,
             authority,
             repeat,
@@ -825,14 +826,42 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
             if !authority && repeat != 1 {
                 bail!("重复执行只用于 authority gate；请同时传 --authority");
             }
+            if workspace_snapshot && !authority {
+                bail!("--workspace-snapshot 只允许与 --authority 一起使用");
+            }
             let impacts = impact_evidence_for_changed_paths(root, &changed)?;
-            goal::validate_command_for_impacts(root, &command, &impacts, non_code)?;
+            goal::validate_command_for_scope(
+                root,
+                &command,
+                &impacts,
+                non_code,
+                workspace_snapshot,
+            )?;
             if authority {
                 goal::validate_authority_command(root, &command)?;
             }
             let parsed = goal::parse_validation_command(&command)?;
             let contract_sha256 = store.validation_contract_hash(&id, &req)?;
-            let before = goal::workspace_fingerprint(root)?;
+            let snapshot_baseline = if workspace_snapshot {
+                let goal_record = store
+                    .get(&id)?
+                    .ok_or_else(|| anyhow::anyhow!("目标不存在: {id}"))?;
+                let current = goal::workspace_baseline(root)?;
+                let delta = goal::goal_plan_delta(&goal_record, &current)?;
+                if !delta.actual_changed_paths.is_empty() {
+                    bail!(
+                        "--workspace-snapshot 要求 goal baseline delta 为空；发现真实变更: {}。验证命令尚未执行",
+                        delta.actual_changed_paths.join(", ")
+                    );
+                }
+                Some(current)
+            } else {
+                None
+            };
+            let before = snapshot_baseline
+                .as_ref()
+                .map(|baseline| baseline.workspace_fingerprint.clone())
+                .unwrap_or(goal::workspace_fingerprint(root)?);
             let (listed_tests, list_stdout_sha256, list_stderr_sha256) =
                 if let Some(list_command) = goal::validation_list_command(&parsed)? {
                     let list_output = run_validation_command(root, &list_command)?;
@@ -908,10 +937,11 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 workspace_fingerprint_after: after,
                 stdout_sha256: sha256_hex(&output.stdout),
                 stderr_sha256: sha256_hex(&output.stderr),
-                invocation_sha256: goal::validation_invocation_sha256_scoped(
+                invocation_sha256: goal::validation_invocation_sha256_scoped_mode(
                     &command,
                     &impact_scopes,
                     non_code,
+                    workspace_snapshot,
                 ),
                 passed_tests: test_proof.map(|proof| proof.passed),
                 listed_tests: test_proof.map(|proof| proof.listed),
@@ -940,12 +970,14 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                             repeat,
                             impact_scopes: impact_scopes.clone(),
                             non_code,
-                            invocation_sha256: goal::authority_invocation_sha256(
+                            workspace_snapshot,
+                            invocation_sha256: goal::authority_invocation_sha256_mode(
                                 &command,
                                 &req,
                                 repeat,
                                 &impact_scopes,
                                 non_code,
+                                workspace_snapshot,
                             ),
                             contract_sha256: contract_sha256.clone(),
                             runs: stable_runs,
@@ -1259,11 +1291,13 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
     let freshness = context::strong_freshness(root);
     let asset_report = assets::scan(root)?;
     let goal_store = goal::GoalStore::new(root);
+    let (goals, goal_load_issues) = goal_store.list_with_issues()?;
     // 损坏的 pending.json 是阻塞项而非"零待办"：静默放行会让门禁失效。
-    let (pending, pending_error) = match goal::PendingStore::new(root).list() {
-        Ok(items) => (items, None),
-        Err(error) => (Vec::new(), Some(format!("{error:#}"))),
-    };
+    let (pending, historical_pending, pending_error) =
+        match goal::PendingStore::new(root).readiness(&goals) {
+            Ok(report) => (report.active, report.historical, None),
+            Err(error) => (Vec::new(), Vec::new(), Some(format!("{error:#}"))),
+        };
 
     let context_blocked = freshness.status != "ready";
     let mut standard_blockers = Vec::new();
@@ -1274,7 +1308,6 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
     let mut map_quality = None;
 
     if matches!(cmd.profile, CheckProfile::Standard | CheckProfile::Release) {
-        let (goals, goal_load_issues) = goal_store.list_with_issues()?;
         if task_goal_id.is_none() && cmd.require_current_goal {
             let current_ids = goals
                 .iter()
@@ -1460,6 +1493,7 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
                 "markers": asset_report.markers.len(),
             },
             "pending": pending.len(),
+            "historical_pending": historical_pending.len(),
             "pending_error": pending_error,
             "standard": {
                 "blockers": standard_blockers,
@@ -1499,6 +1533,12 @@ fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
             asset_report.markers.len()
         );
         println!("  待完成项: {}", pending.len());
+        if !historical_pending.is_empty() {
+            println!(
+                "  历史待完成项（保留，不阻塞）: {}",
+                historical_pending.len()
+            );
+        }
         if let Some(error) = &pending_error {
             println!("    BLOCKER: pending.json 不可读取: {error}");
         }

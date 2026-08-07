@@ -150,6 +150,9 @@ pub(super) fn legacy_lifecycle_contract_sha256(goal: &Goal) -> String {
                     lifecycle_hash_optional_str(&mut hasher, scope.manifest_path.as_deref());
                 }
                 hasher.update([u8::from(authority.non_code)]);
+                if authority.workspace_snapshot {
+                    hasher.update(b"rayman.workspace-snapshot-authority-lifecycle.v1");
+                }
                 lifecycle_hash_str(&mut hasher, &authority.invocation_sha256);
                 lifecycle_hash_str(&mut hasher, &authority.contract_sha256);
                 hasher.update((authority.runs.len() as u64).to_le_bytes());
@@ -290,6 +293,9 @@ pub(super) fn legacy_lifecycle_contract_sha256(goal: &Goal) -> String {
                 lifecycle_hash_optional_str(&mut hasher, scope.manifest_path.as_deref());
             }
             hasher.update([u8::from(validation.non_code)]);
+            if validation.workspace_snapshot {
+                hasher.update(b"rayman.workspace-snapshot-validation-lifecycle.v1");
+            }
             hasher.update([u8::from(validation.receipt.is_some())]);
             if let Some(receipt) = &validation.receipt {
                 hasher.update(receipt.exit_code.to_le_bytes());
@@ -1125,15 +1131,17 @@ impl Goal {
                 };
                 if authority.repeat < 2
                     || authority.runs.len() != authority.repeat as usize
+                    || !authority_scope_is_well_formed(authority)
                     || authority.contract_sha256 != contract_sha256
                     || !is_sha256(&authority.workspace_fingerprint)
                     || authority.invocation_sha256
-                        != authority_invocation_sha256(
+                        != authority_invocation_sha256_mode(
                             &authority.command,
                             &authority.requirement_id,
                             authority.repeat,
                             &authority.impact_scopes,
                             authority.non_code,
+                            authority.workspace_snapshot,
                         )
                     || authority.runs.iter().any(|run| {
                         run.exit_code != 0

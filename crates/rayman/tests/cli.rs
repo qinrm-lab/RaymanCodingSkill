@@ -4772,6 +4772,42 @@ fn task_bound_check_prepare_and_finish_distinguish_task_from_workspace_readiness
     generate_lockfile(root);
     run_json(root, &["context", "refresh"]);
 
+    let retired = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "retired boundary",
+            "--must",
+            "obtain owner input",
+        ],
+    );
+    let retired_id = retired["id"].as_str().unwrap();
+    let retired_pending = add_complete_human_pending(
+        root,
+        retired_id,
+        "owner/retired-readiness",
+        "historical owner choice",
+    );
+    assert_eq!(
+        run(root, &["goal", "close", retired_id, "--status", "blocked"],).status,
+        0
+    );
+    assert_eq!(
+        run(
+            root,
+            &[
+                "goal",
+                "archive",
+                retired_id,
+                "--reason",
+                "retired boundary retained",
+            ],
+        )
+        .status,
+        0
+    );
+
     let unbound = run(
         root,
         &[
@@ -4787,6 +4823,8 @@ fn task_bound_check_prepare_and_finish_distinguish_task_from_workspace_readiness
     let unbound: Value = serde_json::from_str(&unbound.stdout).unwrap();
     assert_eq!(unbound["workspace_ready"], true);
     assert_eq!(unbound["task"]["ready"], false);
+    assert_eq!(unbound["pending"], 0);
+    assert_eq!(unbound["historical_pending"], 1);
 
     let started = run_json(
         root,
@@ -4851,7 +4889,55 @@ fn task_bound_check_prepare_and_finish_distinguish_task_from_workspace_readiness
     assert_eq!(finished["task"]["goal_id"], id);
     assert_eq!(finished["task"]["ready"], true);
     assert_eq!(finished["ready"], true);
+    assert_eq!(finished["pending"], 0);
+    assert_eq!(finished["historical_pending"], 1);
     assert!(finished["context_refresh"].is_object());
+
+    let current_pending =
+        add_complete_human_pending(root, id, "owner/current-readiness", "current owner choice");
+    let blocked_by_current = run(root, &["--format", "json", "finish", "--goal", id]);
+    assert_eq!(
+        blocked_by_current.status, 1,
+        "{}",
+        blocked_by_current.stdout
+    );
+    let blocked_by_current: Value = serde_json::from_str(&blocked_by_current.stdout).unwrap();
+    assert_eq!(blocked_by_current["pending"], 1);
+    assert_eq!(blocked_by_current["historical_pending"], 1);
+    run(
+        root,
+        &[
+            "goal",
+            "pending",
+            "resolve",
+            current_pending["id"].as_str().unwrap(),
+        ],
+    );
+
+    let unbound_pending = run_json(
+        root,
+        &[
+            "goal",
+            "pending",
+            "add",
+            "legacy active work",
+            "-m",
+            "still active",
+        ],
+    );
+    assert_eq!(run(root, &["finish", "--goal", id]).status, 1);
+    run(
+        root,
+        &[
+            "goal",
+            "pending",
+            "resolve",
+            unbound_pending["id"].as_str().unwrap(),
+        ],
+    );
+    let listed = run_json(root, &["goal", "pending", "list"]);
+    assert_eq!(listed.as_array().unwrap().len(), 1);
+    assert_eq!(listed[0]["id"], retired_pending["id"]);
 }
 
 #[test]
@@ -5610,6 +5696,177 @@ fn goal_package_progress_summary_and_lane_fail_closed_through_cli() {
     let rejected = run(root, &["goal", "lane", "close", id, "review"]);
     assert_eq!(rejected.status, 1);
     assert!(rejected.stderr.contains("只读 lane"), "{}", rejected.stderr);
+}
+
+#[test]
+fn workspace_snapshot_authority_records_a_zero_delta_audit() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(
+        root,
+        "Cargo.toml",
+        "[package]\nname = \"snapshot-audit-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(
+        root,
+        "src/lib.rs",
+        "pub fn answer() -> i32 { 42 }\n#[test]\nfn answer_is_valid() { assert_eq!(answer(), 42); }\n",
+    );
+    generate_lockfile(root);
+    run_json(root, &["context", "refresh"]);
+    let started = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "zero delta audit",
+            "--must",
+            "audit workspace",
+        ],
+    );
+    let id = started["id"].as_str().unwrap();
+
+    let validated = run_json(
+        root,
+        &[
+            "goal",
+            "validate",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "stable zero delta repository audit",
+            "--command",
+            "cargo test --workspace --all-targets",
+            "--workspace-snapshot",
+            "--authority",
+            "--repeat",
+            "2",
+        ],
+    );
+    let validation = &validated["requirements"][0]["validations"][0];
+    assert_eq!(validation["workspace_snapshot"], true);
+    assert_eq!(validation["non_code"], false);
+    assert_eq!(validation["impact_paths"].as_array().unwrap().len(), 0);
+    let authority = &validated["authority_receipts"][0];
+    assert_eq!(authority["workspace_snapshot"], true);
+    assert_eq!(authority["repeat"], 2);
+    assert_ne!(
+        validation["receipt"]["invocation_sha256"],
+        authority["invocation_sha256"]
+    );
+}
+
+#[test]
+fn workspace_snapshot_rejects_real_delta_before_running_the_gate() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(
+        root,
+        "scripts/check-repo.ps1",
+        "$sentinel = Join-Path (Split-Path -Parent $PSScriptRoot) 'command-ran.txt'\n[IO.File]::WriteAllText($sentinel, 'ran')\n",
+    );
+    run_json(root, &["context", "refresh"]);
+    let started = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "guard snapshot audit",
+            "--must",
+            "audit workspace",
+        ],
+    );
+    let id = started["id"].as_str().unwrap();
+    write(root, "unexpected.txt", "real delta\n");
+
+    let rejected = run(
+        root,
+        &[
+            "goal",
+            "validate",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "must not run with a real delta",
+            "--command",
+            "pwsh -NoProfile -File scripts/check-repo.ps1",
+            "--workspace-snapshot",
+            "--authority",
+            "--repeat",
+            "2",
+        ],
+    );
+    assert_eq!(rejected.status, 1, "stdout={}", rejected.stdout);
+    assert!(
+        rejected.stderr.contains("goal baseline delta")
+            && rejected.stderr.contains("验证命令尚未执行"),
+        "{}",
+        rejected.stderr
+    );
+    assert!(!root.join("command-ran.txt").exists());
+    let unchanged = run_json(root, &["goal", "show", id]);
+    assert_eq!(unchanged["requirements"][0]["status"], "open");
+    assert_eq!(
+        unchanged["requirements"][0]["validations"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+}
+
+#[test]
+fn ordinary_changed_validation_keeps_the_legacy_scope_shape() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(
+        root,
+        "Cargo.toml",
+        "[package]\nname = \"changed-scope-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(root, "src/lib.rs", "pub fn value() -> u8 { 1 }\n");
+    generate_lockfile(root);
+    run_json(root, &["context", "refresh"]);
+    let started = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "ordinary change",
+            "--must",
+            "validate source",
+        ],
+    );
+    let id = started["id"].as_str().unwrap();
+    write(
+        root,
+        "src/lib.rs",
+        "pub fn value() -> u8 { 2 }\n#[test]\nfn value_is_two() { assert_eq!(value(), 2); }\n",
+    );
+    run_json(root, &["context", "refresh"]);
+
+    let validated = run_json(
+        root,
+        &[
+            "goal",
+            "validate",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "ordinary changed validation",
+            "--changed",
+            "src/lib.rs",
+            "--command",
+            "cargo test --quiet",
+        ],
+    );
+    let validation = &validated["requirements"][0]["validations"][0];
+    assert!(validation.get("workspace_snapshot").is_none());
+    assert_eq!(validation["non_code"], false);
+    assert_eq!(validation["impact_paths"][0], "src/lib.rs");
 }
 
 #[test]

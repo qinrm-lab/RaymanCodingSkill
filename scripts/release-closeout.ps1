@@ -161,6 +161,9 @@ function Get-AuthorityArguments {
         if ([string]::IsNullOrWhiteSpace($path)) { throw 'ChangedPath must not be blank.' }
         $arguments += @('--changed', $path)
     }
+    if ($Changed.Count -eq 0) {
+        $arguments += '--workspace-snapshot'
+    }
     return $arguments
 }
 
@@ -251,6 +254,12 @@ if ($SelfTest) {
         $authority[([Array]::IndexOf($authority, '--repeat') + 1)] -ne '2') {
         throw 'release closeout self-test lost mandatory authority repeat 2.'
     }
+    $snapshotAuthority = @(Get-AuthorityArguments 'goal_test' 'req_8' @())
+    if ($snapshotAuthority -notcontains '--workspace-snapshot' -or
+        $snapshotAuthority -contains '--non-code' -or
+        $authority -contains '--workspace-snapshot') {
+        throw 'release closeout self-test lost the zero-delta workspace snapshot scope boundary.'
+    }
     # EvidencePath 必须与 `rayman state audit --check` 的白名单一致，否则一次
     # closeout 就会让此后每一次仓库审计永久翻红（见 Resolve-EvidencePath）。
     if ((Resolve-EvidencePath '.RaymanCodingSkill/release-closeout-evidence.json') -ne
@@ -293,12 +302,12 @@ try {
         # the cheap PATH-identity check (no rebuild, no repository audit) so a reused
         # closeout still fails when the effective PATH `rayman` differs from -CliPath, just
         # like the non-reuse branch below.
-        & (Join-Path $PSScriptRoot 'verify-release-contract.ps1') -CliPath $CliPath -ReferenceCliPath $CliPath -SkillPath $SkillPath -RequirePath
+        & (Join-Path $PSScriptRoot 'verify-release-contract.ps1') -CliPath $CliPath -ReferenceCliPath $CliPath -SkillPath $SkillPath -WorkspaceSkillPath (Join-Path $repoRoot 'SKILL.md') -RequirePath
         Write-Output 'RAYMAN_RELEASE_PHASE {"phase":"audit_and_source_fresh","status":"reused_exact_binding"}'
     } else {
         Write-Output 'RAYMAN_RELEASE_PHASE {"phase":"audit_and_source_fresh","status":"start"}'
         & (Join-Path $PSScriptRoot 'audit-repository.ps1') -CliPath $CliPath -SkillPath $SkillPath
-        & (Join-Path $PSScriptRoot 'verify-release-contract.ps1') -CliPath $CliPath -ReferenceCliPath $CliPath -SkillPath $SkillPath -RequirePath -RequireSourceFresh
+        & (Join-Path $PSScriptRoot 'verify-release-contract.ps1') -CliPath $CliPath -ReferenceCliPath $CliPath -SkillPath $SkillPath -WorkspaceSkillPath (Join-Path $repoRoot 'SKILL.md') -RequirePath -RequireSourceFresh
         $after = Get-ReleaseBinding -Cli $CliPath -Skill $SkillPath
         if ((Get-ObjectSha256 $after) -ne (Get-ObjectSha256 $binding)) {
             throw 'Release binding drifted during audit; evidence was not written.'

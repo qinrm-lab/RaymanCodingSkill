@@ -5596,6 +5596,7 @@ try {
             CliPath = $artifact
             ReferenceCliPath = $artifact
             SkillPath = $canonicalSkill
+            WorkspaceSkillPath = $canonicalSkill
             DoctorWorkspace = $doctorWorkspaceRecord.Root
             RequireSourceFresh = $true
         }
@@ -5671,6 +5672,7 @@ try {
                 CliPath = $destinationCli
                 ReferenceCliPath = $artifact
                 SkillPath = $destinationSkill
+                WorkspaceSkillPath = $destinationSkill
                 DoctorWorkspace = $doctorWorkspaceRecord.Root
                 RequirePath = $true
             }
