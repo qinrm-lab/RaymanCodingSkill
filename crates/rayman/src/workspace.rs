@@ -445,6 +445,16 @@ fn has_strong_file_identity(identity: &FileIdentity) -> bool {
     }
 }
 
+#[cfg(windows)]
+fn same_windows_file_object(expected: &FileIdentity, actual: &FileIdentity) -> bool {
+    has_strong_file_identity(expected)
+        && has_strong_file_identity(actual)
+        && expected.volume_serial_number == actual.volume_serial_number
+        && expected.file_index == actual.file_index
+        && expected.volume_serial_number_64 == actual.volume_serial_number_64
+        && expected.file_id_128 == actual.file_id_128
+}
+
 fn snapshots_match(expected: &FileSnapshot, actual: &FileSnapshot) -> bool {
     has_strong_file_identity(&expected.identity)
         && has_strong_file_identity(&actual.identity)
@@ -1127,6 +1137,312 @@ fn read_bound_activation_metadata(path: &Path) -> Result<(ActivationMetadata, Fi
 }
 
 #[cfg(windows)]
+struct WindowsActivationTransaction {
+    handle: *mut std::ffi::c_void,
+    completed: bool,
+}
+
+#[cfg(windows)]
+impl WindowsActivationTransaction {
+    fn begin() -> io::Result<Self> {
+        #[link(name = "ktmw32")]
+        unsafe extern "system" {
+            fn CreateTransaction(
+                transaction_attributes: *const std::ffi::c_void,
+                unit_of_work: *const std::ffi::c_void,
+                create_options: u32,
+                isolation_level: u32,
+                isolation_flags: u32,
+                timeout: u32,
+                description: *const u16,
+            ) -> *mut std::ffi::c_void;
+        }
+
+        const INVALID_HANDLE_VALUE: *mut std::ffi::c_void = -1_isize as *mut std::ffi::c_void;
+        let handle = unsafe {
+            CreateTransaction(
+                std::ptr::null(),
+                std::ptr::null(),
+                0,
+                0,
+                0,
+                0,
+                std::ptr::null(),
+            )
+        };
+        if handle == INVALID_HANDLE_VALUE || handle.is_null() {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(Self {
+                handle,
+                completed: false,
+            })
+        }
+    }
+
+    fn commit(&mut self) -> io::Result<()> {
+        #[link(name = "ktmw32")]
+        unsafe extern "system" {
+            fn CommitTransaction(transaction: *mut std::ffi::c_void) -> i32;
+        }
+        if unsafe { CommitTransaction(self.handle) } == 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            self.completed = true;
+            Ok(())
+        }
+    }
+
+    fn rollback(&mut self) -> io::Result<()> {
+        #[link(name = "ktmw32")]
+        unsafe extern "system" {
+            fn RollbackTransaction(transaction: *mut std::ffi::c_void) -> i32;
+        }
+        if unsafe { RollbackTransaction(self.handle) } == 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            self.completed = true;
+            Ok(())
+        }
+    }
+}
+
+#[cfg(windows)]
+impl Drop for WindowsActivationTransaction {
+    fn drop(&mut self) {
+        use windows_sys::Win32::Foundation::CloseHandle;
+
+        if !self.completed {
+            let _ = self.rollback();
+        }
+        unsafe {
+            CloseHandle(self.handle as _);
+        }
+    }
+}
+
+#[cfg(windows)]
+fn open_windows_transacted_activation(
+    path: &Path,
+    transaction: &WindowsActivationTransaction,
+) -> io::Result<fs::File> {
+    use std::os::windows::ffi::OsStrExt as _;
+    use std::os::windows::io::FromRawHandle as _;
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn CreateFileTransactedW(
+            file_name: *const u16,
+            desired_access: u32,
+            share_mode: u32,
+            security_attributes: *const std::ffi::c_void,
+            creation_disposition: u32,
+            flags_and_attributes: u32,
+            template_file: *mut std::ffi::c_void,
+            transaction: *mut std::ffi::c_void,
+            mini_version: *mut u16,
+            extended_parameter: *mut std::ffi::c_void,
+        ) -> *mut std::ffi::c_void;
+    }
+
+    const GENERIC_READ: u32 = 0x8000_0000;
+    const GENERIC_WRITE: u32 = 0x4000_0000;
+    const FILE_SHARE_READ: u32 = 0x0000_0001;
+    const OPEN_EXISTING: u32 = 3;
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    const FILE_FLAG_WRITE_THROUGH: u32 = 0x8000_0000;
+    const INVALID_HANDLE_VALUE: *mut std::ffi::c_void = -1_isize as *mut std::ffi::c_void;
+
+    let path = path
+        .as_os_str()
+        .encode_wide()
+        .chain(Some(0))
+        .collect::<Vec<_>>();
+    let handle = unsafe {
+        CreateFileTransactedW(
+            path.as_ptr(),
+            GENERIC_READ | GENERIC_WRITE,
+            FILE_SHARE_READ,
+            std::ptr::null(),
+            OPEN_EXISTING,
+            FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_WRITE_THROUGH,
+            std::ptr::null_mut(),
+            transaction.handle,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+    if handle == INVALID_HANDLE_VALUE {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(unsafe { fs::File::from_raw_handle(handle) })
+    }
+}
+
+#[cfg(windows)]
+fn restore_windows_activation_times(
+    file: &fs::File,
+    identity: &FileIdentity,
+    path: &Path,
+) -> Result<()> {
+    use std::os::windows::io::AsRawHandle as _;
+
+    #[repr(C)]
+    struct FileTime {
+        low_date_time: u32,
+        high_date_time: u32,
+    }
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn SetFileTime(
+            file: *mut std::ffi::c_void,
+            creation_time: *const FileTime,
+            last_access_time: *const FileTime,
+            last_write_time: *const FileTime,
+        ) -> i32;
+    }
+
+    let creation_time = FileTime {
+        low_date_time: identity.creation_time as u32,
+        high_date_time: (identity.creation_time >> 32) as u32,
+    };
+    let last_write_time = FileTime {
+        low_date_time: identity.last_write_time as u32,
+        high_date_time: (identity.last_write_time >> 32) as u32,
+    };
+    if unsafe {
+        SetFileTime(
+            file.as_raw_handle().cast(),
+            &creation_time,
+            std::ptr::null(),
+            &last_write_time,
+        )
+    } == 0
+    {
+        return Err(io::Error::last_os_error()).with_context(|| {
+            format!(
+                "cannot restore activation timestamps inside the Windows filesystem transaction: {}",
+                display_path(path)
+            )
+        });
+    }
+    Ok(())
+}
+
+/// TxF is a narrow Windows fallback for a caller that may write the existing
+/// activation inode but cannot assign its owner SID to a new inode. The normal
+/// handle-bound staging path remains preferred. A transaction keeps the
+/// original inode (and therefore OWNER/GROUP/DACL) and makes the byte rewrite
+/// visible only at commit; probe mode always rolls it back.
+#[cfg(windows)]
+fn write_windows_activation_transaction(
+    target: &Path,
+    expected: &FileSnapshot,
+    bytes: &[u8],
+    commit: bool,
+    restore_identity: Option<&FileIdentity>,
+) -> Result<FileSnapshot> {
+    let mut transaction = WindowsActivationTransaction::begin().with_context(|| {
+        format!(
+            "cannot begin a Windows activation filesystem transaction for {}",
+            display_path(target)
+        )
+    })?;
+    let mut file = open_windows_transacted_activation(target, &transaction).with_context(|| {
+        format!(
+            "cannot open activation through a Windows filesystem transaction: {}",
+            display_path(target)
+        )
+    })?;
+    let before = read_file_snapshot_from_handle(&file, target)?;
+    require_single_named_link(&before, target)?;
+    if !snapshots_match(expected, &before) {
+        transaction
+            .rollback()
+            .context("cannot rollback a stale Windows activation transaction")?;
+        bail!(
+            "activation changed before the Windows transactional rewrite: {}",
+            display_path(target)
+        );
+    }
+
+    let operation = (|| -> Result<FileSnapshot> {
+        file.set_len(0)?;
+        file.seek(SeekFrom::Start(0))?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        if let Some(identity) = restore_identity {
+            restore_windows_activation_times(&file, identity, target)?;
+            file.sync_all()?;
+        }
+        let staged = read_file_snapshot_from_handle(&file, target)?;
+        if !same_windows_file_object(&expected.identity, &staged.identity)
+            || staged.metadata != expected.metadata
+            || staged.bytes != bytes
+        {
+            bail!(
+                "Windows transactional activation rewrite changed identity or authorization metadata: {}",
+                display_path(target)
+            );
+        }
+        Ok(staged)
+    })();
+    let staged = match operation {
+        Ok(staged) => staged,
+        Err(primary) => {
+            let rollback = transaction.rollback();
+            return match rollback {
+                Ok(()) => Err(primary),
+                Err(rollback) => bail!(
+                    "Windows activation transaction failed and rollback also failed: primary={primary:#}; rollback={rollback}"
+                ),
+            };
+        }
+    };
+
+    if !commit {
+        transaction
+            .rollback()
+            .context("cannot rollback the Windows activation capability probe")?;
+        drop(file);
+        let restored = read_file_snapshot(target)?;
+        if !snapshots_match(expected, &restored) {
+            bail!(
+                "Windows activation capability probe changed its target after rollback: {}",
+                display_path(target)
+            );
+        }
+        return Ok(restored);
+    }
+
+    transaction
+        .commit()
+        .context("cannot commit the Windows activation filesystem transaction")?;
+    // A transacted file handle becomes unusable after CommitTransaction
+    // (ERROR_TRANSACTION_NOT_ACTIVE). Close it before validating the newly
+    // visible canonical path, and bind that validation to the strong file ID
+    // captured while the transaction was active.
+    drop(file);
+    let named = read_file_snapshot(target)?;
+    if !same_windows_file_object(&staged.identity, &named.identity)
+        || named.metadata != staged.metadata
+        || named.bytes != staged.bytes
+    {
+        bail!(
+            "Windows activation transaction did not bind the committed bytes to the canonical path: {}",
+            display_path(target)
+        );
+    }
+    Ok(named)
+}
+
+#[cfg(windows)]
+fn activation_owner_assignment_denied(error: &anyhow::Error) -> bool {
+    matches!(activation_probe_os_error(error), Some(1307 | 1308))
+}
+
+#[cfg(windows)]
 fn create_activation_temp_file(
     path: &Path,
     metadata: Option<&ActivationMetadata>,
@@ -1720,6 +2036,24 @@ fn probe_activation_metadata_stage(
         match create_activation_temp_file(&path, Some(metadata), true) {
             Ok(file) => break (file, path),
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) if matches!(error.raw_os_error(), Some(1307 | 1308)) => {
+                *cleanup_complete = Some(true);
+                *phase = ActivationMetadataProbePhase::StageWrite;
+                let expected = read_file_snapshot(target)?;
+                if &expected.metadata != metadata {
+                    bail!(
+                        "activation metadata changed before the Windows transactional capability probe"
+                    );
+                }
+                write_windows_activation_transaction(
+                    target,
+                    &expected,
+                    ACTIVATION_METADATA_PROBE_BYTES,
+                    false,
+                    None,
+                )?;
+                return Ok(());
+            }
             Err(error) => {
                 *cleanup_complete = Some(true);
                 return Err(error).with_context(|| {
@@ -3656,6 +3990,44 @@ fn rollback_activation_contract(
     )
 }
 
+#[cfg(windows)]
+fn replace_activation_contract_windows_transaction<V>(
+    root: &Path,
+    config_path: &Path,
+    expected: &FileSnapshot,
+    bytes: &[u8],
+    verifier: &mut V,
+) -> Result<WorkspaceActivationReport>
+where
+    V: FnMut(&Path, &FileSnapshot) -> Result<WorkspaceActivationReport>,
+{
+    let publication =
+        write_windows_activation_transaction(config_path, expected, bytes, true, None)?;
+    match verifier(root, &publication) {
+        Ok(report) => Ok(report),
+        Err(primary) => {
+            let rollback = write_windows_activation_transaction(
+                config_path,
+                &publication,
+                &expected.bytes,
+                true,
+                Some(&expected.identity),
+            );
+            match rollback {
+                Ok(restored) if snapshots_match(expected, &restored) => bail!(
+                    "Windows activation verification failed; original bytes were transactionally restored: {primary:#}"
+                ),
+                Ok(_) => bail!(
+                    "Windows activation verification failed and transactional rollback restored a mismatched snapshot: {primary:#}"
+                ),
+                Err(rollback) => bail!(
+                    "Windows activation verification failed and transactional rollback also failed: primary={primary:#}; rollback={rollback:#}"
+                ),
+            }
+        }
+    }
+}
+
 fn replace_activation_contract<V>(
     root: &Path,
     config_path: &Path,
@@ -3667,11 +4039,25 @@ where
 {
     let baseline = read_optional_activation_snapshot(config_path)?;
     let transaction = ActivationTransaction::open(config_path)?;
-    let mut stage = create_owned_activation_temp(
+    let stage_result = create_owned_activation_temp(
         &transaction,
         bytes,
         baseline.as_ref().map(|snapshot| &snapshot.metadata),
-    )?;
+    );
+    #[cfg(windows)]
+    if let Err(error) = &stage_result
+        && activation_owner_assignment_denied(error)
+        && let Some(expected) = baseline.as_ref()
+    {
+        return replace_activation_contract_windows_transaction(
+            root,
+            config_path,
+            expected,
+            bytes,
+            &mut verifier,
+        );
+    }
+    let mut stage = stage_result?;
     let original = match baseline.as_ref() {
         Some(expected) => {
             match capture_activation_target(&transaction, "activation contract original capture")? {
@@ -4138,6 +4524,75 @@ where
         ),
     }
 }
+
+#[cfg(windows)]
+fn rebind_with_windows_transaction<H, V>(
+    root: &Path,
+    loaded: &LoadedRebind,
+    published: &[u8],
+    transaction_hook: &mut H,
+    verifier: &mut V,
+) -> Result<WorkspaceRebindReport>
+where
+    H: FnMut(ActivationTransactionPhase, &Path, &Path) -> Result<()>,
+    V: FnMut(&Path) -> Result<WorkspaceActivationReport>,
+{
+    let expected = FileSnapshot {
+        bytes: loaded.original_bytes.clone(),
+        identity: loaded.config_identity.clone(),
+        metadata: loaded.config_metadata.clone(),
+    };
+    let publication = write_windows_activation_transaction(
+        &loaded.config_path,
+        &expected,
+        published,
+        true,
+        None,
+    )?;
+    let transaction = ActivationTransaction::open(&loaded.config_path)?;
+    let verified = (|| -> Result<WorkspaceActivationReport> {
+        transaction_hook(
+            ActivationTransactionPhase::RebindAfterPublicationMove,
+            &loaded.config_path,
+            &loaded.config_path,
+        )?;
+        let report = verifier(root)?;
+        verify_rebind_publication(&transaction, root, loaded, &publication, &report)?;
+        transaction_hook(
+            ActivationTransactionPhase::RebindBeforeSuccessCleanup,
+            &loaded.config_path,
+            &loaded.config_path,
+        )?;
+        Ok(report)
+    })();
+    match verified {
+        Ok(activation) => Ok(WorkspaceRebindReport {
+            activation,
+            changed: true,
+        }),
+        Err(primary) => {
+            let rollback = write_windows_activation_transaction(
+                &loaded.config_path,
+                &publication,
+                &expected.bytes,
+                true,
+                Some(&expected.identity),
+            );
+            match rollback {
+                Ok(restored) if snapshots_match(&expected, &restored) => bail!(
+                    "workspace rebind verification failed; original bytes were transactionally restored: {primary:#}"
+                ),
+                Ok(_) => bail!(
+                    "workspace rebind verification failed and transactional rollback restored a mismatched snapshot: {primary:#}"
+                ),
+                Err(rollback) => bail!(
+                    "workspace rebind verification failed and transactional rollback also failed: primary={primary:#}; rollback={rollback:#}"
+                ),
+            }
+        }
+    }
+}
+
 fn rebind_with<B, H, V>(
     root: &Path,
     before_publish: &mut B,
@@ -4182,11 +4637,24 @@ where
         std::str::from_utf8(&loaded.original_bytes).context("原激活合同不是有效 UTF-8")?;
     let published = rewrite_rebind_contract(original_text, &loaded.skill.sha256);
     let transaction = ActivationTransaction::open(&loaded.config_path)?;
-    let mut stage = create_owned_activation_temp(
+    let stage_result = create_owned_activation_temp(
         &transaction,
         published.as_bytes(),
         Some(&loaded.config_metadata),
-    )?;
+    );
+    #[cfg(windows)]
+    if let Err(error) = &stage_result
+        && activation_owner_assignment_denied(error)
+    {
+        return rebind_with_windows_transaction::<H, V>(
+            &root,
+            &loaded,
+            published.as_bytes(),
+            transaction_hook,
+            verifier,
+        );
+    }
+    let mut stage = stage_result?;
     let publication_snapshot;
 
     let original = match capture_activation_target(
@@ -5393,6 +5861,48 @@ mod tests {
                 }),
             "activation metadata probe left a named sidecar"
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_transactional_activation_fallback_preserves_inode_security_and_rolls_back_probe() {
+        let (_root, binding, original) = stale_rebind_fixture();
+        let expected_metadata = set_distinct_activation_metadata(&binding);
+        let before = read_file_snapshot(&binding).unwrap();
+        assert_eq!(before.metadata, expected_metadata);
+
+        let probe = write_windows_activation_transaction(
+            &binding,
+            &before,
+            ACTIVATION_METADATA_PROBE_BYTES,
+            false,
+            None,
+        )
+        .unwrap();
+        assert!(snapshots_match(&before, &probe));
+        assert_eq!(fs::read(&binding).unwrap(), original);
+
+        let replacement = b"transactional activation publication\n";
+        let published =
+            write_windows_activation_transaction(&binding, &before, replacement, true, None)
+                .unwrap();
+        assert_eq!(published.bytes, replacement);
+        assert!(same_windows_file_object(
+            &before.identity,
+            &published.identity
+        ));
+        assert_eq!(published.metadata, before.metadata);
+
+        let restored = write_windows_activation_transaction(
+            &binding,
+            &published,
+            &before.bytes,
+            true,
+            Some(&before.identity),
+        )
+        .unwrap();
+        assert!(snapshots_match(&before, &restored));
+        assert_eq!(fs::read(&binding).unwrap(), original);
     }
 
     #[cfg(windows)]
