@@ -323,6 +323,59 @@ function Resolve-MsrvToolchainApplications {
     }
 }
 
+function Resolve-MsrvLlvmApplications {
+    param(
+        [Parameter(Mandatory = $true)]
+        $RustcIdentity,
+
+        [scriptblock]$Invoker
+    )
+
+    if ($null -eq $Invoker) {
+        $Invoker = {
+            param([string]$FilePath, [string[]]$Arguments)
+            Invoke-NativeCaptured -FilePath $FilePath -Arguments $Arguments
+        }
+    }
+    Assert-ExactApplicationIdentity -Identity $RustcIdentity
+    $result = & $Invoker `
+        -FilePath $RustcIdentity.Path `
+        -Arguments @('--print', 'target-libdir')
+    if ($null -eq $result -or $result.ExitCode -ne 0) {
+        $detail = if ($null -eq $result) { '<no result>' } else { ($result.Output | Out-String).Trim() }
+        throw "$($RustcIdentity.Label) target-libdir resolution failed: $detail"
+    }
+    $lines = @(
+        $result.Output |
+            ForEach-Object { $_.ToString().Trim() } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    )
+    if ($lines.Count -ne 1) {
+        throw "$($RustcIdentity.Label) target-libdir returned $($lines.Count) non-empty lines; expected one exact directory path."
+    }
+    $targetLibItem = Get-Item -LiteralPath $lines[0] -Force -ErrorAction Stop
+    if (-not $targetLibItem.PSIsContainer -or
+        $targetLibItem.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw "$($RustcIdentity.Label) target-libdir must be an ordinary directory: $($lines[0])"
+    }
+    $targetLibDirectory = (Resolve-Path -LiteralPath $targetLibItem.FullName).ProviderPath
+    $llvmBin = Join-Path (Split-Path -Parent $targetLibDirectory) 'bin'
+    $suffix = if ($IsWindows) { '.exe' } else { '' }
+    $llvmCov = New-ExactApplicationIdentity `
+        -Name 'llvm-cov' `
+        -Label "$($RustcIdentity.Label) llvm-cov" `
+        -Path (Join-Path $llvmBin "llvm-cov$suffix")
+    $llvmProfdata = New-ExactApplicationIdentity `
+        -Name 'llvm-profdata' `
+        -Label "$($RustcIdentity.Label) llvm-profdata" `
+        -Path (Join-Path $llvmBin "llvm-profdata$suffix")
+    Assert-ExactApplicationIdentity -Identity $RustcIdentity
+    return [pscustomobject]@{
+        LlvmCov = $llvmCov
+        LlvmProfdata = $llvmProfdata
+    }
+}
+
 function Assert-RustToolVersion {
     param(
         [Parameter(Mandatory = $true)]
@@ -417,6 +470,100 @@ function Invoke-IsolatedMsrvChecks {
             -Arguments @('test', '--locked', '--workspace', '--all-targets')
         Assert-ExactApplicationIdentity -Identity $CargoIdentity
         Assert-ExactApplicationIdentity -Identity $RustcIdentity
+    } finally {
+        try {
+            Restore-EnvironmentSnapshot -Snapshot $environmentSnapshot
+        } finally {
+            Remove-ManagedAuditDirectory -Path $targetDirectory
+        }
+    }
+}
+
+function Invoke-IsolatedCoverageCheck {
+    param(
+        [Parameter(Mandatory = $true)]
+        $CoverageIdentity,
+
+        [Parameter(Mandatory = $true)]
+        $CargoIdentity,
+
+        [Parameter(Mandatory = $true)]
+        $RustcIdentity,
+
+        [Parameter(Mandatory = $true)]
+        $LlvmCovIdentity,
+
+        [Parameter(Mandatory = $true)]
+        $LlvmProfdataIdentity,
+
+        [Parameter(Mandatory = $true)]
+        [int]$MinimumLineCoverage,
+
+        [scriptblock]$CommandRunner
+    )
+
+    if ($null -eq $CommandRunner) {
+        $CommandRunner = {
+            param([string]$FilePath, [string[]]$Arguments)
+            Invoke-NativeChecked -FilePath $FilePath -Arguments $Arguments
+        }
+    }
+    $environmentNames = @(
+        'PATH',
+        'CARGO',
+        'RUSTC',
+        'CARGO_BUILD_RUSTC',
+        'CARGO_TARGET_DIR',
+        'LLVM_COV',
+        'LLVM_PROFDATA',
+        'RUSTC_WRAPPER',
+        'RUSTC_WORKSPACE_WRAPPER'
+    )
+    $environmentSnapshot = Get-EnvironmentSnapshot -Names $environmentNames
+    $targetDirectory = New-ManagedAuditDirectory -Label 'coverage-target'
+    try {
+        $pathEntries = @(
+            (Split-Path -Parent $CoverageIdentity.Path),
+            (Split-Path -Parent $CargoIdentity.Path)
+        )
+        if ($environmentSnapshot.PATH.Present -and
+            -not [string]::IsNullOrWhiteSpace($environmentSnapshot.PATH.Value)) {
+            $pathEntries += $environmentSnapshot.PATH.Value
+        }
+        $env:PATH = $pathEntries -join [IO.Path]::PathSeparator
+        $env:CARGO = $CargoIdentity.Path
+        $env:RUSTC = $RustcIdentity.Path
+        $env:CARGO_BUILD_RUSTC = $RustcIdentity.Path
+        $env:CARGO_TARGET_DIR = $targetDirectory
+        $env:LLVM_COV = $LlvmCovIdentity.Path
+        $env:LLVM_PROFDATA = $LlvmProfdataIdentity.Path
+        Remove-Item Env:RUSTC_WRAPPER -ErrorAction SilentlyContinue
+        Remove-Item Env:RUSTC_WORKSPACE_WRAPPER -ErrorAction SilentlyContinue
+
+        foreach ($identity in @(
+            $CoverageIdentity,
+            $CargoIdentity,
+            $RustcIdentity,
+            $LlvmCovIdentity,
+            $LlvmProfdataIdentity
+        )) {
+            Assert-ExactApplicationIdentity -Identity $identity
+        }
+        & $CommandRunner `
+            -FilePath $CoverageIdentity.Path `
+            -Arguments @(
+                'llvm-cov', '--locked', '--workspace', '--all-features', '--all-targets',
+                '--fail-under-lines', $MinimumLineCoverage.ToString()
+            )
+        foreach ($identity in @(
+            $CoverageIdentity,
+            $CargoIdentity,
+            $RustcIdentity,
+            $LlvmCovIdentity,
+            $LlvmProfdataIdentity
+        )) {
+            Assert-ExactApplicationIdentity -Identity $identity
+        }
     } finally {
         try {
             Restore-EnvironmentSnapshot -Snapshot $environmentSnapshot
@@ -900,9 +1047,13 @@ function Invoke-AuditScriptSelfTest {
 
     $msrvFixture = New-ManagedAuditDirectory -Label 'msrv-selftest'
     $msrvEnvironmentNames = @(
+        'PATH',
+        'CARGO',
         'RUSTC',
         'CARGO_BUILD_RUSTC',
         'CARGO_TARGET_DIR',
+        'LLVM_COV',
+        'LLVM_PROFDATA',
         'RUSTC_WRAPPER',
         'RUSTC_WORKSPACE_WRAPPER'
     )
@@ -912,6 +1063,14 @@ function Invoke-AuditScriptSelfTest {
         $fakeRustc = Join-Path $msrvFixture 'rustc-fixture'
         Set-Content -LiteralPath $fakeCargo -Value 'fixture cargo' -Encoding utf8
         Set-Content -LiteralPath $fakeRustc -Value 'fixture rustc' -Encoding utf8
+        $fakeTargetLib = Join-Path $msrvFixture 'rustlib-target/lib'
+        $fakeLlvmBin = Join-Path $msrvFixture 'rustlib-target/bin'
+        New-Item -ItemType Directory -Path $fakeTargetLib,$fakeLlvmBin | Out-Null
+        $llvmSuffix = if ($IsWindows) { '.exe' } else { '' }
+        $fakeLlvmCov = Join-Path $fakeLlvmBin "llvm-cov$llvmSuffix"
+        $fakeLlvmProfdata = Join-Path $fakeLlvmBin "llvm-profdata$llvmSuffix"
+        Set-Content -LiteralPath $fakeLlvmCov -Value 'fixture llvm-cov' -Encoding utf8
+        Set-Content -LiteralPath $fakeLlvmProfdata -Value 'fixture llvm-profdata' -Encoding utf8
         $rustupCalls = [Collections.Generic.List[string]]::new()
         $rustupInvoker = {
             param([string]$FilePath, [string[]]$Arguments)
@@ -932,6 +1091,25 @@ function Invoke-AuditScriptSelfTest {
             -not $msrvApplications.Cargo.Path.Equals((Resolve-Path -LiteralPath $fakeCargo).ProviderPath, $pathComparison) -or
             -not $msrvApplications.Rustc.Path.Equals((Resolve-Path -LiteralPath $fakeRustc).ProviderPath, $pathComparison)) {
             throw 'Audit self-test failed: MSRV cargo/rustc were not bound to the exact rustup which results.'
+        }
+
+        $llvmResolutionCalls = [Collections.Generic.List[string]]::new()
+        $llvmInvoker = {
+            param([string]$FilePath, [string[]]$Arguments)
+            $llvmResolutionCalls.Add(($Arguments -join ' '))
+            return [pscustomobject]@{
+                ExitCode = 0
+                Output = @($fakeTargetLib)
+            }
+        }.GetNewClosure()
+        $msrvLlvmApplications = Resolve-MsrvLlvmApplications `
+            -RustcIdentity $msrvApplications.Rustc `
+            -Invoker $llvmInvoker
+        if ($llvmResolutionCalls.Count -ne 1 -or
+            $llvmResolutionCalls[0] -ne '--print target-libdir' -or
+            -not $msrvLlvmApplications.LlvmCov.Path.Equals((Resolve-Path -LiteralPath $fakeLlvmCov).ProviderPath, $pathComparison) -or
+            -not $msrvLlvmApplications.LlvmProfdata.Path.Equals((Resolve-Path -LiteralPath $fakeLlvmProfdata).ProviderPath, $pathComparison)) {
+            throw 'Audit self-test failed: MSRV llvm-tools were not bound to the exact rustc target-libdir sibling bin.'
         }
 
         $env:RUSTC = 'ambient-rustc'
@@ -995,6 +1173,90 @@ function Invoke-AuditScriptSelfTest {
                 "workspace_wrapper_present=$(Test-Path Env:RUSTC_WORKSPACE_WRAPPER)"
             ) -join '; '
             throw "Audit self-test failed: isolated MSRV commands, cleanup, or environment restoration are incomplete: $detail"
+        }
+
+        $fakeCoverageBin = Join-Path $msrvFixture 'coverage-bin'
+        New-Item -ItemType Directory -Path $fakeCoverageBin | Out-Null
+        $coverageSuffix = if ($IsWindows) { '.exe' } else { '' }
+        $fakeCoverage = Join-Path $fakeCoverageBin "cargo-llvm-cov$coverageSuffix"
+        Set-Content -LiteralPath $fakeCoverage -Value 'fixture cargo-llvm-cov' -Encoding utf8
+        $coverageIdentity = New-ExactApplicationIdentity `
+            -Name 'cargo-llvm-cov' `
+            -Label 'Coverage fixture' `
+            -Path $fakeCoverage
+
+        $env:PATH = 'ambient-path'
+        $env:CARGO = 'ambient-cargo'
+        $env:LLVM_COV = 'ambient-llvm-cov'
+        $env:LLVM_PROFDATA = 'ambient-llvm-profdata'
+        $coverageTargets = [Collections.Generic.List[string]]::new()
+        $coverageCalls = [Collections.Generic.List[string]]::new()
+        $coverageSelfTestPathComparison = $pathComparison
+        $coverageRunner = {
+            param([string]$FilePath, [string[]]$Arguments)
+            if ($coverageTargets.Count -eq 0) {
+                $coverageTargets.Add($env:CARGO_TARGET_DIR)
+            }
+            $pathParts = @($env:PATH -split [regex]::Escape([IO.Path]::PathSeparator))
+            if (-not [string]::Equals($FilePath, $coverageIdentity.Path, $coverageSelfTestPathComparison) -or
+                $pathParts.Count -lt 2 -or
+                -not [string]::Equals($pathParts[0], $fakeCoverageBin, $coverageSelfTestPathComparison) -or
+                -not [string]::Equals($pathParts[1], (Split-Path -Parent $msrvApplications.Cargo.Path), $coverageSelfTestPathComparison) -or
+                $env:CARGO -ne $msrvApplications.Cargo.Path -or
+                $env:RUSTC -ne $msrvApplications.Rustc.Path -or
+                $env:CARGO_BUILD_RUSTC -ne $msrvApplications.Rustc.Path -or
+                $env:LLVM_COV -ne $msrvLlvmApplications.LlvmCov.Path -or
+                $env:LLVM_PROFDATA -ne $msrvLlvmApplications.LlvmProfdata.Path -or
+                $env:CARGO_TARGET_DIR -ne $coverageTargets[0] -or
+                (Test-Path Env:RUSTC_WRAPPER) -or
+                (Test-Path Env:RUSTC_WORKSPACE_WRAPPER)) {
+                throw 'Coverage self-test runner observed an unbound compiler, LLVM tool, wrapper, PATH, or target directory.'
+            }
+            $coverageCalls.Add(($Arguments -join ' '))
+            throw 'intentional coverage command failure'
+        }.GetNewClosure()
+
+        $coverageFailureObserved = $false
+        $coverageFailureMessage = '<none>'
+        try {
+            Invoke-IsolatedCoverageCheck `
+                -CoverageIdentity $coverageIdentity `
+                -CargoIdentity $msrvApplications.Cargo `
+                -RustcIdentity $msrvApplications.Rustc `
+                -LlvmCovIdentity $msrvLlvmApplications.LlvmCov `
+                -LlvmProfdataIdentity $msrvLlvmApplications.LlvmProfdata `
+                -MinimumLineCoverage 75 `
+                -CommandRunner $coverageRunner
+        } catch {
+            $coverageFailureMessage = $_.Exception.Message
+            $coverageFailureObserved = $_.Exception.Message -match 'intentional coverage command failure'
+        }
+        if (-not $coverageFailureObserved -or
+            $coverageCalls.Count -ne 1 -or
+            $coverageCalls[0] -ne 'llvm-cov --locked --workspace --all-features --all-targets --fail-under-lines 75' -or
+            $coverageTargets.Count -ne 1 -or
+            (Test-Path -LiteralPath $coverageTargets[0]) -or
+            $env:PATH -ne 'ambient-path' -or
+            $env:CARGO -ne 'ambient-cargo' -or
+            $env:RUSTC -ne 'ambient-rustc' -or
+            (Test-Path Env:CARGO_BUILD_RUSTC) -or
+            $env:CARGO_TARGET_DIR -ne 'ambient-target' -or
+            $env:LLVM_COV -ne 'ambient-llvm-cov' -or
+            $env:LLVM_PROFDATA -ne 'ambient-llvm-profdata' -or
+            $env:RUSTC_WRAPPER -ne 'ambient-wrapper' -or
+            (Test-Path Env:RUSTC_WORKSPACE_WRAPPER)) {
+            $detail = @(
+                "failure=$coverageFailureMessage",
+                "commands=$($coverageCalls -join '|')",
+                "created=$($coverageTargets.Count)",
+                "target_exists=$(if ($coverageTargets.Count -eq 1) { Test-Path -LiteralPath $coverageTargets[0] } else { 'unknown' })",
+                "path=$env:PATH",
+                "cargo=$env:CARGO",
+                "rustc=$env:RUSTC",
+                "llvm_cov=$env:LLVM_COV",
+                "llvm_profdata=$env:LLVM_PROFDATA"
+            ) -join '; '
+            throw "Audit self-test failed: isolated coverage binding, cleanup, or environment restoration is incomplete: $detail"
         }
     } finally {
         Restore-EnvironmentSnapshot -Snapshot $msrvOuterEnvironment
@@ -1153,12 +1415,16 @@ try {
     Invoke-IsolatedCargoDenyChecks `
         -CargoDenyIdentity $nativeApplications.CargoDeny `
         -DatabaseSeedPath $CargoDenyDatabaseSeedPath
+    Invoke-NativeChecked $nativeApplications.Rustup.Path @(
+        'component', 'add', 'llvm-tools-preview', '--toolchain', $MsrvToolchain
+    )
     $msrvApplications = Resolve-MsrvToolchainApplications `
         -RustupIdentity $nativeApplications.Rustup `
         -Toolchain $MsrvToolchain
     Assert-RustToolVersion -Identity $msrvApplications.Cargo -ExpectedVersion $MsrvToolchain
     Assert-RustToolVersion -Identity $msrvApplications.Rustc -ExpectedVersion $MsrvToolchain
-    Invoke-NativeChecked $nativeApplications.Rustup.Path @('component', 'add', 'llvm-tools-preview')
+    $msrvLlvmApplications = Resolve-MsrvLlvmApplications `
+        -RustcIdentity $msrvApplications.Rustc
     Write-AuditPhase -Name 'environment_preflight' -Status 'pass'
 
     Write-AuditPhase -Name 'root_quality' -Status 'start'
@@ -1180,11 +1446,11 @@ try {
 
     # Real shipped-CLI coverage. Always install the exact measurement tool into
     # a fresh managed root, resolve that exact Application, and invoke it by its
-    # captured path. An arbitrary PATH copy is never accepted as coverage proof.
+    # captured path. Compile the coverage lane with the exact MSRV cargo/rustc
+    # and its matching llvm-tools so a system Rust that is not owned by rustup
+    # cannot make the preflight claim tools that the coverage compiler cannot use.
     Write-AuditPhase -Name 'cli_coverage' -Status 'start'
-    # llvm-tools-preview is guaranteed by environment_preflight above.
     $coverageToolRoot = New-ManagedAuditDirectory -Label "cargo-llvm-cov-$CoverageToolVersion"
-    $originalPathForCoverage = $env:PATH
     try {
         Invoke-NativeChecked $nativeApplications.Cargo.Path @(
             'install', 'cargo-llvm-cov', '--locked', '--version', $CoverageToolVersion,
@@ -1193,28 +1459,21 @@ try {
         $coverageBin = Join-Path $coverageToolRoot 'bin'
         $coverageApplicationName = if ($IsWindows) { 'cargo-llvm-cov.exe' } else { 'cargo-llvm-cov' }
         $expectedCoveragePath = Join-Path $coverageBin $coverageApplicationName
-        $fixedCargoDirectory = Split-Path -Parent $nativeApplications.Cargo.Path
-        $env:PATH = @(
-            $coverageBin,
-            $fixedCargoDirectory,
-            $originalPathForCoverage
-        ) -join [IO.Path]::PathSeparator
-        $coverageIdentity = Resolve-NativeApplication `
+        $coverageIdentity = New-ExactApplicationIdentity `
             -Name 'cargo-llvm-cov' `
-            -Label 'Managed cargo-llvm-cov'
-        Assert-ExpectedApplicationPath `
-            -Identity $coverageIdentity `
-            -ExpectedPath $expectedCoveragePath
+            -Label 'Managed cargo-llvm-cov' `
+            -Path $expectedCoveragePath
         Get-CoverageToolVersion `
             -Identity $coverageIdentity `
             -ExpectedVersion $CoverageToolVersion
-        Invoke-NativeChecked $coverageIdentity.Path @(
-            'llvm-cov', '--locked', '--workspace', '--all-features', '--all-targets',
-            '--fail-under-lines', $MinimumCliLineCoverage.ToString()
-        )
-        Assert-NativeApplicationIdentity -Identity $coverageIdentity
+        Invoke-IsolatedCoverageCheck `
+            -CoverageIdentity $coverageIdentity `
+            -CargoIdentity $msrvApplications.Cargo `
+            -RustcIdentity $msrvApplications.Rustc `
+            -LlvmCovIdentity $msrvLlvmApplications.LlvmCov `
+            -LlvmProfdataIdentity $msrvLlvmApplications.LlvmProfdata `
+            -MinimumLineCoverage $MinimumCliLineCoverage
     } finally {
-        $env:PATH = $originalPathForCoverage
         Remove-ManagedAuditDirectory -Path $coverageToolRoot
     }
     Write-AuditPhase -Name 'cli_coverage' -Status 'pass'
@@ -1361,6 +1620,16 @@ try {
         if (-not $terminal.Path.Equals($initial.Path, $pathComparison) -or
             $terminal.Sha256 -ne $initial.Sha256) {
             throw "$($initial.Label) rustup binding changed during audit: $($initial.Path) [$($initial.Sha256)] -> $($terminal.Path) [$($terminal.Sha256)]"
+        }
+    }
+    $terminalMsrvLlvmApplications = Resolve-MsrvLlvmApplications `
+        -RustcIdentity $terminalMsrvApplications.Rustc
+    foreach ($name in @('LlvmCov', 'LlvmProfdata')) {
+        $initial = $msrvLlvmApplications.$name
+        $terminal = $terminalMsrvLlvmApplications.$name
+        if (-not $terminal.Path.Equals($initial.Path, $pathComparison) -or
+            $terminal.Sha256 -ne $initial.Sha256) {
+            throw "$($initial.Label) MSRV LLVM binding changed during audit: $($initial.Path) [$($initial.Sha256)] -> $($terminal.Path) [$($terminal.Sha256)]"
         }
     }
     Write-AuditPhase -Name 'installed_release_identity' -Status 'pass'
