@@ -19,6 +19,12 @@ param(
     [Parameter(ParameterSetName = 'Audit')]
     [ValidateSet('0.8.7')]
     [string]$CoverageToolVersion = '0.8.7',
+
+    [Parameter(ParameterSetName = 'Audit')]
+    [Parameter(ParameterSetName = 'DependencyPolicy')]
+    [ValidateNotNullOrEmpty()]
+    [string]$CargoDenyDatabaseSeedPath,
+
     [Parameter(Mandatory = $true, ParameterSetName = 'DependencyPolicy')]
     [switch]$DependencyPolicyOnly,
 
@@ -647,23 +653,34 @@ function New-IsolatedCargoDenyState {
         [string]$RootConfig,
 
         [Parameter(Mandatory = $true)]
-        [string]$EvalConfig
+        [string]$EvalConfig,
+
+        [string]$DatabaseSeedPath
     )
 
     $root = New-ManagedAuditDirectory -Label 'cargo-deny-state'
     try {
         $database = Join-Path $root 'advisory-dbs'
-        $cargoHome = if ([string]::IsNullOrWhiteSpace($env:CARGO_HOME)) {
-            Join-Path $HOME '.cargo'
+        $explicitSeed = -not [string]::IsNullOrWhiteSpace($DatabaseSeedPath)
+        $sourceDatabase = if ($explicitSeed) {
+            [IO.Path]::GetFullPath($DatabaseSeedPath)
         } else {
-            $env:CARGO_HOME
+            $cargoHome = if ([string]::IsNullOrWhiteSpace($env:CARGO_HOME)) {
+                Join-Path $HOME '.cargo'
+            } else {
+                $env:CARGO_HOME
+            }
+            [IO.Path]::GetFullPath((Join-Path $cargoHome 'advisory-dbs'))
         }
-        $sourceDatabase = [IO.Path]::GetFullPath((Join-Path $cargoHome 'advisory-dbs'))
-        if (Test-Path -LiteralPath $sourceDatabase) {
+        if (Test-Path -LiteralPath $sourceDatabase -PathType Container) {
             Copy-OrdinaryDirectoryTree `
                 -Source $sourceDatabase `
                 -Destination $database `
                 -Label 'cargo-deny advisory database'
+        } elseif (Test-Path -LiteralPath $sourceDatabase) {
+            throw "cargo-deny advisory database seed must be a directory: $sourceDatabase"
+        } elseif ($explicitSeed) {
+            throw "Explicit cargo-deny advisory database seed is missing: $sourceDatabase"
         } else {
             $database = Resolve-OrCreateRealAuditDirectory `
                 -Path $database `
@@ -720,12 +737,15 @@ function Get-CargoDenyArguments {
 function Invoke-IsolatedCargoDenyChecks {
     param(
         [Parameter(Mandatory = $true)]
-        $CargoDenyIdentity
+        $CargoDenyIdentity,
+
+        [string]$DatabaseSeedPath
     )
 
     $state = New-IsolatedCargoDenyState `
         -RootConfig (Join-Path $repoRoot 'deny.toml') `
-        -EvalConfig (Join-Path $repoRoot 'evals/deny.toml')
+        -EvalConfig (Join-Path $repoRoot 'evals/deny.toml') `
+        -DatabaseSeedPath $DatabaseSeedPath
     try {
         Invoke-NativeChecked $CargoDenyIdentity.Path @(
             Get-CargoDenyArguments -ConfigPath $state.RootConfig
@@ -1015,6 +1035,33 @@ version = 2
             throw 'Audit self-test failed: isolated cargo-deny db-path injection is missing or mutated the source config.'
         }
 
+        $explicitSeedState = New-IsolatedCargoDenyState `
+            -RootConfig $fixtureConfig `
+            -EvalConfig $fixtureConfig `
+            -DatabaseSeedPath $fixtureDatabase
+        try {
+            if (-not (Test-Path -LiteralPath (Join-Path $explicitSeedState.Database 'advisory-db/HEAD') -PathType Leaf) -or
+                (Get-Content -LiteralPath $explicitSeedState.RootConfig -Raw) -notmatch '(?m)^db-path\s*=' -or
+                (Get-Content -LiteralPath $explicitSeedState.EvalConfig -Raw) -notmatch '(?m)^db-path\s*=') {
+                throw 'Audit self-test failed: explicit cargo-deny database seed was not copied and bound to both configs.'
+            }
+        } finally {
+            Remove-ManagedAuditDirectory -Path $explicitSeedState.Root
+        }
+
+        $missingExplicitSeedRejected = $false
+        try {
+            $null = New-IsolatedCargoDenyState `
+                -RootConfig $fixtureConfig `
+                -EvalConfig $fixtureConfig `
+                -DatabaseSeedPath (Join-Path $cargoDenyFixture 'missing-seed')
+        } catch {
+            $missingExplicitSeedRejected = $_.Exception.Message -match 'Explicit cargo-deny advisory database seed is missing'
+        }
+        if (-not $missingExplicitSeedRejected) {
+            throw 'Audit self-test failed: a missing explicit cargo-deny database seed was accepted.'
+        }
+
         $preconfigured = Join-Path $cargoDenyFixture 'preconfigured.toml'
         Set-Content -LiteralPath $preconfigured -Value @'
 [advisories]
@@ -1086,7 +1133,9 @@ if ($DependencyPolicyOnly) {
     Push-Location $repoRoot
     try {
         Write-AuditPhase -Name 'dependency_policy' -Status 'start'
-        Invoke-IsolatedCargoDenyChecks -CargoDenyIdentity $nativeApplications.CargoDeny
+        Invoke-IsolatedCargoDenyChecks `
+            -CargoDenyIdentity $nativeApplications.CargoDeny `
+            -DatabaseSeedPath $CargoDenyDatabaseSeedPath
         Write-AuditPhase -Name 'dependency_policy' -Status 'pass'
     } finally {
         Pop-Location
@@ -1101,7 +1150,9 @@ try {
     # exactly the operations a restricted sandbox denies. Probing them first
     # costs seconds instead of aborting the audit tens of minutes in.
     Write-AuditPhase -Name 'environment_preflight' -Status 'start'
-    Invoke-IsolatedCargoDenyChecks -CargoDenyIdentity $nativeApplications.CargoDeny
+    Invoke-IsolatedCargoDenyChecks `
+        -CargoDenyIdentity $nativeApplications.CargoDeny `
+        -DatabaseSeedPath $CargoDenyDatabaseSeedPath
     $msrvApplications = Resolve-MsrvToolchainApplications `
         -RustupIdentity $nativeApplications.Rustup `
         -Toolchain $MsrvToolchain

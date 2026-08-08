@@ -123,7 +123,8 @@ function Assert-MsrvAuditDocumentation {
             'CARGO_BUILD_RUSTC',
             'CARGO_TARGET_DIR',
             '.RaymanCodingSkill/tmp',
-            'ProviderPath'
+            'ProviderPath',
+            'CargoDenyDatabaseSeedPath'
         )) {
         if (-not $Documentation.Contains($required, [StringComparison]::Ordinal)) {
             throw "MSRV audit documentation is missing required contract text: $required"
@@ -134,7 +135,9 @@ function Assert-MsrvAuditDocumentation {
             'Invoke-IsolatedMsrvChecks',
             "'CARGO_BUILD_RUSTC'",
             "New-ManagedAuditDirectory -Label 'msrv-target'",
-            '.ProviderPath'
+            '.ProviderPath',
+            '$CargoDenyDatabaseSeedPath',
+            '-DatabaseSeedPath $CargoDenyDatabaseSeedPath'
         )) {
         if (-not $Source.Contains($required, [StringComparison]::Ordinal)) {
             throw "MSRV audit source is missing its documented implementation token: $required"
@@ -354,6 +357,16 @@ if ($SelfTest) {
         Assert-MsrvAuditDocumentation `
             -Documentation $auditDocumentation.Replace('CARGO_BUILD_RUSTC', 'REMOVED_COMPILER_BINDING') `
             -Source $auditSource
+    }
+    Assert-Throws -Label 'audit documentation loses explicit advisory seed contract' -Action {
+        Assert-MsrvAuditDocumentation `
+            -Documentation $auditDocumentation.Replace('CargoDenyDatabaseSeedPath', 'REMOVED_ADVISORY_SEED') `
+            -Source $auditSource
+    }
+    Assert-Throws -Label 'audit source loses explicit advisory seed propagation' -Action {
+        Assert-MsrvAuditDocumentation `
+            -Documentation $auditDocumentation `
+            -Source $auditSource.Replace('-DatabaseSeedPath $CargoDenyDatabaseSeedPath', '-DatabaseSeedPath $null')
     }
     Assert-Throws -Label 'filesystem identity regresses to provider-qualified Path' -Action {
         Assert-FileSystemProviderPaths `
