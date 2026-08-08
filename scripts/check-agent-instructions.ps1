@@ -119,7 +119,7 @@ function Assert-MsrvAuditDocumentation {
         [Parameter(Mandatory = $true)][string]$Source
     )
     foreach ($required in @(
-            'rustup which ... --toolchain 1.88.0',
+            'rustup which ... --toolchain 1.97.1',
             'CARGO_BUILD_RUSTC',
             'CARGO_TARGET_DIR',
             '.RaymanCodingSkill/tmp',

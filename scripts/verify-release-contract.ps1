@@ -59,7 +59,7 @@ $lockfile = Join-Path $repoRoot 'Cargo.lock'
 $canonicalSkill = Join-Path $repoRoot 'SKILL.md'
 $packagedCanonicalSkill = Join-Path $repoRoot 'crates/rayman/assets/canonical-skill.md'
 $expectedContract = 'rayman-cli-contract-v16'
-$requiredMsrv = '1.88'
+$requiredMsrv = '1.97'
 
 function Read-RequiredFile {
     param([string]$Path, [string]$Label)

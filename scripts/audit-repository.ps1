@@ -9,8 +9,8 @@ param(
     [string]$SkillPath,
 
     [Parameter(ParameterSetName = 'Audit')]
-    [ValidateSet('1.88.0')]
-    [string]$MsrvToolchain = '1.88.0',
+    [ValidateSet('1.97.1')]
+    [string]$MsrvToolchain = '1.97.1',
 
     [Parameter(ParameterSetName = 'Audit')]
     [ValidateRange(75, 100)]
@@ -1083,11 +1083,11 @@ function Invoke-AuditScriptSelfTest {
         }.GetNewClosure()
         $msrvApplications = Resolve-MsrvToolchainApplications `
             -RustupIdentity ([pscustomobject]@{ Path = 'rustup-fixture' }) `
-            -Toolchain '1.88.0' `
+            -Toolchain '1.97.1' `
             -Invoker $rustupInvoker
         if ($rustupCalls.Count -ne 2 -or
-            $rustupCalls[0] -ne 'which cargo --toolchain 1.88.0' -or
-            $rustupCalls[1] -ne 'which rustc --toolchain 1.88.0' -or
+            $rustupCalls[0] -ne 'which cargo --toolchain 1.97.1' -or
+            $rustupCalls[1] -ne 'which rustc --toolchain 1.97.1' -or
             -not $msrvApplications.Cargo.Path.Equals((Resolve-Path -LiteralPath $fakeCargo).ProviderPath, $pathComparison) -or
             -not $msrvApplications.Rustc.Path.Equals((Resolve-Path -LiteralPath $fakeRustc).ProviderPath, $pathComparison)) {
             throw 'Audit self-test failed: MSRV cargo/rustc were not bound to the exact rustup which results.'

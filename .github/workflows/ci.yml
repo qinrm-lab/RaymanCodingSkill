@@ -67,7 +67,7 @@ jobs:
         run: cargo test --locked --workspace --all-targets
 
   msrv:
-    name: MSRV (Rust 1.88.0)
+    name: MSRV (Rust 1.97.1)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -80,7 +80,7 @@ jobs:
       - name: Install MSRV toolchain
         uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable action, explicit MSRV below
         with:
-          toolchain: 1.88.0
+          toolchain: 1.97.1
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2

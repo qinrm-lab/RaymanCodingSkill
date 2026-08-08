@@ -41,7 +41,7 @@ fixtures; `scripts/check-repo.ps1` runs the same self-test.
 cargo build --release
 ```
 
-The binary is written to `target/release/rayman` (`rayman.exe` on Windows). The minimum supported Rust version is **1.88.0** (the workspace declares `rust-version = "1.88"`; current code uses stable let-chains). Run it through Cargo while developing:
+The binary is written to `target/release/rayman` (`rayman.exe` on Windows). The minimum supported Rust version is **1.97.1** (the workspace declares `rust-version = "1.97"`; current code uses stable let-chains). Run it through Cargo while developing:
 
 ```
 cargo run -p rayman -- context status
@@ -227,7 +227,7 @@ cargo test --manifest-path evals/Cargo.toml --locked
 cargo deny --manifest-path evals/Cargo.toml check --config evals/deny.toml
 ```
 
-CI (`.github/workflows/ci.yml`) grants only `contents: read` and pins every third-party Action to an immutable commit. It runs root fmt/clippy/tests on Linux and Windows, installs the Linux `acl` capability so named-ACL regressions cannot capability-skip, and executes `install-rayman.ps1 -SelfTest` as an installer runtime test on hosted Windows x64 and Ubuntu/Linux x64. The Linux ARM64 leg is only a Rust cross-target `cargo check`; it does not execute the installer and must never be reported as an ARM64 runtime PASS. CI also verifies Rust 1.88.0, self-dogfoods context refresh + strict quality + release readiness, and verifies clean-source release identity on both runtime platforms without a conflicting global `RUSTFLAGS`. Separate jobs exercise `cargo package`, `cargo install`, and enforce a real 75% line threshold for the shipped root CLI workspace rather than the standalone eval harness. Dependency policy runs on every change, with an additional scheduled weekly advisory refresh. `evals/` runs fmt/clippy/unit tests, both host-exec rejection guards, and an offline mock provenance smoke on Linux and Windows; no real-model credential or quality claim is involved.
+CI (`.github/workflows/ci.yml`) grants only `contents: read` and pins every third-party Action to an immutable commit. It runs root fmt/clippy/tests on Linux and Windows, installs the Linux `acl` capability so named-ACL regressions cannot capability-skip, and executes `install-rayman.ps1 -SelfTest` as an installer runtime test on hosted Windows x64 and Ubuntu/Linux x64. The Linux ARM64 leg is only a Rust cross-target `cargo check`; it does not execute the installer and must never be reported as an ARM64 runtime PASS. CI also verifies Rust 1.97.1, self-dogfoods context refresh + strict quality + release readiness, and verifies clean-source release identity on both runtime platforms without a conflicting global `RUSTFLAGS`. Separate jobs exercise `cargo package`, `cargo install`, and enforce a real 75% line threshold for the shipped root CLI workspace rather than the standalone eval harness. Dependency policy runs on every change, with an additional scheduled weekly advisory refresh. `evals/` runs fmt/clippy/unit tests, both host-exec rejection guards, and an offline mock provenance smoke on Linux and Windows; no real-model credential or quality claim is involved.
 
 ## License
 
