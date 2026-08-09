@@ -41,7 +41,7 @@ fixtures; `scripts/check-repo.ps1` runs the same self-test.
 cargo build --release
 ```
 
-The binary is written to `target/release/rayman` (`rayman.exe` on Windows). The minimum supported Rust version is **1.97.1** (the workspace declares `rust-version = "1.97"`; current code uses stable let-chains). Run it through Cargo while developing:
+The binary is written to `target/release/rayman` (`rayman.exe` on Windows). The minimum supported Rust version is **1.97.1**; the workspace declares the same exact `rust-version = "1.97.1"`, and the release verifier, repository audit, and MSRV CI lanes must remain aligned to it. Current code uses stable let-chains. Run it through Cargo while developing:
 
 ```
 cargo run -p rayman -- context status

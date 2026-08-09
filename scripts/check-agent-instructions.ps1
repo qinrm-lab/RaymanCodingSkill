@@ -61,6 +61,110 @@ $goalCliSource = Read-StrictUtf8 'crates/rayman/src/goal_cli.rs'
 $codexHookSource = Read-StrictUtf8 'crates/rayman/src/codex_hook.rs'
 $auditDocumentation = Read-StrictUtf8 'docs/AUDIT.md'
 $auditSource = Read-StrictUtf8 'scripts/audit-repository.ps1'
+$workspaceManifest = Read-StrictUtf8 'Cargo.toml'
+$ciWorkflow = Read-StrictUtf8 '.github/workflows/ci.yml'
+$releaseVerifier = Read-StrictUtf8 'scripts/verify-release-contract.ps1'
+
+function Get-SingleContractValue {
+    param(
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][string]$Text,
+        [Parameter(Mandatory = $true)][string]$Pattern
+    )
+    $found = [regex]::Matches(
+        $Text,
+        $Pattern,
+        [System.Text.RegularExpressions.RegexOptions]::Multiline
+    )
+    if ($found.Count -ne 1 -or [string]::IsNullOrWhiteSpace($found[0].Groups[1].Value)) {
+        throw "$Label must have exactly one non-empty contract value."
+    }
+    return $found[0].Groups[1].Value
+}
+
+function Assert-MsrvContractConsistency {
+    param(
+        [Parameter(Mandatory = $true)][string]$WorkspaceManifest,
+        [Parameter(Mandatory = $true)][string]$Readme,
+        [Parameter(Mandatory = $true)][string]$AuditDocumentation,
+        [Parameter(Mandatory = $true)][string]$AuditSource,
+        [Parameter(Mandatory = $true)][string]$CiWorkflow,
+        [Parameter(Mandatory = $true)][string]$ReleaseVerifier
+    )
+    $declaredMsrv = Get-SingleContractValue `
+        -Label 'Cargo.toml rust-version' `
+        -Text $WorkspaceManifest `
+        -Pattern '^rust-version\s*=\s*"([^"]+)"\s*$'
+    $releaseMsrv = Get-SingleContractValue `
+        -Label 'release verifier required MSRV' `
+        -Text $ReleaseVerifier `
+        -Pattern '^\$requiredMsrv\s*=\s*''([^'']+)''\s*$'
+    if ($releaseMsrv -cne $declaredMsrv) {
+        throw "Release verifier MSRV $releaseMsrv differs from Cargo.toml $declaredMsrv."
+    }
+
+    $coverageJobs = [regex]::Matches(
+        $CiWorkflow,
+        '(?ms)^  coverage:\r?\n(?<body>.*?)(?=^  [A-Za-z0-9_-]+:\r?\n|\z)'
+    )
+    if ($coverageJobs.Count -ne 1) {
+        throw 'CI workflow must define exactly one coverage job.'
+    }
+    $coverageMsrv = Get-SingleContractValue `
+        -Label 'coverage job toolchain' `
+        -Text $coverageJobs[0].Groups['body'].Value `
+        -Pattern '^\s+toolchain:\s*([^\s#]+)\s*(?:#.*)?$'
+    if ($coverageMsrv -cne $declaredMsrv) {
+        throw "Coverage MSRV $coverageMsrv differs from Cargo.toml $declaredMsrv."
+    }
+
+    foreach ($required in @(
+            "minimum supported Rust version is **$declaredMsrv**",
+            ('rust-version = "{0}"' -f $declaredMsrv)
+        )) {
+        if (-not $Readme.Contains($required, [StringComparison]::Ordinal)) {
+            throw "README MSRV contract is missing: $required"
+        }
+    }
+    foreach ($required in @(
+            "[ValidateSet('$declaredMsrv')]",
+            ('$MsrvToolchain = ''{0}''' -f $declaredMsrv)
+        )) {
+        if (-not $AuditSource.Contains($required, [StringComparison]::Ordinal)) {
+            throw "Audit source MSRV contract is missing: $required"
+        }
+    }
+    foreach ($required in @(
+            ('MSRV and the coverage tool are fixed at {0}{1}{0}' -f [char]96, $declaredMsrv),
+            "rustup which ... --toolchain $declaredMsrv"
+        )) {
+        if (-not $AuditDocumentation.Contains($required, [StringComparison]::Ordinal)) {
+            throw "Audit documentation MSRV contract is missing: $required"
+        }
+    }
+    return $declaredMsrv
+}
+
+function Assert-AuditAuthorizationDocumentation {
+    param([Parameter(Mandatory = $true)][string]$Documentation)
+    foreach ($required in @(
+            'an audit request by itself does not grant write authorization',
+            'When the user explicitly asks to repair or close audit findings'
+        )) {
+        if (-not $Documentation.Contains($required, [StringComparison]::Ordinal)) {
+            throw "Audit documentation is missing the explicit write-authority boundary: $required"
+        }
+    }
+}
+
+$declaredMsrv = Assert-MsrvContractConsistency `
+    -WorkspaceManifest $workspaceManifest `
+    -Readme $readme `
+    -AuditDocumentation $auditDocumentation `
+    -AuditSource $auditSource `
+    -CiWorkflow $ciWorkflow `
+    -ReleaseVerifier $releaseVerifier
+Assert-AuditAuthorizationDocumentation -Documentation $auditDocumentation
 
 $canonicalSkillAsset = 'crates/rayman/assets/canonical-skill.md'
 $null = Read-StrictUtf8 $canonicalSkillAsset
@@ -116,10 +220,11 @@ Assert-PublishedContractSafe -Text $contract
 function Assert-MsrvAuditDocumentation {
     param(
         [Parameter(Mandatory = $true)][string]$Documentation,
-        [Parameter(Mandatory = $true)][string]$Source
+        [Parameter(Mandatory = $true)][string]$Source,
+        [Parameter(Mandatory = $true)][string]$Msrv
     )
     foreach ($required in @(
-            'rustup which ... --toolchain 1.97.1',
+            "rustup which ... --toolchain $Msrv",
             'CARGO_BUILD_RUSTC',
             'CARGO_TARGET_DIR',
             '.RaymanCodingSkill/tmp',
@@ -145,7 +250,10 @@ function Assert-MsrvAuditDocumentation {
     }
 }
 
-Assert-MsrvAuditDocumentation -Documentation $auditDocumentation -Source $auditSource
+Assert-MsrvAuditDocumentation `
+    -Documentation $auditDocumentation `
+    -Source $auditSource `
+    -Msrv $declaredMsrv
 
 function Assert-FileSystemProviderPaths {
     param(
@@ -324,6 +432,33 @@ foreach ($resource in @($manifest.codex_skill_resources)) {
 Assert-ManifestResourceSet -Actual $actual
 
 if ($SelfTest) {
+    Assert-Throws -Label 'Cargo manifest MSRV drifts from release and audit contracts' -Action {
+        Assert-MsrvContractConsistency `
+            -WorkspaceManifest $workspaceManifest.Replace(
+                ('rust-version = "{0}"' -f $declaredMsrv),
+                'rust-version = "0.0.0"'
+            ) `
+            -Readme $readme `
+            -AuditDocumentation $auditDocumentation `
+            -AuditSource $auditSource `
+            -CiWorkflow $ciWorkflow `
+            -ReleaseVerifier $releaseVerifier
+    }
+    Assert-Throws -Label 'coverage job loses exact MSRV binding' -Action {
+        Assert-MsrvContractConsistency `
+            -WorkspaceManifest $workspaceManifest `
+            -Readme $readme `
+            -AuditDocumentation $auditDocumentation `
+            -AuditSource $auditSource `
+            -CiWorkflow ($ciWorkflow -replace '(?ms)(^  coverage:.*?^\s+toolchain:\s*)[^\s#]+', '${1}stable') `
+            -ReleaseVerifier $releaseVerifier
+    }
+    Assert-Throws -Label 'audit documentation implies write authority' -Action {
+        Assert-AuditAuthorizationDocumentation -Documentation $auditDocumentation.Replace(
+            'an audit request by itself does not grant write authorization',
+            'an audit request may imply write authorization'
+        )
+    }
     Assert-Throws -Label 'published managed block' -Action {
         Assert-PublishedContractSafe -Text ($contract + "`n<!-- save-work-status:managed-begin v5 -->")
     }
@@ -356,17 +491,20 @@ if ($SelfTest) {
     Assert-Throws -Label 'MSRV documentation loses compiler binding' -Action {
         Assert-MsrvAuditDocumentation `
             -Documentation $auditDocumentation.Replace('CARGO_BUILD_RUSTC', 'REMOVED_COMPILER_BINDING') `
-            -Source $auditSource
+            -Source $auditSource `
+            -Msrv $declaredMsrv
     }
     Assert-Throws -Label 'audit documentation loses explicit advisory seed contract' -Action {
         Assert-MsrvAuditDocumentation `
             -Documentation $auditDocumentation.Replace('CargoDenyDatabaseSeedPath', 'REMOVED_ADVISORY_SEED') `
-            -Source $auditSource
+            -Source $auditSource `
+            -Msrv $declaredMsrv
     }
     Assert-Throws -Label 'audit source loses explicit advisory seed propagation' -Action {
         Assert-MsrvAuditDocumentation `
             -Documentation $auditDocumentation `
-            -Source $auditSource.Replace('-DatabaseSeedPath $CargoDenyDatabaseSeedPath', '-DatabaseSeedPath $null')
+            -Source $auditSource.Replace('-DatabaseSeedPath $CargoDenyDatabaseSeedPath', '-DatabaseSeedPath $null') `
+            -Msrv $declaredMsrv
     }
     Assert-Throws -Label 'filesystem identity regresses to provider-qualified Path' -Action {
         Assert-FileSystemProviderPaths `

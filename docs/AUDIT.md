@@ -1,6 +1,6 @@
 # Complete repository audit
 
-Under RaymanCodingSkill Owner Mode, an unqualified full-repository audit is an audit-to-closure task: inspect current evidence, repair safe in-scope findings, rerun the authoritative gates, and stop only at a stable pass or a structured human/external boundary. `只审计` / `只报告` / `不要修改` explicitly selects the read-only variant.
+Owner Mode controls continuation only after the user has authorized a write-capable repair task; an audit request by itself does not grant write authorization. An unqualified full-repository audit is therefore read-only: inspect current evidence, run non-mutating gates, and report findings. When the user explicitly asks to repair or close audit findings, it becomes an audit-to-closure task: repair safe in-scope findings, rerun the authoritative gates, and stop only at a stable pass or a structured human/external boundary. `只审计` / `只报告` / `不要修改` restates that read-only boundary.
 
 During development, bind the final project gate to the task instead of running it as untracked prose evidence:
 
