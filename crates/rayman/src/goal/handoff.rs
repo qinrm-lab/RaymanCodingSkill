@@ -311,3 +311,72 @@ pub fn handoff_contract_error(
     }
     None
 }
+
+/// Evaluate a release handoff from the caller-owned readiness capture.  The
+/// write path intentionally observes live Git state; the readiness path must
+/// instead bind every check to the same source snapshot as its goal receipts.
+pub(crate) fn handoff_contract_error_with_context(
+    goal: &Goal,
+    all_goals: &[Goal],
+    decision: &GoalDecisionContext<'_>,
+) -> Option<String> {
+    let handoff = goal.handoff.as_ref()?;
+    let Ok(expected_contract) = handoff_contract_sha256(handoff) else {
+        return Some("handoff contract hash could not be computed".into());
+    };
+    if handoff.contract_sha256 != expected_contract {
+        return Some("handoff contract hash is invalid".into());
+    }
+    let Some(current) = decision.current() else {
+        return Some("handoff captured workspace snapshot is missing".into());
+    };
+    if handoff.workspace_identity != decision.captured_workspace_identity().unwrap_or_default()
+        || handoff.workspace_fingerprint != current.workspace_fingerprint
+    {
+        return Some("handoff workspace identity or fingerprint drifted".into());
+    }
+    let Some(source_state) = decision.captured_source() else {
+        return Some("handoff captured source state is missing".into());
+    };
+    if !source_state.available
+        || source_state.kind != "git"
+        || source_state.path_encoding_lossy
+        || source_state.clean != Some(true)
+        || source_state.head.as_deref() != Some(handoff.git_commit.as_str())
+    {
+        return Some("handoff Git HEAD or clean-state binding is no longer valid".into());
+    }
+    let Some(source) = all_goals
+        .iter()
+        .find(|candidate| candidate.id == handoff.source_goal_id)
+    else {
+        return Some("handoff source goal is missing".into());
+    };
+    if source.handoff.is_some()
+        || source.status != GoalStatus::Success
+        || goal_contract_sha256(source).ok().as_deref()
+            != Some(handoff.source_goal_contract_sha256.as_str())
+    {
+        return Some("handoff source goal contract or success state changed".into());
+    }
+    let authority_matches = source.authority_receipts.iter().any(|authority| {
+        authority_receipt_sha256(authority).ok().as_deref()
+            == Some(handoff.source_authority_sha256.as_str())
+            && direct_stable_authority_receipt_is_valid_with_context(source, decision, authority)
+    });
+    if !authority_matches {
+        return Some("handoff source authority receipt is missing or stale".into());
+    }
+    let stages_match = handoff.stages == handoff_stages()
+        && handoff.stages.iter().all(|stage| {
+            goal.requirements.iter().any(|requirement| {
+                requirement.id == stage.requirement_id
+                    && requirement.kind == RequirementKind::Must
+                    && requirement.proof_kind == Some(stage.proof_kind)
+            })
+        });
+    if !stages_match {
+        return Some("handoff stage requirements do not match the structured contract".into());
+    }
+    None
+}

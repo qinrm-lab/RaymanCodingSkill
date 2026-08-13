@@ -3,13 +3,18 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use crate::context::{self, ContextIndex, FileEntry};
+use crate::context::{ContextIndex, FileEntry};
 
 use super::{
-    PackageEntry, TestInference, manifest_root_path, path_is_under_package, quoted_assignment,
+    MapFileSource, PackageEntry, TestInference, indexed_file_text, manifest_root_path,
+    path_is_under_package, quoted_assignment,
 };
 
-pub(super) fn discover_packages(root: &Path, index: &ContextIndex) -> Result<Vec<PackageEntry>> {
+pub(super) fn discover_packages(
+    root: &Path,
+    index: &ContextIndex,
+    source: MapFileSource<'_>,
+) -> Result<Vec<PackageEntry>> {
     let mut packages = Vec::new();
     for entry in index
         .files
@@ -18,7 +23,7 @@ pub(super) fn discover_packages(root: &Path, index: &ContextIndex) -> Result<Vec
     {
         // Same tolerance as indexed source files and Cargo manifests: a non-UTF-8 pyproject
         // must not bail the whole project map.
-        let text = String::from_utf8_lossy(&context::read_verified_file(root, entry)?).into_owned();
+        let text = indexed_file_text(root, entry, source)?;
         let root_path = manifest_root_path(&entry.path);
         let name = parse_pyproject_name(&text).unwrap_or_else(|| {
             if root_path == "." {

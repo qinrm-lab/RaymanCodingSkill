@@ -3000,7 +3000,11 @@ fn legacy_success_current_can_be_archived_through_cli() {
     assert_eq!(archived["status"], "success");
     assert_eq!(
         archived["lifecycle_proof"]["receipt_policy"],
-        "receipt_integrity_v2"
+        "receipt_integrity_v3"
+    );
+    assert_eq!(
+        archived["lifecycle_proof"]["workspace_identity"],
+        archived["requirements"][0]["validations"][0]["receipt"]["workspace_identity"]
     );
     assert_eq!(run(root, &["check", "--profile", "standard"]).status, 0);
 }
@@ -5814,6 +5818,74 @@ fn workspace_snapshot_rejects_real_delta_before_running_the_gate() {
             .unwrap()
             .len(),
         0
+    );
+}
+
+#[test]
+fn changed_repository_gate_is_rejected_before_execution() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(root, "scripts/check-repo.ps1", "throw 'real gate'\n");
+    run_json(root, &["context", "refresh"]);
+    let started = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "repair repository gate",
+            "--must-proof",
+            "repository_gate::keep the gate independent",
+        ],
+    );
+    let id = started["id"].as_str().unwrap();
+    write(
+        root,
+        "scripts/check-repo.ps1",
+        "$sentinel = Join-Path (Split-Path -Parent $PSScriptRoot) 'command-ran.txt'\n[IO.File]::WriteAllText($sentinel, 'ran')\nexit 0\n",
+    );
+
+    let rejected = run(
+        root,
+        &[
+            "goal",
+            "validate",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "a changed gate cannot validate itself",
+            "--changed",
+            "scripts/check-repo.ps1",
+            "--command",
+            "pwsh -NoProfile -File scripts/check-repo.ps1",
+            "--authority",
+            "--repeat",
+            "2",
+        ],
+    );
+    assert_eq!(rejected.status, 1, "stdout={}", rejected.stdout);
+    assert!(
+        rejected
+            .stderr
+            .contains("refusing a self-validating authority gate")
+            && rejected.stderr.contains("scripts/check-repo.ps1"),
+        "{}",
+        rejected.stderr
+    );
+    assert!(!root.join("command-ran.txt").exists());
+    let unchanged = run_json(root, &["goal", "show", id]);
+    assert_eq!(unchanged["requirements"][0]["status"], "open");
+    assert!(
+        unchanged["requirements"][0]["validations"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        unchanged["authority_receipts"]
+            .as_array()
+            .unwrap()
+            .is_empty()
     );
 }
 

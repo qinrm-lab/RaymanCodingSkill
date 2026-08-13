@@ -6,6 +6,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use serde::Serialize;
 
+use crate::context::FileEntry;
 use crate::walk::{relative_key, workspace_files_checked};
 
 const OBSOLETE_SUFFIXES: &[&str] = &[".bak", ".old", ".orig", ".deprecated", "~"];
@@ -107,6 +108,49 @@ pub fn scan(root: &Path) -> Result<AssetReport> {
         }
     }
     Ok(AssetReport { obsolete, markers })
+}
+
+/// Derive the asset report from the exact bytes already owned by a readiness
+/// capture. This removes a second workspace walk and prevents the report from
+/// drifting away from the context/baseline decision point.
+pub fn scan_from_capture<'a>(
+    files: impl IntoIterator<Item = (&'a FileEntry, &'a [u8])>,
+) -> AssetReport {
+    let mut obsolete = Vec::new();
+    let mut markers = Vec::new();
+    for (entry, bytes) in files {
+        let name = Path::new(&entry.path)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("");
+        if let Some(reason) = looks_obsolete(name) {
+            obsolete.push(AssetFinding {
+                path: entry.path.clone(),
+                reason,
+            });
+        }
+        if entry.size > MAX_SCAN_BYTES {
+            continue;
+        }
+        let text = String::from_utf8_lossy(bytes);
+        for (index, line) in text.lines().enumerate() {
+            if is_marker_catalog_or_fixture_line(&entry.path, line) {
+                continue;
+            }
+            for marker in WORK_MARKERS
+                .iter()
+                .filter(|marker| line_has_work_marker(line, marker))
+            {
+                markers.push(MarkerFinding {
+                    path: entry.path.clone(),
+                    line: index + 1,
+                    marker: (*marker).into(),
+                    text: line.trim().chars().take(120).collect(),
+                });
+            }
+        }
+    }
+    AssetReport { obsolete, markers }
 }
 
 fn is_marker_catalog_or_fixture_line(path: &str, line: &str) -> bool {

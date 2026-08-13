@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -32,6 +32,7 @@ const STRICT_RECEIPT_ROLLOUT_AT: &str = "2026-07-14T00:00:00Z";
 const PRE_RECEIPT_MIGRATION: &str = "pre_receipt_schema_v2";
 const RECEIPT_POLICY_V1: &str = "receipt_integrity_v1";
 const RECEIPT_POLICY_V2: &str = "receipt_integrity_v2";
+const RECEIPT_POLICY_V3: &str = "receipt_integrity_v3";
 const VERIFIED_REPLACEMENT_TRANSFER_POLICY: &str = "verified_replacement_transfer_v1";
 const RECEIPT_POLICY_QUARANTINED: &str = "untrusted_legacy_history_v1";
 const RECEIPT_POLICY_INTEGRITY_QUARANTINED: &str = "receipt_integrity_quarantined";
@@ -46,6 +47,7 @@ pub use long_task::*;
 mod model;
 pub use model::*;
 
+mod authority_gate;
 mod handoff;
 mod legacy;
 mod lifecycle;
@@ -53,7 +55,9 @@ mod pending;
 mod plan_publication;
 mod rebind;
 mod validation;
+mod workspace_baseline;
 
+pub use authority_gate::*;
 pub use handoff::*;
 use legacy::*;
 pub use lifecycle::*;
@@ -61,6 +65,7 @@ pub use pending::*;
 use plan_publication::*;
 pub use rebind::*;
 pub use validation::*;
+pub use workspace_baseline::*;
 
 fn legacy_must_kind() -> String {
     "must".into()
@@ -74,6 +79,171 @@ fn legacy_open_status() -> String {
 pub struct GoalLoadIssue {
     pub path: String,
     pub error: String,
+}
+
+/// Caller-owned inputs for a goal readiness decision.
+///
+/// This type is intentionally introduced in slices. The current version fixes
+/// the workspace baseline and the exact captured workspace bytes, which lets
+/// validation relevance parse Cargo workspace exclusions without reopening
+/// `Cargo.toml`. Command containment, authority closure, lifecycle history,
+/// handoff source state and maintenance artifacts migrate in later slices;
+/// callers must not infer that those observations are captured merely because
+/// they use this context.
+pub(crate) struct CapturedWorkspaceFile<'a> {
+    /// Exact key recorded by the caller's complete workspace capture.
+    pub key: String,
+    pub bytes: &'a [u8],
+}
+
+pub struct GoalDecisionContext<'a> {
+    root: &'a Path,
+    current: Option<&'a WorkspaceBaseline>,
+    workspace_bytes: Option<&'a BTreeMap<String, Vec<u8>>>,
+    source: Option<&'a crate::source_state::SourceState>,
+    maintenance_artifact_hashes: Option<&'a BTreeMap<String, String>>,
+    workspace_identity: Option<&'a str>,
+}
+
+impl<'a> GoalDecisionContext<'a> {
+    pub fn live(root: &'a Path, current: Option<&'a WorkspaceBaseline>) -> Self {
+        Self {
+            root,
+            current,
+            workspace_bytes: None,
+            source: None,
+            maintenance_artifact_hashes: None,
+            workspace_identity: None,
+        }
+    }
+
+    pub fn captured(
+        root: &'a Path,
+        current: Option<&'a WorkspaceBaseline>,
+        workspace_bytes: &'a BTreeMap<String, Vec<u8>>,
+    ) -> Self {
+        Self {
+            root,
+            current,
+            workspace_bytes: Some(workspace_bytes),
+            source: None,
+            maintenance_artifact_hashes: None,
+            workspace_identity: None,
+        }
+    }
+
+    pub fn captured_with_readiness_state(
+        root: &'a Path,
+        current: Option<&'a WorkspaceBaseline>,
+        workspace_bytes: &'a BTreeMap<String, Vec<u8>>,
+        source: &'a crate::source_state::SourceState,
+        maintenance_artifact_hashes: &'a BTreeMap<String, String>,
+        workspace_identity: &'a str,
+    ) -> Self {
+        Self {
+            root,
+            current,
+            workspace_bytes: Some(workspace_bytes),
+            source: Some(source),
+            maintenance_artifact_hashes: Some(maintenance_artifact_hashes),
+            workspace_identity: Some(workspace_identity),
+        }
+    }
+
+    pub fn root(&self) -> &Path {
+        self.root
+    }
+
+    pub fn current(&self) -> Option<&WorkspaceBaseline> {
+        self.current
+    }
+
+    /// Whether this decision owns an immutable workspace-byte capture rather
+    /// than delegating observations to the live workspace.
+    pub(crate) fn has_captured_workspace_bytes(&self) -> bool {
+        self.workspace_bytes.is_some()
+    }
+
+    pub(crate) fn captured_source(&self) -> Option<&crate::source_state::SourceState> {
+        self.source
+    }
+
+    pub(crate) fn captured_maintenance_artifact_hash(&self, key: &str) -> Result<Option<&str>> {
+        let Some(hashes) = self.maintenance_artifact_hashes else {
+            return Ok(None);
+        };
+        if let Some(hash) = hashes.get(key) {
+            return Ok(Some(hash));
+        }
+        if !cfg!(windows) {
+            return Ok(None);
+        }
+        let mut matches = hashes.iter().filter(|(candidate, _)| {
+            candidate
+                .replace('\\', "/")
+                .eq_ignore_ascii_case(&key.replace('\\', "/"))
+        });
+        let Some((_, hash)) = matches.next() else {
+            return Ok(None);
+        };
+        if matches.next().is_some() {
+            bail!(
+                "captured maintenance artifact path is ambiguous under Windows case rules: {key}"
+            );
+        }
+        Ok(Some(hash))
+    }
+
+    pub(crate) fn captured_workspace_identity(&self) -> Option<&str> {
+        self.workspace_identity
+    }
+
+    /// Look up one already captured workspace file without reopening the
+    /// filesystem. Exact spelling wins; the Windows fallback is permitted only
+    /// when it selects exactly one capture key, so a case-colliding capture can
+    /// never mint an arbitrary authority identity.
+    pub(crate) fn captured_workspace_file(
+        &self,
+        key: &str,
+    ) -> Result<Option<CapturedWorkspaceFile<'_>>> {
+        let Some(files) = self.workspace_bytes else {
+            return Ok(None);
+        };
+        if let Some(bytes) = files.get(key) {
+            return Ok(Some(CapturedWorkspaceFile {
+                key: key.to_string(),
+                bytes: bytes.as_slice(),
+            }));
+        }
+        if !cfg!(windows) {
+            return Ok(None);
+        }
+        let mut matches = files.iter().filter(|(candidate, _)| {
+            candidate
+                .replace('\\', "/")
+                .eq_ignore_ascii_case(&key.replace('\\', "/"))
+        });
+        let Some((candidate, bytes)) = matches.next() else {
+            return Ok(None);
+        };
+        if matches.next().is_some() {
+            bail!("captured workspace path is ambiguous under Windows case rules: {key}");
+        }
+        Ok(Some(CapturedWorkspaceFile {
+            key: candidate.clone(),
+            bytes: bytes.as_slice(),
+        }))
+    }
+
+    pub(crate) fn path_is_excluded_from_root_cargo_workspace(&self, path: &str) -> bool {
+        match self.workspace_bytes {
+            Some(files) => crate::map::path_is_excluded_from_root_cargo_workspace_bytes(
+                files.get("Cargo.toml").map(Vec::as_slice),
+                path,
+            ),
+            None => crate::map::path_is_excluded_from_root_cargo_workspace(self.root, path),
+        }
+    }
 }
 
 pub struct GoalStore {
@@ -1573,25 +1743,7 @@ impl GoalStore {
         let Some(value) = read_json::<serde_json::Value>(path)? else {
             return Ok(None);
         };
-        match serde_json::from_value::<Goal>(value.clone()) {
-            Ok(mut goal) => {
-                // Earlier lean goals were already serialized in a shape close
-                // to `Goal`, but had no schema marker.  Mutating one of those
-                // records writes schema_version=0; keep treating that exact
-                // migration shape as legacy on every later load.  A nonzero
-                // unknown version remains a current-format incompatibility
-                // and is rejected by the standard gate instead of silently
-                // downgraded to history.
-                goal.loaded_from_legacy = goal.schema_version == 0;
-                Ok(Some(goal))
-            }
-            Err(current_error) => match serde_json::from_value::<LegacyGoal>(value) {
-                Ok(legacy) => Ok(Some(goal_from_legacy(legacy))),
-                Err(legacy_error) => bail!(
-                    "无法解析 goal 文件: current schema: {current_error}; legacy schema: {legacy_error}"
-                ),
-            },
-        }
+        Ok(Some(parse_goal_value(value)?))
     }
 
     /// Load an existing goal for mutation without allowing an `updated_at`
@@ -1748,6 +1900,11 @@ impl GoalStore {
         {
             bail!("validation receipt 与命令/影响路径不匹配");
         }
+        if receipt.workspace_identity != workspace_identity(&self.root)
+            || !is_sha256(&receipt.workspace_identity)
+        {
+            bail!("validation receipt workspace identity 与当前工作区不匹配");
+        }
         let path = self.goal_path(id)?;
         let _lock = acquire_state_lock(&path)?;
         let Some(mut goal) = Self::load_goal_file_for_update(&path)? else {
@@ -1761,6 +1918,9 @@ impl GoalStore {
                 "目标 {id} lifecycle={}，不能写入 receipt；先用 `goal current {id}` 恢复为 current",
                 goal.lifecycle
             );
+        }
+        if authority.is_some() {
+            validate_authority_command_for_goal(&self.root, &goal, &command)?;
         }
         let required_proof = goal
             .requirements
@@ -1940,7 +2100,27 @@ impl GoalStore {
                 bail!("拒绝关闭为 success：目标合约无效: {error}");
             }
             let fingerprint = workspace_fingerprint(&self.root)?;
-            let gaps = goal_success_receipt_gaps(&candidate, &self.root, &fingerprint);
+            // Existing current goals may carry v2 receipts written before the
+            // v3 rollout. They remain usable only to finish/archive their own
+            // history; V2 is never eligible for later authority transfer.
+            let close_policy = if candidate
+                .requirements
+                .iter()
+                .flat_map(|requirement| &requirement.validations)
+                .filter_map(|validation| validation.receipt.as_ref())
+                .all(|receipt| receipt.workspace_identity.is_empty())
+            {
+                ReceiptValidationPolicy::CurrentV2
+            } else {
+                ReceiptValidationPolicy::CurrentV3
+            };
+            let gaps = goal_success_receipt_gaps_for_policy(
+                &candidate,
+                &self.root,
+                &fingerprint,
+                true,
+                close_policy,
+            );
             if !gaps.is_empty() {
                 bail!(
                     "拒绝关闭为 success：必须先用 goal validate 写入当前且相关的 receipt: {}",
@@ -2030,6 +2210,7 @@ impl GoalStore {
                 Some(PRE_RECEIPT_MIGRATION.to_string()),
                 Some(RECEIPT_POLICY_V2.to_string()),
                 event_at,
+                None,
             ));
             write_json(&path, &goal)?;
             return Ok(goal);
@@ -2068,6 +2249,7 @@ impl GoalStore {
                 Some(RECEIPT_POLICY_V1_MIGRATION.to_string()),
                 Some(RECEIPT_POLICY_V1.to_string()),
                 event_at,
+                None,
             ));
             write_json(&path, &goal)?;
             return Ok(goal);
@@ -2109,7 +2291,7 @@ impl GoalStore {
         let current_fingerprint = workspace_fingerprint(&self.root)?;
         let mut proof_fingerprint = current_fingerprint.clone();
         let mut migration = None;
-        let mut receipt_policy = Some(RECEIPT_POLICY_V2.to_string());
+        let mut receipt_policy = Some(RECEIPT_POLICY_V3.to_string());
         let legacy_unreceipted_migration_gaps = if retiring_legacy_success {
             goal_retiring_legacy_success_unreceipted_migration_gaps(
                 &goal,
@@ -2157,14 +2339,14 @@ impl GoalStore {
                     historical_success_fingerprint_for_retiring_legacy_success(
                         &goal,
                         &self.root,
-                        ReceiptValidationPolicy::CurrentV2,
+                        ReceiptValidationPolicy::CurrentV3,
                         Some(&current_fingerprint),
                     )
                 } else {
                     historical_success_fingerprint(
                         &goal,
                         &self.root,
-                        ReceiptValidationPolicy::CurrentV2,
+                        ReceiptValidationPolicy::CurrentV3,
                     )
                 } {
                     proof_fingerprint = historical;
@@ -2211,6 +2393,7 @@ impl GoalStore {
             migration,
             receipt_policy,
             event_at,
+            Some(workspace_identity(&self.root)),
         ));
         if let Some(error) = goal.current_schema_error() {
             bail!("归档后的目标合约无效: {error}");
@@ -2251,7 +2434,9 @@ impl GoalStore {
             );
         }
 
-        let (proof_fingerprint, proof_error) = if goal.lifecycle == GoalLifecycle::Current {
+        let (proof_fingerprint, proof_error, proof_workspace_identity) = if goal.lifecycle
+            == GoalLifecycle::Current
+        {
             let Some(current_error) = goal.current_schema_error() else {
                 bail!(
                     "只允许隔离 proof 已失效的已归档 success，或无法生成可信归档 proof 的完整 current legacy success；有效或尚未结束的 current goal 不能隐藏"
@@ -2288,7 +2473,7 @@ impl GoalStore {
             let historical_v2 = historical_success_fingerprint_for_retiring_legacy_success(
                 &goal,
                 &self.root,
-                ReceiptValidationPolicy::CurrentV2,
+                ReceiptValidationPolicy::CurrentV3,
                 Some(&current_fingerprint),
             );
             let unreceipted_migration_works = pre_receipt_migration_eligible(&goal)
@@ -2328,6 +2513,7 @@ impl GoalStore {
                     "{current_error}; success receipt proof invalid: {}",
                     current_gaps.join("; ")
                 ),
+                workspace_identity(&self.root),
             )
         } else {
             if let Some(error) = goal.current_schema_error() {
@@ -2351,7 +2537,13 @@ impl GoalStore {
             let Some(proof_error) = goal.lifecycle_proof_error(&self.root) else {
                 bail!("归档 success 的 lifecycle proof 仍然有效；拒绝把有效证据降级为 quarantine");
             };
-            (old_proof.workspace_fingerprint, proof_error)
+            (
+                old_proof.workspace_fingerprint,
+                proof_error,
+                old_proof
+                    .workspace_identity
+                    .unwrap_or_else(|| workspace_identity(&self.root)),
+            )
         };
 
         let previous_reason = goal
@@ -2374,6 +2566,7 @@ impl GoalStore {
             Some(INTEGRITY_QUARANTINE_MIGRATION.to_string()),
             Some(RECEIPT_POLICY_INTEGRITY_QUARANTINED.to_string()),
             event_at,
+            Some(proof_workspace_identity),
         ));
         if let Some(error) = goal.current_schema_error() {
             bail!("隔离后的目标合约无效: {error}");
@@ -2395,6 +2588,23 @@ impl GoalStore {
         predecessor_ids: &[String],
         authority_goal_id: &str,
         live_authority: ReplacementAuthorityReceipt,
+    ) -> Result<Goal> {
+        self.authorize_replacement_with_before_confirm(
+            id,
+            predecessor_ids,
+            authority_goal_id,
+            live_authority,
+            || {},
+        )
+    }
+
+    fn authorize_replacement_with_before_confirm(
+        &self,
+        id: &str,
+        predecessor_ids: &[String],
+        authority_goal_id: &str,
+        live_authority: ReplacementAuthorityReceipt,
+        before_confirm: impl FnOnce(),
     ) -> Result<Goal> {
         if predecessor_ids.is_empty() {
             bail!("lifecycle-only replacement 至少需要一个 --supersedes 目标");
@@ -2450,7 +2660,7 @@ impl GoalStore {
         {
             bail!("lifecycle-only replacement 必须保持 pristine 且只能包含 open must");
         }
-        let current = workspace_baseline(&self.root)?;
+        let current = stable_workspace_baseline(&self.root)?;
         let Some(baseline) = replacement.baseline.as_ref() else {
             bail!("lifecycle-only replacement 缺少 baseline");
         };
@@ -2499,13 +2709,13 @@ impl GoalStore {
             || authority.status != GoalStatus::Success
             || !authority.is_current_schema()
             || authority.current_schema_error().is_some()
-            || authority_lifecycle.receipt_policy.as_deref() != Some(RECEIPT_POLICY_V2)
+            || authority_lifecycle.receipt_policy.as_deref() != Some(RECEIPT_POLICY_V3)
             || authority_lifecycle.migration.is_some()
             || authority.lifecycle_proof_error(&self.root).is_some()
             || historical_success_fingerprint(
                 &authority,
                 &self.root,
-                ReceiptValidationPolicy::CurrentV2,
+                ReceiptValidationPolicy::CurrentV3,
             )
             .as_deref()
                 != Some(authority_lifecycle.workspace_fingerprint.as_str())
@@ -2520,6 +2730,8 @@ impl GoalStore {
                 "authority goal 必须是同 workspace、current-policy 且包含同命令 direct-authority 的有效 archived success"
             );
         }
+        let authority_gate_binding =
+            authority_gate_binding_for_goal(&authority, &self.root, &live_authority.command)?;
         if live_authority.repeat < 2
             || live_authority.runs.len() != live_authority.repeat as usize
             || live_authority.workspace_fingerprint != fingerprint
@@ -2598,6 +2810,7 @@ impl GoalStore {
             replacement_contract_sha256: replacement_contract_sha256(&replacement),
             predecessor_contracts,
             source_delta_paths,
+            authority_gate_binding,
             live_authority,
             proof_sha256: String::new(),
         };
@@ -2608,6 +2821,38 @@ impl GoalStore {
         }
         if let Some(error) = replacement_authority_error(&replacement, &self.root, &fingerprint) {
             bail!("拒绝写入 lifecycle-only replacement proof: {error}");
+        }
+        let confirmed_binding = authority_gate_binding_for_goal(
+            &authority,
+            &self.root,
+            &replacement
+                .replacement_authority
+                .as_ref()
+                .expect("proof assembled before confirmation")
+                .live_authority
+                .command,
+        )?;
+        if confirmed_binding
+            != replacement
+                .replacement_authority
+                .as_ref()
+                .and_then(|proof| proof.authority_gate_binding.clone())
+        {
+            bail!("authority gate dependency binding changed before replacement proof publication");
+        }
+        // Keep the final source bracket after every other potentially slow
+        // revalidation. `before_confirm` is a deterministic race injection
+        // point for regression tests; production passes a no-op. Nothing that
+        // reads repository source may be inserted between this bracket and the
+        // atomic state publication below.
+        before_confirm();
+        let confirmed = stable_workspace_baseline(&self.root)?;
+        if confirmed.files != current.files
+            || confirmed.workspace_fingerprint != current.workspace_fingerprint
+        {
+            bail!(
+                "workspace changed before lifecycle-only replacement proof publication; no proof was written"
+            );
         }
         write_json(&path, &replacement)?;
         Ok(replacement)
@@ -2650,13 +2895,13 @@ impl GoalStore {
         }
         let current_fingerprint = workspace_fingerprint(&self.root)?;
         let mut proof_fingerprint = current_fingerprint.clone();
-        let mut lifecycle_receipt_policy = RECEIPT_POLICY_V2;
+        let mut lifecycle_receipt_policy = RECEIPT_POLICY_V3;
         if goal.status == GoalStatus::Success
             && !goal.loaded_from_legacy
             && let Some(historical) = historical_success_fingerprint(
                 &goal,
                 &self.root,
-                ReceiptValidationPolicy::CurrentV2,
+                ReceiptValidationPolicy::CurrentV3,
             )
         {
             proof_fingerprint = historical;
@@ -2693,6 +2938,7 @@ impl GoalStore {
             None,
             Some(lifecycle_receipt_policy.to_string()),
             event_at,
+            Some(workspace_identity(&self.root)),
         ));
         write_json(&path, &goal)?;
         Ok(goal)
@@ -2731,6 +2977,33 @@ impl GoalStore {
         write_json(&path, &candidate)?;
         Ok(candidate)
     }
+}
+
+fn parse_goal_value(value: serde_json::Value) -> Result<Goal> {
+    match serde_json::from_value::<Goal>(value.clone()) {
+        Ok(mut goal) => {
+            // Earlier lean goals were already serialized in a shape close to
+            // `Goal`, but had no schema marker. Keep treating that exact shape
+            // as legacy after a caller-owned readiness capture parses it.
+            goal.loaded_from_legacy = goal.schema_version == 0;
+            Ok(goal)
+        }
+        Err(current_error) => match serde_json::from_value::<LegacyGoal>(value) {
+            Ok(legacy) => Ok(goal_from_legacy(legacy)),
+            Err(legacy_error) => bail!(
+                "无法解析 goal 文件: current schema: {current_error}; legacy schema: {legacy_error}"
+            ),
+        },
+    }
+}
+
+/// Parse one goal from bytes already captured through a stable no-follow
+/// handle. Readiness must not validate a path and then reopen it through the
+/// ordinary store loader.
+pub fn goal_from_captured_bytes(bytes: &[u8]) -> Result<Goal> {
+    let value = serde_json::from_slice::<serde_json::Value>(bytes)
+        .context("无法解析 captured goal JSON")?;
+    parse_goal_value(value)
 }
 
 /// Is this record an explicitly untrusted, quarantined history?

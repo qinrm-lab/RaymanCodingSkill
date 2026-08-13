@@ -146,14 +146,52 @@ function Assert-MsrvContractConsistency {
 }
 
 function Assert-AuditAuthorizationDocumentation {
-    param([Parameter(Mandatory = $true)][string]$Documentation)
+    param(
+        [Parameter(Mandatory = $true)][string]$Documentation,
+        [Parameter(Mandatory = $true)][string]$Source
+    )
     foreach ($required in @(
             'an audit request by itself does not grant write authorization',
-            'When the user explicitly asks to repair or close audit findings'
+            'When the user explicitly asks to repair or close audit findings',
+            'The default audit never provisions host audit tools or changes rustup components',
+            '`-PrepareAuditTools` is the sole provisioning authorization'
         )) {
         if (-not $Documentation.Contains($required, [StringComparison]::Ordinal)) {
             throw "Audit documentation is missing the explicit write-authority boundary: $required"
         }
+    }
+    foreach ($required in @(
+            '[switch]$PrepareAuditTools',
+            "[Parameter(Mandatory = `$true, ParameterSetName = 'PrepareAuditTools')]",
+            'switch ($PSCmdlet.ParameterSetName)',
+            'if (-not $PrepareAuditTools.IsPresent)',
+            "if (`$PSCmdlet.ParameterSetName -eq 'PrepareAuditTools')",
+            ". (Join-Path `$PSScriptRoot 'repository-quality.ps1')",
+            "schema = 'rayman.audit.tool-preparation.v1'",
+            'Resolve-PersistentCargoInstallRoot',
+            'Get-MsrvLlvmPreparationArguments',
+            'Get-CoverageToolPreparationArguments',
+            "-IncludePreinstalledCoverageTool (`$PSCmdlet.ParameterSetName -eq 'Audit')"
+        )) {
+        if (-not $Source.Contains($required, [StringComparison]::Ordinal)) {
+            throw "Audit source is missing its explicit tool-preparation authority boundary: $required"
+        }
+    }
+    foreach ($name in @('CliPath', 'SkillPath')) {
+        $escapedVariable = [regex]::Escape('$' + $name)
+        $pattern = "(?ms)(?:\[Parameter\([^\]]*ParameterSetName\s*=\s*'PrepareAuditTools'[^\]]*\)\]\s*)+(?:\[[^\]]+\]\s*)*\[string\]\s*$escapedVariable\b"
+        if ([regex]::IsMatch($Source, $pattern)) {
+            throw "Audit preparation mode must not require the $name release identity."
+        }
+    }
+    $prepareBranch = $Source.IndexOf("if (`$PSCmdlet.ParameterSetName -eq 'PrepareAuditTools')", [StringComparison]::Ordinal)
+    $helperLoad = $Source.IndexOf(". (Join-Path `$PSScriptRoot 'repository-quality.ps1')", [StringComparison]::Ordinal)
+    if ($prepareBranch -lt 0 -or $helperLoad -lt 0 -or $prepareBranch -ge $helperLoad) {
+        throw 'Audit preparation must branch before loading the repository quality helper.'
+    }
+    $preparation = $Source.Substring($prepareBranch, $helperLoad - $prepareBranch)
+    if (-not $preparation.Contains('return', [StringComparison]::Ordinal)) {
+        throw 'Audit preparation must return before loading repository audit helpers.'
     }
 }
 
@@ -164,7 +202,9 @@ $declaredMsrv = Assert-MsrvContractConsistency `
     -AuditSource $auditSource `
     -CiWorkflow $ciWorkflow `
     -ReleaseVerifier $releaseVerifier
-Assert-AuditAuthorizationDocumentation -Documentation $auditDocumentation
+Assert-AuditAuthorizationDocumentation `
+    -Documentation $auditDocumentation `
+    -Source $auditSource
 
 $canonicalSkillAsset = 'crates/rayman/assets/canonical-skill.md'
 $null = Read-StrictUtf8 $canonicalSkillAsset
@@ -454,10 +494,12 @@ if ($SelfTest) {
             -ReleaseVerifier $releaseVerifier
     }
     Assert-Throws -Label 'audit documentation implies write authority' -Action {
-        Assert-AuditAuthorizationDocumentation -Documentation $auditDocumentation.Replace(
-            'an audit request by itself does not grant write authorization',
-            'an audit request may imply write authorization'
-        )
+        Assert-AuditAuthorizationDocumentation `
+            -Documentation $auditDocumentation.Replace(
+                'an audit request by itself does not grant write authorization',
+                'an audit request may imply write authorization'
+            ) `
+            -Source $auditSource
     }
     Assert-Throws -Label 'published managed block' -Action {
         Assert-PublishedContractSafe -Text ($contract + "`n<!-- save-work-status:managed-begin v5 -->")

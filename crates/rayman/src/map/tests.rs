@@ -21,6 +21,140 @@ fn cargo_workspace_requires_metadata_provenance_for_authoritative_topology() {
 }
 
 #[test]
+fn cargo_metadata_invocation_is_lockfile_stable() {
+    let dir = tempfile::tempdir().unwrap();
+    let command = cargo_metadata_command(dir.path(), Some("crates/foo/Cargo.toml"));
+    let arguments = command
+        .get_args()
+        .map(|argument| argument.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        arguments,
+        [
+            "metadata",
+            "--locked",
+            "--no-deps",
+            "--format-version",
+            "1",
+            "--manifest-path",
+            "crates/foo/Cargo.toml",
+        ]
+    );
+    assert_eq!(command.get_current_dir(), Some(dir.path()));
+}
+
+#[test]
+fn cargo_metadata_document_rejects_manifests_outside_the_decision_capture() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    write(
+        &root.join("outside/Cargo.toml"),
+        "[package]\nname = \"outside\"\nversion = \"0.1.0\"\n",
+    );
+    let captured = CapturedManifestAuthority::from_paths(["Cargo.toml".to_string()]).unwrap();
+    let document = CargoMetadataDocument {
+        packages: vec![CargoMetadataPackage {
+            id: "outside 0.1.0".into(),
+            name: "outside".into(),
+            manifest_path: root.join("outside/Cargo.toml").display().to_string(),
+            dependencies: Vec::new(),
+        }],
+        workspace_members: vec!["outside 0.1.0".into()],
+        workspace_root: root.display().to_string(),
+    };
+
+    let error = validate_cargo_metadata_document(root.as_path(), None, &captured, &document)
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("package manifest was not in the decision capture"));
+}
+
+#[test]
+fn cargo_metadata_document_rejects_unbound_workspace_dependency_and_member() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    write(&root.join("Cargo.toml"), "[workspace]\nmembers = []\n");
+    write(
+        &root.join("crates/app/Cargo.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n",
+    );
+    write(
+        &root.join("outside/Cargo.toml"),
+        "[package]\nname = \"outside\"\nversion = \"0.1.0\"\n",
+    );
+    let captured = CapturedManifestAuthority::from_paths([
+        "Cargo.toml".to_string(),
+        "crates/app/Cargo.toml".to_string(),
+    ])
+    .unwrap();
+    let base_package = CargoMetadataPackage {
+        id: "app 0.1.0".into(),
+        name: "app".into(),
+        manifest_path: root.join("crates/app/Cargo.toml").display().to_string(),
+        dependencies: Vec::new(),
+    };
+
+    let unknown_member = CargoMetadataDocument {
+        packages: vec![base_package],
+        workspace_members: vec!["missing 0.1.0".into()],
+        workspace_root: root.display().to_string(),
+    };
+    assert!(
+        validate_cargo_metadata_document(&root, None, &captured, &unknown_member)
+            .unwrap_err()
+            .to_string()
+            .contains("unknown package id")
+    );
+
+    let outside_dependency = CargoMetadataDocument {
+        packages: vec![CargoMetadataPackage {
+            id: "app 0.1.0".into(),
+            name: "app".into(),
+            manifest_path: root.join("crates/app/Cargo.toml").display().to_string(),
+            dependencies: vec![CargoMetadataDependency {
+                name: "outside".into(),
+                rename: None,
+                path: Some(root.join("outside").display().to_string()),
+                kind: None,
+            }],
+        }],
+        workspace_members: vec!["app 0.1.0".into()],
+        workspace_root: root.display().to_string(),
+    };
+    assert!(
+        validate_cargo_metadata_document(&root, None, &captured, &outside_dependency)
+            .unwrap_err()
+            .to_string()
+            .contains("path dependency manifest was not in the decision capture")
+    );
+}
+
+#[test]
+fn captured_map_rejects_missing_manifest_bytes_before_metadata() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        &root.join("Cargo.toml"),
+        "[package]\nname = \"captured\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    );
+    write(&root.join("src/lib.rs"), "pub fn captured() {}\n");
+    context::refresh(root).unwrap();
+    let index = context::verified_index(root).unwrap();
+    let mut captured = BTreeMap::new();
+    captured.insert(
+        "src/lib.rs".to_string(),
+        fs::read(root.join("src/lib.rs")).unwrap(),
+    );
+    let error = build_from_capture(root, &index, &captured)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("capture 缺少已验证文件: Cargo.toml"),
+        "error={error}"
+    );
+}
+
+#[test]
 fn subdirectory_only_cargo_workspace_obtains_authority_instead_of_being_blocked_forever() {
     // 根目录没有 Cargo.toml 只说明"在根上跑 cargo metadata 会失败"，不说明拓扑不可信。
     // 早先的判据把这种仓库判为非权威，而权威性是 standard/release 的硬前提，于是
@@ -413,7 +547,9 @@ fn map_build_rejects_source_drift_after_index_validation() {
         root.join("src/lib.rs").as_path(),
         "pub fn value() -> i32 { 2 }\n",
     );
-    let error = build_from_index(root, &index).unwrap_err().to_string();
+    let error = build_from_index(root, &index, MapFileSource::Live)
+        .unwrap_err()
+        .to_string();
     assert!(
         error.contains("项目地图读取失败") && error.contains("src/lib.rs"),
         "error={error}"

@@ -1070,6 +1070,7 @@ mod tests {
                     receipt: crate::goal::ValidationReceipt {
                         exit_code: 0,
                         cwd: root.display().to_string(),
+                        workspace_identity: crate::context::workspace_identity(root),
                         workspace_fingerprint_before: fingerprint.clone(),
                         workspace_fingerprint_after: fingerprint,
                         stdout_sha256: "a".repeat(64),
@@ -1315,6 +1316,7 @@ mod tests {
                     receipt: crate::goal::ValidationReceipt {
                         exit_code: 0,
                         cwd: root.display().to_string(),
+                        workspace_identity: crate::context::workspace_identity(root),
                         workspace_fingerprint_before: fingerprint.clone(),
                         workspace_fingerprint_after: fingerprint,
                         stdout_sha256: "a".repeat(64),

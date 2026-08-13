@@ -108,4 +108,4 @@ cargo run -- --backend deepseek --task fix-failing-test --unsafe-host-exec   # �
   -SkillPath "$HOME/.codex/skills/raymancodingskill/SKILL.md"
 ```
 
-此审计依次覆盖 root/evals fmt、Clippy、tests、deny，`cargo package`/`cargo install` smoke，当前 artifact 的 context + strict + release 自食验证，`state audit --check` 门禁与仅作报告的 `assets` 扫描，以及最终 clean-source/PATH/skill 身份。任一**门禁**失败都不能声明发布或安装完成；`assets` 只报告，不阻塞。
+此审计依次覆盖 root/evals fmt、Clippy、tests、deny，`cargo package`/`cargo install` smoke，当前 artifact 的 context + strict + release 自食验证，`state audit --check` 门禁与仅作报告的 `assets` 扫描，以及最终 clean-source/PATH/skill 身份。默认命令只验证已经安装的固定版 `cargo-llvm-cov` 和 MSRV LLVM 组件，不会隐式执行 `cargo install cargo-llvm-cov` 或 `rustup component add`；缺失时会失败并给出恢复命令。只有调用者明确接受宿主工具变更时，才单独运行 `./scripts/audit-repository.ps1 -PrepareAuditTools`；它不需要 CLI/SKILL 路径，只持久准备并精确复验这两项工具，随后立即退出，不运行仓库门禁。准备完成后再单独运行普通审计。release closeout 只在 `CARGO_NET_OFFLINE=true` 且 clean HEAD、CLI/SKILL、脚本、当前 PowerShell host、cargo-deny、固定 coverage/MSRV/LLVM、advisory tree 全部 binding 完全一致时复用审计，并在宣告复用前及 authority/finish 后各重算一次；在线 advisory 模式永不复用。完整审计本身仍会写构建输出、托管临时状态和派生工作区状态。任一**门禁**失败都不能声明发布或安装完成；`assets` 只报告，不阻塞。

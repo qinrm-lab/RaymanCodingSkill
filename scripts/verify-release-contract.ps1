@@ -42,6 +42,11 @@ param(
     [Parameter(ParameterSetName = 'Verify')]
     [switch]$RequireSourceFresh,
 
+    # Read-only machine contract consumed by repository audit and release
+    # closeout. It intentionally performs no build and emits one JSON object.
+    [Parameter(Mandatory = $true, ParameterSetName = 'InspectSourceFreshInputs')]
+    [switch]$InspectSourceFreshInputs,
+
     [Parameter(Mandatory = $true, ParameterSetName = 'SelfTest')]
     [switch]$SelfTest
 )
@@ -60,6 +65,19 @@ $canonicalSkill = Join-Path $repoRoot 'SKILL.md'
 $packagedCanonicalSkill = Join-Path $repoRoot 'crates/rayman/assets/canonical-skill.md'
 $expectedContract = 'rayman-cli-contract-v16'
 $requiredMsrv = '1.97.1'
+
+switch ($PSCmdlet.ParameterSetName) {
+    'InspectSourceFreshInputs' {
+        if (-not $InspectSourceFreshInputs.IsPresent) {
+            throw 'The InspectSourceFreshInputs parameter set requires -InspectSourceFreshInputs to be present and true; -InspectSourceFreshInputs:$false grants no inspection authority.'
+        }
+    }
+    'SelfTest' {
+        if (-not $SelfTest.IsPresent) {
+            throw 'The SelfTest parameter set requires -SelfTest to be present and true; -SelfTest:$false grants no self-test authority.'
+        }
+    }
+}
 
 function Read-RequiredFile {
     param([string]$Path, [string]$Label)
@@ -236,6 +254,141 @@ function Get-Sha256 {
     param([string]$Path)
 
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Get-ObjectSha256 {
+    param([Parameter(Mandatory = $true)]$Value)
+
+    $json = $Value | ConvertTo-Json -Depth 20 -Compress
+    $bytes = [Text.Encoding]::UTF8.GetBytes($json)
+    return [Convert]::ToHexString(
+        [Security.Cryptography.SHA256]::HashData($bytes)
+    ).ToLowerInvariant()
+}
+
+function Get-SourceFreshEnvironmentPolicy {
+    # This is the single source of truth for ambient variables that can alter
+    # generated code, native dependencies, target selection, linker behavior,
+    # or release-profile output without changing checked-in source.
+    return [ordered]@{
+        schema = 'rayman.source-fresh.environment-policy.v1'
+        exact_names = [string[]]@(
+            'AR',
+            'CC',
+            'CFLAGS',
+            'CXX',
+            'CXXFLAGS',
+            'LDFLAGS',
+            'SOURCE_DATE_EPOCH',
+            'RUSTC',
+            'RUSTC_BOOTSTRAP',
+            'RUSTC_WRAPPER',
+            'RUSTC_WORKSPACE_WRAPPER',
+            'RUSTDOCFLAGS',
+            'RUSTFLAGS',
+            'CARGO_ENCODED_RUSTFLAGS',
+            'CARGO_ENCODED_RUSTDOCFLAGS',
+            'CARGO_BUILD_RUSTC',
+            'CARGO_BUILD_RUSTC_WRAPPER',
+            'CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER',
+            'CARGO_BUILD_RUSTFLAGS',
+            'CARGO_BUILD_INCREMENTAL',
+            'CARGO_BUILD_TARGET',
+            'CARGO_INCREMENTAL'
+        )
+        name_patterns = [string[]]@(
+            '^CARGO_PROFILE_',
+            '^CARGO_TARGET_.+_(AR|CC|CFLAGS|CXX|CXXFLAGS|LINKER|RUNNER|RUSTFLAGS)$',
+            '^(AR|CC|CFLAGS|CXX|CXXFLAGS|LDFLAGS)_.+$',
+            '^(HOST|TARGET)_(AR|CC|CFLAGS|CXX|CXXFLAGS|LDFLAGS)$'
+        )
+    }
+}
+
+function Get-SourceFreshEnvironmentSnapshot {
+    param([object[]]$EnvironmentEntries = @(Get-ChildItem Env:))
+
+    $policy = Get-SourceFreshEnvironmentPolicy
+    $found = @(
+        $EnvironmentEntries | Where-Object {
+            $name = [string]$_.Name
+            $value = [string]$_.Value
+            # An absent or exactly empty value is inert.  A whitespace-only
+            # value is still an explicit compiler/Cargo input and must not be
+            # normalized away by the release evidence boundary.
+            if ($value.Length -eq 0) {
+                return $false
+            }
+            if ($policy.exact_names -contains $name) {
+                return $true
+            }
+            foreach ($pattern in $policy.name_patterns) {
+                if ($name -match $pattern) {
+                    return $true
+                }
+            }
+            return $false
+        } | Sort-Object Name | ForEach-Object { [string]$_.Name }
+    )
+    return [ordered]@{
+        schema = 'rayman.source-fresh.environment.v1'
+        policy = $policy
+        policy_sha256 = Get-ObjectSha256 $policy
+        clear = ($found.Count -eq 0)
+        rejected_names = [string[]]$found
+    }
+}
+
+function Assert-SourceFreshEnvironmentSnapshot {
+    param([Parameter(Mandatory = $true)]$Snapshot)
+
+    if ($Snapshot.schema -ne 'rayman.source-fresh.environment.v1' -or
+        $Snapshot.policy.schema -ne 'rayman.source-fresh.environment-policy.v1' -or
+        $Snapshot.policy_sha256 -ne (Get-ObjectSha256 $Snapshot.policy)) {
+        throw 'Source-fresh build environment policy binding is internally inconsistent.'
+    }
+    if ($Snapshot.clear -ne $true -or @($Snapshot.rejected_names).Count -ne 0) {
+        throw "Source-fresh verification refuses ambient build-shaping environment variables: $(@($Snapshot.rejected_names) -join ', '). Clear them and rebuild the supplied artifact."
+    }
+}
+
+function Get-WorkspaceActivationSnapshot {
+    $activation = Resolve-RequiredRegularFile `
+        -Path (Join-Path $repoRoot '.RaymanCodingSkill/workspace_skill.yaml') `
+        -Label 'Repository workspace activation binding'
+    return [ordered]@{
+        schema = 'rayman.workspace-activation.snapshot.v1'
+        path = $activation
+        sha256 = Get-Sha256 $activation
+    }
+}
+
+function Get-SourceFreshInputInspection {
+    $environment = Get-SourceFreshEnvironmentSnapshot
+    Assert-SourceFreshEnvironmentSnapshot -Snapshot $environment
+    return [ordered]@{
+        schema = 'rayman.source-fresh.input-inspection.v1'
+        workspace_activation = Get-WorkspaceActivationSnapshot
+        source_fresh_environment = $environment
+    }
+}
+
+function Assert-SourceFreshInputInspectionSnapshot {
+    param(
+        [Parameter(Mandatory = $true)]$Expected,
+        [Parameter(Mandatory = $true)]$Actual,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    if ($Expected.schema -ne 'rayman.source-fresh.input-inspection.v1' -or
+        $Actual.schema -ne 'rayman.source-fresh.input-inspection.v1') {
+        throw "$Label source-fresh input inspection schema changed."
+    }
+    Assert-SourceFreshEnvironmentSnapshot -Snapshot $Expected.source_fresh_environment
+    Assert-SourceFreshEnvironmentSnapshot -Snapshot $Actual.source_fresh_environment
+    if ((Get-ObjectSha256 $Expected) -ne (Get-ObjectSha256 $Actual)) {
+        throw "$Label workspace activation or source-fresh environment policy drifted during verification."
+    }
 }
 
 function Resolve-SkillIdentitySnapshot {
@@ -417,43 +570,11 @@ function Get-RustcIdentity {
 }
 
 function Assert-NoBuildShapingEnvironment {
-    # These variables can change generated code, native dependencies, target selection,
-    # linker behavior, or release-profile output without changing the checked-in source.
-    # A byte-identical rebuild under such ambient overrides is not a repository-default
-    # active-build-context source identity claim, so refuse it instead of silently
-    # inheriting the overrides. User/parent Cargo config remains a documented input.
-    $exactNames = @(
-        'AR',
-        'CC',
-        'CFLAGS',
-        'CXX',
-        'CXXFLAGS',
-        'LDFLAGS',
-        'SOURCE_DATE_EPOCH',
-        'RUSTC',
-        'RUSTC_WRAPPER',
-        'RUSTC_WORKSPACE_WRAPPER',
-        'RUSTFLAGS',
-        'CARGO_ENCODED_RUSTFLAGS',
-        'CARGO_BUILD_RUSTC',
-        'CARGO_BUILD_RUSTFLAGS',
-        'CARGO_BUILD_TARGET',
-        'CARGO_INCREMENTAL'
-    )
-    $found = @(
-        Get-ChildItem Env: | Where-Object {
-            -not [string]::IsNullOrWhiteSpace($_.Value) -and (
-                $exactNames -contains $_.Name -or
-                $_.Name -match '^CARGO_PROFILE_' -or
-                $_.Name -match '^CARGO_TARGET_.+_(AR|CC|CFLAGS|CXX|CXXFLAGS|LINKER|RUNNER|RUSTFLAGS)$' -or
-                $_.Name -match '^(AR|CC|CFLAGS|CXX|CXXFLAGS|LDFLAGS)_.+$' -or
-                $_.Name -match '^(HOST|TARGET)_(AR|CC|CFLAGS|CXX|CXXFLAGS|LDFLAGS)$'
-            )
-        } | Sort-Object Name | ForEach-Object Name
-    )
-    if ($found.Count -gt 0) {
-        throw "Source-fresh verification refuses ambient build-shaping environment variables: $($found -join ', '). Clear them and rebuild the supplied artifact."
-    }
+    # User/parent Cargo config remains a documented input. Ambient process
+    # overrides are evaluated through the same policy exposed to audit and
+    # closeout, so those consumers cannot silently drift to a smaller list.
+    $snapshot = Get-SourceFreshEnvironmentSnapshot
+    Assert-SourceFreshEnvironmentSnapshot -Snapshot $snapshot
 }
 
 function Assert-CleanGitSource {
@@ -914,6 +1035,106 @@ function Remove-ReleaseVerifierSelfTestReparsePoint {
 }
 
 function Invoke-ReleaseVerifierSelfTest {
+    $environmentPolicy = Get-SourceFreshEnvironmentPolicy
+    if ($environmentPolicy.schema -ne 'rayman.source-fresh.environment-policy.v1' -or
+        (Get-ObjectSha256 $environmentPolicy) -notmatch '^[0-9a-f]{64}$') {
+        throw 'Release verifier self-test failed: source-fresh environment policy identity is invalid.'
+    }
+    foreach ($name in @(
+        'RUSTFLAGS',
+        'CARGO_ENCODED_RUSTFLAGS',
+        'RUSTC_BOOTSTRAP',
+        'RUSTC_WRAPPER',
+        'RUSTC_WORKSPACE_WRAPPER',
+        'CARGO_BUILD_INCREMENTAL',
+        'CARGO_PROFILE_RELEASE_LTO',
+        'CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER'
+    )) {
+        $snapshot = Get-SourceFreshEnvironmentSnapshot -EnvironmentEntries @(
+            [pscustomobject]@{ Name = $name; Value = 'self-test-override' }
+        )
+        $rejected = $false
+        try {
+            Assert-SourceFreshEnvironmentSnapshot -Snapshot $snapshot
+        } catch {
+            $rejected = $_.Exception.Message -match [regex]::Escape($name)
+        }
+        if (-not $rejected) {
+            throw "Release verifier self-test failed: build-shaping environment variable $name was not rejected."
+        }
+    }
+    $clearEnvironment = Get-SourceFreshEnvironmentSnapshot -EnvironmentEntries @(
+        [pscustomobject]@{ Name = 'CARGO_TARGET_DIR'; Value = 'self-test-target' },
+        [pscustomobject]@{ Name = 'RUSTFLAGS'; Value = '' }
+    )
+    Assert-SourceFreshEnvironmentSnapshot -Snapshot $clearEnvironment
+    $whitespaceEnvironment = Get-SourceFreshEnvironmentSnapshot -EnvironmentEntries @(
+        [pscustomobject]@{ Name = 'RUSTFLAGS'; Value = '   ' }
+    )
+    $whitespaceRejected = $false
+    try {
+        Assert-SourceFreshEnvironmentSnapshot -Snapshot $whitespaceEnvironment
+    } catch {
+        $whitespaceRejected = $_.Exception.Message -match 'RUSTFLAGS'
+    }
+    if (-not $whitespaceRejected) {
+        throw 'Release verifier self-test failed: whitespace-only build-shaping environment value was not rejected.'
+    }
+    # Self-test remains runnable in a clean CI checkout before activation is
+    # provisioned. Normal inspection resolves the real workspace file; drift
+    # behavior itself is exercised against the identical snapshot schema here.
+    $activationSnapshot = [ordered]@{
+        schema = 'rayman.workspace-activation.snapshot.v1'
+        path = Join-Path $repoRoot '.RaymanCodingSkill/workspace_skill.yaml'
+        sha256 = ('9' * 64)
+    }
+    if ($activationSnapshot.schema -ne 'rayman.workspace-activation.snapshot.v1' -or
+        $activationSnapshot.path -notmatch '[\\/]\.RaymanCodingSkill[\\/]workspace_skill\.yaml$' -or
+        $activationSnapshot.sha256 -notmatch '^[0-9a-f]{64}$') {
+        throw 'Release verifier self-test failed: repository workspace activation snapshot is invalid.'
+    }
+    $inputInspection = [ordered]@{
+        schema = 'rayman.source-fresh.input-inspection.v1'
+        workspace_activation = $activationSnapshot
+        source_fresh_environment = $clearEnvironment
+    }
+    foreach ($case in @(
+        @{
+            Label = 'workspace activation path'
+            Mutate = { param($copy) $copy.workspace_activation.path += '.drifted' }
+        },
+        @{
+            Label = 'workspace activation hash'
+            Mutate = { param($copy) $copy.workspace_activation.sha256 = ('0' * 64) }
+        },
+        @{
+            Label = 'source-fresh environment policy'
+            Mutate = {
+                param($copy)
+                $copy.source_fresh_environment.policy.exact_names += 'SELF_TEST_OVERRIDE'
+                $copy.source_fresh_environment.policy_sha256 =
+                    Get-ObjectSha256 $copy.source_fresh_environment.policy
+            }
+        }
+    )) {
+        $driftedInspection = $inputInspection |
+            ConvertTo-Json -Depth 20 |
+            ConvertFrom-Json -Depth 20
+        & $case.Mutate $driftedInspection
+        $driftRejected = $false
+        try {
+            Assert-SourceFreshInputInspectionSnapshot `
+                -Expected $inputInspection `
+                -Actual $driftedInspection `
+                -Label 'Release verifier self-test terminal check'
+        } catch {
+            $driftRejected = $_.Exception.Message -match 'drifted during verification'
+        }
+        if (-not $driftRejected) {
+            throw "Release verifier self-test failed: $($case.Label) drift was not rejected."
+        }
+    }
+
     foreach ($name in @('cargo', 'git', 'rustc')) {
         Set-Item -LiteralPath "Function:$name" -Value { 'forged command' }
         try {
@@ -1219,7 +1440,12 @@ function Invoke-ReleaseVerifierSelfTest {
         }
     }
 
-    Write-Host 'Release verifier self-test passed: source/deployed manifest-resource modes, native command shadows, independent deployed/workspace skill drift, packaged canonical skill drift, isolated doctor workspace ancestry/terminal guards, and forged GitHub tag context were verified.'
+    Write-Host 'Release verifier self-test passed: source-fresh environment policy, workspace activation identity, source/deployed manifest-resource modes, native command shadows, independent deployed/workspace skill drift, packaged canonical skill drift, isolated doctor workspace ancestry/terminal guards, and forged GitHub tag context were verified.'
+}
+
+if ($InspectSourceFreshInputs) {
+    Get-SourceFreshInputInspection | ConvertTo-Json -Depth 20 -Compress
+    return
 }
 
 if ($SelfTest) {
@@ -1269,8 +1495,9 @@ if ($lockMatch.Groups[1].Value -ne $expectedVersion) {
 
 $sourceHeadBefore = $null
 $rustcIdentityBefore = $null
+$sourceFreshInputInspection = $null
 if ($RequireSourceFresh) {
-    Assert-NoBuildShapingEnvironment
+    $sourceFreshInputInspection = Get-SourceFreshInputInspection
     $rustcIdentityBefore = Get-RustcIdentity
 }
 if ($RequireSourceFresh -or $VerifyGitTag) {
@@ -1458,7 +1685,11 @@ if ($RequirePath) {
     }
 }
 if ($RequireSourceFresh) {
-    Assert-NoBuildShapingEnvironment
+    $terminalSourceFreshInputInspection = Get-SourceFreshInputInspection
+    Assert-SourceFreshInputInspectionSnapshot `
+        -Expected $sourceFreshInputInspection `
+        -Actual $terminalSourceFreshInputInspection `
+        -Label 'Terminal'
     if ((Get-RustcIdentity) -ne $rustcIdentityBefore) {
         throw 'The active Rust compiler changed before final release-contract output.'
     }

@@ -10,13 +10,18 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $repoRoot
+$auditIntegrationTestName = 'audit_self_test_exercises_only_the_audit_contract'
 
 & (Join-Path $PSScriptRoot 'check-agent-instructions.ps1') -SelfTest
 & (Join-Path $PSScriptRoot 'release-closeout.ps1') -SelfTest
-# Runs the audit script self-test, then the isolated-advisory-DB dependency
-# policy checks. Doing this before the multi-minute fmt/clippy/test stages
-# fails fast under restricted sandboxes and never locks the user-profile
-# advisory database.
+# Keep sibling PowerShell regressions explicit and single-owner. The audit
+# self-test now exercises only audit-repository.ps1, so root Cargo tests do not
+# recursively launch the installer/verifier/profile suites.
+& (Join-Path $PSScriptRoot 'install-rayman.ps1') -SelfTest
+& (Join-Path $PSScriptRoot 'verify-release-contract.ps1') -SelfTest
+& (Join-Path $PSScriptRoot 'repair-rayman-powershell-profile.ps1') -SelfTest
+# Runs the audit script self-test plus the isolated-advisory-DB dependency
+# policy checks before the multi-minute fmt/clippy/test stages.
 & (Join-Path $PSScriptRoot 'audit-repository.ps1') -DependencyPolicyOnly
 
 function Resolve-NativeApplication {
@@ -46,7 +51,14 @@ $git = Resolve-NativeApplication -Name 'git'
 
 foreach ($suite in @('Root', 'Evals')) {
     foreach ($qualityCommand in @(Get-RepositoryQualityCommands -Suite $suite)) {
-        Invoke-NativeChecked -Application $cargo -Arguments $qualityCommand.Arguments
+        $qualityArguments = @($qualityCommand.Arguments)
+        if ($suite -eq 'Root' -and $qualityCommand.Name -eq 'test') {
+            # DependencyPolicyOnly already executed the real audit PowerShell
+            # self-test above. Skip exactly that one integration test here so
+            # the selector-free outer Cargo suite does not recursively launch it.
+            $qualityArguments += @('--', '--skip', $auditIntegrationTestName)
+        }
+        Invoke-NativeChecked -Application $cargo -Arguments $qualityArguments
     }
 }
 $raymanName = if ($IsWindows) { 'rayman.exe' } else { 'rayman' }

@@ -112,11 +112,22 @@ The verifier above is one release primitive, not the test suite. The single full
 
 It includes root and evals fmt/Clippy/tests/dependency policy, `cargo package` and `cargo install` smoke, context refresh, strict quality, release readiness, the `state audit --check` gate plus a report-only `assets` scan, and this installed release contract. See [AUDIT.md](AUDIT.md).
 
+The default audit validates already installed host tooling and does not run `rustup component add` or `cargo install cargo-llvm-cov`. A missing fixed MSRV LLVM component or fixed `cargo-llvm-cov` Application fails closed during preflight. `audit-repository.ps1 -PrepareAuditTools` is a separate explicit provisioning command: it requires no CLI/SKILL paths, persists and verifies only those two pinned tools, then exits without running an audit lane. `release-closeout.ps1` never forwards or implicitly grants provisioning authority; prepare first, then invoke the normal audit or closeout separately.
+
 For goal-bound handoff closure, `scripts/release-closeout.ps1` composes the
-audit, source-fresh verification, and the final goal authority gate. Its
+audit's internal source-fresh verification and the final goal authority gate. A
+non-reused closeout consumes the audit's `installed_release_identity` proof and
+then recomputes the exact release binding; it does not perform a second
+source-fresh rebuild. Its
 optional evidence reuse is content-addressed over the canonical workspace,
 clean Git HEAD, installed CLI and deployed SKILL hashes, every release script,
-and the exact native tool paths and hashes. Missing, malformed, dirty, or drifted
-bindings rerun the audit. Even an exact reusable binding never replaces the
+and the exact native tool paths, versions, and hashes (including cargo-deny,
+the current PowerShell host independently of PATH, the preinstalled coverage
+Application, exact MSRV Cargo/rustc, and matching LLVM tools), plus the
+advisory-database tree and `CARGO_NET_OFFLINE` state. Reuse is accepted only
+when offline mode is effective; an online advisory run always reruns. The full
+binding is recomputed immediately before a reused result is announced and
+again after authority and optional finish. Missing, malformed, dirty, or drifted
+bindings fail closed. Even an exact reusable binding never replaces the
 current goal validation: `pwsh -NoProfile -File scripts/check-repo.ps1` is still
 executed with `--authority --repeat 2` on one unchanged fingerprint.

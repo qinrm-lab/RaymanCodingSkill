@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
 use super::{Goal, GoalLifecycle, GoalStatus, acquire_state_lock, short_id};
@@ -304,33 +304,7 @@ impl PendingStore {
     /// 放行，下一次 add/resolve 还会覆盖销毁原有边界证据。
     fn load(&self) -> Result<PendingList> {
         let list: PendingList = read_json(&self.path(false)?)?.unwrap_or_default();
-        let mut capability_keys = BTreeMap::<(&str, &str), (usize, &str)>::new();
-        for (index, item) in list.items.iter().enumerate() {
-            item.validate_contract().map_err(|error| {
-                anyhow::anyhow!(
-                    "pending.json 第 {} 项（id={}）合同无效: {error}",
-                    index + 1,
-                    item.id
-                )
-            })?;
-            if item.contract_version == PENDING_CONTRACT_V2
-                && let (Some(goal_id), Some(key)) =
-                    (item.goal_id.as_deref(), item.capability_key.as_deref())
-                && let Some((previous_index, previous_id)) =
-                    capability_keys.insert((goal_id, key), (index, item.id.as_str()))
-            {
-                bail!(
-                    "pending.json (goal_id, capability_key) 重复: 第 {} 项（id={}）与第 {} 项（id={}）都声明了 ({}, {})",
-                    previous_index + 1,
-                    previous_id,
-                    index + 1,
-                    item.id,
-                    goal_id,
-                    key
-                );
-            }
-        }
-        Ok(list)
+        validate_pending_list(list)
     }
 
     pub fn list(&self) -> Result<Vec<PendingItem>> {
@@ -778,6 +752,71 @@ impl PendingStore {
                 .iter()
                 .all(PendingItem::has_complete_solution_package))
     }
+}
+
+fn validate_pending_list(list: PendingList) -> Result<PendingList> {
+    let mut capability_keys = BTreeMap::<(&str, &str), (usize, &str)>::new();
+    for (index, item) in list.items.iter().enumerate() {
+        item.validate_contract().map_err(|error| {
+            anyhow::anyhow!(
+                "pending.json 第 {} 项（id={}）合同无效: {error}",
+                index + 1,
+                item.id
+            )
+        })?;
+        if item.contract_version == PENDING_CONTRACT_V2
+            && let (Some(goal_id), Some(key)) =
+                (item.goal_id.as_deref(), item.capability_key.as_deref())
+            && let Some((previous_index, previous_id)) =
+                capability_keys.insert((goal_id, key), (index, item.id.as_str()))
+        {
+            bail!(
+                "pending.json (goal_id, capability_key) 重复: 第 {} 项（id={}）与第 {} 项（id={}）都声明了 ({}, {})",
+                previous_index + 1,
+                previous_id,
+                index + 1,
+                item.id,
+                goal_id,
+                key
+            );
+        }
+    }
+    Ok(list)
+}
+
+/// Partition pending state from the exact optional bytes held by a readiness
+/// capture. `None` is the only empty-state case; malformed bytes remain a
+/// blocker and are never replaced by another named read.
+pub fn pending_readiness_from_captured_bytes(
+    bytes: Option<&[u8]>,
+    goals: &[Goal],
+) -> Result<PendingReadiness> {
+    let list = match bytes {
+        Some(bytes) => validate_pending_list(
+            serde_json::from_slice::<PendingList>(bytes)
+                .context("无法解析 captured pending.json")?,
+        )?,
+        None => PendingList::default(),
+    };
+    let lifecycles = goals
+        .iter()
+        .map(|goal| (goal.id.as_str(), goal.lifecycle))
+        .collect::<BTreeMap<_, _>>();
+    let mut report = PendingReadiness::default();
+    for item in list.items {
+        let Some(goal_id) = item.goal_id.as_deref() else {
+            report.active.push(item);
+            continue;
+        };
+        match lifecycles.get(goal_id) {
+            Some(GoalLifecycle::Current) => report.active.push(item),
+            Some(GoalLifecycle::Archived | GoalLifecycle::Superseded) => {
+                report.historical.push(item);
+            }
+            None => bail!("pending 绑定的 goal 不存在: {goal_id}"),
+        }
+    }
+    Ok(report)
 }
 
 fn relevant_items(items: &[PendingItem], goal_id: &str) -> Vec<PendingItem> {

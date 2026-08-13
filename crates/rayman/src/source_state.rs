@@ -3,7 +3,7 @@ use std::process::Command;
 
 use serde::Serialize;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SourceState {
     pub kind: String,
     pub available: bool,
@@ -13,6 +13,9 @@ pub struct SourceState {
     pub untracked: usize,
     pub path_encoding_lossy: bool,
     pub changed_paths: Vec<String>,
+    /// Hash of the exact `git status --porcelain=v1 -z` bytes. Counts and
+    /// paths alone cannot distinguish staged from unstaged XY state.
+    pub porcelain_sha256: Option<String>,
     pub error: Option<String>,
 }
 
@@ -27,8 +30,8 @@ pub fn inspect(root: &Path) -> SourceState {
         Err(error) => return failed(error),
     }
 
-    let head = match git_text(root, &["rev-parse", "HEAD"]) {
-        Ok(value) => Some(value.trim().to_string()),
+    let head_before = match git_text(root, &["rev-parse", "HEAD"]) {
+        Ok(value) => value.trim().to_string(),
         Err(error) => return failed(error),
     };
     let status = match git_bytes(
@@ -42,16 +45,24 @@ pub fn inspect(root: &Path) -> SourceState {
         Ok(parsed) => parsed,
         Err(error) => return failed(error),
     };
+    let head_after = match git_text(root, &["rev-parse", "HEAD"]) {
+        Ok(value) => value.trim().to_string(),
+        Err(error) => return failed(error),
+    };
+    if head_before != head_after {
+        return failed("git HEAD changed while source state was captured".into());
+    }
 
     SourceState {
         kind: "git".into(),
         available: true,
         clean: Some(parsed.tracked_dirty == 0 && parsed.untracked == 0),
-        head,
+        head: Some(head_after),
         tracked_dirty: parsed.tracked_dirty,
         untracked: parsed.untracked,
         changed_paths: parsed.changed_paths,
         path_encoding_lossy: parsed.path_encoding_lossy,
+        porcelain_sha256: Some(crate::hash::sha256_bytes(&status)),
         error: None,
     }
 }
@@ -142,6 +153,7 @@ fn unavailable(kind: &str) -> SourceState {
         tracked_dirty: 0,
         untracked: 0,
         changed_paths: Vec::new(),
+        porcelain_sha256: None,
         error: None,
     }
 }
@@ -156,6 +168,7 @@ fn failed(error: String) -> SourceState {
         tracked_dirty: 0,
         untracked: 0,
         changed_paths: Vec::new(),
+        porcelain_sha256: None,
         error: Some(error),
     }
 }

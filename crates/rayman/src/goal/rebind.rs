@@ -4,8 +4,8 @@ use std::path::{Component, Path, PathBuf};
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
-use super::ParsedValidationCommand;
 use super::validation::{is_sha256, parse_validation_command};
+use super::{GoalDecisionContext, ParsedValidationCommand};
 use crate::file_io::is_link_or_reparse;
 
 pub const MAINTENANCE_CYCLE_REBIND_SCHEMA: &str = "rayman.maintenance-cycle-authority-rebind.v1";
@@ -102,6 +102,19 @@ fn verified_workspace_relative_file(root: &Path, value: &str) -> Result<PathBuf>
     Ok(canonical)
 }
 
+pub(crate) fn verified_maintenance_cycle_rebind_path(
+    root: &Path,
+    rebind: &ReplacementAuthorityCommandRebind,
+) -> Result<PathBuf> {
+    if rebind.schema != MAINTENANCE_CYCLE_REBIND_SCHEMA
+        || !is_sha256(&rebind.current_sha256)
+        || rebind.current_sha256 != rebind.current_sha256.to_ascii_lowercase()
+    {
+        bail!("maintenance cycle rebind 结构无效");
+    }
+    verified_workspace_relative_file(root, &rebind.current_value)
+}
+
 pub fn prepare_maintenance_cycle_rebind(
     root: &Path,
     command: &str,
@@ -158,10 +171,33 @@ pub fn verify_maintenance_cycle_rebind_artifact(
     root: &Path,
     rebind: &ReplacementAuthorityCommandRebind,
 ) -> Result<()> {
-    let path = verified_workspace_relative_file(root, &rebind.current_value)?;
-    let current = crate::hash::sha256_file(&path)?;
+    let path = verified_maintenance_cycle_rebind_path(root, rebind)?;
+    let (bytes, _) =
+        crate::file_io::read_handle_bound_file(&path, "maintenance cycle rebind artifact")?;
+    let current = crate::hash::sha256_bytes(&bytes);
     if current != rebind.current_sha256 {
         bail!("maintenance cycle rebind 文件 hash 已漂移");
     }
     Ok(())
+}
+
+/// Capture-only counterpart for readiness decisions. The capture has already
+/// resolved and handle-read the artifact, so reopening the path here would let
+/// an A/B mutation influence a decision made about the earlier snapshot.
+pub(crate) fn verify_maintenance_cycle_rebind_artifact_with_context(
+    decision: &GoalDecisionContext<'_>,
+    rebind: &ReplacementAuthorityCommandRebind,
+) -> Result<()> {
+    if rebind.schema != MAINTENANCE_CYCLE_REBIND_SCHEMA
+        || !is_sha256(&rebind.current_sha256)
+        || rebind.current_sha256 != rebind.current_sha256.to_ascii_lowercase()
+    {
+        bail!("maintenance cycle rebind 结构无效");
+    }
+    normalized_relative_path(&rebind.current_value)?;
+    match decision.captured_maintenance_artifact_hash(&rebind.current_value)? {
+        Some(hash) if hash == rebind.current_sha256 => Ok(()),
+        Some(_) => bail!("captured maintenance cycle rebind 文件 hash 已漂移"),
+        None => bail!("captured maintenance cycle rebind artifact 缺失"),
+    }
 }

@@ -205,6 +205,11 @@ pub struct ValidationEvidence {
 pub struct ValidationReceipt {
     pub exit_code: i32,
     pub cwd: String,
+    /// Stable canonical workspace identity. It is required by the explicit v3
+    /// receipt policy; older v1/v2 receipts retain an empty value as audit-only
+    /// history and must never be silently promoted.
+    #[serde(default)]
+    pub workspace_identity: String,
     pub workspace_fingerprint_before: String,
     pub workspace_fingerprint_after: String,
     pub stdout_sha256: String,
@@ -427,6 +432,10 @@ pub struct ImpactEvidence {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LifecycleProof {
     pub recorded_at: String,
+    /// Stable workspace identity recorded with a v3 proof. Omission preserves
+    /// legacy proof decoding but leaves that history identity-unbound.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_identity: Option<String>,
     pub workspace_fingerprint: String,
     pub contract_sha256: String,
     #[serde(default)]
@@ -453,9 +462,22 @@ pub struct ReplacementAuthorityProof {
     pub predecessor_contracts: BTreeMap<String, String>,
     #[serde(default)]
     pub source_delta_paths: Vec<String>,
+    /// Immutable receipt-era binding for a workspace-owned PowerShell
+    /// authority gate.  Cargo/pytest authority has no repository script
+    /// dependency closure and therefore leaves this unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authority_gate_binding: Option<AuthorityGateBinding>,
     #[serde(default)]
     pub live_authority: ReplacementAuthorityReceipt,
     pub proof_sha256: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AuthorityGateBinding {
+    pub policy: String,
+    pub entrypoint: String,
+    pub dependency_sha256: BTreeMap<String, String>,
+    pub binding_sha256: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]

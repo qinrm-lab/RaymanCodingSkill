@@ -15,6 +15,7 @@ fn successful_receipt(
     ValidationReceipt {
         exit_code: 0,
         cwd: root.display().to_string(),
+        workspace_identity: workspace_identity(root),
         workspace_fingerprint_before: fingerprint.clone(),
         workspace_fingerprint_after: fingerprint,
         stdout_sha256: "a".repeat(64),
@@ -565,7 +566,7 @@ fn validation_command_is_direct_argv_and_exactly_classified() {
 #[test]
 fn powershell_validation_allows_only_workspace_file_mode() {
     let root = tempfile::tempdir().unwrap();
-    let script = root.path().join("scripts/check-repo.ps1");
+    let script = root.path().join("tools/verify-local.ps1");
     fs::create_dir_all(script.parent().unwrap()).unwrap();
     fs::write(&script, "exit 0\n").unwrap();
     let command = format!(
@@ -575,7 +576,8 @@ fn powershell_validation_allows_only_workspace_file_mode() {
     let parsed = parse_validation_command(&command).unwrap();
     assert!(validate_command_security(root.path(), &parsed).is_ok());
     assert!(
-        validate_command_for_impacts(root.path(), &command, &[impact("src/lib.rs")], false).is_ok()
+        validate_command_for_impacts(root.path(), &command, &[impact("src/lib.rs")], false,)
+            .is_ok()
     );
 
     assert!(parse_validation_command("powershell -NoProfile -Command 'cargo test'").is_err());
@@ -591,6 +593,42 @@ fn powershell_validation_allows_only_workspace_file_mode() {
     );
     let outside_parsed = parse_validation_command(&outside_command).unwrap();
     assert!(validate_command_security(root.path(), &outside_parsed).is_err());
+}
+
+#[test]
+fn captured_powershell_validation_uses_a_unique_captured_workspace_script_without_authority() {
+    let root = tempfile::tempdir().unwrap();
+    let captured_files =
+        BTreeMap::from([("tools/verify-local.ps1".to_string(), b"exit 0\n".to_vec())]);
+    let decision = GoalDecisionContext::captured(root.path(), None, &captured_files);
+    let command = "powershell -NoProfile -File tools/verify-local.ps1 -Quick";
+    let parsed = parse_validation_command(command).unwrap();
+    assert!(validate_command_security_with_context(&decision, &parsed).is_ok());
+    assert!(
+        validate_command_for_scope_with_context(
+            &decision,
+            command,
+            &[impact("src/lib.rs")],
+            false,
+            false,
+        )
+        .is_ok()
+    );
+    assert!(validate_authority_command_with_context(&decision, command).is_err());
+
+    for alias in [
+        "./tools/verify-local.ps1",
+        "tools/../tools/verify-local.ps1",
+        "tools\\verify-local.ps1",
+        "C:/work/tools/verify-local.ps1",
+    ] {
+        let command = format!("powershell -NoProfile -File '{alias}'");
+        let parsed = parse_validation_command(&command).unwrap();
+        assert!(
+            validate_command_security_with_context(&decision, &parsed).is_err(),
+            "captured validation must reject non-logical alias: {alias}"
+        );
+    }
 }
 
 #[test]
@@ -632,6 +670,48 @@ fn cargo_test_receipt_requires_actual_passed_tests() {
             passed: 2,
             ignored: 0,
         })
+    );
+}
+
+#[test]
+fn captured_receipt_rejects_nonexecuting_test_modes() {
+    let root = tempfile::tempdir().unwrap();
+    let captured_files = BTreeMap::new();
+    let decision = GoalDecisionContext::captured(root.path(), None, &captured_files);
+    for command in [
+        "cargo test --workspace -- --list",
+        "python -m pytest --collect-only",
+    ] {
+        let parsed = parse_validation_command(command).unwrap();
+        assert!(
+            validate_command_security_with_context(&decision, &parsed).is_err(),
+            "captured receipt must reject nonexecuting test mode: {command}"
+        );
+    }
+}
+
+#[test]
+fn captured_pytest_directory_selector_uses_only_captured_logical_keys() {
+    let root = tempfile::tempdir().unwrap();
+    let captured_files = BTreeMap::from([(
+        "tests/test_api.py".to_string(),
+        b"def test_value():\n    assert True\n".to_vec(),
+    )]);
+    let decision = GoalDecisionContext::captured(root.path(), None, &captured_files);
+    let mut api = impact("src/api.py");
+    api.candidate_tests = vec!["tests/test_api.py".into()];
+
+    // The live path is intentionally absent. Capture-only matching must still
+    // accept the captured directory selector rather than reopening it.
+    assert!(
+        validate_command_for_scope_with_context(
+            &decision,
+            "python -m pytest tests -q",
+            &[api],
+            false,
+            false,
+        )
+        .is_ok()
     );
 }
 
@@ -707,20 +787,152 @@ fn relevance_requires_one_current_receipt_bound_to_command_and_impact() {
         "typed cargo evidence and an unrelated receipt must not be combinable"
     );
 
-    requirement.validations.push(current_validation(
-        &goal,
+    requirement.validations.clear();
+    let mut current_goal = goal.clone();
+    current_goal.requirements = vec![requirement.clone()];
+    let validation = current_validation(
+        &current_goal,
         "req_1",
         dir.path(),
         "cargo test --all",
         &["src/lib.rs"],
+    );
+    requirement.validations.push(validation);
+    current_goal.requirements = vec![requirement.clone()];
+    let current_contract = validation_contract_sha256(&current_goal, "req_1").unwrap();
+    let impact_scopes = current_goal.requirements[0].validations[0]
+        .impact_scopes
+        .clone();
+    {
+        let receipt = current_goal.requirements[0].validations[0]
+            .receipt
+            .as_mut()
+            .unwrap();
+        receipt.contract_sha256 = current_contract.clone();
+        receipt.invocation_sha256 =
+            validation_invocation_sha256_scoped("cargo test --all", &impact_scopes, false);
+    }
+    let receipt = current_goal.requirements[0].validations[0]
+        .receipt
+        .as_ref()
+        .unwrap();
+    assert!(validation_has_receipt_for_fingerprint(
+        &current_goal.requirements[0].validations[0],
+        dir.path(),
+        &fingerprint,
+        &receipt.contract_sha256,
+        true,
+        ReceiptValidationPolicy::CurrentV3,
     ));
-    assert!(validation_relevance_gaps(&requirement, &goal, dir.path(), &fingerprint).is_empty());
+    let gaps = validation_relevance_gaps(
+        &current_goal.requirements[0],
+        &current_goal,
+        dir.path(),
+        &fingerprint,
+    );
+    assert!(gaps.is_empty(), "{gaps:?}");
 
-    requirement.validations.last_mut().unwrap().command = "echo cargo test".into();
-    let validated = requirement.validations.last().unwrap();
+    current_goal.requirements[0].validations[0].command = "echo cargo test".into();
+    let validated = &current_goal.requirements[0].validations[0];
     assert!(
-        !validation_has_current_receipt(validated, &goal, &requirement, dir.path(), &fingerprint),
+        !validation_has_current_receipt(
+            validated,
+            &current_goal,
+            &current_goal.requirements[0],
+            dir.path(),
+            &fingerprint,
+        ),
         "editing the command must invalidate its invocation digest"
+    );
+}
+
+#[test]
+fn captured_goal_context_keeps_the_original_cargo_workspace_exclude() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    fs::create_dir_all(root.join("evals/src")).unwrap();
+    fs::write(root.join("evals/src/lib.rs"), "pub fn fixture() {}\n").unwrap();
+    let captured_manifest = b"[workspace]\nexclude = [\"evals\"]\n".to_vec();
+    fs::write(root.join("Cargo.toml"), &captured_manifest).unwrap();
+    let captured_files = BTreeMap::from([("Cargo.toml".to_string(), captured_manifest)]);
+    let decision = GoalDecisionContext::captured(root, None, &captured_files);
+
+    // Live state now claims the package is included. The captured decision
+    // must retain the earlier exclusion and reject workspace-wide coverage.
+    fs::write(root.join("Cargo.toml"), "[workspace]\nmembers = []\n").unwrap();
+    let impacts = vec![impact("evals/src/lib.rs")];
+    assert!(
+        validate_command_for_scope_with_context(
+            &decision,
+            "cargo test --workspace",
+            &impacts,
+            false,
+            false,
+        )
+        .is_err()
+    );
+    assert!(
+        validate_command_for_scope(root, "cargo test --workspace", &impacts, false, false).is_ok()
+    );
+}
+
+#[test]
+fn captured_goal_context_ignores_a_later_live_cargo_exclude() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    fs::create_dir_all(root.join("evals/src")).unwrap();
+    fs::write(root.join("evals/src/lib.rs"), "pub fn fixture() {}\n").unwrap();
+    let captured_manifest = b"[workspace]\nmembers = []\n".to_vec();
+    fs::write(root.join("Cargo.toml"), &captured_manifest).unwrap();
+    let captured_files = BTreeMap::from([("Cargo.toml".to_string(), captured_manifest)]);
+    let decision = GoalDecisionContext::captured(root, None, &captured_files);
+
+    fs::write(
+        root.join("Cargo.toml"),
+        "[workspace]\nexclude = [\"evals\"]\n",
+    )
+    .unwrap();
+    let impacts = vec![impact("evals/src/lib.rs")];
+    assert!(
+        validate_command_for_scope_with_context(
+            &decision,
+            "cargo test --workspace",
+            &impacts,
+            false,
+            false,
+        )
+        .is_ok()
+    );
+    assert!(
+        validate_command_for_scope(root, "cargo test --workspace", &impacts, false, false).is_err()
+    );
+}
+
+#[test]
+fn live_and_captured_goal_contexts_match_without_manifest_drift() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    fs::create_dir_all(root.join("evals/src")).unwrap();
+    fs::write(root.join("evals/src/lib.rs"), "pub fn fixture() {}\n").unwrap();
+    let manifest = b"[workspace]\nexclude = [\"evals\"]\n".to_vec();
+    fs::write(root.join("Cargo.toml"), &manifest).unwrap();
+    let captured_files = BTreeMap::from([("Cargo.toml".to_string(), manifest)]);
+    let captured = GoalDecisionContext::captured(root, None, &captured_files);
+    let impacts = vec![impact("evals/src/lib.rs")];
+
+    let captured_result = validate_command_for_scope_with_context(
+        &captured,
+        "cargo test --workspace",
+        &impacts,
+        false,
+        false,
+    );
+    let live_result =
+        validate_command_for_scope(root, "cargo test --workspace", &impacts, false, false);
+    assert_eq!(captured_result.is_ok(), live_result.is_ok());
+    assert_eq!(
+        captured_result.unwrap_err().to_string(),
+        live_result.unwrap_err().to_string()
     );
 }
 
@@ -850,761 +1062,9 @@ fn legacy_v2_lifecycle_hash_projection_remains_byte_compatible() {
     );
 }
 
-#[test]
-fn non_success_supersession_requires_all_must_text_in_the_replacement() {
-    let dir = tempfile::tempdir().unwrap();
-    let store = GoalStore::new(dir.path());
-    let old = store
-        .start("old", &[("preserve security invariant".into(), true)])
-        .unwrap();
-    let unrelated = store
-        .start("unrelated", &[("different work".into(), true)])
-        .unwrap();
-    let unrelated = close_non_code_success(&store, dir.path(), &unrelated);
-    assert!(store.supersede(&old.id, &unrelated.id).is_err());
-    assert_eq!(
-        store.get(&old.id).unwrap().unwrap().lifecycle,
-        GoalLifecycle::Current
-    );
-
-    let replacement = store
-        .start(
-            "replacement",
-            &[(" preserve   security invariant ".into(), true)],
-        )
-        .unwrap();
-    let replacement = close_non_code_success(&store, dir.path(), &replacement);
-    let superseded = store.supersede(&old.id, &replacement.id).unwrap();
-    let fingerprint = workspace_fingerprint(dir.path()).unwrap();
-    assert_eq!(superseded.lifecycle, GoalLifecycle::Superseded);
-    assert_eq!(
-        supersession_error(
-            &superseded,
-            &[store.get(&replacement.id).unwrap().unwrap()],
-            dir.path(),
-            &fingerprint,
-        ),
-        None
-    );
-}
-
-#[test]
-fn invalid_success_requires_an_exact_gate_ready_replacement_before_supersession() {
-    let dir = tempfile::tempdir().unwrap();
-    let store = GoalStore::new(dir.path());
-    let old = store
-        .start(
-            "old invalid success",
-            &[("preserve proven behavior".into(), true)],
-        )
-        .unwrap();
-    let mut old = close_non_code_success(&store, dir.path(), &old);
-    old.requirements[0].validations[0]
-        .receipt
-        .as_mut()
-        .unwrap()
-        .contract_sha256 = "0".repeat(64);
-    let old_path = dir.path().join(GOALS_DIR).join(format!("{}.json", old.id));
-    write_json(&old_path, &old).unwrap();
-
-    let unrelated = store
-        .start("unrelated replacement", &[("different work".into(), true)])
-        .unwrap();
-    let unrelated = close_non_code_success(&store, dir.path(), &unrelated);
-    assert!(store.supersede(&old.id, &unrelated.id).is_err());
-    assert_eq!(
-        store.get(&old.id).unwrap().unwrap().lifecycle,
-        GoalLifecycle::Current
-    );
-
-    let replacement = store
-        .start(
-            "exact proven replacement",
-            &[(" preserve   proven behavior ".into(), true)],
-        )
-        .unwrap();
-    let replacement = close_non_code_success(&store, dir.path(), &replacement);
-    let superseded = store.supersede(&old.id, &replacement.id).unwrap();
-    let current = workspace_fingerprint(dir.path()).unwrap();
-
-    assert_eq!(superseded.lifecycle, GoalLifecycle::Superseded);
-    assert_eq!(superseded.lifecycle_proof_error(dir.path()), None);
-    assert_eq!(
-        supersession_error(
-            &superseded,
-            std::slice::from_ref(&replacement),
-            dir.path(),
-            &current,
-        ),
-        None
-    );
-
-    let mut forged_archive = superseded.clone();
-    forged_archive.lifecycle = GoalLifecycle::Archived;
-    forged_archive.lifecycle_reason = Some("forged archive".into());
-    forged_archive.superseded_by = None;
-    forged_archive.lifecycle_proof = Some(issue_lifecycle_proof(
-        &forged_archive,
-        current,
-        None,
-        Some(VERIFIED_REPLACEMENT_TRANSFER_POLICY.into()),
-    ));
-    assert!(
-        forged_archive
-            .lifecycle_proof_error(dir.path())
-            .is_some_and(|error| error.contains("只允许"))
-    );
-}
-
-#[test]
-fn supersession_accepts_a_proven_archived_success_and_rejects_forgery() {
-    let dir = tempfile::tempdir().unwrap();
-    let store = GoalStore::new(dir.path());
-    let old = store
-        .start("old", &[("preserve delivered invariant".into(), true)])
-        .unwrap();
-    let replacement = store
-        .start(
-            "replacement",
-            &[("preserve delivered invariant".into(), true)],
-        )
-        .unwrap();
-    let replacement = close_non_code_success(&store, dir.path(), &replacement);
-    let superseded = store.supersede(&old.id, &replacement.id).unwrap();
-    let replacement = store
-        .archive(&replacement.id, "delivered replacement", false)
-        .unwrap();
-    let fingerprint = workspace_fingerprint(dir.path()).unwrap();
-    assert_eq!(
-        supersession_error(
-            &superseded,
-            std::slice::from_ref(&replacement),
-            dir.path(),
-            &fingerprint,
-        ),
-        None
-    );
-
-    let replacement_path = dir
-        .path()
-        .join(GOALS_DIR)
-        .join(format!("{}.json", replacement.id));
-    let mut forged = replacement;
-    forged.title.push_str(" forged");
-    write_json(&replacement_path, &forged).unwrap();
-    assert!(supersession_error(&superseded, &[forged], dir.path(), &fingerprint,).is_some());
-}
-
-#[test]
-fn lifecycle_only_replacement_transfers_exact_musts_from_direct_archived_authority() {
-    let dir = tempfile::tempdir().unwrap();
-    let store = GoalStore::new(dir.path());
-    let authority = archived_direct_authority_success(&store, dir.path());
-    let first = store
-        .start("first unfinished", &[("preserve alpha".into(), true)])
-        .unwrap();
-    let second = store
-        .start("second unfinished", &[("preserve beta".into(), true)])
-        .unwrap();
-    let replacement = store
-        .start(
-            "exact replacement",
-            &[
-                ("preserve alpha".into(), true),
-                (" preserve   beta ".into(), true),
-            ],
-        )
-        .unwrap();
-
-    let authorized = store
-        .authorize_replacement(
-            &replacement.id,
-            &[first.id.clone(), second.id.clone()],
-            &authority.id,
-            live_replacement_authority(
-                dir.path(),
-                &replacement.id,
-                &[first.id.clone(), second.id.clone()],
-                &authority.id,
-            ),
-        )
-        .unwrap();
-    let fingerprint = workspace_fingerprint(dir.path()).unwrap();
-    assert_eq!(authorized.status, GoalStatus::Success);
-    assert!(authorized.replacement_authority.is_some());
-    assert!(has_current_stable_authority_receipt(
-        &authorized,
-        dir.path(),
-        &fingerprint
-    ));
-    assert!(goal_success_receipt_gaps(&authorized, dir.path(), &fingerprint).is_empty());
-
-    let first = store.supersede(&first.id, &authorized.id).unwrap();
-    let second = store.supersede(&second.id, &authorized.id).unwrap();
-    let authorized = store.get(&authorized.id).unwrap().unwrap();
-    assert_eq!(first.lifecycle, GoalLifecycle::Superseded);
-    assert_eq!(second.lifecycle, GoalLifecycle::Superseded);
-    assert_eq!(
-        replacement_authority_error(&authorized, dir.path(), &fingerprint),
-        None
-    );
-    let archived = store
-        .archive(&authorized.id, "lifecycle transfer complete", false)
-        .unwrap();
-    assert_eq!(archived.lifecycle_proof_error(dir.path()), None);
-}
-
-#[test]
-fn lifecycle_only_replacement_stays_standard_ready_after_superseding_predecessors() {
-    let dir = tempfile::tempdir().unwrap();
-    let root = dir.path();
-    let store = GoalStore::new(root);
-    let authority = archived_direct_authority_success(&store, root);
-    let predecessor = store
-        .start(
-            "planned predecessor",
-            &[("preserve planned delta".into(), true)],
-        )
-        .unwrap();
-    let predecessor = store
-        .record_plan(
-            &predecessor.id,
-            PlanReceiptSubmission {
-                changed_paths: vec!["first.rs".into(), "second.rs".into()],
-                review_priority: "normal".into(),
-                impacted_paths: vec!["first.rs".into(), "second.rs".into()],
-                recommended_checks: vec!["cargo test --workspace --all-targets".into()],
-            },
-        )
-        .unwrap();
-    let replacement = store
-        .start(
-            "lifecycle-only replacement",
-            &[("preserve planned delta".into(), true)],
-        )
-        .unwrap();
-    fs::write(root.join("first.rs"), "pub fn first() {}\n").unwrap();
-    fs::write(root.join("second.rs"), "pub fn second() {}\n").unwrap();
-
-    let authorized = store
-        .authorize_replacement(
-            &replacement.id,
-            std::slice::from_ref(&predecessor.id),
-            &authority.id,
-            live_replacement_authority(
-                root,
-                &replacement.id,
-                std::slice::from_ref(&predecessor.id),
-                &authority.id,
-            ),
-        )
-        .unwrap();
-    let predecessor = store.supersede(&predecessor.id, &authorized.id).unwrap();
-    let authorized = store.get(&authorized.id).unwrap().unwrap();
-    let fingerprint = workspace_fingerprint(root).unwrap();
-    let goals = store.list().unwrap();
-    let verdict = goal_gate_verdict(&authorized, &goals, root, Some(&fingerprint));
-
-    assert!(
-        verdict.blockers.is_empty(),
-        "valid lifecycle-only replacement must bypass ordinary planning gaps: {:?}",
-        verdict.blockers
-    );
-
-    fs::write(root.join("first.rs"), "pub fn first() -> i32 { 1 }\n").unwrap();
-    let later_fingerprint = workspace_fingerprint(root).unwrap();
-    assert_ne!(later_fingerprint, fingerprint);
-    let archived = store
-        .archive(&authorized.id, "delivered lifecycle replacement", false)
-        .unwrap();
-    assert_eq!(
-        archived
-            .lifecycle_proof
-            .as_ref()
-            .map(|proof| proof.workspace_fingerprint.as_str()),
-        Some(fingerprint.as_str())
-    );
-    assert_eq!(archived.lifecycle_proof_error(root), None);
-    assert_eq!(
-        supersession_error(
-            &predecessor,
-            std::slice::from_ref(&archived),
-            root,
-            &later_fingerprint,
-        ),
-        None
-    );
-}
-
-#[test]
-fn lifecycle_only_replacement_rebinds_only_a_verified_maintenance_cycle_path() {
-    let dir = tempfile::tempdir().unwrap();
-    let root = dir.path();
-    let store = GoalStore::new(root);
-    fs::create_dir_all(root.join("scripts")).unwrap();
-    fs::create_dir_all(root.join(".check-repo-output")).unwrap();
-    fs::write(root.join("scripts/check-repo.ps1"), "exit 0\n").unwrap();
-    let archived_cycle = ".check-repo-output/archived-maintenance-review-cycle.json";
-    let current_cycle = ".check-repo-output/current-maintenance-review-cycle.json";
-    fs::write(root.join(archived_cycle), "{\"snapshot\":\"old\"}\n").unwrap();
-    fs::write(root.join(current_cycle), "{\"snapshot\":\"current\"}\n").unwrap();
-    let command = format!(
-        "pwsh -NoProfile -File scripts/check-repo.ps1 -QuickParallel -MaintenanceOrchestrationCycle {archived_cycle}"
-    );
-    let authority = archived_direct_authority_success_for_command(&store, root, command.as_str());
-    let old = store
-        .start("old", &[("preserve exact contract".into(), true)])
-        .unwrap();
-    let replacement = store
-        .start("replacement", &[("preserve exact contract".into(), true)])
-        .unwrap();
-    let (effective, rebind) =
-        prepare_maintenance_cycle_rebind(root, &command, current_cycle).unwrap();
-    assert_eq!(
-        effective.args.last().map(String::as_str),
-        Some(current_cycle)
-    );
-    assert_eq!(rebind.archived_value, archived_cycle);
-    assert_eq!(
-        rebind.current_sha256,
-        crate::hash::sha256_file(&root.join(current_cycle)).unwrap()
-    );
-
-    let fingerprint = workspace_fingerprint(root).unwrap();
-    let predecessors = vec![old.id.clone()];
-    let live = ReplacementAuthorityReceipt {
-        command: command.clone(),
-        command_rebind: Some(rebind.clone()),
-        recorded_at: now_iso(),
-        workspace_fingerprint: fingerprint.clone(),
-        repeat: 2,
-        invocation_sha256: replacement_authority_invocation_sha256_with_rebind(
-            &command,
-            &replacement.id,
-            &authority.id,
-            &predecessors,
-            2,
-            Some(&rebind),
-        ),
-        runs: (0..2)
-            .map(|_| AuthorityRunReceipt {
-                exit_code: 0,
-                workspace_fingerprint_before: fingerprint.clone(),
-                workspace_fingerprint_after: fingerprint.clone(),
-                stdout_sha256: "a".repeat(64),
-                stderr_sha256: "b".repeat(64),
-            })
-            .collect(),
-    };
-    let authorized = store
-        .authorize_replacement(&replacement.id, &predecessors, &authority.id, live)
-        .unwrap();
-    assert_eq!(authorized.status, GoalStatus::Success);
-    assert_eq!(
-        authorized
-            .replacement_authority
-            .as_ref()
-            .unwrap()
-            .live_authority
-            .command,
-        command
-    );
-    assert_eq!(
-        replacement_authority_error(&authorized, root, &fingerprint),
-        None
-    );
-
-    fs::write(root.join(current_cycle), "{\"snapshot\":\"drifted\"}\n").unwrap();
-    assert!(verify_maintenance_cycle_rebind_artifact(root, &rebind).is_err());
-    // 读侧复验器必须与写侧一致地把 rebind 工件哈希当 fatal：工件可位于不进
-    // workspace fingerprint 的路径（gitignored），授权后被改写只有这里能翻红。
-    assert!(replacement_authority_error(&authorized, root, &fingerprint).is_some());
-}
-
-#[test]
-fn maintenance_cycle_rebind_rejects_substitution_traversal_and_ambiguous_flags() {
-    let dir = tempfile::tempdir().unwrap();
-    let root = dir.path();
-    fs::create_dir_all(root.join(".check-repo-output")).unwrap();
-    let current_cycle = ".check-repo-output/current-maintenance-review-cycle.json";
-    fs::write(root.join(current_cycle), "{}\n").unwrap();
-    let exact = "pwsh -NoProfile -File scripts/check-repo.ps1 -MaintenanceOrchestrationCycle .check-repo-output/old-maintenance-review-cycle.json";
-    assert!(prepare_maintenance_cycle_rebind(root, exact, current_cycle).is_ok());
-    for invalid_command in [
-        "pwsh -NoProfile -File scripts/check-repo.ps1 -OtherCycle .check-repo-output/old-maintenance-review-cycle.json",
-        "pwsh -NoProfile -File scripts/check-repo.ps1 -MaintenanceOrchestrationCycle .check-repo-output/a-maintenance-review-cycle.json -MaintenanceOrchestrationCycle .check-repo-output/b-maintenance-review-cycle.json",
-    ] {
-        assert!(prepare_maintenance_cycle_rebind(root, invalid_command, current_cycle).is_err());
-    }
-    for invalid_path in [
-        "../outside-maintenance-review-cycle.json",
-        "./.check-repo-output/current-maintenance-review-cycle.json",
-        "C:/outside-maintenance-review-cycle.json",
-        ".check-repo-output\\current-maintenance-review-cycle.json",
-        ".check-repo-output//current-maintenance-review-cycle.json",
-        ".check-repo-output/not-a-cycle.json",
-    ] {
-        assert!(prepare_maintenance_cycle_rebind(root, exact, invalid_path).is_err());
-    }
-
-    let (_, mut rebind) = prepare_maintenance_cycle_rebind(root, exact, current_cycle).unwrap();
-    rebind.flag = "-OtherCycle".into();
-    assert!(replacement_authority_effective_command(exact, Some(&rebind)).is_err());
-}
-
-#[cfg(unix)]
-#[test]
-fn maintenance_cycle_rebind_rejects_symlink_components() {
-    use std::os::unix::fs::symlink;
-
-    let dir = tempfile::tempdir().unwrap();
-    let outside = tempfile::tempdir().unwrap();
-    fs::write(
-        outside.path().join("current-maintenance-review-cycle.json"),
-        "{}\n",
-    )
-    .unwrap();
-    symlink(outside.path(), dir.path().join("linked")).unwrap();
-    let command = "pwsh -NoProfile -File scripts/check-repo.ps1 -MaintenanceOrchestrationCycle old-maintenance-review-cycle.json";
-    assert!(
-        prepare_maintenance_cycle_rebind(
-            dir.path(),
-            command,
-            "linked/current-maintenance-review-cycle.json",
-        )
-        .is_err()
-    );
-}
-
-#[test]
-fn lifecycle_only_replacement_rejects_inexact_stale_and_unlisted_transfers() {
-    let dir = tempfile::tempdir().unwrap();
-    let store = GoalStore::new(dir.path());
-    let authority = archived_direct_authority_success(&store, dir.path());
-    let old = store
-        .start("old", &[("preserve exact contract".into(), true)])
-        .unwrap();
-    let missing = store
-        .start("missing", &[("different contract".into(), true)])
-        .unwrap();
-    assert!(
-        store
-            .authorize_replacement(
-                &missing.id,
-                std::slice::from_ref(&old.id),
-                &authority.id,
-                live_replacement_authority(
-                    dir.path(),
-                    &missing.id,
-                    std::slice::from_ref(&old.id),
-                    &authority.id,
-                ),
-            )
-            .unwrap_err()
-            .to_string()
-            .contains("精确并集")
-    );
-
-    let replacement = store
-        .start("replacement", &[("preserve exact contract".into(), true)])
-        .unwrap();
-    let mut substituted = live_replacement_authority(
-        dir.path(),
-        &replacement.id,
-        std::slice::from_ref(&old.id),
-        &authority.id,
-    );
-    substituted.command = "cargo test --all".into();
-    substituted.invocation_sha256 = replacement_authority_invocation_sha256(
-        &substituted.command,
-        &replacement.id,
-        &authority.id,
-        std::slice::from_ref(&old.id),
-        substituted.repeat,
-    );
-    assert!(
-        store
-            .authorize_replacement(
-                &replacement.id,
-                std::slice::from_ref(&old.id),
-                &authority.id,
-                substituted,
-            )
-            .unwrap_err()
-            .to_string()
-            .contains("同命令 direct-authority")
-    );
-    let mut unstable = live_replacement_authority(
-        dir.path(),
-        &replacement.id,
-        std::slice::from_ref(&old.id),
-        &authority.id,
-    );
-    unstable.runs[1].workspace_fingerprint_after = "c".repeat(64);
-    assert!(
-        store
-            .authorize_replacement(
-                &replacement.id,
-                std::slice::from_ref(&old.id),
-                &authority.id,
-                unstable,
-            )
-            .unwrap_err()
-            .to_string()
-            .contains("重复稳定仓库 gate")
-    );
-    let mut failing = live_replacement_authority(
-        dir.path(),
-        &replacement.id,
-        std::slice::from_ref(&old.id),
-        &authority.id,
-    );
-    failing.runs[0].exit_code = 1;
-    assert!(
-        store
-            .authorize_replacement(
-                &replacement.id,
-                std::slice::from_ref(&old.id),
-                &authority.id,
-                failing,
-            )
-            .unwrap_err()
-            .to_string()
-            .contains("重复稳定仓库 gate")
-    );
-    let authorized = store
-        .authorize_replacement(
-            &replacement.id,
-            std::slice::from_ref(&old.id),
-            &authority.id,
-            live_replacement_authority(
-                dir.path(),
-                &replacement.id,
-                std::slice::from_ref(&old.id),
-                &authority.id,
-            ),
-        )
-        .unwrap();
-    let unlisted = store
-        .start(
-            "unlisted same text",
-            &[("preserve exact contract".into(), true)],
-        )
-        .unwrap();
-    assert!(store.supersede(&unlisted.id, &authorized.id).is_err());
-
-    let stale_root = tempfile::tempdir().unwrap();
-    let stale_store = GoalStore::new(stale_root.path());
-    let stale_authority = archived_direct_authority_success(&stale_store, stale_root.path());
-    let stale_old = stale_store
-        .start("stale old", &[("preserve stale".into(), true)])
-        .unwrap();
-    let stale_old = stale_store
-        .record_plan(
-            &stale_old.id,
-            PlanReceiptSubmission {
-                changed_paths: vec!["lib.rs".into()],
-                review_priority: "normal".into(),
-                impacted_paths: vec!["lib.rs".into()],
-                recommended_checks: vec!["cargo test --workspace --all-targets".into()],
-            },
-        )
-        .unwrap();
-    let stale_replacement = stale_store
-        .start("stale replacement", &[("preserve stale".into(), true)])
-        .unwrap();
-    let stale_only = live_replacement_authority(
-        stale_root.path(),
-        &stale_replacement.id,
-        std::slice::from_ref(&stale_old.id),
-        &stale_authority.id,
-    );
-    fs::write(
-        stale_root.path().join("lib.rs"),
-        "pub fn value() -> i32 { 3 }",
-    )
-    .unwrap();
-    assert!(
-        stale_store
-            .authorize_replacement(
-                &stale_replacement.id,
-                std::slice::from_ref(&stale_old.id),
-                &stale_authority.id,
-                stale_only,
-            )
-            .is_err()
-    );
-    let authorized = stale_store
-        .authorize_replacement(
-            &stale_replacement.id,
-            std::slice::from_ref(&stale_old.id),
-            &stale_authority.id,
-            live_replacement_authority(
-                stale_root.path(),
-                &stale_replacement.id,
-                std::slice::from_ref(&stale_old.id),
-                &stale_authority.id,
-            ),
-        )
-        .unwrap();
-    assert_eq!(
-        authorized
-            .replacement_authority
-            .as_ref()
-            .unwrap()
-            .source_delta_paths,
-        vec!["lib.rs"]
-    );
-    let mut legacy_value = serde_json::to_value(&authorized).unwrap();
-    legacy_value["replacement_authority"]
-        .as_object_mut()
-        .unwrap()
-        .remove("live_authority");
-    let legacy_readable: Goal = serde_json::from_value(legacy_value).unwrap();
-    assert!(legacy_readable.current_schema_error().is_some());
-
-    let mut tampered_predecessor = stale_store.get(&stale_old.id).unwrap().unwrap();
-    tampered_predecessor.plan_receipts[0].review_priority = "broad".into();
-    tampered_predecessor.plan_receipts[0].plan_sha256 =
-        plan_receipt_sha256(&tampered_predecessor.plan_receipts[0]);
-    write_json(
-        &stale_root
-            .path()
-            .join(GOALS_DIR)
-            .join(format!("{}.json", stale_old.id)),
-        &tampered_predecessor,
-    )
-    .unwrap();
-    let current_fingerprint = workspace_fingerprint(stale_root.path()).unwrap();
-    assert!(
-        replacement_authority_error(&authorized, stale_root.path(), &current_fingerprint)
-            .unwrap()
-            .contains("合约或 lifecycle 已失效")
-    );
-
-    let unscoped_root = tempfile::tempdir().unwrap();
-    let unscoped_store = GoalStore::new(unscoped_root.path());
-    let unscoped_authority =
-        archived_direct_authority_success(&unscoped_store, unscoped_root.path());
-    let unscoped_old = unscoped_store
-        .start("unscoped old", &[("preserve unscoped".into(), true)])
-        .unwrap();
-    let unscoped_replacement = unscoped_store
-        .start(
-            "unscoped replacement",
-            &[("preserve unscoped".into(), true)],
-        )
-        .unwrap();
-    fs::write(
-        unscoped_root.path().join("lib.rs"),
-        "pub fn value() -> i32 { 4 }",
-    )
-    .unwrap();
-    assert!(
-        unscoped_store
-            .authorize_replacement(
-                &unscoped_replacement.id,
-                std::slice::from_ref(&unscoped_old.id),
-                &unscoped_authority.id,
-                live_replacement_authority(
-                    unscoped_root.path(),
-                    &unscoped_replacement.id,
-                    std::slice::from_ref(&unscoped_old.id),
-                    &unscoped_authority.id,
-                ),
-            )
-            .unwrap_err()
-            .to_string()
-            .contains("未被 predecessor plan 覆盖")
-    );
-
-    let indirect_root = tempfile::tempdir().unwrap();
-    let indirect_store = GoalStore::new(indirect_root.path());
-    let indirect_authority = indirect_store
-        .start(
-            "non-authority success",
-            &[("not a repository gate".into(), true)],
-        )
-        .unwrap();
-    let indirect_authority =
-        close_non_code_success(&indirect_store, indirect_root.path(), &indirect_authority);
-    let indirect_authority = indirect_store
-        .archive(&indirect_authority.id, "no direct authority", false)
-        .unwrap();
-    let indirect_old = indirect_store
-        .start("indirect old", &[("preserve indirect".into(), true)])
-        .unwrap();
-    let indirect_replacement = indirect_store
-        .start(
-            "indirect replacement",
-            &[("preserve indirect".into(), true)],
-        )
-        .unwrap();
-    assert!(
-        indirect_store
-            .authorize_replacement(
-                &indirect_replacement.id,
-                std::slice::from_ref(&indirect_old.id),
-                &indirect_authority.id,
-                live_replacement_authority(
-                    indirect_root.path(),
-                    &indirect_replacement.id,
-                    std::slice::from_ref(&indirect_old.id),
-                    &indirect_authority.id,
-                ),
-            )
-            .unwrap_err()
-            .to_string()
-            .contains("direct-authority")
-    );
-}
-
-#[test]
-fn lifecycle_only_replacement_proof_rejects_cross_workspace_reuse() {
-    let source = tempfile::tempdir().unwrap();
-    let source_store = GoalStore::new(source.path());
-    let authority = archived_direct_authority_success(&source_store, source.path());
-    let old = source_store
-        .start("old", &[("preserve identity".into(), true)])
-        .unwrap();
-    let replacement = source_store
-        .start("replacement", &[("preserve identity".into(), true)])
-        .unwrap();
-    let authorized = source_store
-        .authorize_replacement(
-            &replacement.id,
-            std::slice::from_ref(&old.id),
-            &authority.id,
-            live_replacement_authority(
-                source.path(),
-                &replacement.id,
-                std::slice::from_ref(&old.id),
-                &authority.id,
-            ),
-        )
-        .unwrap();
-
-    let target = tempfile::tempdir().unwrap();
-    fs::write(
-        target.path().join("lib.rs"),
-        fs::read(source.path().join("lib.rs")).unwrap(),
-    )
-    .unwrap();
-    fs::create_dir_all(target.path().join(GOALS_DIR)).unwrap();
-    for id in [&authority.id, &old.id, &authorized.id] {
-        fs::copy(
-            source.path().join(GOALS_DIR).join(format!("{id}.json")),
-            target.path().join(GOALS_DIR).join(format!("{id}.json")),
-        )
-        .unwrap();
-    }
-    let fingerprint = workspace_fingerprint(target.path()).unwrap();
-    assert!(
-        replacement_authority_error(&authorized, target.path(), &fingerprint)
-            .unwrap()
-            .contains("workspace identity")
-    );
-}
+#[cfg(test)]
+#[path = "tests/authority_gate.rs"]
+mod authority_gate;
 
 /// `--migrate-unreceipted` 的文档承诺是"只适用于从来没有 receipt 的 pre-rollout
 /// 记录"。缺了这条判定时，一个**有** receipt 但复核失败的目标也能被它洗成合法
@@ -1908,11 +1368,13 @@ fn invalid_archived_success_can_be_quarantined_without_becoming_authority() {
     let mut invalid = archived;
     invalid.requirements[0].validations[0].non_code = false;
     let old_proof = invalid.lifecycle_proof.clone().unwrap();
-    invalid.lifecycle_proof = Some(issue_lifecycle_proof(
+    invalid.lifecycle_proof = Some(issue_lifecycle_proof_at(
         &invalid,
         old_proof.workspace_fingerprint,
         old_proof.migration,
         old_proof.receipt_policy,
+        now_iso(),
+        old_proof.workspace_identity,
     ));
     write_json(&path, &invalid).unwrap();
     assert!(
@@ -1960,6 +1422,58 @@ fn invalid_archived_success_can_be_quarantined_without_becoming_authority() {
             &current_fingerprint,
         )
         .is_some_and(|error| error.contains("untrusted history quarantine"))
+    );
+}
+
+#[test]
+fn quarantine_keeps_an_archived_v3_proof_identity_after_a_path_move() {
+    let source = tempfile::tempdir().unwrap();
+    let source_store = GoalStore::new(source.path());
+    let current = source_store
+        .start(
+            "moved archived receipt",
+            &[("preserve failed historical evidence".into(), true)],
+        )
+        .unwrap();
+    let archived = close_non_code_success(&source_store, source.path(), &current);
+    let mut invalid = source_store
+        .archive(&archived.id, "archive before relocation", false)
+        .unwrap();
+    invalid.requirements[0].validations[0].non_code = false;
+    let old_proof = invalid.lifecycle_proof.take().unwrap();
+    let archived_identity = old_proof.workspace_identity.clone().unwrap();
+    invalid.lifecycle_proof = Some(issue_lifecycle_proof_at(
+        &invalid,
+        old_proof.workspace_fingerprint,
+        old_proof.migration,
+        old_proof.receipt_policy,
+        now_iso(),
+        old_proof.workspace_identity,
+    ));
+    assert!(invalid.lifecycle_proof_error(source.path()).is_some());
+
+    let destination = tempfile::tempdir().unwrap();
+    let destination_path = destination
+        .path()
+        .join(GOALS_DIR)
+        .join(format!("{}.json", invalid.id));
+    fs::create_dir_all(destination_path.parent().unwrap()).unwrap();
+    write_json(&destination_path, &invalid).unwrap();
+
+    let destination_store = GoalStore::new(destination.path());
+    let quarantined = destination_store
+        .quarantine_invalid_history(&invalid.id, "retain relocated invalid receipt")
+        .unwrap();
+    let proof = quarantined.lifecycle_proof.as_ref().unwrap();
+    assert_eq!(
+        proof.workspace_identity.as_deref(),
+        Some(archived_identity.as_str())
+    );
+    assert_ne!(workspace_identity(destination.path()), archived_identity);
+    assert!(
+        quarantined
+            .lifecycle_proof_error(destination.path())
+            .is_none()
     );
 }
 

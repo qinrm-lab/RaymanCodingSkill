@@ -1,16 +1,19 @@
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::io::{self, Seek, SeekFrom, Write};
 #[cfg(windows)]
 use std::path::Prefix;
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::SystemTime;
 
 use anyhow::{Context, Result, bail};
 use serde::Serialize;
 
-use crate::file_io::is_link_or_reparse;
+use crate::file_io::{
+    FileIdentity, file_identity_from_handle, has_strong_file_identity, is_link_or_reparse,
+    open_file_no_follow, read_bytes_from_handle, read_handle_bound_file,
+    read_optional_handle_bound_file,
+};
 use crate::hash::sha256_bytes;
 #[cfg(test)]
 use crate::hash::sha256_file;
@@ -55,6 +58,17 @@ pub struct WorkspaceActivationReport {
     pub recovery_command: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub retained_evidence: Vec<RetainedActivationEvidence>,
+}
+
+/// Exact skill-file observation supplied by a caller-owned readiness capture.
+/// A safe recorded path that cannot be read is represented as an error value,
+/// not silently collapsed into a missing binding.
+#[derive(Debug, Clone)]
+pub struct CapturedActivationSkill {
+    pub recorded_path: String,
+    pub resolved_path: PathBuf,
+    pub bytes: Option<Vec<u8>>,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -181,118 +195,6 @@ fn resolve_skill_file(root: &Path, value: &str) -> PathBuf {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct FileIdentity {
-    len: u64,
-    modified: Option<SystemTime>,
-    created: Option<SystemTime>,
-    #[cfg(unix)]
-    device: u64,
-    #[cfg(unix)]
-    inode: u64,
-    #[cfg(unix)]
-    nlink: u64,
-    #[cfg(windows)]
-    creation_time: u64,
-    #[cfg(windows)]
-    last_write_time: u64,
-    #[cfg(windows)]
-    volume_serial_number: Option<u32>,
-    #[cfg(windows)]
-    file_index: Option<u64>,
-    #[cfg(windows)]
-    volume_serial_number_64: Option<u64>,
-    #[cfg(windows)]
-    file_id_128: Option<[u8; 16]>,
-}
-
-fn file_identity(metadata: &fs::Metadata) -> FileIdentity {
-    #[cfg(unix)]
-    use std::os::unix::fs::MetadataExt as _;
-    #[cfg(windows)]
-    use std::os::windows::fs::MetadataExt as _;
-
-    FileIdentity {
-        len: metadata.len(),
-        modified: metadata.modified().ok(),
-        created: metadata.created().ok(),
-        #[cfg(unix)]
-        device: metadata.dev(),
-        #[cfg(unix)]
-        inode: metadata.ino(),
-        #[cfg(unix)]
-        nlink: metadata.nlink(),
-        #[cfg(windows)]
-        creation_time: metadata.creation_time(),
-        #[cfg(windows)]
-        last_write_time: metadata.last_write_time(),
-        #[cfg(windows)]
-        volume_serial_number: None,
-        #[cfg(windows)]
-        file_index: None,
-        #[cfg(windows)]
-        volume_serial_number_64: None,
-        #[cfg(windows)]
-        file_id_128: None,
-    }
-}
-
-#[cfg(windows)]
-fn file_identity_from_handle(
-    file: &fs::File,
-    metadata: &fs::Metadata,
-    path: &Path,
-) -> Result<FileIdentity> {
-    use std::os::windows::io::AsRawHandle as _;
-    use windows_sys::Win32::Storage::FileSystem::{
-        BY_HANDLE_FILE_INFORMATION, FILE_ID_INFO, FileIdInfo, GetFileInformationByHandle,
-        GetFileInformationByHandleEx,
-    };
-
-    let mut information = BY_HANDLE_FILE_INFORMATION::default();
-    let read = unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, &mut information) };
-    if read == 0 {
-        return Err(io::Error::last_os_error()).with_context(|| {
-            format!(
-                "cannot read strong activation file identity from handle: {}",
-                display_path(path)
-            )
-        });
-    }
-    let mut identity = file_identity(metadata);
-    identity.volume_serial_number = Some(information.dwVolumeSerialNumber);
-    identity.file_index =
-        Some((u64::from(information.nFileIndexHigh) << 32) | u64::from(information.nFileIndexLow));
-    let mut extended = FILE_ID_INFO::default();
-    let extended_read = unsafe {
-        GetFileInformationByHandleEx(
-            file.as_raw_handle() as _,
-            FileIdInfo,
-            (&raw mut extended).cast(),
-            std::mem::size_of::<FILE_ID_INFO>() as u32,
-        )
-    };
-    if extended_read == 0 {
-        return Err(io::Error::last_os_error()).with_context(|| {
-            format!(
-                "cannot read 128-bit activation file identity from handle: {}",
-                display_path(path)
-            )
-        });
-    }
-    identity.volume_serial_number_64 = Some(extended.VolumeSerialNumber);
-    identity.file_id_128 = Some(extended.FileId.Identifier);
-    Ok(identity)
-}
-
-#[cfg(not(windows))]
-fn file_identity_from_handle(
-    _: &fs::File,
-    metadata: &fs::Metadata,
-    _: &Path,
-) -> Result<FileIdentity> {
-    Ok(file_identity(metadata))
-}
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct SkillSnapshot {
     path: PathBuf,
@@ -430,21 +332,6 @@ fn activation_temp_path(target: &Path) -> Result<PathBuf> {
         .unwrap_or("workspace_skill.yaml");
     Ok(target.with_file_name(format!(".{name}.rayman-{}-{token}.tmp", std::process::id())))
 }
-fn has_strong_file_identity(identity: &FileIdentity) -> bool {
-    #[cfg(windows)]
-    {
-        identity.volume_serial_number.is_some()
-            && identity.file_index.is_some()
-            && identity.volume_serial_number_64.is_some()
-            && identity.file_id_128.is_some()
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = identity;
-        true
-    }
-}
-
 #[cfg(windows)]
 fn same_windows_file_object(expected: &FileIdentity, actual: &FileIdentity) -> bool {
     has_strong_file_identity(expected)
@@ -1090,7 +977,7 @@ fn read_bound_activation_metadata(path: &Path) -> Result<(ActivationMetadata, Fi
             display_path(path)
         );
     }
-    let before_identity = file_identity_from_handle(&file, &before, path)?;
+    let before_identity = file_identity_from_handle(&file, &before, path, "activation metadata")?;
     let before_security = activation_metadata_from_handle(&file, &before, path)?;
     let after = file.metadata().with_context(|| {
         format!(
@@ -1098,7 +985,7 @@ fn read_bound_activation_metadata(path: &Path) -> Result<(ActivationMetadata, Fi
             display_path(path)
         )
     })?;
-    let after_identity = file_identity_from_handle(&file, &after, path)?;
+    let after_identity = file_identity_from_handle(&file, &after, path, "activation metadata")?;
     let after_security = activation_metadata_from_handle(&file, &after, path)?;
     if before_identity != after_identity || before_security != after_security {
         bail!(
@@ -1125,7 +1012,8 @@ fn read_bound_activation_metadata(path: &Path) -> Result<(ActivationMetadata, Fi
             display_path(path)
         );
     }
-    let named_identity = file_identity_from_handle(&named, &named_metadata, path)?;
+    let named_identity =
+        file_identity_from_handle(&named, &named_metadata, path, "activation metadata")?;
     let named_security = activation_metadata_from_handle(&named, &named_metadata, path)?;
     if named_identity != after_identity || named_security != after_security {
         bail!(
@@ -1763,50 +1651,6 @@ fn apply_activation_metadata(_: &fs::File, path: &Path, _: &ActivationMetadata) 
     )
 }
 
-#[cfg(unix)]
-fn read_bytes_from_handle(file: &fs::File, len: u64, path: &Path) -> Result<Vec<u8>> {
-    use std::os::unix::fs::FileExt as _;
-
-    let len = usize::try_from(len).context("activation file is too large to read")?;
-    let mut bytes = vec![0_u8; len];
-    let mut offset = 0;
-    while offset < len {
-        let read = file
-            .read_at(&mut bytes[offset..], offset as u64)
-            .with_context(|| format!("cannot read activation handle: {}", display_path(path)))?;
-        if read == 0 {
-            bail!(
-                "activation handle reached an early EOF: {}",
-                display_path(path)
-            );
-        }
-        offset += read;
-    }
-    Ok(bytes)
-}
-
-#[cfg(windows)]
-fn read_bytes_from_handle(file: &fs::File, len: u64, path: &Path) -> Result<Vec<u8>> {
-    use std::os::windows::fs::FileExt as _;
-
-    let len = usize::try_from(len).context("activation file is too large to read")?;
-    let mut bytes = vec![0_u8; len];
-    let mut offset = 0;
-    while offset < len {
-        let read = file
-            .seek_read(&mut bytes[offset..], offset as u64)
-            .with_context(|| format!("cannot read activation handle: {}", display_path(path)))?;
-        if read == 0 {
-            bail!(
-                "activation handle reached an early EOF: {}",
-                display_path(path)
-            );
-        }
-        offset += read;
-    }
-    Ok(bytes)
-}
-
 fn read_file_snapshot_from_handle(file: &fs::File, path: &Path) -> Result<FileSnapshot> {
     let before = file
         .metadata()
@@ -1817,7 +1661,7 @@ fn read_file_snapshot_from_handle(file: &fs::File, path: &Path) -> Result<FileSn
             display_path(path)
         );
     }
-    let before_identity = file_identity_from_handle(file, &before, path)?;
+    let before_identity = file_identity_from_handle(file, &before, path, "activation file")?;
     if !has_strong_file_identity(&before_identity) {
         bail!(
             "activation handle lacks a strong identity: {}",
@@ -1825,13 +1669,13 @@ fn read_file_snapshot_from_handle(file: &fs::File, path: &Path) -> Result<FileSn
         );
     }
     let before_security = activation_metadata_from_handle(file, &before, path)?;
-    let first = read_bytes_from_handle(file, before_identity.len, path)?;
+    let first = read_bytes_from_handle(file, before_identity.len, path, "activation file")?;
     let middle = file.metadata()?;
-    let middle_identity = file_identity_from_handle(file, &middle, path)?;
+    let middle_identity = file_identity_from_handle(file, &middle, path, "activation file")?;
     let middle_security = activation_metadata_from_handle(file, &middle, path)?;
-    let second = read_bytes_from_handle(file, middle_identity.len, path)?;
+    let second = read_bytes_from_handle(file, middle_identity.len, path, "activation file")?;
     let after = file.metadata()?;
-    let after_identity = file_identity_from_handle(file, &after, path)?;
+    let after_identity = file_identity_from_handle(file, &after, path, "activation file")?;
     let after_security = activation_metadata_from_handle(file, &after, path)?;
     if first != second
         || before_identity != middle_identity
@@ -3445,37 +3289,6 @@ fn retained_snapshots_message(reason: &str, first: &Path, second: &Path) -> Stri
         display_path(second)
     )
 }
-#[cfg(windows)]
-fn open_file_no_follow(path: &Path) -> io::Result<fs::File> {
-    use std::os::windows::fs::OpenOptionsExt as _;
-    use windows_sys::Win32::Storage::FileSystem::{
-        FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
-    };
-
-    fs::OpenOptions::new()
-        .read(true)
-        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
-        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
-        .open(path)
-}
-
-#[cfg(unix)]
-fn open_file_no_follow(path: &Path) -> io::Result<fs::File> {
-    use std::os::unix::fs::OpenOptionsExt as _;
-
-    fs::OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
-        .open(path)
-}
-
-#[cfg(not(any(windows, unix)))]
-fn open_file_no_follow(_: &Path) -> io::Result<fs::File> {
-    Err(io::Error::new(
-        io::ErrorKind::Unsupported,
-        "handle-bound no-follow activation reads are unsupported on this platform",
-    ))
-}
 fn ensure_ordinary_skill_path(path: &Path) -> Result<fs::Metadata> {
     let mut ancestors = path
         .ancestors()
@@ -3505,7 +3318,7 @@ fn ensure_ordinary_skill_path(path: &Path) -> Result<fs::Metadata> {
     final_metadata.ok_or_else(|| anyhow::anyhow!("skill_file 路径为空"))
 }
 
-fn inspect_skill_path(path: &Path) -> Result<SkillSnapshot> {
+fn read_skill_path_bytes(path: &Path) -> Result<(PathBuf, Vec<u8>, FileIdentity)> {
     ensure_ordinary_skill_path(path)?;
     let before_canonical = path
         .canonicalize()
@@ -3518,9 +3331,14 @@ fn inspect_skill_path(path: &Path) -> Result<SkillSnapshot> {
     if before_canonical != after_canonical {
         bail!("skill_file 在校验期间发生变化: {}", display_path(path));
     }
+    Ok((before_canonical, bytes, identity))
+}
+
+fn inspect_skill_path(path: &Path) -> Result<SkillSnapshot> {
+    let (canonical, bytes, identity) = read_skill_path_bytes(path)?;
     Ok(SkillSnapshot {
         path: path.to_path_buf(),
-        canonical: before_canonical,
+        canonical,
         identity,
         sha256: sha256_bytes(&bytes),
     })
@@ -3717,6 +3535,43 @@ fn identity_drifted(fields: &BTreeMap<String, String>, actual_sha256: &str) -> b
             .get("cli_version")
             .is_none_or(|value| value != crate::CLI_VERSION)
 }
+
+pub(crate) fn capture_activation_skill(
+    root: &Path,
+    config_bytes: &[u8],
+) -> Result<Option<(CapturedActivationSkill, Option<FileIdentity>)>> {
+    let text =
+        std::str::from_utf8(config_bytes).context("workspace_skill.yaml 必须是有效 UTF-8")?;
+    let fields = parse_activation(text)?;
+    let Some(recorded_path) = fields.get("skill_file").cloned() else {
+        return Ok(None);
+    };
+    if !safe_recorded_skill_file(&recorded_path) {
+        return Ok(None);
+    }
+    let resolved_path = resolve_skill_file(root, &recorded_path);
+    match read_skill_path_bytes(&resolved_path) {
+        Ok((_canonical, bytes, identity)) => Ok(Some((
+            CapturedActivationSkill {
+                recorded_path,
+                resolved_path,
+                bytes: Some(bytes),
+                error: None,
+            },
+            Some(identity),
+        ))),
+        Err(error) => Ok(Some((
+            CapturedActivationSkill {
+                recorded_path,
+                resolved_path,
+                bytes: None,
+                error: Some(format!("{error:#}")),
+            },
+            None,
+        ))),
+    }
+}
+
 pub fn activation_status(root: &Path) -> Result<WorkspaceActivationReport> {
     let root = root.canonicalize().context("无法规范化工作区根")?;
     let state = state_paths::managed_state_root(&root, false)?;
@@ -3725,7 +3580,26 @@ pub fn activation_status(root: &Path) -> Result<WorkspaceActivationReport> {
         state_paths::managed_state_file(&root, Path::new(ACTIVATION_RELATIVE), false)?;
     let config = read_optional_handle_bound_file(&config_path, "workspace_skill.yaml")
         .context("无法从同一 no-follow 文件句柄读取 workspace_skill.yaml")?;
-    if config.is_none() {
+    let config_bytes = config.as_ref().map(|(bytes, _)| bytes.as_slice());
+    let captured_skill = config_bytes
+        .map(|bytes| capture_activation_skill(&root, bytes))
+        .transpose()?
+        .flatten()
+        .map(|(skill, _identity)| skill);
+    activation_status_from_capture(&root, state_present, config_bytes, captured_skill.as_ref())
+}
+
+/// Evaluate activation from the exact bytes already held by a readiness
+/// capture. No path is reopened here; the caller supplies either stable skill
+/// bytes or the stable read error that belongs to the same decision point.
+pub fn activation_status_from_capture(
+    root: &Path,
+    state_present: bool,
+    config_bytes: Option<&[u8]>,
+    captured_skill: Option<&CapturedActivationSkill>,
+) -> Result<WorkspaceActivationReport> {
+    let root = root.canonicalize().context("无法规范化工作区根")?;
+    let Some(config_bytes) = config_bytes else {
         return Ok(WorkspaceActivationReport {
             status: if state_present {
                 "orphan_state".into()
@@ -3753,11 +3627,10 @@ pub fn activation_status(root: &Path) -> Result<WorkspaceActivationReport> {
             recovery_command: None,
             retained_evidence: Vec::new(),
         });
-    }
+    };
 
-    let (config_bytes, _) = config.expect("activation handle presence was checked");
     let text =
-        std::str::from_utf8(&config_bytes).context("workspace_skill.yaml 必须是有效 UTF-8")?;
+        std::str::from_utf8(config_bytes).context("workspace_skill.yaml 必须是有效 UTF-8")?;
     let fields = parse_activation(text)?;
     let skill = fields.get("skill").cloned();
     let enabled_value = fields.get("enabled").map(String::as_str);
@@ -3780,17 +3653,40 @@ pub fn activation_status(root: &Path) -> Result<WorkspaceActivationReport> {
         Some("true") | Some("false") => {}
         Some(_) | None => issues.push("enabled 不是 true".into()),
     }
-    let skill_snapshot = if let Some(value) = skill_file.as_deref() {
+    let actual_sha256 = if let Some(value) = skill_file.as_deref() {
         if !safe_recorded_skill_file(value) {
             issues.push("skill_file 路径不是 activate 可生成的安全规范形式".into());
             None
         } else {
-            match inspect_skill_file(&root, value) {
-                Ok(snapshot) => Some(snapshot),
-                Err(error) => {
+            let expected_path = resolve_skill_file(&root, value);
+            match captured_skill {
+                Some(observation)
+                    if observation.recorded_path == value
+                        && observation.resolved_path == expected_path =>
+                {
+                    match (observation.bytes.as_deref(), observation.error.as_deref()) {
+                        (Some(bytes), None) => Some(sha256_bytes(bytes)),
+                        (None, Some(error)) => {
+                            issues.push(format!(
+                                "skill_file 不可安全读取 {}: {error}",
+                                display_path(&expected_path)
+                            ));
+                            None
+                        }
+                        _ => {
+                            issues.push("skill_file capture 结构无效".into());
+                            None
+                        }
+                    }
+                }
+                Some(_) => {
+                    issues.push("skill_file capture 与 activation 记录路径不匹配".into());
+                    None
+                }
+                None => {
                     issues.push(format!(
-                        "skill_file 不可安全读取 {}: {error}",
-                        display_path(resolve_skill_file(&root, value).as_ref())
+                        "skill_file 不可安全读取 {}: readiness capture 缺少对应观察",
+                        display_path(&expected_path)
                     ));
                     None
                 }
@@ -3800,9 +3696,6 @@ pub fn activation_status(root: &Path) -> Result<WorkspaceActivationReport> {
         issues.push("缺少 skill_file".into());
         None
     };
-    let actual_sha256 = skill_snapshot
-        .as_ref()
-        .map(|snapshot| snapshot.sha256.clone());
     match (expected_sha256.as_deref(), actual_sha256.as_deref()) {
         (Some(expected), Some(actual))
             if expected.len() == 64
@@ -3819,13 +3712,13 @@ pub fn activation_status(root: &Path) -> Result<WorkspaceActivationReport> {
         && fields.get("enabled").is_some_and(|value| value == "true")
         && skill_file.as_deref().is_some_and(safe_recorded_skill_file)
         && has_valid_recorded_identity(&fields)
-        && skill_snapshot.is_some();
-    let identity_drift = skill_snapshot
-        .as_ref()
-        .is_some_and(|snapshot| identity_drifted(&fields, &snapshot.sha256));
-    let matches_running_canonical = skill_snapshot
-        .as_ref()
-        .is_some_and(|snapshot| snapshot.sha256 == running_canonical_skill_sha256());
+        && actual_sha256.is_some();
+    let identity_drift = actual_sha256
+        .as_deref()
+        .is_some_and(|sha256| identity_drifted(&fields, sha256));
+    let matches_running_canonical = actual_sha256
+        .as_deref()
+        .is_some_and(|sha256| sha256 == running_canonical_skill_sha256());
     if structurally_rebindable && identity_drift && !matches_running_canonical {
         issues.push("skill_file 当前内容与此 CLI 内嵌的 canonical SKILL.md 不一致".into());
     }
@@ -4174,121 +4067,6 @@ struct LoadedRebind {
     skill_file: String,
     skill: SkillSnapshot,
     changed: bool,
-}
-
-fn read_handle_bound_file(path: &Path, label: &str) -> Result<(Vec<u8>, FileIdentity)> {
-    let mut file = open_file_no_follow(path).with_context(|| {
-        format!(
-            "cannot open {label} without following links: {}",
-            display_path(path)
-        )
-    })?;
-    let before = file.metadata().with_context(|| {
-        format!(
-            "cannot read {label} handle metadata: {}",
-            display_path(path)
-        )
-    })?;
-    if is_link_or_reparse(&before) || !before.file_type().is_file() {
-        bail!(
-            "{label} must be an ordinary non-link file: {}",
-            display_path(path)
-        );
-    }
-    let before_identity = file_identity_from_handle(&file, &before, path)?;
-    if !has_strong_file_identity(&before_identity) {
-        bail!(
-            "{label} lacks the strong file identity required for transactions: {}",
-            display_path(path)
-        );
-    }
-
-    let mut first = Vec::new();
-    file.read_to_end(&mut first).with_context(|| {
-        format!(
-            "cannot read {label} from its bound handle: {}",
-            display_path(path)
-        )
-    })?;
-    let middle = file.metadata().with_context(|| {
-        format!(
-            "cannot recheck {label} handle metadata: {}",
-            display_path(path)
-        )
-    })?;
-    let middle_identity = file_identity_from_handle(&file, &middle, path)?;
-    file.seek(SeekFrom::Start(0))
-        .with_context(|| format!("cannot rewind {label} handle: {}", display_path(path)))?;
-    let mut second = Vec::new();
-    file.read_to_end(&mut second).with_context(|| {
-        format!(
-            "cannot reread {label} from its bound handle: {}",
-            display_path(path)
-        )
-    })?;
-    let after = file.metadata().with_context(|| {
-        format!(
-            "cannot finalize {label} handle metadata: {}",
-            display_path(path)
-        )
-    })?;
-    let after_identity = file_identity_from_handle(&file, &after, path)?;
-    if first != second
-        || before_identity != middle_identity
-        || middle_identity != after_identity
-        || after_identity.len != second.len() as u64
-    {
-        bail!(
-            "{label} changed during handle-bound read: {}",
-            display_path(path)
-        );
-    }
-
-    let named_file = open_file_no_follow(path).with_context(|| {
-        format!(
-            "{label} path changed after handle-bound read: {}",
-            display_path(path)
-        )
-    })?;
-    let named_metadata = named_file.metadata().with_context(|| {
-        format!(
-            "cannot recheck named {label} handle: {}",
-            display_path(path)
-        )
-    })?;
-    if is_link_or_reparse(&named_metadata) || !named_metadata.file_type().is_file() {
-        bail!(
-            "{label} path became a link or non-file: {}",
-            display_path(path)
-        );
-    }
-    let named_identity = file_identity_from_handle(&named_file, &named_metadata, path)?;
-    if named_identity != after_identity {
-        bail!(
-            "{label} path changed identity during handle-bound read: {}",
-            display_path(path)
-        );
-    }
-    Ok((second, after_identity))
-}
-
-fn read_optional_handle_bound_file(
-    path: &Path,
-    label: &str,
-) -> Result<Option<(Vec<u8>, FileIdentity)>> {
-    match read_handle_bound_file(path, label) {
-        Ok(value) => Ok(Some(value)),
-        Err(error)
-            if error.chain().any(|source| {
-                source
-                    .downcast_ref::<io::Error>()
-                    .is_some_and(|io_error| io_error.kind() == io::ErrorKind::NotFound)
-            }) =>
-        {
-            Ok(None)
-        }
-        Err(error) => Err(error),
-    }
 }
 
 fn read_stable_activation(path: &Path) -> Result<(Vec<u8>, FileIdentity)> {

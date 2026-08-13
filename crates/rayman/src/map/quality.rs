@@ -113,6 +113,57 @@ pub fn load_quality_config(root: &Path, profile: &str) -> Result<QualityConfig> 
     Ok(config)
 }
 
+/// Load strict/standard policy from the exact workspace bytes held by a
+/// readiness capture. Exemption targets are proven by membership in that same
+/// complete capture, so policy evaluation never reopens a mutable path.
+pub fn load_quality_config_from_capture(
+    profile: &str,
+    files: &BTreeMap<String, Vec<u8>>,
+) -> Result<QualityConfig> {
+    let mut config = match profile {
+        "strict" => QualityConfig::strict(),
+        _ => QualityConfig::standard(),
+    };
+    let file_config = files
+        .get(QUALITY_CONFIG_RELATIVE_PATH)
+        .map(|bytes| {
+            serde_json::from_slice::<QualityConfig>(bytes)
+                .context("无法解析 captured .RaymanCodingSkill/quality.json")
+        })
+        .transpose()?;
+    if let Some(file_config) = file_config {
+        validate_quality_config(&file_config)?;
+        config.multi_source_no_test_min_sources = config
+            .multi_source_no_test_min_sources
+            .min(file_config.multi_source_no_test_min_sources.max(1));
+        config.configured_block_warning_kinds = file_config.block_warning_kinds.clone();
+        for kind in file_config.block_warning_kinds {
+            if !config.block_warning_kinds.contains(&kind) {
+                config.block_warning_kinds.push(kind);
+            }
+        }
+        config.exemptions = file_config.exemptions;
+        for exemption in &config.exemptions {
+            let present = if cfg!(windows) {
+                files
+                    .keys()
+                    .any(|path| path.eq_ignore_ascii_case(&exemption.path))
+            } else {
+                files.contains_key(&exemption.path)
+            };
+            if !present {
+                bail!(
+                    "{} exemption path must name a file in the same readiness capture: {}",
+                    QUALITY_CONFIG_RELATIVE_PATH,
+                    exemption.path
+                );
+            }
+        }
+        config.profile = profile.into();
+    }
+    Ok(config)
+}
+
 impl QualityConfig {
     pub fn standard() -> Self {
         Self {

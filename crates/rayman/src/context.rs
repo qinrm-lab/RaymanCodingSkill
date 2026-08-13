@@ -52,7 +52,7 @@ pub struct Symbol {
     pub line: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ContextIndex {
     #[serde(default)]
     pub schema_version: u32,
@@ -87,9 +87,15 @@ fn index_path(root: &Path, create_parents: bool) -> Result<std::path::PathBuf> {
     state_paths::managed_state_file(root, Path::new(INDEX_STATE_RELATIVE), create_parents)
 }
 
-fn workspace_identity(root: &Path) -> String {
+pub fn workspace_identity(root: &Path) -> String {
     let canonical = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
-    sha256_bytes(canonical.to_string_lossy().as_bytes())
+    workspace_identity_from_canonical_root(&canonical)
+}
+
+/// Hash a root already canonicalized by a caller that owns a stable capture.
+/// This avoids reopening that path in capture-only readiness decisions.
+pub(crate) fn workspace_identity_from_canonical_root(root: &Path) -> String {
+    sha256_bytes(root.to_string_lossy().as_bytes())
 }
 
 pub fn load(root: &Path) -> Result<Option<ContextIndex>> {
@@ -304,10 +310,224 @@ fn build_entry(root: &Path, path: &Path, size: u64, mtime: u128) -> Result<FileE
     })
 }
 
+/// Build the exact context entry for bytes already captured through a stable
+/// no-follow handle. Readiness uses this to project one workspace capture into
+/// context freshness, assets, maps, and goal baselines without another walk.
+pub(crate) fn build_entry_from_captured_bytes(
+    root: &Path,
+    path: &Path,
+    size: u64,
+    mtime: u128,
+    bytes: &[u8],
+) -> Result<FileEntry> {
+    if bytes.len() as u64 != size {
+        bail!(
+            "captured context file size mismatch: {} ({} != {})",
+            display_path(path),
+            bytes.len(),
+            size
+        );
+    }
+    let rel = relative_key(root, path);
+    let extension = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let kind = classify(&rel, &extension);
+    let lines = if bytes.is_empty() {
+        0
+    } else {
+        bytes.iter().filter(|byte| **byte == b'\n').count()
+            + usize::from(bytes.last() != Some(&b'\n'))
+    };
+    let symbols = if (kind == "source" || kind == "test") && size <= MAX_TEXT_BYTES {
+        extract_symbols(&String::from_utf8_lossy(bytes))
+    } else {
+        Vec::new()
+    };
+    Ok(FileEntry {
+        path: rel,
+        size,
+        mtime_ns: mtime,
+        sha256: sha256_bytes(bytes),
+        kind,
+        lines,
+        symbols,
+        read_error: None,
+    })
+}
+
+fn incomplete_freshness(error: impl Into<String>) -> FreshnessReport {
+    FreshnessReport {
+        status: "incomplete".into(),
+        changed: Vec::new(),
+        removed: Vec::new(),
+        added: Vec::new(),
+        errors: vec![error.into()],
+    }
+}
+
+/// Validate a cached index against caller-captured complete entries. The exact
+/// cached object is returned only when every persisted and derived field
+/// matches; callers must not reopen the cache after this decision.
+pub(crate) fn verify_index_from_capture(
+    root: &Path,
+    cached: Result<Option<ContextIndex>>,
+    current: &[FileEntry],
+) -> (FreshnessReport, Option<ContextIndex>) {
+    let index = match cached {
+        Ok(Some(index)) => index,
+        Ok(None) => {
+            return (
+                FreshnessReport {
+                    status: "missing".into(),
+                    changed: Vec::new(),
+                    removed: Vec::new(),
+                    added: Vec::new(),
+                    errors: Vec::new(),
+                },
+                None,
+            );
+        }
+        Err(error) => {
+            return (
+                incomplete_freshness(format!("无法安全读取 context 状态: {error:#}")),
+                None,
+            );
+        }
+    };
+    if index.schema_version != CONTEXT_SCHEMA_VERSION
+        || index.workspace_identity != workspace_identity(root)
+    {
+        return (
+            FreshnessReport {
+                status: "missing".into(),
+                changed: Vec::new(),
+                removed: Vec::new(),
+                added: Vec::new(),
+                errors: vec!["context schema/workspace identity 不匹配".into()],
+            },
+            None,
+        );
+    }
+
+    let mut errors = Vec::new();
+    let mut cached_by_path = BTreeMap::new();
+    for entry in &index.files {
+        if cached_by_path.insert(entry.path.as_str(), entry).is_some() {
+            errors.push(format!("context 索引包含重复路径: {}", entry.path));
+        }
+        if entry.read_error.is_some() {
+            errors.push(format!("context 索引包含读取失败条目: {}", entry.path));
+        }
+    }
+    let mut current_by_path = BTreeMap::new();
+    for entry in current {
+        if current_by_path.insert(entry.path.as_str(), entry).is_some() {
+            errors.push(format!(
+                "当前 workspace capture 包含重复路径: {}",
+                entry.path
+            ));
+        }
+    }
+
+    let mut changed = Vec::new();
+    let mut added = Vec::new();
+    for (path, entry) in &current_by_path {
+        match cached_by_path.get(path) {
+            Some(cached) if **cached == **entry => {}
+            Some(_) => changed.push((*path).to_string()),
+            None => added.push((*path).to_string()),
+        }
+    }
+    let mut removed = cached_by_path
+        .keys()
+        .filter(|path| !current_by_path.contains_key(**path))
+        .map(|path| (*path).to_string())
+        .collect::<Vec<_>>();
+    changed.sort();
+    added.sort();
+    removed.sort();
+    let status = if !errors.is_empty() {
+        "incomplete"
+    } else if changed.is_empty() && added.is_empty() && removed.is_empty() {
+        "ready"
+    } else {
+        "stale"
+    };
+    let ready = status == "ready";
+    (
+        FreshnessReport {
+            status: status.into(),
+            changed,
+            removed,
+            added,
+            errors,
+        },
+        ready.then_some(index),
+    )
+}
+
+/// Publish a context index from an already complete workspace capture. This is
+/// the readiness `--refresh-context` path: refresh itself is the first decision
+/// walk rather than an extra fifth walk before a two-round finish.
+pub(crate) fn refresh_from_capture(
+    root: &Path,
+    files: Vec<FileEntry>,
+    captured_cached: Result<Option<ContextIndex>>,
+) -> Result<(ContextIndex, RefreshReport)> {
+    let identity = workspace_identity(root);
+    let cached = captured_cached?
+        .filter(|index| {
+            index.schema_version == CONTEXT_SCHEMA_VERSION && index.workspace_identity == identity
+        })
+        .map(|index| {
+            index
+                .files
+                .into_iter()
+                .map(|entry| (entry.path.clone(), entry))
+                .collect::<BTreeMap<_, _>>()
+        })
+        .unwrap_or_default();
+    let current_paths = files
+        .iter()
+        .map(|entry| entry.path.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    let reused = files
+        .iter()
+        .filter(|entry| {
+            cached.get(&entry.path).is_some_and(|old| {
+                old.sha256 == entry.sha256 && old.read_error.is_none() && entry.read_error.is_none()
+            })
+        })
+        .count();
+    let removed = cached
+        .keys()
+        .filter(|path| !current_paths.contains(path.as_str()))
+        .count();
+    let report = RefreshReport {
+        total: files.len(),
+        reused,
+        rehashed: files.len().saturating_sub(reused),
+        removed,
+        errors: Vec::new(),
+    };
+    let index = ContextIndex {
+        schema_version: CONTEXT_SCHEMA_VERSION,
+        generated_at: now_iso(),
+        workspace: display_path(root),
+        workspace_identity: identity,
+        files,
+    };
+    write_json(&index_path(root, true)?, &index)?;
+    Ok((index, report))
+}
+
 /// 在读取/哈希前后确认候选文件仍是工作区内的普通文件。遍历器不跟随
 /// 链接，但路径可能在遍历完成后被替换；拒绝链接/reparse，避免把工作区外
 /// 内容纳入上下文索引。
-fn ensure_source_file(root: &Path, path: &Path) -> Result<()> {
+pub(crate) fn ensure_source_file(root: &Path, path: &Path) -> Result<()> {
     let relative = path.strip_prefix(root).with_context(|| {
         format!(
             "上下文索引文件不属于工作区: {} under {}",

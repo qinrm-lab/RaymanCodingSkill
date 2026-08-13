@@ -5,10 +5,10 @@ mod cli;
 mod codex_hook_cli;
 mod doctor;
 mod goal_cli;
+mod readiness;
 mod state_audit_cli;
 mod task_workflow;
 
-use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::Command as ProcessCommand;
 
@@ -18,10 +18,9 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 
 use cli::{
-    AutosaveAction, AutosaveCmd, CheckCmd, CheckProfile, CheckpointAction, CheckpointCmd, Cli,
-    Command, ContextAction, ContextCmd, Format, GoalAction, GoalCmd, HandoffAction, MapAction,
-    MapCmd, QualityProfile, StateAction, StateCmd, TempAction, TempCmd, WorkspaceAction,
-    WorkspaceCmd,
+    AutosaveAction, AutosaveCmd, CheckCmd, CheckpointAction, CheckpointCmd, Cli, Command,
+    ContextAction, ContextCmd, Format, GoalAction, GoalCmd, HandoffAction, MapAction, MapCmd,
+    QualityProfile, StateAction, StateCmd, TempAction, TempCmd, WorkspaceAction, WorkspaceCmd,
 };
 use rayman::{assets, autosave, context, goal, map, source_state, temp, workspace, workspace_root};
 
@@ -167,7 +166,7 @@ fn run(cli: Cli) -> Result<()> {
 
         Command::Finish(cmd) => {
             task_workflow::require_stable_authority(&root, &cmd.goal)?;
-            return run_check(
+            return readiness::run_check_with_terminal_hook(
                 &root,
                 json,
                 CheckCmd {
@@ -176,6 +175,8 @@ fn run(cli: Cli) -> Result<()> {
                     require_current_goal: true,
                     refresh_context: true,
                 },
+                true,
+                || {},
             );
         }
 
@@ -278,7 +279,7 @@ fn run(cli: Cli) -> Result<()> {
             StateAction::Audit { check } => run_state_audit(&root, json, check)?,
         },
 
-        Command::Check(cmd) => return run_check(&root, json, cmd),
+        Command::Check(cmd) => return readiness::run_check(&root, json, cmd),
 
         Command::Map(cmd) => return run_map(&root, json, cmd),
 
@@ -829,6 +830,15 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
             if workspace_snapshot && !authority {
                 bail!("--workspace-snapshot 只允许与 --authority 一起使用");
             }
+            let authority_goal = if authority {
+                let goal_record = store
+                    .get(&id)?
+                    .ok_or_else(|| anyhow::anyhow!("目标不存在: {id}"))?;
+                goal::validate_authority_command_for_goal(root, &goal_record, &command)?;
+                Some(goal_record)
+            } else {
+                None
+            };
             let impacts = impact_evidence_for_changed_paths(root, &changed)?;
             goal::validate_command_for_scope(
                 root,
@@ -837,17 +847,14 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 non_code,
                 workspace_snapshot,
             )?;
-            if authority {
-                goal::validate_authority_command(root, &command)?;
-            }
             let parsed = goal::parse_validation_command(&command)?;
             let contract_sha256 = store.validation_contract_hash(&id, &req)?;
             let snapshot_baseline = if workspace_snapshot {
-                let goal_record = store
-                    .get(&id)?
-                    .ok_or_else(|| anyhow::anyhow!("目标不存在: {id}"))?;
+                let goal_record = authority_goal
+                    .as_ref()
+                    .expect("workspace snapshot requires authority");
                 let current = goal::workspace_baseline(root)?;
-                let delta = goal::goal_plan_delta(&goal_record, &current)?;
+                let delta = goal::goal_plan_delta(goal_record, &current)?;
                 if !delta.actual_changed_paths.is_empty() {
                     bail!(
                         "--workspace-snapshot 要求 goal baseline delta 为空；发现真实变更: {}。验证命令尚未执行",
@@ -933,6 +940,7 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
             let receipt = goal::ValidationReceipt {
                 exit_code: output.status.code().unwrap_or(0),
                 cwd: root.display().to_string(),
+                workspace_identity: context::workspace_identity(root),
                 workspace_fingerprint_before: before.clone(),
                 workspace_fingerprint_after: after,
                 stdout_sha256: sha256_hex(&output.stdout),
@@ -1218,11 +1226,18 @@ fn run_validation_command(
     root: &Path,
     command: &goal::ParsedValidationCommand,
 ) -> Result<std::process::Output> {
-    ProcessCommand::new(&command.program)
-        .args(&command.args)
+    let mut executable = command.clone();
+    if let Some(script) = goal::resolve_live_powershell_script(root, command)? {
+        // The receipt preserves the user's canonical logical command text, but
+        // the process gets the exact live path that passed the component-wise
+        // preflight. Do not validate an alias and then spawn the alias.
+        executable.args[2] = script.canonical_path.to_string_lossy().into_owned();
+    }
+    ProcessCommand::new(&executable.program)
+        .args(&executable.args)
         .current_dir(root)
         .output()
-        .with_context(|| format!("无法执行验证程序: {}", command.program))
+        .with_context(|| format!("无法执行验证程序: {}", executable.program))
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -1254,352 +1269,6 @@ fn impact_evidence_from_report(report: &map::ImpactReport) -> goal::ImpactEviden
         recommended_checks: report.recommended_checks.clone(),
         recommendation_basis: report.recommendation_basis.clone(),
         recorded_at: rayman::timefmt::now_iso(),
-    }
-}
-
-fn task_proof_blockers(
-    goal_blockers: &BTreeMap<String, Vec<String>>,
-    shared_blockers: &[String],
-    goal_id: &str,
-) -> Vec<String> {
-    let mut blockers = goal_blockers.get(goal_id).cloned().unwrap_or_default();
-    blockers.extend_from_slice(shared_blockers);
-    blockers.sort();
-    blockers.dedup();
-    blockers
-}
-
-/// 一次性就绪检查：聚合激活状态、源码状态、上下文新鲜度、资产扫描、待完成项、
-/// 项目地图、质量档位与（绑定 `--goal` 时）任务门禁。任一硬阻塞都以非零码退出，
-/// 便于脚本/agent 门禁。
-///
-/// 只在不带 `--refresh-context` 时是只读的：带上该标志（`finish` 总是带）会重建
-/// 并落盘上下文索引。阻塞项远不止上下文与待完成项两类——完整清单见下方各
-/// `blockers.push` 分支与 `goal_gate_verdict`。
-fn run_check(root: &std::path::Path, json: bool, cmd: CheckCmd) -> Result<()> {
-    let activation = workspace::activation_status(root)?;
-    let refresh_report = if cmd.refresh_context {
-        Some(context::refresh(root)?.1)
-    } else {
-        None
-    };
-    let source = source_state::inspect(root);
-    let mut task_goal_id = cmd.goal.clone();
-    let mut task_blockers = Vec::new();
-
-    // `check` is a readiness claim, not a cheap UI probe: use content hashes.
-    let freshness = context::strong_freshness(root);
-    let asset_report = assets::scan(root)?;
-    let goal_store = goal::GoalStore::new(root);
-    let (goals, goal_load_issues) = goal_store.list_with_issues()?;
-    // 损坏的 pending.json 是阻塞项而非"零待办"：静默放行会让门禁失效。
-    let (pending, historical_pending, pending_error) =
-        match goal::PendingStore::new(root).readiness(&goals) {
-            Ok(report) => (report.active, report.historical, None),
-            Err(error) => (Vec::new(), Vec::new(), Some(format!("{error:#}"))),
-        };
-
-    let context_blocked = freshness.status != "ready";
-    let mut standard_blockers = Vec::new();
-    let mut goal_blockers = BTreeMap::<String, Vec<String>>::new();
-    let mut shared_task_proof_blockers = Vec::new();
-    let mut standard_warnings = Vec::new();
-    let mut map_summary = None;
-    let mut map_quality = None;
-
-    if matches!(cmd.profile, CheckProfile::Standard | CheckProfile::Release) {
-        if task_goal_id.is_none() && cmd.require_current_goal {
-            let current_ids = goals
-                .iter()
-                .filter(|goal| goal.lifecycle == goal::GoalLifecycle::Current)
-                .map(|goal| goal.id.clone())
-                .collect::<Vec<_>>();
-            match current_ids.as_slice() {
-                [id] => task_goal_id = Some(id.clone()),
-                [] => task_blockers.push(
-                    "要求绑定 current goal，但当前没有 current goal；先运行 goal start".into(),
-                ),
-                _ => task_blockers.push(format!(
-                    "要求绑定唯一 current goal，但当前有 {} 个；请显式传 --goal <id>",
-                    current_ids.len()
-                )),
-            }
-        }
-        if let Some(id) = task_goal_id.as_deref() {
-            match goals.iter().find(|goal| goal.id == id) {
-                None => task_blockers.push(format!("绑定的 goal 不存在: {id}")),
-                Some(selected) => {
-                    if selected.lifecycle != goal::GoalLifecycle::Current {
-                        task_blockers.push(format!(
-                            "绑定的 goal {id} lifecycle={}，必须为 current",
-                            selected.lifecycle
-                        ));
-                    }
-                    if selected.status != goal::GoalStatus::Success {
-                        task_blockers.push(format!(
-                            "绑定的 goal {id} status={}，必须完成验证并 close success",
-                            selected.status
-                        ));
-                    }
-                }
-            }
-        }
-        for issue in goal_load_issues {
-            let blocker = format!("goal 文件不可读取: {} ({})", issue.path, issue.error);
-            standard_blockers.push(blocker.clone());
-            shared_task_proof_blockers.push(blocker);
-        }
-        if !context_blocked {
-            match map::build_readonly(root) {
-                Ok(project_map) => {
-                    map_summary = Some(map::summary(&project_map));
-                    if !map::topology_is_authoritative(root, &project_map) {
-                        // Still fail closed — unproven topology is unproven — but
-                        // lead with the repair when the cause is the operator's
-                        // environment rather than the repository. The actionable
-                        // half used to be buried at the tail of a provenance string.
-                        standard_blockers.push(
-                            if map::topology_blocked_by_missing_cargo(
-                                &project_map.topology_provenance,
-                            ) {
-                                format!(
-                                    "环境未就绪: {}；无法确认 Cargo 拓扑",
-                                    rayman::toolchain::unreachable_tool_advice("cargo")
-                                )
-                            } else {
-                                format!(
-                                    "Cargo workspace 拓扑未获 cargo metadata 权威确认: {}",
-                                    project_map.topology_provenance
-                                )
-                            },
-                        );
-                    }
-                    let quality = if cmd.profile == CheckProfile::Release {
-                        let config = map::load_quality_config(root, "strict")?;
-                        map::quality_report_with_config(&project_map, &config)
-                    } else {
-                        map::quality_report(&project_map)
-                    };
-                    for finding in &quality.findings {
-                        if finding.severity == "error" {
-                            standard_blockers.push(format!(
-                                "quality {}: {} — {}",
-                                finding.kind, finding.path, finding.detail
-                            ));
-                        }
-                    }
-                    map_quality = Some(quality);
-                }
-                Err(error) => {
-                    standard_blockers.push(format!("项目地图不可用: {error}"));
-                }
-            }
-        }
-        let current_fingerprint = match goal::workspace_fingerprint(root) {
-            Ok(fingerprint) => Some(fingerprint),
-            Err(error) => {
-                let blocker = format!("无法计算工作区内容指纹: {error}");
-                standard_blockers.push(blocker.clone());
-                shared_task_proof_blockers.push(blocker);
-                None
-            }
-        };
-        for checked_goal in &goals {
-            // 门禁判定只有这一份实现，autosave 的"工作是否已完成"共用它。
-            let verdict =
-                goal::goal_gate_verdict(checked_goal, &goals, root, current_fingerprint.as_deref());
-            goal_blockers.insert(checked_goal.id.clone(), verdict.blockers.clone());
-            // Unbound `check` is a workspace-health claim. Goal lifecycle and
-            // completion evidence belong only to an explicitly bound task
-            // check/finish; otherwise an active goal makes the repository's
-            // own authority gate circular and impossible to record.
-            if !verdict.blockers.is_empty() {
-                standard_warnings.push(format!(
-                    "goal {} is not task-ready (bind with --goal to enforce): {}",
-                    checked_goal.id,
-                    verdict.blockers.join("; ")
-                ));
-            }
-            standard_warnings.extend(verdict.warnings);
-        }
-    }
-
-    // quick 档不解析目标绑定，所以 `--require-current-goal` 下 task_goal_id 恒为
-    // None。只按 task_goal_id 判断会让这条路径以空 blocker 列表退出，用户拿不到
-    // 任何原因——门禁本身是对的，缺的是诊断。
-    if (task_goal_id.is_some() || cmd.require_current_goal) && cmd.profile == CheckProfile::Quick {
-        task_blockers
-            .push("goal-bound completion gate requires standard or release profile".into());
-    }
-    if context_blocked && task_goal_id.is_some() {
-        shared_task_proof_blockers
-            .push("任务门禁要求 ready context；使用 --refresh-context 或 prepare/finish".into());
-    }
-    if let Some(id) = task_goal_id.as_deref() {
-        task_blockers.extend(task_proof_blockers(
-            &goal_blockers,
-            &shared_task_proof_blockers,
-            id,
-        ));
-    }
-    task_blockers.sort();
-    task_blockers.dedup();
-    let workspace_blocked = context_blocked
-        || !pending.is_empty()
-        || pending_error.is_some()
-        || !standard_blockers.is_empty();
-    let task_requested = task_goal_id.is_some() || cmd.require_current_goal;
-    let task_ready = if task_requested {
-        Some(task_goal_id.is_some() && task_blockers.is_empty())
-    } else {
-        None
-    };
-    let blocked = workspace_blocked || task_ready == Some(false);
-
-    let readiness_scope = check_readiness_scope(cmd.profile);
-    let release_contract = if cmd.profile == CheckProfile::Release {
-        json!({
-            "checked": false,
-            "status": "not_checked",
-            "detail": "release profile proves workspace strict-quality only; it is not installed release identity or source freshness",
-            "required_verifier": SOURCE_FRESH_VERIFIER,
-        })
-    } else {
-        json!({
-            "checked": false,
-            "status": "not_applicable",
-        })
-    };
-
-    if json {
-        print(&json!({
-            "ready": !blocked,
-            "workspace_ready": !workspace_blocked,
-            "task": {
-                "requested": task_goal_id.is_some() || cmd.require_current_goal,
-                "goal_id": &task_goal_id,
-                "ready": task_ready,
-                "blockers": &task_blockers,
-            },
-            "source": &source,
-            "context_refresh": &refresh_report,
-            "activation": &activation,
-            "profile": format!("{:?}", cmd.profile).to_ascii_lowercase(),
-            "readiness_scope": readiness_scope,
-            "release_contract": release_contract,
-            "context": serde_json::to_value(&freshness)?,
-            "assets": {
-                "obsolete": asset_report.obsolete.len(),
-                "markers": asset_report.markers.len(),
-            },
-            "pending": pending.len(),
-            "historical_pending": historical_pending.len(),
-            "pending_error": pending_error,
-            "standard": {
-                "blockers": standard_blockers,
-                "warnings": standard_warnings,
-                "project_map": map_summary,
-                "quality": map_quality,
-            },
-        }));
-    } else {
-        println!(
-            "工作区就绪检查({readiness_scope}): {}",
-            if blocked { "BLOCKED" } else { "READY" }
-        );
-        println!("  activation: {}", activation.status);
-        print_source_state(&source);
-        if let Some(refresh) = &refresh_report {
-            println!(
-                "  context refresh: total={} reused={} rehashed={} removed={}",
-                refresh.total, refresh.reused, refresh.rehashed, refresh.removed
-            );
-        }
-        // The hint is framework text, not user content, so it must not ride
-        // through a placeholder: captures are reinserted verbatim, which left
-        // `check --language en` printing a Chinese instruction. Two complete
-        // authored messages instead of one message plus a captured tail.
-        if context_blocked {
-            println!(
-                "  上下文: {} → 运行 `rayman context refresh`",
-                freshness.status
-            );
-        } else {
-            println!("  上下文: {}", freshness.status);
-        }
-        println!(
-            "  资产: 过时候选 {}，未完成标记 {}（提示，不阻塞）",
-            asset_report.obsolete.len(),
-            asset_report.markers.len()
-        );
-        println!("  待完成项: {}", pending.len());
-        if !historical_pending.is_empty() {
-            println!(
-                "  历史待完成项（保留，不阻塞）: {}",
-                historical_pending.len()
-            );
-        }
-        if let Some(error) = &pending_error {
-            println!("    BLOCKER: pending.json 不可读取: {error}");
-        }
-        if task_goal_id.is_some() || cmd.require_current_goal {
-            println!(
-                "  task: goal={} ready={}",
-                task_goal_id.as_deref().unwrap_or("unresolved"),
-                task_ready.unwrap_or(false)
-            );
-            for blocker in &task_blockers {
-                println!("    TASK BLOCKER: {blocker}");
-            }
-        }
-        if matches!(cmd.profile, CheckProfile::Standard | CheckProfile::Release) {
-            if let Some(summary) = &map_summary {
-                println!(
-                    "  项目地图: modules={} symbols={} deps={} packages={} risks={}",
-                    summary.modules,
-                    summary.symbols,
-                    summary.dependencies,
-                    summary.packages,
-                    summary.risks
-                );
-            }
-            if let Some(quality) = &map_quality {
-                println!(
-                    "  质量: profile={} ready={} errors={} warnings={} covered_sources={}/{}",
-                    quality.profile,
-                    quality.ready,
-                    quality.error_count,
-                    quality.warning_count,
-                    quality.candidate_test_covered_source_files,
-                    quality.source_files
-                );
-            }
-            println!("  standard blockers: {}", standard_blockers.len());
-            for blocker in &standard_blockers {
-                println!("    BLOCKER: {blocker}");
-            }
-            println!("  standard warnings: {}", standard_warnings.len());
-            for warning in &standard_warnings {
-                println!("    warning: {warning}");
-            }
-        }
-        if cmd.profile == CheckProfile::Release {
-            println!("  发布交接状态: 未检查（本结果仅是工作区 strict-quality）");
-            println!("  交接/CI 必须运行 `{SOURCE_FRESH_VERIFIER}`");
-        }
-    }
-
-    if blocked {
-        std::process::exit(1);
-    }
-    Ok(())
-}
-
-fn check_readiness_scope(profile: CheckProfile) -> &'static str {
-    match profile {
-        CheckProfile::Quick => "workspace_base_snapshot",
-        CheckProfile::Standard => "workspace_standard",
-        CheckProfile::Release => "workspace_strict_quality",
     }
 }
 
@@ -1856,33 +1525,5 @@ fn print(value: &serde_json::Value) {
     match serde_json::to_string_pretty(value) {
         Ok(text) => println!("{text}"),
         Err(error) => eprintln!("错误: 无法序列化输出: {error}"),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn workspace_fingerprint_refuses_an_incomplete_workspace_walk() {
-        let dir = tempfile::tempdir().unwrap();
-        assert!(goal::workspace_fingerprint(&dir.path().join("missing-workspace")).is_err());
-    }
-
-    #[test]
-    fn task_proof_blockers_use_structured_goal_ownership() {
-        let mut by_goal = BTreeMap::new();
-        by_goal.insert("goal_selected".into(), vec!["selected blocker".into()]);
-        by_goal.insert(
-            "goal_other".into(),
-            vec!["unrelated message mentions goal_selected".into()],
-        );
-        let shared = vec!["shared proof blocker".into()];
-
-        assert_eq!(
-            task_proof_blockers(&by_goal, &shared, "goal_selected"),
-            vec!["selected blocker", "shared proof blocker"]
-        );
-        assert!(!task_proof_blockers(&by_goal, &shared, "missing").is_empty());
     }
 }

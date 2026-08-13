@@ -31,7 +31,7 @@ pub(super) fn historical_success_fingerprint_excluding(
     policy: ReceiptValidationPolicy,
     excluded_fingerprint: Option<&str>,
 ) -> Option<String> {
-    if policy == ReceiptValidationPolicy::CurrentV2
+    if policy == ReceiptValidationPolicy::CurrentV3
         && let Some(proof) = goal.replacement_authority.as_ref()
         && excluded_fingerprint != Some(proof.workspace_fingerprint.as_str())
         && goal_success_receipt_gaps_for_policy(
@@ -58,7 +58,7 @@ pub(super) fn historical_success_fingerprint_for_retiring_legacy_success(
     policy: ReceiptValidationPolicy,
     excluded_fingerprint: Option<&str>,
 ) -> Option<String> {
-    if policy == ReceiptValidationPolicy::CurrentV2
+    if policy == ReceiptValidationPolicy::CurrentV3
         && let Some(proof) = goal.replacement_authority.as_ref()
         && excluded_fingerprint != Some(proof.workspace_fingerprint.as_str())
         && goal_success_receipt_gaps_for_historical_legacy_success(

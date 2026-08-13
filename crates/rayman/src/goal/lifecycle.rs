@@ -1,5 +1,7 @@
 use super::*;
 
+pub(crate) use super::workspace_baseline::fingerprint_for_files;
+
 fn lifecycle_hash_bytes(hasher: &mut Sha256, value: &[u8]) {
     hasher.update((value.len() as u64).to_le_bytes());
     hasher.update(value);
@@ -38,6 +40,10 @@ pub(super) fn legacy_lifecycle_contract_sha256(goal: &Goal) -> String {
         .any(|receipt| !receipt.extensions.is_empty())
         || !goal.authority_receipts.is_empty();
     let replacement_extended = goal.replacement_authority.is_some();
+    let authority_binding_extended = goal
+        .replacement_authority
+        .as_ref()
+        .is_some_and(|proof| proof.authority_gate_binding.is_some());
     let workflow_extended = !goal.work_packages.is_empty()
         || !goal.progress_receipts.is_empty()
         || !goal.lanes.is_empty();
@@ -52,7 +58,9 @@ pub(super) fn legacy_lifecycle_contract_sha256(goal: &Goal) -> String {
         });
     lifecycle_hash_str(
         &mut hasher,
-        if publication_extended {
+        if authority_binding_extended {
+            "rayman.lifecycle-contract.v8"
+        } else if publication_extended {
             "rayman.lifecycle-contract.v7"
         } else if workflow_extended {
             "rayman.lifecycle-contract.v6"
@@ -255,6 +263,19 @@ pub(super) fn legacy_lifecycle_contract_sha256(goal: &Goal) -> String {
             for path in &proof.source_delta_paths {
                 lifecycle_hash_str(&mut hasher, path);
             }
+            if authority_binding_extended {
+                hasher.update([u8::from(proof.authority_gate_binding.is_some())]);
+                if let Some(binding) = proof.authority_gate_binding.as_ref() {
+                    lifecycle_hash_str(&mut hasher, &binding.policy);
+                    lifecycle_hash_str(&mut hasher, &binding.entrypoint);
+                    hasher.update((binding.dependency_sha256.len() as u64).to_le_bytes());
+                    for (path, hash) in &binding.dependency_sha256 {
+                        lifecycle_hash_str(&mut hasher, path);
+                        lifecycle_hash_str(&mut hasher, hash);
+                    }
+                    lifecycle_hash_str(&mut hasher, &binding.binding_sha256);
+                }
+            }
             lifecycle_hash_str(&mut hasher, &proof.live_authority.command);
             lifecycle_hash_str(&mut hasher, &proof.live_authority.recorded_at);
             lifecycle_hash_str(&mut hasher, &proof.live_authority.workspace_fingerprint);
@@ -358,13 +379,36 @@ fn lifecycle_contract_sha256(
     goal: &Goal,
     receipt_policy: Option<&str>,
     proof_recorded_at: Option<&str>,
+    proof_workspace_identity: Option<&str>,
 ) -> String {
     let legacy_contract = legacy_lifecycle_contract_sha256(goal);
     let Some(receipt_policy) = receipt_policy else {
         return legacy_contract;
     };
     let mut hasher = Sha256::new();
-    if has_goal_bound_plan_publication(goal) {
+    if receipt_policy == RECEIPT_POLICY_V3 {
+        lifecycle_hash_str(&mut hasher, "rayman.lifecycle-proof-policy.v3");
+        lifecycle_hash_str(
+            &mut hasher,
+            proof_recorded_at.expect("v3 lifecycle proof must bind recorded_at"),
+        );
+        lifecycle_hash_str(
+            &mut hasher,
+            proof_workspace_identity.expect("v3 lifecycle proof must bind workspace identity"),
+        );
+        for requirement in &goal.requirements {
+            for validation in &requirement.validations {
+                lifecycle_hash_str(
+                    &mut hasher,
+                    validation
+                        .receipt
+                        .as_ref()
+                        .map(|receipt| receipt.workspace_identity.as_str())
+                        .unwrap_or_default(),
+                );
+            }
+        }
+    } else if has_goal_bound_plan_publication(goal) {
         lifecycle_hash_str(&mut hasher, "rayman.lifecycle-proof-policy.v2");
         lifecycle_hash_str(
             &mut hasher,
@@ -384,14 +428,17 @@ pub(super) fn issue_lifecycle_proof_at(
     migration: Option<String>,
     receipt_policy: Option<String>,
     recorded_at: String,
+    workspace_identity: Option<String>,
 ) -> LifecycleProof {
     LifecycleProof {
         contract_sha256: lifecycle_contract_sha256(
             goal,
             receipt_policy.as_deref(),
             Some(&recorded_at),
+            workspace_identity.as_deref(),
         ),
         recorded_at,
+        workspace_identity,
         workspace_fingerprint: fingerprint,
         migration,
         receipt_policy,
@@ -405,7 +452,14 @@ pub(super) fn issue_lifecycle_proof(
     migration: Option<String>,
     receipt_policy: Option<String>,
 ) -> LifecycleProof {
-    issue_lifecycle_proof_at(goal, fingerprint, migration, receipt_policy, now_iso())
+    issue_lifecycle_proof_at(
+        goal,
+        fingerprint,
+        migration,
+        receipt_policy,
+        now_iso(),
+        None,
+    )
 }
 
 fn completed_current_schema_history(goal: &Goal) -> bool {
@@ -486,291 +540,6 @@ pub(super) fn integrity_quarantine_eligible(goal: &Goal) -> bool {
     goal.lifecycle == GoalLifecycle::Archived && completed_current_schema_history(goal)
 }
 
-pub(super) fn fingerprint_for_files(files: &BTreeMap<String, String>) -> String {
-    let mut hasher = Sha256::new();
-    for (relative, hash) in files {
-        hasher.update(relative.as_bytes());
-        hasher.update([0]);
-        hasher.update(hash.as_bytes());
-        hasher.update([0]);
-    }
-    format!("{:x}", hasher.finalize())
-}
-
-pub fn workspace_baseline(root: &Path) -> Result<WorkspaceBaseline> {
-    let mut files = BTreeMap::new();
-    for path in crate::walk::workspace_files_checked(root)? {
-        let relative = path
-            .strip_prefix(root)
-            .unwrap_or(&path)
-            .to_string_lossy()
-            .replace('\\', "/");
-        files.insert(relative, crate::hash::sha256_file(&path)?);
-    }
-    Ok(WorkspaceBaseline {
-        recorded_at: now_iso(),
-        workspace_fingerprint: fingerprint_for_files(&files),
-        files,
-    })
-}
-
-pub fn workspace_fingerprint(root: &Path) -> Result<String> {
-    Ok(workspace_baseline(root)?.workspace_fingerprint)
-}
-
-pub fn workspace_delta(baseline: &WorkspaceBaseline, current: &WorkspaceBaseline) -> Vec<String> {
-    let mut paths = baseline
-        .files
-        .keys()
-        .chain(current.files.keys())
-        .filter(|path| baseline.files.get(*path) != current.files.get(*path))
-        .cloned()
-        .collect::<Vec<_>>();
-    paths.sort();
-    paths.dedup();
-    paths
-}
-
-/// Reconcile a current workspace snapshot against the goal-owned baseline and
-/// the effective aggregate plan.  Callers use this same comparison during
-/// prepare, validation, and readiness checks so plan scope cannot drift
-/// between lifecycle stages.
-pub fn goal_plan_delta(goal: &Goal, current: &WorkspaceBaseline) -> Result<GoalPlanDelta> {
-    if !goal.is_current_schema() {
-        bail!(
-            "目标 {} 不是当前 schema，不能作为 plan reconciliation authority",
-            goal.id
-        );
-    }
-    if let Some(error) = goal.current_schema_error() {
-        bail!("goal {} 合约无效: {error}", goal.id);
-    }
-    goal_plan_delta_after_schema_validation(goal, current)
-}
-
-fn goal_plan_delta_for_retiring_legacy_success(
-    goal: &Goal,
-    current: &WorkspaceBaseline,
-) -> Result<GoalPlanDelta> {
-    let mut archived_view = goal.clone();
-    archived_view.lifecycle = GoalLifecycle::Archived;
-    if !goal.is_current_schema()
-        || goal.lifecycle != GoalLifecycle::Current
-        || goal.status != GoalStatus::Success
-        || goal.lifecycle_error().is_some()
-        || goal.plan_publication_policy.is_some()
-        || plan_chain_error(&archived_view).is_some()
-    {
-        bail!(
-            "目标 {} 不满足 retiring legacy-success plan reconciliation 条件",
-            goal.id
-        );
-    }
-    goal_plan_delta_after_schema_validation(goal, current)
-}
-
-fn goal_plan_delta_after_schema_validation(
-    goal: &Goal,
-    current: &WorkspaceBaseline,
-) -> Result<GoalPlanDelta> {
-    let Some(baseline) = goal.baseline.as_ref() else {
-        bail!(
-            "目标 {} 缺少开工 baseline；不能核对实际变更，请用新的 baseline-bound goal supersede，或将已完成记录显式 archive",
-            goal.id
-        );
-    };
-    if fingerprint_for_files(&current.files) != current.workspace_fingerprint {
-        bail!("当前 workspace snapshot 的文件清单与 fingerprint 不匹配");
-    }
-
-    let actual_changed_paths = workspace_delta(baseline, current);
-    let planned_changed_paths = goal
-        .plan_receipts
-        .iter()
-        .flat_map(|receipt| receipt.effective_changed_paths().iter().cloned())
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect::<Vec<_>>();
-    let unplanned_changed_paths = actual_changed_paths
-        .iter()
-        .filter(|path| planned_changed_paths.binary_search(path).is_err())
-        .cloned()
-        .collect::<Vec<_>>();
-    let plan_recorded = !goal.plan_receipts.is_empty();
-    let plan_required = actual_changed_paths.len() >= 2;
-    let covered = if plan_recorded {
-        unplanned_changed_paths.is_empty()
-    } else {
-        !plan_required
-    };
-
-    Ok(GoalPlanDelta {
-        baseline_fingerprint: baseline.workspace_fingerprint.clone(),
-        current_fingerprint: current.workspace_fingerprint.clone(),
-        actual_changed_paths,
-        planned_changed_paths,
-        unplanned_changed_paths,
-        plan_recorded,
-        plan_required,
-        covered,
-    })
-}
-
-pub fn goal_planning_gaps(goal: &Goal, root: &Path, current_fingerprint: &str) -> Vec<String> {
-    goal_planning_gaps_with_policy(
-        goal,
-        root,
-        current_fingerprint,
-        false,
-        Some(ReceiptValidationPolicy::CurrentV2),
-    )
-}
-
-pub(super) fn goal_planning_gaps_for_retiring_legacy_success(
-    goal: &Goal,
-    root: &Path,
-    current_fingerprint: &str,
-) -> Vec<String> {
-    goal_planning_gaps_with_policy(
-        goal,
-        root,
-        current_fingerprint,
-        true,
-        Some(ReceiptValidationPolicy::CurrentV2),
-    )
-}
-
-pub(super) fn goal_plan_governance_gaps_for_retiring_legacy_success(
-    goal: &Goal,
-    root: &Path,
-    current_fingerprint: &str,
-) -> Vec<String> {
-    goal_planning_gaps_with_policy(goal, root, current_fingerprint, true, None)
-}
-
-pub(super) fn goal_v1_governance_gaps_for_retiring_legacy_success(
-    goal: &Goal,
-    root: &Path,
-    current_fingerprint: &str,
-) -> Vec<String> {
-    goal_planning_gaps_with_policy(
-        goal,
-        root,
-        current_fingerprint,
-        true,
-        Some(ReceiptValidationPolicy::LegacyV1),
-    )
-}
-
-fn goal_planning_gaps_with_policy(
-    goal: &Goal,
-    root: &Path,
-    current_fingerprint: &str,
-    retiring_legacy_success: bool,
-    validation_policy: Option<ReceiptValidationPolicy>,
-) -> Vec<String> {
-    let Some(baseline) = goal.baseline.as_ref() else {
-        return if goal.is_current_schema() && goal.lifecycle == GoalLifecycle::Current {
-            vec![
-                "current goal 缺少开工 baseline；不能作为当前成功证据，请用新的 baseline-bound goal supersede，或将已完成记录显式 archive"
-                    .into(),
-            ]
-        } else {
-            Vec::new()
-        };
-    };
-    let mut gaps = Vec::new();
-    if fingerprint_for_files(&baseline.files) != baseline.workspace_fingerprint {
-        gaps.push("goal baseline 文件清单与 fingerprint 不匹配".into());
-        return gaps;
-    }
-    let current = match workspace_baseline(root) {
-        Ok(current) => current,
-        Err(error) => {
-            gaps.push(format!("无法计算 goal 实际变更集: {error}"));
-            return gaps;
-        }
-    };
-    if current.workspace_fingerprint != current_fingerprint {
-        gaps.push("goal 规划检查与调用方当前 fingerprint 不一致".into());
-        return gaps;
-    }
-    let delta = match if retiring_legacy_success {
-        goal_plan_delta_for_retiring_legacy_success(goal, &current)
-    } else {
-        goal_plan_delta(goal, &current)
-    } {
-        Ok(delta) => delta,
-        Err(error) => {
-            gaps.push(format!("无法核对 goal plan: {error}"));
-            return gaps;
-        }
-    };
-    let actual = &delta.actual_changed_paths;
-    if delta.plan_required && !delta.plan_recorded {
-        gaps.push(format!(
-            "实际变更 {} 个文件但缺少首次修改前的 goal plan receipt",
-            actual.len()
-        ));
-    }
-    if delta.plan_recorded && !delta.unplanned_changed_paths.is_empty() {
-        gaps.push(format!(
-            "实际变更超出 plan: {}",
-            delta.unplanned_changed_paths.join(", ")
-        ));
-    }
-
-    if let Some(validation_policy) = validation_policy {
-        let mut validated = BTreeSet::new();
-        for requirement in &goal.requirements {
-            let Ok(contract_sha256) = validation_contract_sha256(goal, &requirement.id) else {
-                continue;
-            };
-            for validation in &requirement.validations {
-                if validation_has_receipt_for_fingerprint(
-                    validation,
-                    root,
-                    current_fingerprint,
-                    &contract_sha256,
-                    true,
-                    validation_policy,
-                ) {
-                    validated.extend(
-                        validation
-                            .impact_scopes
-                            .iter()
-                            .map(|scope| scope.changed_path.replace('\\', "/")),
-                    );
-                }
-            }
-        }
-        let undeclared = actual
-            .iter()
-            .filter(|path| !validated.contains(*path))
-            .cloned()
-            .collect::<Vec<_>>();
-        if !undeclared.is_empty() {
-            gaps.push(format!(
-                "实际变更未被当前 validation receipt 声明: {}",
-                undeclared.join(", ")
-            ));
-        }
-    }
-
-    if goal
-        .plan_receipts
-        .iter()
-        .any(|receipt| receipt.effective_review_priority() == "high")
-        && !goal
-            .review_receipts
-            .iter()
-            .any(|receipt| receipt.source_fingerprint == current_fingerprint)
-    {
-        gaps.push("high-priority plan 缺少绑定最终源码 fingerprint 的 review receipt".into());
-    }
-    gaps
-}
-
 /// 单个目标在 standard 门禁下的判定。
 pub struct GoalGateVerdict {
     pub blockers: Vec<String>,
@@ -788,6 +557,134 @@ pub fn goal_gate_verdict(
     root: &Path,
     current_fingerprint: Option<&str>,
 ) -> GoalGateVerdict {
+    let decision = GoalDecisionContext::live(root, None);
+    goal_gate_verdict_core(goal, all_goals, &decision, current_fingerprint, None)
+}
+
+/// Evaluate a goal against the exact workspace capture owned by the caller.
+/// This keeps every current-goal planning and workspace-snapshot receipt check
+/// on one readiness decision point instead of reopening the repository.
+pub fn goal_gate_verdict_with_baseline(
+    goal: &Goal,
+    all_goals: &[Goal],
+    root: &Path,
+    current: Option<&WorkspaceBaseline>,
+) -> GoalGateVerdict {
+    let decision = GoalDecisionContext::live(root, current);
+    goal_gate_verdict_core(
+        goal,
+        all_goals,
+        &decision,
+        current.map(|baseline| baseline.workspace_fingerprint.as_str()),
+        current,
+    )
+}
+
+/// Captured readiness entrypoint. The fixed baseline and Cargo workspace
+/// exclusion relevance consume the decision context now; remaining goal-state
+/// live observations migrate in later slices.
+pub fn goal_gate_verdict_with_context(
+    goal: &Goal,
+    all_goals: &[Goal],
+    decision: &GoalDecisionContext<'_>,
+) -> GoalGateVerdict {
+    goal_gate_verdict_core(
+        goal,
+        all_goals,
+        decision,
+        decision
+            .current()
+            .map(|baseline| baseline.workspace_fingerprint.as_str()),
+        decision.current(),
+    )
+}
+
+fn goal_planning_gaps_with_context(goal: &Goal, decision: &GoalDecisionContext<'_>) -> Vec<String> {
+    let Some(current) = decision.current() else {
+        return vec!["当前 captured workspace snapshot 缺失".into()];
+    };
+    let Some(baseline) = goal.baseline.as_ref() else {
+        return vec!["current goal 缺少开工 baseline；不能作为当前成功证据".into()];
+    };
+    if fingerprint_for_files(&baseline.files) != baseline.workspace_fingerprint
+        || fingerprint_for_files(&current.files) != current.workspace_fingerprint
+    {
+        return vec!["goal baseline 或 captured workspace snapshot 与 fingerprint 不匹配".into()];
+    }
+    let delta = match goal_plan_delta(goal, current) {
+        Ok(delta) => delta,
+        Err(error) => return vec![format!("无法核对 goal plan: {error}")],
+    };
+    let mut gaps = Vec::new();
+    if delta.plan_required && !delta.plan_recorded {
+        gaps.push(format!(
+            "实际变更 {} 个文件但缺少首次修改前的 goal plan receipt",
+            delta.actual_changed_paths.len()
+        ));
+    }
+    if delta.plan_recorded && !delta.unplanned_changed_paths.is_empty() {
+        gaps.push(format!(
+            "实际变更超出 plan: {}",
+            delta.unplanned_changed_paths.join(", ")
+        ));
+    }
+    let mut validated = BTreeSet::new();
+    for requirement in &goal.requirements {
+        let Ok(contract_sha256) = validation_contract_sha256(goal, &requirement.id) else {
+            continue;
+        };
+        for validation in &requirement.validations {
+            if validation_has_receipt_for_fingerprint_with_context(
+                validation,
+                decision,
+                &current.workspace_fingerprint,
+                &contract_sha256,
+                true,
+                ReceiptValidationPolicy::CurrentV3,
+            ) {
+                validated.extend(
+                    validation
+                        .impact_scopes
+                        .iter()
+                        .map(|scope| scope.changed_path.replace('\\', "/")),
+                );
+            }
+        }
+    }
+    let undeclared = delta
+        .actual_changed_paths
+        .iter()
+        .filter(|path| !validated.contains(*path))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !undeclared.is_empty() {
+        gaps.push(format!(
+            "实际变更未被当前 validation receipt 声明: {}",
+            undeclared.join(", ")
+        ));
+    }
+    if goal
+        .plan_receipts
+        .iter()
+        .any(|receipt| receipt.effective_review_priority() == "high")
+        && !goal
+            .review_receipts
+            .iter()
+            .any(|receipt| receipt.source_fingerprint == current.workspace_fingerprint)
+    {
+        gaps.push("high-priority plan 缺少绑定最终源码 fingerprint 的 review receipt".into());
+    }
+    gaps
+}
+
+fn goal_gate_verdict_core(
+    goal: &Goal,
+    all_goals: &[Goal],
+    decision: &GoalDecisionContext<'_>,
+    current_fingerprint: Option<&str>,
+    current: Option<&WorkspaceBaseline>,
+) -> GoalGateVerdict {
+    let root = decision.root();
     let mut blockers = Vec::new();
     let mut warnings = Vec::new();
 
@@ -795,12 +692,21 @@ pub fn goal_gate_verdict(
         blockers.push(format!("goal {} 合约无效: {error}", goal.id));
         return GoalGateVerdict { blockers, warnings };
     }
-    if let Some(error) = goal.lifecycle_proof_error(root) {
+    let lifecycle_error = if decision.has_captured_workspace_bytes() {
+        goal.lifecycle_proof_error_with_context(decision, all_goals)
+    } else {
+        goal.lifecycle_proof_error(root)
+    };
+    if let Some(error) = lifecycle_error {
         blockers.push(format!("goal {} lifecycle proof 无效: {error}", goal.id));
         return GoalGateVerdict { blockers, warnings };
     }
     if let Some(fingerprint) = current_fingerprint
-        && let Some(error) = supersession_error(goal, all_goals, root, fingerprint)
+        && let Some(error) = if decision.has_captured_workspace_bytes() {
+            supersession_error_with_context(goal, all_goals, decision)
+        } else {
+            supersession_error(goal, all_goals, root, fingerprint)
+        }
     {
         blockers.push(format!("goal {} supersession 合约无效: {error}", goal.id));
         return GoalGateVerdict { blockers, warnings };
@@ -832,7 +738,12 @@ pub fn goal_gate_verdict(
             ));
             return GoalGateVerdict { blockers, warnings };
         };
-        if let Some(error) = handoff_contract_error(goal, all_goals, root, fingerprint) {
+        let error = if decision.has_captured_workspace_bytes() {
+            handoff_contract_error_with_context(goal, all_goals, decision)
+        } else {
+            handoff_contract_error(goal, all_goals, root, fingerprint)
+        };
+        if let Some(error) = error {
             blockers.push(format!(
                 "goal {} handoff contract invalid: {error}",
                 goal.id
@@ -850,7 +761,14 @@ pub fn goal_gate_verdict(
             ));
             return GoalGateVerdict { blockers, warnings };
         };
-        if let Some(error) = replacement_authority_error(goal, root, fingerprint) {
+        let error = if decision.has_captured_workspace_bytes() {
+            replacement_authority_error_with_context(goal, decision, all_goals)
+        } else if let Some(current) = current {
+            replacement_authority_error_with_baseline(goal, root, current, all_goals)
+        } else {
+            replacement_authority_error(goal, root, fingerprint)
+        };
+        if let Some(error) = error {
             blockers.push(format!(
                 "goal {} lifecycle-only replacement proof 无效: {error}",
                 goal.id
@@ -905,15 +823,23 @@ pub fn goal_gate_verdict(
         if !req.impacts.is_empty()
             && let Some(fingerprint) = current_fingerprint
         {
-            for gap in validation_relevance_gaps(req, goal, root, fingerprint) {
+            for gap in validation_relevance_gaps_with_context(req, goal, decision, fingerprint) {
                 blockers.push(format!("goal {} 需求 {} {gap}", goal.id, req.id));
             }
         }
         if !lifecycle_only && requires_receipt && goal.status == GoalStatus::Success && is_must {
             let has_current_receipt = req.validations.iter().any(|validation| {
-                current_fingerprint.is_some_and(|fingerprint| {
-                    validation_has_current_receipt(validation, goal, req, root, fingerprint)
-                })
+                if decision.has_captured_workspace_bytes() {
+                    validation_has_current_receipt_with_context(validation, goal, req, decision)
+                } else if let Some(current) = current {
+                    validation_has_current_receipt_with_baseline(
+                        validation, goal, req, root, current,
+                    )
+                } else {
+                    current_fingerprint.is_some_and(|fingerprint| {
+                        validation_has_current_receipt(validation, goal, req, root, fingerprint)
+                    })
+                }
             });
             if !has_current_receipt {
                 blockers.push(format!(
@@ -942,7 +868,14 @@ pub fn goal_gate_verdict(
         && goal.status == GoalStatus::Success
         && let Some(fingerprint) = current_fingerprint
     {
-        for gap in goal_planning_gaps(goal, root, fingerprint) {
+        let gaps = if decision.has_captured_workspace_bytes() {
+            goal_planning_gaps_with_context(goal, decision)
+        } else if let Some(current) = current {
+            goal_planning_gaps_with_baseline(goal, root, current)
+        } else {
+            goal_planning_gaps(goal, root, fingerprint)
+        };
+        for gap in gaps {
             blockers.push(format!("goal {} {gap}", goal.id));
         }
     }
@@ -1191,6 +1124,20 @@ impl Goal {
                     .predecessor_contracts
                     .iter()
                     .any(|(id, contract)| id.trim().is_empty() || !is_sha256(contract))
+                || proof
+                    .authority_gate_binding
+                    .as_ref()
+                    .is_some_and(|binding| {
+                        binding.policy.trim().is_empty()
+                            || binding.entrypoint.trim().is_empty()
+                            || binding.dependency_sha256.is_empty()
+                            || !binding.dependency_sha256.contains_key(&binding.entrypoint)
+                            || binding
+                                .dependency_sha256
+                                .iter()
+                                .any(|(path, hash)| path.trim().is_empty() || !is_sha256(hash))
+                            || !is_sha256(&binding.binding_sha256)
+                    })
             {
                 return Some("lifecycle-only replacement proof 结构或摘要无效".into());
             }
@@ -1236,6 +1183,7 @@ impl Goal {
             self,
             proof.receipt_policy.as_deref(),
             Some(&proof.recorded_at),
+            proof.workspace_identity.as_deref(),
         );
         if proof.contract_sha256 != expected {
             return Some("lifecycle_proof 与当前 goal 合约不匹配".into());
@@ -1276,6 +1224,7 @@ impl Goal {
             None => ReceiptValidationPolicy::CurrentV2,
             Some(RECEIPT_POLICY_V1) => ReceiptValidationPolicy::LegacyV1,
             Some(RECEIPT_POLICY_V2) => ReceiptValidationPolicy::CurrentV2,
+            Some(RECEIPT_POLICY_V3) => ReceiptValidationPolicy::CurrentV3,
             Some(other) => return Some(format!("未知 lifecycle receipt policy: {other}")),
         };
         if self.status == GoalStatus::Success && !self.loaded_from_legacy {
@@ -1290,13 +1239,44 @@ impl Goal {
             } else if proof.receipt_policy.as_deref() == Some(RECEIPT_POLICY_V1) {
                 return Some("显式 v1 receipt policy proof 缺少受控迁移标记".into());
             }
-            let gaps = goal_success_receipt_gaps_for_policy(
-                self,
-                root,
-                &proof.workspace_fingerprint,
-                false,
-                policy,
-            );
+            if policy == ReceiptValidationPolicy::CurrentV3
+                && !proof.workspace_identity.as_deref().is_some_and(is_sha256)
+            {
+                return Some("receipt_integrity_v3 lifecycle proof 缺少 workspace identity".into());
+            }
+            let gaps = if policy == ReceiptValidationPolicy::CurrentV3 {
+                goal_success_historical_receipt_gaps_with_identity(
+                    self,
+                    root,
+                    &proof.workspace_fingerprint,
+                    policy,
+                    proof.workspace_identity.as_deref(),
+                )
+            } else {
+                goal_success_receipt_gaps_for_policy(
+                    self,
+                    root,
+                    &proof.workspace_fingerprint,
+                    false,
+                    policy,
+                )
+            };
+            if policy == ReceiptValidationPolicy::CurrentV3
+                && self
+                    .requirements
+                    .iter()
+                    .flat_map(|requirement| &requirement.validations)
+                    .filter_map(|validation| validation.receipt.as_ref())
+                    .any(|receipt| {
+                        receipt.workspace_identity
+                            != proof.workspace_identity.as_deref().unwrap_or_default()
+                    })
+            {
+                return Some(
+                    "receipt_integrity_v3 receipt workspace identity 与 lifecycle proof 不一致"
+                        .into(),
+                );
+            }
             if !gaps.is_empty() {
                 return Some(format!(
                     "历史化时的 success receipt proof 无效: {}",
@@ -1304,6 +1284,138 @@ impl Goal {
                 ));
             }
         }
+        None
+    }
+
+    /// Capture-only lifecycle verifier for readiness. Historical receipt
+    /// integrity is evaluated against the caller's immutable source capture;
+    /// it must not recalculate containment, gate identity, or helper bytes
+    /// from the live worktree halfway through a readiness decision.
+    pub(crate) fn lifecycle_proof_error_with_context(
+        &self,
+        decision: &GoalDecisionContext<'_>,
+        all_goals: &[Goal],
+    ) -> Option<String> {
+        if self.lifecycle == GoalLifecycle::Current {
+            return None;
+        }
+        let Some(proof) = self.lifecycle_proof.as_ref() else {
+            return Some("缺少 lifecycle_proof".into());
+        };
+        if !is_sha256(&proof.workspace_fingerprint) || !is_sha256(&proof.contract_sha256) {
+            return Some("lifecycle_proof 包含非法摘要".into());
+        }
+        let proof_recorded_at = match chrono::DateTime::parse_from_rfc3339(&proof.recorded_at) {
+            Ok(value) => value,
+            Err(_) => return Some("lifecycle_proof.recorded_at 必须是 RFC3339 timestamp".into()),
+        };
+        let goal_updated_at = match chrono::DateTime::parse_from_rfc3339(&self.updated_at) {
+            Ok(value) => value,
+            Err(_) => return Some("goal.updated_at 必须是 RFC3339 timestamp".into()),
+        };
+        if proof_recorded_at < goal_updated_at {
+            return Some("lifecycle_proof.recorded_at 不得早于 goal.updated_at".into());
+        }
+        let expected = lifecycle_contract_sha256(
+            self,
+            proof.receipt_policy.as_deref(),
+            Some(&proof.recorded_at),
+            proof.workspace_identity.as_deref(),
+        );
+        if proof.contract_sha256 != expected {
+            return Some("lifecycle_proof 与当前 goal 合约不匹配".into());
+        }
+        if proof.receipt_policy.as_deref() == Some(RECEIPT_POLICY_QUARANTINED) {
+            return if proof.migration.as_deref() == Some(QUARANTINED_HISTORY_MIGRATION)
+                && quarantined_history_eligible(self)
+            {
+                None
+            } else {
+                Some("lifecycle_proof 使用了无效的 legacy quarantine".into())
+            };
+        }
+        if proof.receipt_policy.as_deref() == Some(RECEIPT_POLICY_INTEGRITY_QUARANTINED) {
+            return if proof.migration.as_deref() == Some(INTEGRITY_QUARANTINE_MIGRATION)
+                && integrity_quarantine_eligible(self)
+            {
+                None
+            } else {
+                Some("lifecycle_proof 使用了无效的 receipt integrity quarantine".into())
+            };
+        }
+        if proof.receipt_policy.as_deref() == Some(VERIFIED_REPLACEMENT_TRANSFER_POLICY) {
+            return if self.lifecycle == GoalLifecycle::Superseded
+                && self.status == GoalStatus::Success
+                && !self.loaded_from_legacy
+                && proof.migration.is_none()
+            {
+                None
+            } else {
+                Some("verified replacement transfer 只允许无额外 migration 的 superseded current-schema success".into())
+            };
+        }
+        let policy = match proof.receipt_policy.as_deref() {
+            None if goal_created_before(self, RECEIPT_POLICY_V2_ROLLOUT_AT) => {
+                ReceiptValidationPolicy::LegacyV1
+            }
+            None => ReceiptValidationPolicy::CurrentV2,
+            Some(RECEIPT_POLICY_V1) => ReceiptValidationPolicy::LegacyV1,
+            Some(RECEIPT_POLICY_V2) => ReceiptValidationPolicy::CurrentV2,
+            Some(RECEIPT_POLICY_V3) => ReceiptValidationPolicy::CurrentV3,
+            Some(other) => return Some(format!("未知 lifecycle receipt policy: {other}")),
+        };
+        if self.status == GoalStatus::Success && !self.loaded_from_legacy {
+            if let Some(migration) = proof.migration.as_deref() {
+                match migration {
+                    PRE_RECEIPT_MIGRATION if pre_receipt_migration_eligible(self) => return None,
+                    RECEIPT_POLICY_V1_MIGRATION
+                        if policy == ReceiptValidationPolicy::LegacyV1
+                            && receipt_policy_v1_migration_eligible(self) => {}
+                    _ => return Some("lifecycle_proof 使用了无效的历史迁移".into()),
+                }
+            } else if proof.receipt_policy.as_deref() == Some(RECEIPT_POLICY_V1) {
+                return Some("显式 v1 receipt policy proof 缺少受控迁移标记".into());
+            }
+            if policy == ReceiptValidationPolicy::CurrentV3
+                && !proof.workspace_identity.as_deref().is_some_and(is_sha256)
+            {
+                return Some("receipt_integrity_v3 lifecycle proof 缺少 workspace identity".into());
+            }
+            let gaps = if policy == ReceiptValidationPolicy::CurrentV3 {
+                goal_success_historical_receipt_gaps_with_identity(
+                    self,
+                    decision.root(),
+                    &proof.workspace_fingerprint,
+                    policy,
+                    proof.workspace_identity.as_deref(),
+                )
+            } else {
+                goal_success_receipt_gaps_with_context(self, decision, all_goals, policy)
+            };
+            if policy == ReceiptValidationPolicy::CurrentV3
+                && self
+                    .requirements
+                    .iter()
+                    .flat_map(|requirement| &requirement.validations)
+                    .filter_map(|validation| validation.receipt.as_ref())
+                    .any(|receipt| {
+                        receipt.workspace_identity
+                            != proof.workspace_identity.as_deref().unwrap_or_default()
+                    })
+            {
+                return Some(
+                    "receipt_integrity_v3 receipt workspace identity 与 lifecycle proof 不一致"
+                        .into(),
+                );
+            }
+            if !gaps.is_empty() {
+                return Some(format!(
+                    "历史化时的 success receipt proof 无效: {}",
+                    gaps.join("; ")
+                ));
+            }
+        }
+        let _ = all_goals;
         None
     }
 }
@@ -1316,8 +1428,7 @@ fn normalized_requirement_text(text: &str) -> String {
 }
 
 pub(super) fn workspace_identity(root: &Path) -> String {
-    let canonical = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
-    crate::hash::sha256_bytes(canonical.to_string_lossy().as_bytes())
+    crate::context::workspace_identity(root)
 }
 
 /// must 转移比较键。typed proof 义务是不可变合约的一部分（自 v3 起
@@ -1447,7 +1558,9 @@ pub(super) fn replacement_authority_proof_sha256(proof: &ReplacementAuthorityPro
     let mut hasher = Sha256::new();
     lifecycle_hash_str(
         &mut hasher,
-        if proof.live_authority.command_rebind.is_some() {
+        if proof.authority_gate_binding.is_some() {
+            "rayman.lifecycle-only-replacement-proof.v4"
+        } else if proof.live_authority.command_rebind.is_some() {
             "rayman.lifecycle-only-replacement-proof.v3"
         } else {
             "rayman.lifecycle-only-replacement-proof.v2"
@@ -1467,6 +1580,17 @@ pub(super) fn replacement_authority_proof_sha256(proof: &ReplacementAuthorityPro
     hasher.update((proof.source_delta_paths.len() as u64).to_le_bytes());
     for path in &proof.source_delta_paths {
         lifecycle_hash_str(&mut hasher, path);
+    }
+    hasher.update([u8::from(proof.authority_gate_binding.is_some())]);
+    if let Some(binding) = proof.authority_gate_binding.as_ref() {
+        lifecycle_hash_str(&mut hasher, &binding.policy);
+        lifecycle_hash_str(&mut hasher, &binding.entrypoint);
+        hasher.update((binding.dependency_sha256.len() as u64).to_le_bytes());
+        for (path, hash) in &binding.dependency_sha256 {
+            lifecycle_hash_str(&mut hasher, path);
+            lifecycle_hash_str(&mut hasher, hash);
+        }
+        lifecycle_hash_str(&mut hasher, &binding.binding_sha256);
     }
     lifecycle_hash_str(&mut hasher, &proof.live_authority.command);
     if let Some(rebind) = proof.live_authority.command_rebind.as_ref() {
@@ -1574,6 +1698,322 @@ pub fn replacement_authority_invocation_sha256_with_rebind(
 /// conclusion.  All referenced records are loaded from this workspace's
 /// managed goal store, so copied cross-workspace JSON cannot mint authority.
 pub fn replacement_authority_error(goal: &Goal, root: &Path, fingerprint: &str) -> Option<String> {
+    let (all_goals, issues) = match GoalStore::new(root).list_with_issues() {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            return Some(format!(
+                "无法读取 lifecycle-only authority goal snapshot: {error}"
+            ));
+        }
+    };
+    if !issues.is_empty() {
+        return Some(format!(
+            "无法读取 lifecycle-only authority goal snapshot: {}",
+            issues
+                .iter()
+                .map(|issue| format!("{} ({})", issue.path, issue.error))
+                .collect::<Vec<_>>()
+                .join("; ")
+        ));
+    }
+    let current = if goal.lifecycle == GoalLifecycle::Current {
+        match stable_workspace_baseline(root) {
+            Ok(current) => Some(current),
+            Err(error) => {
+                return Some(format!(
+                    "could not recompute the current lifecycle-only replacement baseline: {error}"
+                ));
+            }
+        }
+    } else {
+        None
+    };
+    replacement_authority_error_core(goal, root, fingerprint, current.as_ref(), &all_goals)
+}
+
+pub fn replacement_authority_error_with_baseline(
+    goal: &Goal,
+    root: &Path,
+    current: &WorkspaceBaseline,
+    all_goals: &[Goal],
+) -> Option<String> {
+    replacement_authority_error_core(
+        goal,
+        root,
+        &current.workspace_fingerprint,
+        Some(current),
+        all_goals,
+    )
+}
+
+/// Capture-only counterpart for readiness.  Its shape deliberately mirrors
+/// the live verifier below, but all filesystem, Git and maintenance-artifact
+/// observations are supplied by `GoalDecisionContext`.
+pub(crate) fn replacement_authority_error_with_context(
+    goal: &Goal,
+    decision: &GoalDecisionContext<'_>,
+    all_goals: &[Goal],
+) -> Option<String> {
+    let proof = goal.replacement_authority.as_ref()?;
+    if proof.proof_sha256 != replacement_authority_proof_sha256(proof) {
+        return Some("lifecycle-only replacement proof hash 无效".into());
+    }
+    if proof.workspace_identity != decision.captured_workspace_identity().unwrap_or_default() {
+        return Some("lifecycle-only replacement 来自不同 workspace identity".into());
+    }
+    let Some(current) = decision.current() else {
+        return Some("current lifecycle-only replacement lacks a workspace baseline".into());
+    };
+    let fingerprint = &current.workspace_fingerprint;
+    if proof.workspace_fingerprint != *fingerprint {
+        return Some("lifecycle-only replacement source fingerprint 已过期".into());
+    }
+    let Some(baseline) = goal.baseline.as_ref() else {
+        return Some("lifecycle-only replacement 缺少 baseline".into());
+    };
+    let proof_recorded_at =
+        match plan_timestamp("replacement_authority.recorded_at", &proof.recorded_at) {
+            Ok(value) => value,
+            Err(error) => return Some(error),
+        };
+    let live = &proof.live_authority;
+    let live_recorded_at = match plan_timestamp(
+        "replacement_authority.live_authority.recorded_at",
+        &live.recorded_at,
+    ) {
+        Ok(value) => value,
+        Err(error) => return Some(error),
+    };
+    let goal_created_at = match plan_timestamp("goal.created_at", &goal.created_at) {
+        Ok(value) => value,
+        Err(error) => return Some(error),
+    };
+    let goal_updated_at = match plan_timestamp("goal.updated_at", &goal.updated_at) {
+        Ok(value) => value,
+        Err(error) => return Some(error),
+    };
+    let baseline_recorded_at =
+        match plan_timestamp("goal.baseline.recorded_at", &baseline.recorded_at) {
+            Ok(value) => value,
+            Err(error) => return Some(error),
+        };
+    for (label, lower_bound) in [
+        ("goal.created_at", goal_created_at),
+        ("goal.baseline.recorded_at", baseline_recorded_at),
+        (
+            "replacement_authority.live_authority.recorded_at",
+            live_recorded_at,
+        ),
+    ] {
+        if lower_bound > proof_recorded_at {
+            return Some(format!(
+                "{label} 不得晚于 replacement_authority.recorded_at"
+            ));
+        }
+    }
+    if proof_recorded_at > goal_updated_at {
+        return Some("replacement_authority.recorded_at 不得晚于 goal.updated_at".into());
+    }
+    if replacement_contract_sha256(goal) != proof.replacement_contract_sha256
+        || !goal.plan_receipts.is_empty()
+        || !goal.review_receipts.is_empty()
+        || !goal.authority_receipts.is_empty()
+        || goal.requirements.iter().any(|requirement| {
+            requirement.status != RequirementStatus::Done
+                || requirement
+                    .evidence
+                    .as_deref()
+                    .map(str::trim)
+                    .unwrap_or_default()
+                    .is_empty()
+                || !requirement.validations.is_empty()
+                || !requirement.impacts.is_empty()
+        })
+    {
+        return Some("lifecycle-only replacement 合约、baseline 或专用迁移形态无效".into());
+    }
+    let mut normalized_delta = proof.source_delta_paths.clone();
+    normalize_path_list(&mut normalized_delta);
+    let predecessor_ids = proof
+        .predecessor_contracts
+        .keys()
+        .cloned()
+        .collect::<Vec<_>>();
+    if normalized_delta != proof.source_delta_paths
+        || live.repeat < 2
+        || live.runs.len() != live.repeat as usize
+        || live.workspace_fingerprint != *fingerprint
+        || live.invocation_sha256
+            != replacement_authority_invocation_sha256_with_rebind(
+                &live.command,
+                &goal.id,
+                &proof.authority_goal_id,
+                &predecessor_ids,
+                live.repeat,
+                live.command_rebind.as_ref(),
+            )
+        || validate_authority_command_with_context(decision, &live.command).is_err()
+        || replacement_authority_effective_command(&live.command, live.command_rebind.as_ref())
+            .is_err()
+        || live.command_rebind.as_ref().is_some_and(|rebind| {
+            verify_maintenance_cycle_rebind_artifact_with_context(decision, rebind).is_err()
+        })
+        || live.runs.iter().any(|run| {
+            run.exit_code != 0
+                || run.workspace_fingerprint_before != *fingerprint
+                || run.workspace_fingerprint_after != *fingerprint
+                || !is_sha256(&run.stdout_sha256)
+                || !is_sha256(&run.stderr_sha256)
+        })
+    {
+        return Some("live lifecycle authority receipt 无效或未绑定当前源码".into());
+    }
+    if workspace_delta(baseline, current) != proof.source_delta_paths {
+        return Some("lifecycle-only replacement 当前 delta 与授权 proof 不一致".into());
+    }
+    let authority = match all_goals
+        .iter()
+        .find(|candidate| candidate.id == proof.authority_goal_id)
+    {
+        Some(authority) => authority,
+        None => return Some("lifecycle-only authority goal 不存在".into()),
+    };
+    let Some(authority_lifecycle) = authority.lifecycle_proof.as_ref() else {
+        return Some("lifecycle-only authority goal 缺少 lifecycle proof".into());
+    };
+    if authority.lifecycle != GoalLifecycle::Archived
+        || authority.status != GoalStatus::Success
+        || !authority.is_current_schema()
+        || authority.current_schema_error().is_some()
+        || authority_lifecycle.receipt_policy.as_deref() != Some(RECEIPT_POLICY_V3)
+        || authority_lifecycle.migration.is_some()
+        || authority_lifecycle.contract_sha256 != proof.authority_lifecycle_contract_sha256
+        || authority
+            .lifecycle_proof_error_with_context(decision, all_goals)
+            .is_some()
+        || !has_archived_direct_stable_authority_command_with_context(
+            authority,
+            decision,
+            &authority_lifecycle.workspace_fingerprint,
+            &live.command,
+        )
+    {
+        return Some("lifecycle-only authority 必须是同 workspace、current-policy 且包含同命令 direct-authority 的有效 archived success".into());
+    }
+    if let Some(error) = authority_gate_binding_error(
+        authority,
+        &live.command,
+        proof.authority_gate_binding.as_ref(),
+    ) {
+        return Some(error);
+    }
+    let captured_binding = match authority_gate_binding_for_goal_with_context(
+        authority,
+        decision,
+        &live.command,
+    ) {
+        Ok(binding) => binding,
+        Err(error) => {
+            return Some(format!(
+                "无法从 captured workspace 重算 PowerShell replacement authority gate binding: {error:#}"
+            ));
+        }
+    };
+    if captured_binding != proof.authority_gate_binding {
+        return Some(
+            "PowerShell replacement authority binding 与 captured authority gate closure 不一致"
+                .into(),
+        );
+    }
+    for (label, value) in goal_ledger_timestamp_bounds(authority) {
+        let timestamp = match plan_timestamp(label, value) {
+            Ok(value) => value,
+            Err(error) => return Some(format!("lifecycle-only authority {error}")),
+        };
+        if timestamp > proof_recorded_at {
+            return Some(format!(
+                "lifecycle-only authority {label} 不得晚于 replacement_authority.recorded_at"
+            ));
+        }
+    }
+    let mut predecessors = Vec::new();
+    for (id, expected_contract) in &proof.predecessor_contracts {
+        let predecessor = match all_goals.iter().find(|candidate| candidate.id == *id) {
+            Some(predecessor) => predecessor,
+            None => return Some(format!("被转移目标不存在: {id}")),
+        };
+        if predecessor.status == GoalStatus::Success
+            || !predecessor.is_current_schema()
+            || predecessor.current_schema_error().is_some()
+            || transfer_goal_contract_sha256(predecessor) != *expected_contract
+            || !matches!(
+                predecessor.lifecycle,
+                GoalLifecycle::Current | GoalLifecycle::Superseded
+            )
+            || (predecessor.lifecycle == GoalLifecycle::Superseded
+                && predecessor.superseded_by.as_deref() != Some(goal.id.as_str()))
+        {
+            return Some(format!("被转移目标 {id} 的合约或 lifecycle 已失效"));
+        }
+        if predecessor.lifecycle == GoalLifecycle::Superseded {
+            if let Some(error) = predecessor.lifecycle_proof_error_with_context(decision, all_goals)
+            {
+                return Some(format!(
+                    "被转移目标 {id} 的 supersession proof 无效: {error}"
+                ));
+            }
+            let Some(supersession) = predecessor.lifecycle_proof.as_ref() else {
+                return Some(format!("被转移目标 {id} 缺少 supersession proof"));
+            };
+            let superseded_at = match plan_timestamp(
+                "predecessor.lifecycle_proof.recorded_at",
+                &supersession.recorded_at,
+            ) {
+                Ok(value) => value,
+                Err(error) => return Some(error),
+            };
+            if superseded_at < proof_recorded_at {
+                return Some(format!(
+                    "被转移目标 {id} 的 supersession 不得早于 replacement_authority.recorded_at"
+                ));
+            }
+        }
+        predecessors.push(predecessor);
+    }
+    if must_transfer_multiset(std::iter::once(goal))
+        != must_transfer_multiset(predecessors.iter().copied())
+    {
+        return Some(
+            "replacement must 与被转移目标 must（含 typed proof 义务）的精确并集不一致".into(),
+        );
+    }
+    let planned = predecessors
+        .iter()
+        .flat_map(|goal| goal.plan_receipts.iter())
+        .flat_map(|plan| plan.effective_changed_paths().iter().cloned())
+        .collect::<BTreeSet<_>>();
+    let unscoped = proof
+        .source_delta_paths
+        .iter()
+        .filter(|path| !planned.contains(*path))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !unscoped.is_empty() {
+        return Some(format!(
+            "lifecycle-only replacement delta 未被 predecessor plan 覆盖: {}",
+            unscoped.join(", ")
+        ));
+    }
+    None
+}
+
+fn replacement_authority_error_core(
+    goal: &Goal,
+    root: &Path,
+    fingerprint: &str,
+    current: Option<&WorkspaceBaseline>,
+    all_goals: &[Goal],
+) -> Option<String> {
     let proof = goal.replacement_authority.as_ref()?;
     if proof.proof_sha256 != replacement_authority_proof_sha256(proof) {
         return Some("lifecycle-only replacement proof hash 无效".into());
@@ -1689,20 +2129,34 @@ pub fn replacement_authority_error(goal: &Goal, root: &Path, fingerprint: &str) 
     {
         return Some("live lifecycle authority receipt 无效或未绑定当前源码".into());
     }
-    if workspace_fingerprint(root).is_ok_and(|current| current == fingerprint) {
-        let Ok(current) = workspace_baseline(root) else {
-            return Some("无法复算 lifecycle-only replacement 当前 delta".into());
+    if goal.lifecycle == GoalLifecycle::Current {
+        // Read the current workspace exactly once and use that same baseline
+        // for both the fingerprint and delta checks.  The former two-read
+        // shape was fail-open: a read error or drift simply skipped delta
+        // validation, and a mutation between the fingerprint and baseline
+        // walks mixed two points in time.  Archived history has already crossed
+        // this live fixed point and remains verifiable after later source
+        // evolution; a current replacement has not, so it must fail closed.
+        let Some(current) = current else {
+            return Some("current lifecycle-only replacement lacks a workspace baseline".into());
         };
-        if workspace_delta(baseline, &current) != proof.source_delta_paths {
+        if current.workspace_fingerprint != fingerprint {
+            return Some(
+                "the lifecycle-only replacement source fingerprint changed during revalidation"
+                    .into(),
+            );
+        }
+        if workspace_delta(baseline, current) != proof.source_delta_paths {
             return Some("lifecycle-only replacement 当前 delta 与授权 proof 不一致".into());
         }
     }
 
-    let store = GoalStore::new(root);
-    let authority = match store.get(&proof.authority_goal_id) {
-        Ok(Some(authority)) => authority,
-        Ok(None) => return Some("lifecycle-only authority goal 不存在".into()),
-        Err(error) => return Some(format!("无法读取 lifecycle-only authority goal: {error}")),
+    let authority = match all_goals
+        .iter()
+        .find(|candidate| candidate.id == proof.authority_goal_id)
+    {
+        Some(authority) => authority,
+        None => return Some("lifecycle-only authority goal 不存在".into()),
     };
     let Some(authority_lifecycle) = authority.lifecycle_proof.as_ref() else {
         return Some("lifecycle-only authority goal 缺少 lifecycle proof".into());
@@ -1711,15 +2165,12 @@ pub fn replacement_authority_error(goal: &Goal, root: &Path, fingerprint: &str) 
         || authority.status != GoalStatus::Success
         || !authority.is_current_schema()
         || authority.current_schema_error().is_some()
-        || authority_lifecycle.receipt_policy.as_deref() != Some(RECEIPT_POLICY_V2)
+        || authority_lifecycle.receipt_policy.as_deref() != Some(RECEIPT_POLICY_V3)
         || authority_lifecycle.migration.is_some()
         || authority_lifecycle.contract_sha256 != proof.authority_lifecycle_contract_sha256
         || authority.lifecycle_proof_error(root).is_some()
-        || historical_success_fingerprint(&authority, root, ReceiptValidationPolicy::CurrentV2)
-            .as_deref()
-            != Some(authority_lifecycle.workspace_fingerprint.as_str())
-        || !has_direct_stable_authority_command(
-            &authority,
+        || !has_archived_direct_stable_authority_command(
+            authority,
             root,
             &authority_lifecycle.workspace_fingerprint,
             &live.command,
@@ -1730,7 +2181,14 @@ pub fn replacement_authority_error(goal: &Goal, root: &Path, fingerprint: &str) 
                 .into(),
         );
     }
-    for (label, value) in goal_ledger_timestamp_bounds(&authority) {
+    if let Some(error) = authority_gate_binding_error(
+        authority,
+        &live.command,
+        proof.authority_gate_binding.as_ref(),
+    ) {
+        return Some(error);
+    }
+    for (label, value) in goal_ledger_timestamp_bounds(authority) {
         let timestamp = match plan_timestamp(label, value) {
             Ok(value) => value,
             Err(error) => return Some(format!("lifecycle-only authority {error}")),
@@ -1744,15 +2202,14 @@ pub fn replacement_authority_error(goal: &Goal, root: &Path, fingerprint: &str) 
 
     let mut predecessors = Vec::new();
     for (id, expected_contract) in &proof.predecessor_contracts {
-        let predecessor = match store.get(id) {
-            Ok(Some(predecessor)) => predecessor,
-            Ok(None) => return Some(format!("被转移目标不存在: {id}")),
-            Err(error) => return Some(format!("无法读取被转移目标 {id}: {error}")),
+        let predecessor = match all_goals.iter().find(|candidate| candidate.id == *id) {
+            Some(predecessor) => predecessor,
+            None => return Some(format!("被转移目标不存在: {id}")),
         };
         if predecessor.status == GoalStatus::Success
             || !predecessor.is_current_schema()
             || predecessor.current_schema_error().is_some()
-            || transfer_goal_contract_sha256(&predecessor) != *expected_contract
+            || transfer_goal_contract_sha256(predecessor) != *expected_contract
             || !matches!(
                 predecessor.lifecycle,
                 GoalLifecycle::Current | GoalLifecycle::Superseded
@@ -1786,13 +2243,29 @@ pub fn replacement_authority_error(goal: &Goal, root: &Path, fingerprint: &str) 
         }
         predecessors.push(predecessor);
     }
-    if must_transfer_multiset(std::iter::once(goal)) != must_transfer_multiset(predecessors.iter())
+    if must_transfer_multiset(std::iter::once(goal))
+        != must_transfer_multiset(predecessors.iter().copied())
     {
         return Some(
             "replacement must 与被转移目标 must（含 typed proof 义务）的精确并集不一致".into(),
         );
     }
-    if let Some(error) = replacement_delta_scope_error(&predecessors, &proof.source_delta_paths) {
+    let planned = predecessors
+        .iter()
+        .flat_map(|goal| goal.plan_receipts.iter())
+        .flat_map(|plan| plan.effective_changed_paths().iter().cloned())
+        .collect::<BTreeSet<_>>();
+    let unscoped = proof
+        .source_delta_paths
+        .iter()
+        .filter(|path| !planned.contains(*path))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !unscoped.is_empty() {
+        let error = format!(
+            "lifecycle-only replacement delta 未被 predecessor plan 覆盖: {}",
+            unscoped.join(", ")
+        );
         return Some(error);
     }
     None
@@ -1907,8 +2380,147 @@ pub fn supersession_error(
     }
     let must_transfer_required = goal.status != GoalStatus::Success
         || (!goal.loaded_from_legacy
-            && historical_success_fingerprint(goal, root, ReceiptValidationPolicy::CurrentV2)
+            && historical_success_fingerprint(goal, root, ReceiptValidationPolicy::CurrentV3)
                 .is_none());
+    if must_transfer_required {
+        let replacement_must = replacement
+            .requirements
+            .iter()
+            .filter(|requirement| requirement.kind == RequirementKind::Must)
+            .map(must_transfer_key)
+            .collect::<BTreeSet<_>>();
+        let missing = goal
+            .requirements
+            .iter()
+            .filter(|requirement| requirement.kind == RequirementKind::Must)
+            .filter(|requirement| !replacement_must.contains(&must_transfer_key(requirement)))
+            .map(|requirement| match requirement.proof_kind {
+                Some(kind) if kind != ProofKind::Generic => {
+                    format!("{} [proof:{}]", requirement.text, kind.as_str())
+                }
+                _ => requirement.text.clone(),
+            })
+            .collect::<Vec<_>>();
+        if !missing.is_empty() {
+            return Some(format!(
+                "未证明完成的 goal，其 must 未完整转移到 replacement: {}",
+                missing.join(" | ")
+            ));
+        }
+    }
+    None
+}
+
+pub(crate) fn supersession_error_with_context(
+    goal: &Goal,
+    goals: &[Goal],
+    decision: &GoalDecisionContext<'_>,
+) -> Option<String> {
+    if goal.lifecycle != GoalLifecycle::Superseded {
+        return None;
+    }
+    let replacement_id = goal.superseded_by.as_deref()?;
+    let Some(replacement) = goals
+        .iter()
+        .find(|candidate| candidate.id == replacement_id)
+    else {
+        return Some(format!("superseded_by 目标不存在: {replacement_id}"));
+    };
+    if !matches!(
+        replacement.lifecycle,
+        GoalLifecycle::Current | GoalLifecycle::Archived
+    ) {
+        return Some(format!(
+            "superseded_by 目标 {replacement_id} lifecycle={}，必须为 current 或带有效 proof 的 archived success",
+            replacement.lifecycle
+        ));
+    }
+    if matches!(
+        replacement
+            .lifecycle_proof
+            .as_ref()
+            .and_then(|proof| proof.receipt_policy.as_deref()),
+        Some(RECEIPT_POLICY_QUARANTINED | RECEIPT_POLICY_INTEGRITY_QUARANTINED)
+    ) {
+        return Some(format!(
+            "superseded_by archived 目标 {replacement_id} 是 untrusted history quarantine，不能作为完成证明"
+        ));
+    }
+    if !replacement.is_current_schema() {
+        return Some(format!(
+            "superseded_by 目标 {replacement_id} 必须是 current schema，legacy success 只能显式 archive"
+        ));
+    }
+    if let Some(error) = replacement.current_schema_error() {
+        return Some(format!(
+            "superseded_by 目标 {replacement_id} 合约无效: {error}"
+        ));
+    }
+    if replacement.status != GoalStatus::Success {
+        return Some(format!(
+            "superseded_by 目标 {replacement_id} 状态为 {}，必须先 gate-ready success",
+            replacement.status
+        ));
+    }
+    match replacement.lifecycle {
+        GoalLifecycle::Current => {
+            let gaps = goal_success_receipt_gaps_with_context(
+                replacement,
+                decision,
+                goals,
+                ReceiptValidationPolicy::CurrentV3,
+            );
+            if !gaps.is_empty() {
+                return Some(format!(
+                    "superseded_by 目标 {replacement_id} 尚未 gate-ready: {}",
+                    gaps.join("; ")
+                ));
+            }
+        }
+        GoalLifecycle::Archived => {
+            if let Some(error) = replacement.lifecycle_proof_error_with_context(decision, goals) {
+                return Some(format!(
+                    "superseded_by archived 目标 {replacement_id} proof 无效: {error}"
+                ));
+            }
+        }
+        GoalLifecycle::Superseded => unreachable!("lifecycle was checked above"),
+    }
+    if let Some(proof) = replacement.replacement_authority.as_ref() {
+        if let Some(error) = replacement_authority_error_with_context(replacement, decision, goals)
+        {
+            return Some(format!(
+                "lifecycle-only replacement authority proof 无效: {error}"
+            ));
+        }
+        if !proof.predecessor_contracts.contains_key(&goal.id) {
+            return Some(format!(
+                "lifecycle-only replacement 未显式绑定被替代目标 {}",
+                goal.id
+            ));
+        }
+        if let Some(supersession) = goal.lifecycle_proof.as_ref() {
+            let replacement_recorded_at =
+                match plan_timestamp("replacement_authority.recorded_at", &proof.recorded_at) {
+                    Ok(value) => value,
+                    Err(error) => return Some(error),
+                };
+            let superseded_at = match plan_timestamp(
+                "predecessor.lifecycle_proof.recorded_at",
+                &supersession.recorded_at,
+            ) {
+                Ok(value) => value,
+                Err(error) => return Some(error),
+            };
+            if superseded_at < replacement_recorded_at {
+                return Some(format!(
+                    "目标 {} 的 supersession 不得早于 replacement_authority.recorded_at",
+                    goal.id
+                ));
+            }
+        }
+    }
+    let must_transfer_required = goal.status != GoalStatus::Success;
     if must_transfer_required {
         let replacement_must = replacement
             .requirements

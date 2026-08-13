@@ -15,7 +15,7 @@ mod quality;
 
 pub use quality::{
     QualityConfig, QualityExemption, QualityFinding, QualityReport, load_quality_config,
-    quality_report, quality_report_with_config,
+    load_quality_config_from_capture, quality_report, quality_report_with_config,
 };
 use quality::{infer_risks, severity_rank};
 
@@ -36,6 +36,7 @@ struct WorkspaceInfo {
 struct CargoMetadataDocument {
     packages: Vec<CargoMetadataPackage>,
     workspace_members: Vec<String>,
+    workspace_root: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -70,7 +71,70 @@ pub fn build_readonly(root: &Path) -> Result<ProjectMap> {
     // object whose full entries were compared; never validate and reopen the
     // cache because that permits an unverified replacement between the calls.
     let index = context::verified_index(root)?;
-    build_from_index(root, &index)
+    build_from_index(root, &index, MapFileSource::Live)
+}
+
+/// Build from the exact cached index object already verified by a caller-owned
+/// readiness capture. The map may reopen individual source files with their
+/// recorded hash contract, but it never performs another full workspace walk.
+pub fn build_from_verified_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
+    build_from_index(root, index, MapFileSource::Live)
+}
+
+/// Build source and heuristic-manifest conclusions from the exact bytes held
+/// by the caller's readiness capture. Cargo topology remains a live external
+/// observation: it runs with `--locked`, and its returned workspace/package/
+/// path-dependency manifests must all bind to the validated captured manifest
+/// set. A surrounding readiness round must bracket that observation with a
+/// terminal capture. Missing captured bytes are never replaced by a named
+/// reopen.
+pub fn build_from_capture(
+    root: &Path,
+    index: &ContextIndex,
+    files: &BTreeMap<String, Vec<u8>>,
+) -> Result<ProjectMap> {
+    build_from_index(root, index, MapFileSource::Captured(files))
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum MapFileSource<'a> {
+    Live,
+    Captured(&'a BTreeMap<String, Vec<u8>>),
+}
+
+fn indexed_file_bytes(
+    root: &Path,
+    entry: &FileEntry,
+    source: MapFileSource<'_>,
+) -> Result<Vec<u8>> {
+    match source {
+        MapFileSource::Live => context::read_verified_file(root, entry),
+        MapFileSource::Captured(files) => {
+            let bytes = files.get(&entry.path).ok_or_else(|| {
+                anyhow::anyhow!("项目地图 capture 缺少已验证文件: {}", entry.path)
+            })?;
+            let actual_hash = crate::hash::sha256_bytes(bytes);
+            if bytes.len() as u64 != entry.size || actual_hash != entry.sha256 {
+                bail!(
+                    "项目地图 capture 与 context entry 不匹配: {} (size {} != {} or sha256 {} != {})",
+                    entry.path,
+                    bytes.len(),
+                    entry.size,
+                    actual_hash,
+                    entry.sha256
+                );
+            }
+            Ok(bytes.clone())
+        }
+    }
+}
+
+pub(super) fn indexed_file_text(
+    root: &Path,
+    entry: &FileEntry,
+    source: MapFileSource<'_>,
+) -> Result<String> {
+    Ok(String::from_utf8_lossy(&indexed_file_bytes(root, entry, source)?).into_owned())
 }
 
 pub fn summary(map: &ProjectMap) -> MapSummary {
@@ -605,6 +669,79 @@ fn project_map_path(root: &Path, create_parents: bool) -> Result<PathBuf> {
 /// 这类优化——`cargo_metadata_at` 的返回里混有启发式包，据此去重会把 cargo
 /// 从未解析过的 manifest 当成已解析（见循环内注释）。
 const MAX_NESTED_METADATA_MANIFESTS: usize = 32;
+const CARGO_METADATA_ARGS: &[&str] =
+    &["metadata", "--locked", "--no-deps", "--format-version", "1"];
+
+#[derive(Debug)]
+struct CapturedManifestAuthority {
+    by_comparison_key: BTreeMap<String, String>,
+}
+
+impl CapturedManifestAuthority {
+    fn from_index(root: &Path, index: &ContextIndex, source: MapFileSource<'_>) -> Result<Self> {
+        let mut by_comparison_key = BTreeMap::new();
+        for entry in index
+            .files
+            .iter()
+            .filter(|entry| is_cargo_manifest_path(&entry.path))
+        {
+            // Validate presence, size and content hash before Cargo can observe
+            // the live workspace. In captured mode this is the authority for
+            // the accepted manifest set, not merely an index path claim.
+            indexed_file_bytes(root, entry, source)?;
+            let key = manifest_comparison_key(&entry.path);
+            if let Some(previous) = by_comparison_key.insert(key, entry.path.clone())
+                && previous != entry.path
+            {
+                bail!(
+                    "decision capture contains aliased Cargo manifests: {previous} and {}",
+                    entry.path
+                );
+            }
+        }
+        Ok(Self { by_comparison_key })
+    }
+
+    #[cfg(test)]
+    fn from_paths(paths: impl IntoIterator<Item = String>) -> Result<Self> {
+        let mut by_comparison_key = BTreeMap::new();
+        for path in paths {
+            let key = manifest_comparison_key(&path);
+            if let Some(previous) = by_comparison_key.insert(key, path.clone())
+                && previous != path
+            {
+                bail!("decision capture contains aliased Cargo manifests: {previous} and {path}");
+            }
+        }
+        Ok(Self { by_comparison_key })
+    }
+
+    fn contains(&self, path: &str) -> bool {
+        self.by_comparison_key
+            .contains_key(&manifest_comparison_key(path))
+    }
+}
+
+fn manifest_comparison_key(path: &str) -> String {
+    let normalized = path.replace('\\', "/");
+    #[cfg(windows)]
+    {
+        normalized.to_lowercase()
+    }
+    #[cfg(not(windows))]
+    {
+        normalized
+    }
+}
+
+fn cargo_metadata_command(root: &Path, manifest: Option<&str>) -> Command {
+    let mut command = Command::new("cargo");
+    command.args(CARGO_METADATA_ARGS).current_dir(root);
+    if let Some(manifest) = manifest {
+        command.args(["--manifest-path", manifest]);
+    }
+    command
+}
 
 /// 根目录没有 Cargo.toml 时，对索引到的 Cargo manifest 逐个尝试 `cargo metadata`。
 ///
@@ -619,19 +756,21 @@ const MAX_NESTED_METADATA_MANIFESTS: usize = 32;
 fn nested_cargo_metadata_topology(
     root: &Path,
     index: &ContextIndex,
+    source: MapFileSource<'_>,
+    manifests: &CapturedManifestAuthority,
 ) -> Option<Result<(Vec<PackageEntry>, Vec<PackageDependency>)>> {
-    let mut manifests: Vec<&str> = index
+    let mut discovered_manifests: Vec<&str> = index
         .files
         .iter()
         .map(|file| file.path.as_str())
         .filter(|path| is_cargo_manifest_path(path))
         .collect();
-    manifests.sort_unstable();
-    if manifests.is_empty() {
+    discovered_manifests.sort_unstable();
+    if discovered_manifests.is_empty() {
         return None;
     }
 
-    if manifests.len() > MAX_NESTED_METADATA_MANIFESTS {
+    if discovered_manifests.len() > MAX_NESTED_METADATA_MANIFESTS {
         return Some(Err(anyhow::anyhow!(
             "嵌套 Cargo manifest 超过 {MAX_NESTED_METADATA_MANIFESTS} 个，已停止逐个解析；把它们纳入同一个 workspace（根 Cargo.toml 的 `[workspace] members`），或把 fixture manifest 排除出索引"
         )));
@@ -652,8 +791,9 @@ fn nested_cargo_metadata_topology(
     // `cargo test -p <name>` recommendation that cannot run.
     let mut authoritative: BTreeSet<String> = BTreeSet::new();
     let mut by_manifest: BTreeMap<String, PackageEntry> = BTreeMap::new();
-    for manifest in manifests {
-        let (found, deps) = match cargo_metadata_at(root, index, Some(manifest)) {
+    for manifest in discovered_manifests {
+        let (found, deps) = match cargo_metadata_at(root, index, Some(manifest), source, manifests)
+        {
             Ok(result) => result,
             Err(error) => return Some(Err(error)),
         };
@@ -705,8 +845,10 @@ fn nested_cargo_metadata_topology(
 fn cargo_metadata_topology(
     root: &Path,
     index: &ContextIndex,
+    source: MapFileSource<'_>,
+    manifests: &CapturedManifestAuthority,
 ) -> Result<(Vec<PackageEntry>, Vec<PackageDependency>)> {
-    cargo_metadata_at(root, index, None)
+    cargo_metadata_at(root, index, None, source, manifests)
 }
 
 /// Marker inside a heuristic-fallback provenance meaning "the tool could not be
@@ -722,19 +864,22 @@ fn cargo_metadata_at(
     root: &Path,
     index: &ContextIndex,
     manifest: Option<&str>,
+    source: MapFileSource<'_>,
+    manifests: &CapturedManifestAuthority,
 ) -> Result<(Vec<PackageEntry>, Vec<PackageDependency>)> {
-    let mut command = Command::new("cargo");
-    command.args(["metadata", "--no-deps", "--format-version", "1"]);
-    if let Some(manifest) = manifest {
-        command.args(["--manifest-path", manifest]);
+    if let Some(requested) = manifest
+        && !manifests.contains(requested)
+    {
+        bail!("cargo metadata requested manifest was not in the decision capture: {requested}");
     }
+    let mut command = cargo_metadata_command(root, manifest);
     // "cargo 跑不起来"与"拓扑不可信"会产出同一个 BLOCKED，但含义完全不同：前者
     // 装上 cargo 就能解除，后者要修 manifest。诊断里必须分得开，否则用户看到的是
     // 一条无从下手的"拓扑未获权威确认"。
     // Tag the "cargo is not reachable" case so callers can separate an
     // environment boundary from a damaged manifest. Both fail closed, but only
     // one of them is fixed by the operator's PATH rather than by the repository.
-    let output = command.current_dir(root).output().map_err(|error| {
+    let output = command.output().map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
             anyhow::anyhow!("{TOPOLOGY_TOOL_UNAVAILABLE}: cargo 不在本进程 PATH 中")
         } else {
@@ -749,6 +894,7 @@ fn cargo_metadata_at(
     }
     let document: CargoMetadataDocument =
         serde_json::from_slice(&output.stdout).context("无法解析 cargo metadata JSON")?;
+    validate_cargo_metadata_document(root, manifest, manifests, &document)?;
     let workspace_members: BTreeSet<&str> = document
         .workspace_members
         .iter()
@@ -758,27 +904,26 @@ fn cargo_metadata_at(
         .packages
         .iter()
         .map(|package| {
-            let manifest = Path::new(&package.manifest_path);
-            let relative_manifest = manifest
-                .strip_prefix(root)
-                .unwrap_or(manifest)
-                .to_string_lossy()
-                .replace('\\', "/");
-            PackageEntry {
+            let relative_manifest = metadata_workspace_relative_path(
+                root,
+                Path::new(&package.manifest_path),
+                "package manifest",
+            )?;
+            Ok(PackageEntry {
                 name: package.name.clone(),
                 root_path: manifest_root_path(&relative_manifest),
                 manifest_path: relative_manifest,
                 workspace_member: workspace_members.contains(package.id.as_str()),
                 source_files: 0,
                 test_files: 0,
-            }
+            })
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>>>()?;
     // Metadata owns workspace membership/dependencies. Add indexed nested manifests that
     // Cargo deliberately excludes (fixtures, excluded tools) so their impact still gets a
     // manifest-path test command rather than incorrectly borrowing an ancestor package.
-    let heuristic_workspace = read_workspace_info(root, index)?;
-    for candidate in discover_packages(root, index, &heuristic_workspace)? {
+    let heuristic_workspace = read_workspace_info(root, index, source)?;
+    for candidate in discover_packages(root, index, &heuristic_workspace, source)? {
         if !packages
             .iter()
             .any(|package| package.manifest_path == candidate.manifest_path)
@@ -795,12 +940,11 @@ fn cargo_metadata_at(
         .collect();
     let mut dependencies = Vec::new();
     for package in &document.packages {
-        let manifest = Path::new(&package.manifest_path);
-        let relative_manifest = manifest
-            .strip_prefix(root)
-            .unwrap_or(manifest)
-            .to_string_lossy()
-            .replace('\\', "/");
+        let relative_manifest = metadata_workspace_relative_path(
+            root,
+            Path::new(&package.manifest_path),
+            "package manifest",
+        )?;
         let Some(from) = by_manifest.get(&relative_manifest) else {
             continue;
         };
@@ -808,11 +952,8 @@ fn cargo_metadata_at(
             let Some(path) = dependency.path.as_deref() else {
                 continue;
             };
-            let dependency_root = Path::new(path)
-                .strip_prefix(root)
-                .unwrap_or_else(|_| Path::new(path))
-                .to_string_lossy()
-                .replace('\\', "/");
+            let dependency_root =
+                metadata_workspace_relative_path(root, Path::new(path), "path dependency root")?;
             let Some(to) = packages.iter().find(|candidate| {
                 candidate.root_path == dependency_root
                     || candidate.manifest_path
@@ -831,7 +972,7 @@ fn cargo_metadata_at(
                     .unwrap_or_else(|| dependency.name.clone()),
                 kind: dependency.kind.clone().unwrap_or_else(|| "normal".into()),
                 manifest_path: from.manifest_path.clone(),
-                evidence: "cargo metadata --no-deps".into(),
+                evidence: "cargo metadata --locked --no-deps".into(),
             });
         }
     }
@@ -849,7 +990,112 @@ fn cargo_metadata_at(
     Ok((packages, dependencies))
 }
 
-fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
+fn metadata_workspace_relative_path(root: &Path, path: &Path, label: &str) -> Result<String> {
+    let canonical_root = root.canonicalize().with_context(|| {
+        format!(
+            "无法规范化 cargo metadata workspace root: {}",
+            root.display()
+        )
+    })?;
+    // Cargo emits ordinary absolute Windows paths while `canonicalize()` uses
+    // the verbatim `\\?\` form. Comparing those raw spellings rejects the same
+    // file as an escape. Canonicalize the returned path itself first: this also
+    // resolves any symlink/junction alias, so a lexical in-workspace path whose
+    // actual target is outside remains fail-closed.
+    let canonical_path = path
+        .canonicalize()
+        .with_context(|| format!("无法规范化 cargo metadata {label}: {}", path.display()))?;
+    let relative = canonical_path.strip_prefix(&canonical_root).map_err(|_| {
+        anyhow::anyhow!(
+            "cargo metadata {label} escapes the captured workspace: {}",
+            path.display()
+        )
+    })?;
+    if relative
+        .components()
+        .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        bail!(
+            "cargo metadata {label} is not a normalized workspace path: {}",
+            path.display()
+        );
+    }
+    Ok(relative.to_string_lossy().replace('\\', "/"))
+}
+
+fn validate_cargo_metadata_document(
+    root: &Path,
+    requested_manifest: Option<&str>,
+    captured_manifests: &CapturedManifestAuthority,
+    document: &CargoMetadataDocument,
+) -> Result<()> {
+    if let Some(requested) = requested_manifest
+        && !captured_manifests.contains(requested)
+    {
+        bail!("cargo metadata requested manifest was not in the decision capture: {requested}");
+    }
+    let workspace_root = metadata_workspace_relative_path(
+        root,
+        Path::new(&document.workspace_root),
+        "workspace_root",
+    )?;
+    let workspace_manifest = if workspace_root.is_empty() {
+        "Cargo.toml".to_string()
+    } else {
+        format!("{workspace_root}/Cargo.toml")
+    };
+    if !captured_manifests.contains(&workspace_manifest) {
+        bail!(
+            "cargo metadata workspace manifest was not in the decision capture: {workspace_manifest}"
+        );
+    }
+    let package_ids = document
+        .packages
+        .iter()
+        .map(|package| package.id.as_str())
+        .collect::<BTreeSet<_>>();
+    if document
+        .workspace_members
+        .iter()
+        .any(|member| !package_ids.contains(member.as_str()))
+    {
+        bail!("cargo metadata workspace_members contains an unknown package id");
+    }
+    for package in &document.packages {
+        let manifest = metadata_workspace_relative_path(
+            root,
+            Path::new(&package.manifest_path),
+            "package manifest",
+        )?;
+        if !captured_manifests.contains(&manifest) {
+            bail!("cargo metadata package manifest was not in the decision capture: {manifest}");
+        }
+        for dependency in &package.dependencies {
+            let Some(path) = dependency.path.as_deref() else {
+                continue;
+            };
+            let dependency_root =
+                metadata_workspace_relative_path(root, Path::new(path), "path dependency root")?;
+            let dependency_manifest = if dependency_root.is_empty() {
+                "Cargo.toml".to_string()
+            } else {
+                format!("{dependency_root}/Cargo.toml")
+            };
+            if !captured_manifests.contains(&dependency_manifest) {
+                bail!(
+                    "cargo metadata path dependency manifest was not in the decision capture: {dependency_manifest}"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+fn build_from_index(
+    root: &Path,
+    index: &ContextIndex,
+    source: MapFileSource<'_>,
+) -> Result<ProjectMap> {
     let mut modules = Vec::new();
     let mut symbols = Vec::new();
     let mut entrypoints = Vec::new();
@@ -859,7 +1105,7 @@ fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
 
     for file in &index.files {
         if file.kind == "source" || file.kind == "test" {
-            let bytes = context::read_verified_file(root, file)
+            let bytes = indexed_file_bytes(root, file, source)
                 .with_context(|| format!("项目地图读取失败: {}", file.path))?;
             text_by_path.insert(
                 file.path.clone(),
@@ -926,18 +1172,18 @@ fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
         }
     }
 
-    let (mut packages, package_dependencies, topology_provenance) = if root
-        .join("Cargo.toml")
-        .is_file()
-    {
-        match cargo_metadata_topology(root, index) {
+    let cargo_manifests = CapturedManifestAuthority::from_index(root, index, source)?;
+    let root_has_cargo_manifest = index.files.iter().any(|file| file.path == "Cargo.toml");
+    let (mut packages, package_dependencies, topology_provenance) = if root_has_cargo_manifest {
+        match cargo_metadata_topology(root, index, source, &cargo_manifests) {
             Ok((packages, dependencies)) => (packages, dependencies, "cargo_metadata".to_string()),
             Err(error) => {
                 // Do not dress the fallback up as Cargo authority. It remains useful for
                 // damaged/nonstandard workspaces, but callers can see the weaker provenance.
-                let workspace = read_workspace_info(root, index)?;
-                let packages = discover_packages(root, index, &workspace)?;
-                let dependencies = infer_package_dependencies(root, index, &packages, &workspace)?;
+                let workspace = read_workspace_info(root, index, source)?;
+                let packages = discover_packages(root, index, &workspace, source)?;
+                let dependencies =
+                    infer_package_dependencies(root, index, &packages, &workspace, source)?;
                 (
                     packages,
                     dependencies,
@@ -945,16 +1191,19 @@ fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
                 )
             }
         }
-    } else if let Some(attempt) = nested_cargo_metadata_topology(root, index) {
+    } else if let Some(attempt) =
+        nested_cargo_metadata_topology(root, index, source, &cargo_manifests)
+    {
         match attempt {
             Ok((packages, dependencies)) => (packages, dependencies, "cargo_metadata".to_string()),
             Err(error) => {
                 // 与根 manifest 分支同构地透传错误文本：cargo_unavailable 标记
                 // 决定 check 给出的是环境修复建议还是仓库缺陷诊断。此前这里
                 // 吞掉错误换成固定字符串，"缺 cargo"被误诊为仓库损坏。
-                let workspace = read_workspace_info(root, index)?;
-                let packages = discover_packages(root, index, &workspace)?;
-                let dependencies = infer_package_dependencies(root, index, &packages, &workspace)?;
+                let workspace = read_workspace_info(root, index, source)?;
+                let packages = discover_packages(root, index, &workspace, source)?;
+                let dependencies =
+                    infer_package_dependencies(root, index, &packages, &workspace, source)?;
                 (
                     packages,
                     dependencies,
@@ -967,12 +1216,12 @@ fn build_from_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
         // holds no Cargo manifest at all — every other outcome, including the
         // invocation cap, now comes back as `Some(Err)` with an actionable
         // message. A repo with no Cargo package is legitimately ready.
-        let workspace = read_workspace_info(root, index)?;
-        let packages = discover_packages(root, index, &workspace)?;
-        let dependencies = infer_package_dependencies(root, index, &packages, &workspace)?;
+        let workspace = read_workspace_info(root, index, source)?;
+        let packages = discover_packages(root, index, &workspace, source)?;
+        let dependencies = infer_package_dependencies(root, index, &packages, &workspace, source)?;
         (packages, dependencies, "no_cargo_manifest".to_string())
     };
-    packages.extend(python::discover_packages(root, index)?);
+    packages.extend(python::discover_packages(root, index, source)?);
     // 本地 crate 名来自实际发现的 package，而不是硬编码本工具自己的名字。
     let local_crates: BTreeSet<String> = packages
         .iter()
@@ -1032,23 +1281,44 @@ fn count_kinds(index: &ContextIndex) -> (usize, usize, usize, usize, usize, usiz
 /// built. Parsing lives here, next to the other workspace-manifest rules, so
 /// the validation layer cannot drift from it.
 pub(crate) fn path_is_excluded_from_root_cargo_workspace(root: &Path, path: &str) -> bool {
-    let Ok(text) = std::fs::read_to_string(root.join("Cargo.toml")) else {
+    let Ok(bytes) = std::fs::read(root.join("Cargo.toml")) else {
+        return false;
+    };
+    path_is_excluded_from_root_cargo_workspace_bytes(Some(&bytes), path)
+}
+
+/// Pure counterpart used by a caller-owned readiness capture. `None` means
+/// the complete capture contained no root Cargo manifest; malformed UTF-8
+/// preserves the legacy fail-closed relevance behavior of `read_to_string` by
+/// refusing to infer an exclusion.
+pub(crate) fn path_is_excluded_from_root_cargo_workspace_bytes(
+    cargo_toml: Option<&[u8]>,
+    path: &str,
+) -> bool {
+    let Some(bytes) = cargo_toml else {
+        return false;
+    };
+    let Ok(text) = std::str::from_utf8(bytes) else {
         return false;
     };
     let normalized = path.replace('\\', "/");
-    parse_workspace_array(&text, "exclude")
+    parse_workspace_array(text, "exclude")
         .iter()
         .any(|pattern| path_matches_workspace_exclude_pattern(&normalized, pattern))
 }
 
-fn read_workspace_info(root: &Path, index: &ContextIndex) -> Result<WorkspaceInfo> {
+fn read_workspace_info(
+    root: &Path,
+    index: &ContextIndex,
+    source: MapFileSource<'_>,
+) -> Result<WorkspaceInfo> {
     let Some(entry) = index.files.iter().find(|file| file.path == "Cargo.toml") else {
         return Ok(WorkspaceInfo::default());
     };
     // Manifests decode exactly like indexed source files: one non-UTF-8 manifest anywhere in
     // the tree (a fixture with a GBK comment, even one the workspace excludes) must not bail
     // the whole map/check/prepare/finish pipeline and leave the workspace unable to be READY.
-    let text = String::from_utf8_lossy(&context::read_verified_file(root, entry)?).into_owned();
+    let text = indexed_file_text(root, entry, source)?;
     let mut info = WorkspaceInfo {
         member_patterns: parse_workspace_array(&text, "members"),
         exclude_patterns: parse_workspace_array(&text, "exclude"),
@@ -1151,13 +1421,14 @@ fn discover_packages(
     root: &Path,
     index: &ContextIndex,
     workspace: &WorkspaceInfo,
+    source: MapFileSource<'_>,
 ) -> Result<Vec<PackageEntry>> {
     let mut packages = Vec::new();
     for file in &index.files {
         if !is_cargo_manifest_path(&file.path) {
             continue;
         }
-        let text = String::from_utf8_lossy(&context::read_verified_file(root, file)?).into_owned();
+        let text = indexed_file_text(root, file, source)?;
         let Some(name) = parse_package_name(&text) else {
             continue;
         };
@@ -1213,6 +1484,7 @@ fn infer_package_dependencies(
     index: &ContextIndex,
     packages: &[PackageEntry],
     workspace: &WorkspaceInfo,
+    source: MapFileSource<'_>,
 ) -> Result<Vec<PackageDependency>> {
     let package_by_root: BTreeMap<&str, &PackageEntry> = packages
         .iter()
@@ -1232,7 +1504,7 @@ fn infer_package_dependencies(
                     package.manifest_path
                 )
             })?;
-        let text = String::from_utf8_lossy(&context::read_verified_file(root, entry)?).into_owned();
+        let text = indexed_file_text(root, entry, source)?;
         let mut section = String::new();
         let mut nested_dependency: Option<String> = None;
         for (line_index, raw) in text.lines().enumerate() {

@@ -125,7 +125,7 @@ fn executable_name(command: &ParsedValidationCommand) -> String {
         .to_string()
 }
 
-fn powershell_script(command: &ParsedValidationCommand) -> Option<&str> {
+pub(super) fn powershell_script(command: &ParsedValidationCommand) -> Option<&str> {
     if matches!(executable_name(command).as_str(), "powershell" | "pwsh")
         && command.args.len() >= 3
         && command.args[0].eq_ignore_ascii_case("-NoProfile")
@@ -204,54 +204,6 @@ fn test_invocation(command: &ParsedValidationCommand) -> bool {
     cargo_test_invocation(command) || pytest_invocation(command)
 }
 
-/// Resolve a recognized repository gate script by **identity**, not by file name.
-///
-/// Matching on the bare basename was a forgery hole: an ordinary two-line
-/// `exit 0` file committed anywhere in the workspace under the name
-/// `install-rayman.ps1` / `verify-release-contract.ps1` / `check-repo.ps1`
-/// minted the corresponding typed proof, so a release handoff (whose three
-/// stages are exactly `installation`, `repository_gate` and `source_fresh`)
-/// could be closed to success without building, auditing or installing
-/// anything. `validate_authority_command` always resolved the real path; every
-/// other consumer of a gate-script name now shares this one resolution.
-///
-/// Returns the canonical script name so callers keep matching on a stable
-/// token instead of re-deriving paths.
-fn trusted_gate_script(root: &Path, command: &ParsedValidationCommand) -> Option<&'static str> {
-    let script = powershell_script(command)?;
-    let lexical = if Path::new(script).is_absolute() {
-        PathBuf::from(script)
-    } else {
-        root.join(script)
-    };
-    let canonical_root = root.canonicalize().ok()?;
-    let canonical_script = lexical.canonicalize().ok()?;
-    let relative = canonical_script.strip_prefix(&canonical_root).ok()?;
-    match normalized_path_text(&relative.to_string_lossy()).as_str() {
-        "check-repo.ps1" | "scripts/check-repo.ps1" => Some("check-repo.ps1"),
-        "audit-repository.ps1" | "scripts/audit-repository.ps1" => Some("audit-repository.ps1"),
-        "verify-release-contract.ps1" | "scripts/verify-release-contract.ps1" => {
-            Some("verify-release-contract.ps1")
-        }
-        "release-closeout.ps1" | "scripts/release-closeout.ps1" => Some("release-closeout.ps1"),
-        "install-rayman.ps1" | "scripts/install-rayman.ps1" => Some("install-rayman.ps1"),
-        "check-agent-instructions.ps1" | "scripts/check-agent-instructions.ps1" => {
-            Some("check-agent-instructions.ps1")
-        }
-        _ => None,
-    }
-}
-
-/// Workspace-wide project gates: the three scripts whose contract is "this run
-/// covered the whole repository". Kept separate from the installer and the
-/// documentation checker, which cover much less.
-fn trusted_workspace_gate_script(root: &Path, command: &ParsedValidationCommand) -> bool {
-    matches!(
-        trusted_gate_script(root, command),
-        Some("check-repo.ps1" | "audit-repository.ps1" | "verify-release-contract.ps1")
-    )
-}
-
 /// PowerShell binds any unambiguous switch **prefix**, so `-Self` runs the
 /// installer's self-test branch — which builds and installs nothing — while an
 /// exact `-SelfTest` comparison never sees it. Every prefix of `-selftest`
@@ -270,6 +222,48 @@ fn release_installer_invocation(root: &Path, command: &ParsedValidationCommand) 
             .args
             .iter()
             .any(|argument| is_installer_self_test_switch(argument))
+}
+
+fn release_installer_invocation_with_context(
+    decision: &GoalDecisionContext<'_>,
+    command: &ParsedValidationCommand,
+) -> Result<bool> {
+    Ok(
+        trusted_gate_script_with_context(decision, command)? == Some("install-rayman.ps1")
+            && !command
+                .args
+                .iter()
+                .any(|argument| is_installer_self_test_switch(argument)),
+    )
+}
+
+/// Ordinary workspace-owned PowerShell scripts are permitted as local
+/// validation evidence, but the reviewed gate basenames are reserved.  This
+/// keeps an arbitrary `tools/check-repo.ps1` (or an installer's `-Self*`
+/// branch) from borrowing Rust/Cargo coverage merely because it exists under
+/// the workspace.
+fn ordinary_workspace_powershell_validation(
+    root: &Path,
+    command: &ParsedValidationCommand,
+) -> bool {
+    powershell_script(command).is_some()
+        && !powershell_script_has_reserved_gate_basename(command)
+        && resolve_live_powershell_script(root, command)
+            .ok()
+            .flatten()
+            .is_some()
+}
+
+fn ordinary_workspace_powershell_validation_with_context(
+    decision: &GoalDecisionContext<'_>,
+    command: &ParsedValidationCommand,
+) -> bool {
+    powershell_script(command).is_some()
+        && !powershell_script_has_reserved_gate_basename(command)
+        && captured_workspace_powershell_key_with_context(decision, command)
+            .ok()
+            .flatten()
+            .is_some()
 }
 
 pub fn validation_proof_kind(root: &Path, command: &str) -> Result<ProofKind> {
@@ -306,6 +300,69 @@ pub fn validation_proof_kind(root: &Path, command: &str) -> Result<ProofKind> {
         } else {
             ProofKind::Generic
         });
+    }
+    if script == "check-agent-instructions.ps1"
+        || executable == "markdownlint"
+        || parsed.args.iter().any(|argument| {
+            argument
+                .replace('\\', "/")
+                .to_ascii_lowercase()
+                .ends_with("quick_validate.py")
+        })
+    {
+        return Ok(ProofKind::Documentation);
+    }
+    if executable == "git"
+        && parsed
+            .args
+            .first()
+            .is_some_and(|argument| argument == "rev-parse")
+        && parsed.args.iter().any(|argument| argument == "--verify")
+    {
+        return Ok(ProofKind::GitCommit);
+    }
+    if test_invocation(&parsed) {
+        return Ok(ProofKind::Test);
+    }
+    Ok(ProofKind::Generic)
+}
+
+/// Capture-only proof classification for readiness.  It deliberately avoids
+/// reopening a PowerShell path after the decision capture.
+pub(crate) fn validation_proof_kind_with_context(
+    decision: &GoalDecisionContext<'_>,
+    command: &str,
+) -> Result<ProofKind> {
+    let parsed = parse_validation_command(command)?;
+    let executable = executable_name(&parsed);
+    let script = trusted_gate_script_with_context(decision, &parsed)?.unwrap_or_default();
+    let has_arg = |needle: &str| {
+        parsed
+            .args
+            .iter()
+            .any(|argument| argument.eq_ignore_ascii_case(needle))
+    };
+    if script == "verify-release-contract.ps1" && has_arg("-RequireSourceFresh") {
+        return Ok(ProofKind::SourceFresh);
+    }
+    if matches!(
+        script,
+        "check-repo.ps1" | "audit-repository.ps1" | "release-closeout.ps1"
+    ) {
+        return Ok(ProofKind::RepositoryGate);
+    }
+    if script == "install-rayman.ps1" {
+        return Ok(
+            if !parsed
+                .args
+                .iter()
+                .any(|argument| is_installer_self_test_switch(argument))
+            {
+                ProofKind::Installation
+            } else {
+                ProofKind::Generic
+            },
+        );
     }
     if script == "check-agent-instructions.ps1"
         || executable == "markdownlint"
@@ -455,6 +512,22 @@ pub fn validate_command_security(root: &Path, command: &ParsedValidationCommand)
     validate_command_containment(root, command)
 }
 
+pub(super) fn validate_command_security_with_context(
+    decision: &GoalDecisionContext<'_>,
+    command: &ParsedValidationCommand,
+) -> Result<()> {
+    validate_test_execution_mode(command)?;
+    if !decision.has_captured_workspace_bytes() {
+        return validate_command_containment(decision.root(), command);
+    }
+    if powershell_script(command).is_some()
+        && captured_workspace_powershell_key_with_context(decision, command)?.is_none()
+    {
+        bail!("captured PowerShell validation script is absent from the workspace capture");
+    }
+    Ok(())
+}
+
 /// The spawn-safety half of [`validate_command_security`], without the
 /// test-execution-mode rule.
 ///
@@ -464,42 +537,7 @@ pub fn validate_command_security(root: &Path, command: &ParsedValidationCommand)
 /// be able to spawn anything the validation path refuses, which is exactly what
 /// this half enforces.
 pub fn validate_command_containment(root: &Path, command: &ParsedValidationCommand) -> Result<()> {
-    let Some(script) = powershell_script(command) else {
-        return Ok(());
-    };
-    let lexical_script = {
-        let path = Path::new(script);
-        if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            root.join(path)
-        }
-    };
-    let metadata = fs::symlink_metadata(&lexical_script).map_err(|error| {
-        anyhow::anyhow!(
-            "无法读取 PowerShell 验证脚本 {}: {error}",
-            lexical_script.display()
-        )
-    })?;
-    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
-        bail!("PowerShell 验证脚本必须是工作区内的普通 .ps1 文件");
-    }
-    let canonical_root = root.canonicalize()?;
-    let canonical_script = lexical_script.canonicalize()?;
-    if canonical_script.extension().and_then(|ext| ext.to_str()) != Some("ps1")
-        || !canonical_script.starts_with(&canonical_root)
-    {
-        bail!("PowerShell 验证脚本必须是工作区内的普通 .ps1 文件");
-    }
-    let visible = crate::walk::workspace_files_checked(root)?
-        .into_iter()
-        .any(|path| {
-            path.canonicalize()
-                .is_ok_and(|candidate| candidate == canonical_script)
-        });
-    if !visible {
-        bail!("PowerShell 验证脚本不在当前工作区的受检文件集合中");
-    }
+    let _ = resolve_live_powershell_script(root, command)?;
     Ok(())
 }
 
@@ -834,6 +872,49 @@ pub fn has_current_stable_authority_receipt(
             && replacement_authority_error(goal, root, current_fingerprint).is_none())
 }
 
+pub fn has_current_stable_authority_receipt_with_baseline(
+    goal: &Goal,
+    all_goals: &[Goal],
+    root: &Path,
+    current: &WorkspaceBaseline,
+) -> bool {
+    has_direct_stable_authority_receipt_with_baseline(goal, root, current)
+        || (goal.replacement_authority.is_some()
+            && replacement_authority_error_with_baseline(goal, root, current, all_goals).is_none())
+}
+
+/// Capture-only authority readiness used by the readiness decision.  The
+/// caller owns both the source bytes and the current baseline, so no authority
+/// helper, gate path or Cargo manifest is reopened while deciding readiness.
+pub fn has_current_stable_authority_receipt_with_context(
+    goal: &Goal,
+    all_goals: &[Goal],
+    decision: &GoalDecisionContext<'_>,
+) -> bool {
+    has_direct_stable_authority_receipt_with_context(goal, decision)
+        || (goal.replacement_authority.is_some()
+            && replacement_authority_error_with_context(goal, decision, all_goals).is_none())
+}
+
+pub(super) fn has_direct_stable_authority_receipt_with_baseline(
+    goal: &Goal,
+    root: &Path,
+    current: &WorkspaceBaseline,
+) -> bool {
+    goal.authority_receipts.iter().any(|authority| {
+        direct_stable_authority_receipt_is_valid_with_baseline(goal, root, current, authority)
+    })
+}
+
+pub(super) fn has_direct_stable_authority_receipt_with_context(
+    goal: &Goal,
+    decision: &GoalDecisionContext<'_>,
+) -> bool {
+    goal.authority_receipts.iter().any(|authority| {
+        direct_stable_authority_receipt_is_valid_with_context(goal, decision, authority)
+    })
+}
+
 pub(super) fn has_direct_stable_authority_receipt(
     goal: &Goal,
     root: &Path,
@@ -853,6 +934,84 @@ pub(super) fn has_direct_stable_authority_command(
     goal.authority_receipts.iter().any(|authority| {
         authority.command == command
             && direct_stable_authority_receipt_is_valid(goal, root, fingerprint, authority)
+    })
+}
+
+/// Validate an archived direct authority receipt from its immutable ledger
+/// fields without reinterpreting a historical PowerShell dependency graph with
+/// today's parser or today's helper bytes.  The replacement proof separately
+/// binds the receipt-era gate closure.
+pub(super) fn has_archived_direct_stable_authority_command(
+    goal: &Goal,
+    root: &Path,
+    fingerprint: &str,
+    command: &str,
+) -> bool {
+    goal.authority_receipts.iter().any(|authority| {
+        let Ok(contract_sha256) = validation_contract_sha256(goal, &authority.requirement_id)
+        else {
+            return false;
+        };
+        authority.command == command
+            && authority.repeat >= 2
+            && authority.runs.len() == authority.repeat as usize
+            && authority.workspace_fingerprint == fingerprint
+            && authority.contract_sha256 == contract_sha256
+            && authority.invocation_sha256
+                == authority_invocation_sha256_mode(
+                    &authority.command,
+                    &authority.requirement_id,
+                    authority.repeat,
+                    &authority.impact_scopes,
+                    authority.non_code,
+                    authority.workspace_snapshot,
+                )
+            && authority_scope_is_well_formed(authority)
+            && validate_authority_command(root, &authority.command).is_ok()
+            && authority.runs.iter().all(|run| {
+                run.exit_code == 0
+                    && run.workspace_fingerprint_before == fingerprint
+                    && run.workspace_fingerprint_after == fingerprint
+                    && is_sha256(&run.stdout_sha256)
+                    && is_sha256(&run.stderr_sha256)
+            })
+    })
+}
+
+pub(super) fn has_archived_direct_stable_authority_command_with_context(
+    goal: &Goal,
+    decision: &GoalDecisionContext<'_>,
+    fingerprint: &str,
+    command: &str,
+) -> bool {
+    goal.authority_receipts.iter().any(|authority| {
+        let Ok(contract_sha256) = validation_contract_sha256(goal, &authority.requirement_id)
+        else {
+            return false;
+        };
+        authority.command == command
+            && authority.repeat >= 2
+            && authority.runs.len() == authority.repeat as usize
+            && authority.workspace_fingerprint == fingerprint
+            && authority.contract_sha256 == contract_sha256
+            && authority.invocation_sha256
+                == authority_invocation_sha256_mode(
+                    &authority.command,
+                    &authority.requirement_id,
+                    authority.repeat,
+                    &authority.impact_scopes,
+                    authority.non_code,
+                    authority.workspace_snapshot,
+                )
+            && authority_scope_is_well_formed(authority)
+            && validate_authority_command_with_context(decision, &authority.command).is_ok()
+            && authority.runs.iter().all(|run| {
+                run.exit_code == 0
+                    && run.workspace_fingerprint_before == fingerprint
+                    && run.workspace_fingerprint_after == fingerprint
+                    && is_sha256(&run.stdout_sha256)
+                    && is_sha256(&run.stderr_sha256)
+            })
     })
 }
 
@@ -884,11 +1043,88 @@ pub(super) fn direct_stable_authority_receipt_is_valid(
             )
         && authority_scope_is_well_formed(authority)
         && snapshot_delta_is_empty
-        && validate_authority_command(root, &authority.command).is_ok()
+        && validate_authority_command_for_goal(root, goal, &authority.command).is_ok()
         && authority.runs.iter().all(|run| {
             run.exit_code == 0
                 && run.workspace_fingerprint_before == fingerprint
                 && run.workspace_fingerprint_after == fingerprint
+                && is_sha256(&run.stdout_sha256)
+                && is_sha256(&run.stderr_sha256)
+        })
+}
+
+pub(super) fn direct_stable_authority_receipt_is_valid_with_baseline(
+    goal: &Goal,
+    root: &Path,
+    current: &WorkspaceBaseline,
+    authority: &AuthorityReceipt,
+) -> bool {
+    let fingerprint = &current.workspace_fingerprint;
+    let Ok(contract_sha256) = validation_contract_sha256(goal, &authority.requirement_id) else {
+        return false;
+    };
+    let snapshot_delta_is_empty = !authority.workspace_snapshot
+        || goal_plan_delta(goal, current).is_ok_and(|delta| delta.actual_changed_paths.is_empty());
+    authority.repeat >= 2
+        && authority.runs.len() == authority.repeat as usize
+        && authority.workspace_fingerprint == *fingerprint
+        && authority.contract_sha256 == contract_sha256
+        && authority.invocation_sha256
+            == authority_invocation_sha256_mode(
+                &authority.command,
+                &authority.requirement_id,
+                authority.repeat,
+                &authority.impact_scopes,
+                authority.non_code,
+                authority.workspace_snapshot,
+            )
+        && authority_scope_is_well_formed(authority)
+        && snapshot_delta_is_empty
+        && validate_authority_command_for_goal(root, goal, &authority.command).is_ok()
+        && authority.runs.iter().all(|run| {
+            run.exit_code == 0
+                && run.workspace_fingerprint_before == *fingerprint
+                && run.workspace_fingerprint_after == *fingerprint
+                && is_sha256(&run.stdout_sha256)
+                && is_sha256(&run.stderr_sha256)
+        })
+}
+
+pub(super) fn direct_stable_authority_receipt_is_valid_with_context(
+    goal: &Goal,
+    decision: &GoalDecisionContext<'_>,
+    authority: &AuthorityReceipt,
+) -> bool {
+    let Some(current) = decision.current() else {
+        return false;
+    };
+    let fingerprint = &current.workspace_fingerprint;
+    let Ok(contract_sha256) = validation_contract_sha256(goal, &authority.requirement_id) else {
+        return false;
+    };
+    let snapshot_delta_is_empty = !authority.workspace_snapshot
+        || goal_plan_delta(goal, current).is_ok_and(|delta| delta.actual_changed_paths.is_empty());
+    authority.repeat >= 2
+        && authority.runs.len() == authority.repeat as usize
+        && authority.workspace_fingerprint == *fingerprint
+        && authority.contract_sha256 == contract_sha256
+        && authority.invocation_sha256
+            == authority_invocation_sha256_mode(
+                &authority.command,
+                &authority.requirement_id,
+                authority.repeat,
+                &authority.impact_scopes,
+                authority.non_code,
+                authority.workspace_snapshot,
+            )
+        && authority_scope_is_well_formed(authority)
+        && snapshot_delta_is_empty
+        && validate_authority_command_for_goal_with_context(decision, goal, &authority.command)
+            .is_ok()
+        && authority.runs.iter().all(|run| {
+            run.exit_code == 0
+                && run.workspace_fingerprint_before == *fingerprint
+                && run.workspace_fingerprint_after == *fingerprint
                 && is_sha256(&run.stdout_sha256)
                 && is_sha256(&run.stderr_sha256)
         })
@@ -976,10 +1212,45 @@ pub(super) fn is_sha256(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
-fn same_canonical_path(left: &Path, right: &Path) -> bool {
-    match (left.canonicalize(), right.canonicalize()) {
-        (Ok(left), Ok(right)) => left == right,
-        _ => false,
+fn receipt_identity_matches_live(
+    receipt: &ValidationReceipt,
+    root: &Path,
+    policy: ReceiptValidationPolicy,
+) -> bool {
+    match policy {
+        ReceiptValidationPolicy::CurrentV3 => {
+            receipt.workspace_identity == workspace_identity(root)
+                && is_sha256(&receipt.workspace_identity)
+        }
+        // v1/v2 are preserved only as historical audit records. Their old
+        // path-based predicate deliberately retains its original semantics.
+        ReceiptValidationPolicy::LegacyV1 | ReceiptValidationPolicy::CurrentV2 => {
+            match (Path::new(&receipt.cwd).canonicalize(), root.canonicalize()) {
+                (Ok(left), Ok(right)) => left == right,
+                _ => false,
+            }
+        }
+    }
+}
+
+fn receipt_identity_matches_context(
+    receipt: &ValidationReceipt,
+    decision: &GoalDecisionContext<'_>,
+    policy: ReceiptValidationPolicy,
+) -> bool {
+    match policy {
+        ReceiptValidationPolicy::CurrentV3 => match decision.captured_workspace_identity() {
+            Some(identity) => {
+                receipt.workspace_identity == identity && is_sha256(&receipt.workspace_identity)
+            }
+            None => receipt_identity_matches_live(receipt, decision.root(), policy),
+        },
+        // Capture does not reopen arbitrary receipt paths. Legacy records are
+        // only readable audit history; their previous literal comparison is
+        // intentionally retained rather than manufacturing an identity.
+        ReceiptValidationPolicy::LegacyV1 | ReceiptValidationPolicy::CurrentV2 => {
+            receipt.cwd == decision.root().display().to_string()
+        }
     }
 }
 
@@ -1034,6 +1305,9 @@ pub(super) enum ReceiptValidationPolicy {
     LegacyV1,
     /// Current receipt integrity, test-proof, and relevance policy.
     CurrentV2,
+    /// Identity-bound receipts. This is the only policy eligible to carry
+    /// archived success authority back into a current lifecycle decision.
+    CurrentV3,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1075,7 +1349,75 @@ pub fn validation_has_current_receipt(
         current_fingerprint,
         &contract_sha256,
         true,
-        ReceiptValidationPolicy::CurrentV2,
+        ReceiptValidationPolicy::CurrentV3,
+    )
+}
+
+pub fn validation_has_current_receipt_with_baseline(
+    validation: &ValidationEvidence,
+    goal: &Goal,
+    requirement: &Requirement,
+    root: &Path,
+    current: &WorkspaceBaseline,
+) -> bool {
+    if validation.workspace_snapshot
+        && !goal_plan_delta(goal, current).is_ok_and(|delta| delta.actual_changed_paths.is_empty())
+    {
+        return false;
+    }
+    if !proof_kind_matches(
+        requirement.proof_kind,
+        validation_proof_kind(root, &validation.command)
+            .ok()
+            .unwrap_or_default(),
+    ) {
+        return false;
+    }
+    let Ok(contract_sha256) = validation_contract_sha256(goal, &requirement.id) else {
+        return false;
+    };
+    validation_has_receipt_for_fingerprint(
+        validation,
+        root,
+        &current.workspace_fingerprint,
+        &contract_sha256,
+        true,
+        ReceiptValidationPolicy::CurrentV3,
+    )
+}
+
+pub(crate) fn validation_has_current_receipt_with_context(
+    validation: &ValidationEvidence,
+    goal: &Goal,
+    requirement: &Requirement,
+    decision: &GoalDecisionContext<'_>,
+) -> bool {
+    let Some(current) = decision.current() else {
+        return false;
+    };
+    if validation.workspace_snapshot
+        && !goal_plan_delta(goal, current).is_ok_and(|delta| delta.actual_changed_paths.is_empty())
+    {
+        return false;
+    }
+    if !proof_kind_matches(
+        requirement.proof_kind,
+        validation_proof_kind_with_context(decision, &validation.command)
+            .ok()
+            .unwrap_or_default(),
+    ) {
+        return false;
+    }
+    let Ok(contract_sha256) = validation_contract_sha256(goal, &requirement.id) else {
+        return false;
+    };
+    validation_has_receipt_for_fingerprint_with_context(
+        validation,
+        decision,
+        &current.workspace_fingerprint,
+        &contract_sha256,
+        true,
+        ReceiptValidationPolicy::CurrentV3,
     )
 }
 
@@ -1100,7 +1442,7 @@ pub(super) fn validation_has_receipt_for_fingerprint(
         && receipt.workspace_fingerprint_before == fingerprint
         && receipt.workspace_fingerprint_after == fingerprint
         && receipt.workspace_fingerprint_before == receipt.workspace_fingerprint_after
-        && same_canonical_path(Path::new(&receipt.cwd), root)
+        && receipt_identity_matches_live(receipt, root, policy)
         && is_sha256(&receipt.stdout_sha256)
         && is_sha256(&receipt.stderr_sha256)
         && is_sha256(&receipt.invocation_sha256)
@@ -1116,8 +1458,167 @@ pub(super) fn validation_has_receipt_for_fingerprint(
         && validation_scope_is_well_formed(validation)
         && (!(match policy {
             ReceiptValidationPolicy::LegacyV1 => cargo_test_invocation(&parsed),
-            ReceiptValidationPolicy::CurrentV2 => test_invocation(&parsed),
+            ReceiptValidationPolicy::CurrentV2 | ReceiptValidationPolicy::CurrentV3 => {
+                test_invocation(&parsed)
+            }
         }) || test_receipt_has_structured_proof(receipt))
+}
+
+pub(super) fn validation_has_receipt_for_fingerprint_with_context(
+    validation: &ValidationEvidence,
+    decision: &GoalDecisionContext<'_>,
+    fingerprint: &str,
+    contract_sha256: &str,
+    enforce_current_security: bool,
+    policy: ReceiptValidationPolicy,
+) -> bool {
+    let Ok(parsed) = parse_validation_command(&validation.command) else {
+        return false;
+    };
+    if enforce_current_security
+        && validate_command_security_with_context(decision, &parsed).is_err()
+    {
+        return false;
+    }
+    let Some(receipt) = validation.receipt.as_ref() else {
+        return false;
+    };
+    receipt.exit_code == 0
+        && receipt.workspace_fingerprint_before == fingerprint
+        && receipt.workspace_fingerprint_after == fingerprint
+        && receipt.workspace_fingerprint_before == receipt.workspace_fingerprint_after
+        && receipt_identity_matches_context(receipt, decision, policy)
+        && is_sha256(&receipt.stdout_sha256)
+        && is_sha256(&receipt.stderr_sha256)
+        && is_sha256(&receipt.invocation_sha256)
+        && receipt.contract_sha256 == contract_sha256
+        && is_sha256(&receipt.contract_sha256)
+        && receipt.invocation_sha256
+            == validation_invocation_sha256_scoped_mode(
+                &validation.command,
+                &validation.impact_scopes,
+                validation.non_code,
+                validation.workspace_snapshot,
+            )
+        && validation_scope_is_well_formed(validation)
+        && (!(match policy {
+            ReceiptValidationPolicy::LegacyV1 => cargo_test_invocation(&parsed),
+            ReceiptValidationPolicy::CurrentV2 | ReceiptValidationPolicy::CurrentV3 => {
+                test_invocation(&parsed)
+            }
+        }) || test_receipt_has_structured_proof(receipt))
+}
+
+/// Historical lifecycle verification needs one additional identity mode: a v3
+/// receipt is bound to the archived lifecycle proof's immutable workspace
+/// identity, not to the path where that history happens to be inspected now.
+/// This stays private to historical proof validation; all current/replacement
+/// paths continue to require the live or captured identity.
+pub(super) fn validation_has_historical_receipt_for_fingerprint_with_identity(
+    validation: &ValidationEvidence,
+    root: &Path,
+    fingerprint: &str,
+    contract_sha256: &str,
+    policy: ReceiptValidationPolicy,
+    expected_workspace_identity: Option<&str>,
+) -> bool {
+    let Ok(parsed) = parse_validation_command(&validation.command) else {
+        return false;
+    };
+    let Some(receipt) = validation.receipt.as_ref() else {
+        return false;
+    };
+    let identity_matches = match policy {
+        ReceiptValidationPolicy::CurrentV3 => expected_workspace_identity
+            .is_some_and(|identity| receipt.workspace_identity == identity && is_sha256(identity)),
+        ReceiptValidationPolicy::LegacyV1 | ReceiptValidationPolicy::CurrentV2 => {
+            receipt_identity_matches_live(receipt, root, policy)
+        }
+    };
+    receipt.exit_code == 0
+        && receipt.workspace_fingerprint_before == fingerprint
+        && receipt.workspace_fingerprint_after == fingerprint
+        && receipt.workspace_fingerprint_before == receipt.workspace_fingerprint_after
+        && identity_matches
+        && is_sha256(&receipt.stdout_sha256)
+        && is_sha256(&receipt.stderr_sha256)
+        && is_sha256(&receipt.invocation_sha256)
+        && receipt.contract_sha256 == contract_sha256
+        && is_sha256(&receipt.contract_sha256)
+        && receipt.invocation_sha256
+            == validation_invocation_sha256_scoped_mode(
+                &validation.command,
+                &validation.impact_scopes,
+                validation.non_code,
+                validation.workspace_snapshot,
+            )
+        && validation_scope_is_well_formed(validation)
+        && (!(match policy {
+            ReceiptValidationPolicy::LegacyV1 => cargo_test_invocation(&parsed),
+            ReceiptValidationPolicy::CurrentV2 | ReceiptValidationPolicy::CurrentV3 => {
+                test_invocation(&parsed)
+            }
+        }) || test_receipt_has_structured_proof(receipt))
+}
+
+pub(super) fn goal_success_historical_receipt_gaps_with_identity(
+    goal: &Goal,
+    root: &Path,
+    fingerprint: &str,
+    policy: ReceiptValidationPolicy,
+    expected_workspace_identity: Option<&str>,
+) -> Vec<String> {
+    let mut gaps = Vec::new();
+    if goal.status != GoalStatus::Success {
+        gaps.push(format!("goal 状态为 {}，不是 success", goal.status));
+    }
+    if goal.replacement_authority.is_some() {
+        return gaps;
+    }
+    for requirement in &goal.requirements {
+        if requirement.kind != RequirementKind::Must {
+            continue;
+        }
+        if requirement.status != RequirementStatus::Done
+            || requirement
+                .evidence
+                .as_deref()
+                .map(str::trim)
+                .unwrap_or_default()
+                .is_empty()
+        {
+            gaps.push(format!("must {} 未完成或缺少 evidence", requirement.id));
+            continue;
+        }
+        let Ok(contract_sha256) = validation_contract_sha256(goal, &requirement.id) else {
+            gaps.push(format!(
+                "must {} immutable contract 无法计算",
+                requirement.id
+            ));
+            continue;
+        };
+        if !requirement.validations.iter().any(|validation| {
+            proof_kind_matches(
+                requirement.proof_kind,
+                validation_proof_kind(root, &validation.command)
+                    .ok()
+                    .unwrap_or_default(),
+            ) && validation_has_historical_receipt_for_fingerprint_with_identity(
+                validation,
+                root,
+                fingerprint,
+                &contract_sha256,
+                policy,
+                expected_workspace_identity,
+            )
+        }) {
+            gaps.push(format!(
+                "must {} 缺少当前成功 validation receipt",
+                requirement.id
+            ));
+        }
+    }
+    gaps
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1222,8 +1723,8 @@ fn cargo_subcommand(command: &ParsedValidationCommand) -> Option<(&str, Option<&
     Some((first, args.next()))
 }
 
-fn validation_matches_expectation(
-    root: &Path,
+fn validation_matches_expectation_with_context(
+    decision: &GoalDecisionContext<'_>,
     command: &ParsedValidationCommand,
     expectation: ValidationExpectation,
 ) -> bool {
@@ -1233,13 +1734,20 @@ fn validation_matches_expectation(
     if pytest_invocation(command) {
         return matches!(expectation, ValidationExpectation::PythonTest);
     }
-    if release_installer_invocation(root, command) {
+    if release_installer_invocation_with_context(decision, command).unwrap_or(false) {
         return matches!(
             expectation,
             ValidationExpectation::RustBuildOrTest | ValidationExpectation::CargoManifestValidation
         );
     }
-    if trusted_workspace_gate_script(root, command) {
+    if trusted_workspace_gate_script_with_context(decision, command).unwrap_or(false) {
+        return true;
+    }
+    // Execution safety and authority identity intentionally differ. A unique
+    // workspace-owned PowerShell file may be a relevant validation command
+    // without acquiring the immutable logical-key authority of a reviewed
+    // repository gate. Capture-only resolution uses only the fixed bytes.
+    if ordinary_workspace_powershell_validation_with_context(decision, command) {
         return true;
     }
     let rustc_build = executable_name(command) == "rustc"
@@ -1266,12 +1774,62 @@ fn validation_matches_expectation(
                 || (subcommand == "deny" && next == Some("check"))
         }
         ValidationExpectation::PythonTest => false,
-        // 已在函数开头短路，不会走到这里。
         ValidationExpectation::NonProbeCommand => true,
     }
 }
 
-fn normalized_path_text(path: &str) -> String {
+fn validation_matches_expectation(
+    root: &Path,
+    command: &ParsedValidationCommand,
+    expectation: ValidationExpectation,
+) -> bool {
+    if expectation == ValidationExpectation::NonProbeCommand {
+        return !command_is_inert_probe(command);
+    }
+    if pytest_invocation(command) {
+        return matches!(expectation, ValidationExpectation::PythonTest);
+    }
+    if release_installer_invocation(root, command) {
+        return matches!(
+            expectation,
+            ValidationExpectation::RustBuildOrTest | ValidationExpectation::CargoManifestValidation
+        );
+    }
+    if trusted_workspace_gate_script(root, command) {
+        return true;
+    }
+    if ordinary_workspace_powershell_validation(root, command) {
+        return true;
+    }
+    let rustc_build = executable_name(command) == "rustc"
+        && command.args.iter().any(|arg| arg.ends_with(".rs"))
+        && !command.args.iter().any(|arg| {
+            matches!(
+                arg.as_str(),
+                "--help" | "-h" | "--version" | "-V" | "--print"
+            )
+        });
+    if rustc_build {
+        return matches!(expectation, ValidationExpectation::RustBuildOrTest);
+    }
+    let Some((subcommand, next)) = cargo_subcommand(command) else {
+        return false;
+    };
+    let rust_build_or_test = matches!(subcommand, "test" | "clippy" | "check" | "build")
+        || (subcommand == "nextest" && next == Some("run"));
+    match expectation {
+        ValidationExpectation::RustBuildOrTest => rust_build_or_test,
+        ValidationExpectation::CargoManifestValidation => {
+            rust_build_or_test
+                || subcommand == "audit"
+                || (subcommand == "deny" && next == Some("check"))
+        }
+        ValidationExpectation::PythonTest => false,
+        ValidationExpectation::NonProbeCommand => true,
+    }
+}
+
+pub(super) fn normalized_path_text(path: &str) -> String {
     path.trim_start_matches("./")
         .trim_start_matches(".\\")
         .replace('\\', "/")
@@ -1295,6 +1853,40 @@ fn path_argument_matches(root: &Path, argument: &str, expected: &str) -> bool {
         (Ok(argument), Ok(expected)) => argument == expected,
         _ => normalized_path_text(argument) == normalized_path_text(expected),
     }
+}
+
+fn captured_relative_path(key: &str) -> Option<String> {
+    if key.is_empty()
+        || key.contains('\\')
+        || key.contains(':')
+        || key.starts_with('/')
+        || key
+            .split('/')
+            .any(|component| component.is_empty() || matches!(component, "." | ".."))
+    {
+        return None;
+    }
+    Some(key.to_string())
+}
+
+fn captured_path_argument_matches(
+    decision: &GoalDecisionContext<'_>,
+    argument: &str,
+    expected: &str,
+) -> bool {
+    let Some(argument) = captured_relative_path(argument) else {
+        return false;
+    };
+    let Some(expected) = captured_relative_path(expected) else {
+        return false;
+    };
+    let Ok(Some(argument)) = decision.captured_workspace_file(&argument) else {
+        return false;
+    };
+    let Ok(Some(expected)) = decision.captured_workspace_file(&expected) else {
+        return false;
+    };
+    argument.key == expected.key
 }
 
 fn pytest_selector_covers(root: &Path, selector: &str, expected: &str) -> bool {
@@ -1326,6 +1918,28 @@ fn pytest_selector_covers(root: &Path, selector: &str, expected: &str) -> bool {
         || expected
             .strip_prefix(&selector)
             .is_some_and(|rest| rest.starts_with('/'))
+}
+
+fn captured_pytest_selector_covers(
+    decision: &GoalDecisionContext<'_>,
+    selector: &str,
+    expected: &str,
+) -> bool {
+    let Some(selector) = captured_relative_path(pytest_selector_path(selector)) else {
+        return false;
+    };
+    let Some(expected) = captured_relative_path(expected) else {
+        return false;
+    };
+    let Ok(Some(expected)) = decision.captured_workspace_file(&expected) else {
+        return false;
+    };
+    // A complete workspace capture stores regular files, not synthetic
+    // directory entries.  Therefore a directory selector such as `tests`
+    // must be proven by the captured descendant it covers, rather than by a
+    // nonexistent `tests` file.  The strict logical-key grammar above rules
+    // out aliases and traversal; this remains entirely capture-only.
+    selector == expected.key || expected.key.starts_with(&format!("{selector}/"))
 }
 fn cargo_option_values<'a>(
     command: &'a ParsedValidationCommand,
@@ -1407,6 +2021,27 @@ fn cargo_command_is_narrowed(command: &ParsedValidationCommand) -> bool {
     if command.args.get(index).map(String::as_str) == Some(subcommand) {
         index += 1;
     }
+    // Cargo accepts `-pNAME` as well as `-p NAME`. Keep package/exclude
+    // detection on the Cargo side of `--`; after it, similarly-spelled values
+    // belong to libtest and cannot retroactively select workspace packages.
+    let cargo_end = command
+        .args
+        .iter()
+        .position(|argument| argument == "--")
+        .unwrap_or(command.args.len());
+    let cargo_arguments = &command.args[..cargo_end];
+    let compact_package = cargo_arguments.iter().any(|argument| {
+        argument
+            .strip_prefix("-p")
+            .is_some_and(|value| !value.is_empty())
+    });
+    let named_selector = cargo_arguments.iter().any(|argument| {
+        let name = argument.split('=').next().unwrap_or(argument);
+        matches!(name, "-p" | "--package" | "--exclude")
+    });
+    if compact_package || named_selector {
+        return true;
+    }
     let mut after_separator = false;
     while let Some(argument) = command.args.get(index) {
         index += 1;
@@ -1457,6 +2092,21 @@ fn pytest_command_is_narrowed(command: &ParsedValidationCommand) -> bool {
     })
 }
 
+fn command_is_workspace_wide_with_context(
+    decision: &GoalDecisionContext<'_>,
+    command: &ParsedValidationCommand,
+) -> bool {
+    release_installer_invocation_with_context(decision, command).unwrap_or(false)
+        || trusted_workspace_gate_script_with_context(decision, command).unwrap_or(false)
+        || (cargo_subcommand(command).is_some()
+            && command
+                .args
+                .iter()
+                .any(|argument| matches!(argument.as_str(), "--workspace" | "--all"))
+            && !cargo_command_is_narrowed(command))
+        || (pytest_invocation(command) && !pytest_command_is_narrowed(command))
+}
+
 pub(super) fn command_is_workspace_wide(root: &Path, command: &ParsedValidationCommand) -> bool {
     release_installer_invocation(root, command)
         || trusted_workspace_gate_script(root, command)
@@ -1476,17 +2126,25 @@ pub(super) fn command_is_workspace_wide(root: &Path, command: &ParsedValidationC
 pub fn validate_authority_command(root: &Path, command: &str) -> Result<()> {
     let parsed = parse_validation_command(command)?;
     validate_command_security(root, &parsed)?;
+    validate_authority_command_syntax_with_gate(
+        &parsed,
+        trusted_workspace_gate_script(root, &parsed),
+    )
+}
 
-    let trusted_script = trusted_workspace_gate_script(root, &parsed);
+pub(super) fn validate_authority_command_syntax_with_gate(
+    parsed: &ParsedValidationCommand,
+    trusted_script: bool,
+) -> Result<()> {
     // "Selector-free" is part of the contract, not decoration: a filtered run
     // exits 0 while the rest of the suite is red.
-    let workspace_cargo_test = matches!(cargo_subcommand(&parsed), Some(("test", _)))
+    let workspace_cargo_test = matches!(cargo_subcommand(parsed), Some(("test", _)))
         && parsed
             .args
             .iter()
             .any(|argument| matches!(argument.as_str(), "--workspace" | "--all"))
-        && !cargo_command_is_narrowed(&parsed);
-    let workspace_pytest = pytest_invocation(&parsed) && !pytest_command_is_narrowed(&parsed);
+        && !cargo_command_is_narrowed(parsed);
+    let workspace_pytest = pytest_invocation(parsed) && !pytest_command_is_narrowed(parsed);
 
     if !trusted_script && !workspace_cargo_test && !workspace_pytest {
         bail!(
@@ -1496,15 +2154,33 @@ pub fn validate_authority_command(root: &Path, command: &str) -> Result<()> {
     Ok(())
 }
 
-fn validation_matches_impact(
-    root: &Path,
+pub(crate) fn validate_authority_command_with_context(
+    decision: &GoalDecisionContext<'_>,
+    command: &str,
+) -> Result<()> {
+    let parsed = parse_validation_command(command)?;
+    validate_command_security_with_context(decision, &parsed)?;
+    validate_authority_command_syntax_with_gate(
+        &parsed,
+        trusted_workspace_gate_script_with_context(decision, &parsed)?,
+    )
+}
+
+pub(super) fn validation_matches_impact_with_context(
+    decision: &GoalDecisionContext<'_>,
     command: &ParsedValidationCommand,
     impact: &ImpactEvidence,
 ) -> bool {
+    let root = decision.root();
     let Some(expectation) = validation_expectation_for_path(&impact.changed_path) else {
         return true;
     };
-    if !validation_matches_expectation(root, command, expectation) {
+    let matches_expectation = if decision.has_captured_workspace_bytes() {
+        validation_matches_expectation_with_context(decision, command, expectation)
+    } else {
+        validation_matches_expectation(root, command, expectation)
+    };
+    if !matches_expectation {
         return false;
     }
     // 未建模生态只做"非探针"这一条下限判断，不再往下走 Rust/pytest/cargo 的
@@ -1512,35 +2188,60 @@ fn validation_matches_impact(
     if expectation == ValidationExpectation::NonProbeCommand {
         return true;
     }
-    if command_is_workspace_wide(root, command) {
+    let workspace_wide = if decision.has_captured_workspace_bytes() {
+        command_is_workspace_wide_with_context(decision, command)
+    } else {
+        command_is_workspace_wide(root, command)
+    };
+    if workspace_wide {
         // "Workspace-wide" is a Cargo claim, and Cargo never builds a package
         // the root manifest excludes. Treating `--workspace` (or the installer,
         // which is a `cargo build -p` wrapper) as covering an excluded package
         // accepted a receipt for code the command provably never compiled.
-        let cargo_driven =
-            cargo_subcommand(command).is_some() || release_installer_invocation(root, command);
-        if cargo_driven
-            && crate::map::path_is_excluded_from_root_cargo_workspace(root, &impact.changed_path)
+        let cargo_driven = cargo_subcommand(command).is_some()
+            || if decision.has_captured_workspace_bytes() {
+                release_installer_invocation_with_context(decision, command).unwrap_or(false)
+            } else {
+                release_installer_invocation(root, command)
+            };
+        if cargo_driven && decision.path_is_excluded_from_root_cargo_workspace(&impact.changed_path)
         {
             return false;
         }
+        return true;
+    }
+    if decision.has_captured_workspace_bytes() {
+        if ordinary_workspace_powershell_validation_with_context(decision, command) {
+            return true;
+        }
+    } else if ordinary_workspace_powershell_validation(root, command) {
         return true;
     }
     if executable_name(command) == "rustc" {
         return impact.changed_path.to_ascii_lowercase().ends_with(".rs")
             && command.args.iter().any(|argument| {
                 argument.to_ascii_lowercase().ends_with(".rs")
-                    && path_argument_matches(root, argument, &impact.changed_path)
+                    && if decision.has_captured_workspace_bytes() {
+                        captured_path_argument_matches(decision, argument, &impact.changed_path)
+                    } else {
+                        path_argument_matches(root, argument, &impact.changed_path)
+                    }
             });
     }
     if pytest_invocation(command) {
         let paths = pytest_path_arguments(command);
         return paths.iter().any(|argument| {
-            pytest_selector_covers(root, argument, &impact.changed_path)
-                || impact
-                    .candidate_tests
-                    .iter()
-                    .any(|test| pytest_selector_covers(root, argument, test))
+            (if decision.has_captured_workspace_bytes() {
+                captured_pytest_selector_covers(decision, argument, &impact.changed_path)
+            } else {
+                pytest_selector_covers(root, argument, &impact.changed_path)
+            }) || impact.candidate_tests.iter().any(|test| {
+                if decision.has_captured_workspace_bytes() {
+                    captured_pytest_selector_covers(decision, argument, test)
+                } else {
+                    pytest_selector_covers(root, argument, test)
+                }
+            })
         });
     }
     if cargo_subcommand(command).is_some() {
@@ -1552,7 +2253,13 @@ fn validation_matches_impact(
         if impact.manifest_path.as_deref().is_some_and(|manifest| {
             cargo_option_values(command, "--manifest-path", "")
                 .iter()
-                .any(|value| path_argument_matches(root, value, manifest))
+                .any(|value| {
+                    if decision.has_captured_workspace_bytes() {
+                        captured_path_argument_matches(decision, value, manifest)
+                    } else {
+                        path_argument_matches(root, value, manifest)
+                    }
+                })
         }) {
             return true;
         }
@@ -1625,14 +2332,31 @@ pub fn validate_command_for_scope(
     non_code: bool,
     workspace_snapshot: bool,
 ) -> Result<()> {
+    let decision = GoalDecisionContext::live(root, None);
+    validate_command_for_scope_with_context(
+        &decision,
+        command,
+        impacts,
+        non_code,
+        workspace_snapshot,
+    )
+}
+
+pub(crate) fn validate_command_for_scope_with_context(
+    decision: &GoalDecisionContext<'_>,
+    command: &str,
+    impacts: &[ImpactEvidence],
+    non_code: bool,
+    workspace_snapshot: bool,
+) -> Result<()> {
     let parsed = parse_validation_command(command)?;
-    validate_command_security(root, &parsed)?;
+    validate_command_security_with_context(decision, &parsed)?;
     validate_scope_declaration(&parsed, impacts, non_code, workspace_snapshot)?;
     for impact in impacts {
         let Some(expectation) = validation_expectation_for_path(&impact.changed_path) else {
             continue;
         };
-        if !validation_matches_impact(root, &parsed, impact) {
+        if !validation_matches_impact_with_context(decision, &parsed, impact) {
             bail!(
                 "验证命令不覆盖 {}；需要 {}",
                 impact.changed_path,
@@ -1649,13 +2373,23 @@ pub fn validation_relevance_gaps(
     root: &Path,
     current_fingerprint: &str,
 ) -> Vec<String> {
-    validation_relevance_gaps_for_fingerprint(
+    let decision = GoalDecisionContext::live(root, None);
+    validation_relevance_gaps_with_context(requirement, goal, &decision, current_fingerprint)
+}
+
+pub(crate) fn validation_relevance_gaps_with_context(
+    requirement: &Requirement,
+    goal: &Goal,
+    decision: &GoalDecisionContext<'_>,
+    current_fingerprint: &str,
+) -> Vec<String> {
+    validation_relevance_gaps_for_fingerprint_with_context(
         requirement,
         goal,
-        root,
+        decision,
         current_fingerprint,
         true,
-        ReceiptValidationPolicy::CurrentV2,
+        ReceiptValidationPolicy::CurrentV3,
         false,
     )
 }
@@ -1664,6 +2398,27 @@ fn validation_relevance_gaps_for_fingerprint(
     requirement: &Requirement,
     goal: &Goal,
     root: &Path,
+    fingerprint: &str,
+    enforce_current_security: bool,
+    policy: ReceiptValidationPolicy,
+    require_plan_contained: bool,
+) -> Vec<String> {
+    let decision = GoalDecisionContext::live(root, None);
+    validation_relevance_gaps_for_fingerprint_with_context(
+        requirement,
+        goal,
+        &decision,
+        fingerprint,
+        enforce_current_security,
+        policy,
+        require_plan_contained,
+    )
+}
+
+fn validation_relevance_gaps_for_fingerprint_with_context(
+    requirement: &Requirement,
+    goal: &Goal,
+    decision: &GoalDecisionContext<'_>,
     fingerprint: &str,
     enforce_current_security: bool,
     policy: ReceiptValidationPolicy,
@@ -1681,9 +2436,9 @@ fn validation_relevance_gaps_for_fingerprint(
         let covered = requirement.validations.iter().any(|validation| {
             (!require_plan_contained
                 || validation_is_plan_contained_for_historical_legacy_success(goal, validation))
-                && validation_has_receipt_for_fingerprint(
+                && validation_has_receipt_for_fingerprint_with_context(
                     validation,
-                    root,
+                    decision,
                     fingerprint,
                     &contract_sha256,
                     enforce_current_security,
@@ -1695,8 +2450,9 @@ fn validation_relevance_gaps_for_fingerprint(
                         && scope.manifest_path.as_deref().map(normalized_path_text)
                             == impact.manifest_path.as_deref().map(normalized_path_text)
                 })
-                && parse_validation_command(&validation.command)
-                    .is_ok_and(|parsed| validation_matches_impact(root, &parsed, impact))
+                && parse_validation_command(&validation.command).is_ok_and(|parsed| {
+                    validation_matches_impact_with_context(decision, &parsed, impact)
+                })
         });
         if !covered {
             gaps.push(format!(
@@ -1724,7 +2480,7 @@ fn goal_success_receipt_gaps_for_fingerprint(
         root,
         fingerprint,
         enforce_current_security,
-        ReceiptValidationPolicy::CurrentV2,
+        ReceiptValidationPolicy::CurrentV3,
     )
 }
 
@@ -1763,7 +2519,7 @@ pub(super) fn goal_success_receipt_gaps_for_retiring_legacy_success(
         fingerprint,
         true,
         GoalPlanningValidationPolicy::RetiringLegacySuccess,
-        ReceiptValidationPolicy::CurrentV2,
+        ReceiptValidationPolicy::CurrentV3,
     )
 }
 
@@ -1825,8 +2581,8 @@ fn goal_success_receipt_gaps_with_policy(
         gaps.push(format!("goal 状态为 {}，不是 success", goal.status));
     }
     if goal.replacement_authority.is_some() {
-        if policy != ReceiptValidationPolicy::CurrentV2 {
-            gaps.push("lifecycle-only replacement 只接受 current-v2 receipt policy".into());
+        if policy != ReceiptValidationPolicy::CurrentV3 {
+            gaps.push("lifecycle-only replacement 只接受 current-v3 receipt policy".into());
         } else if let Some(error) = replacement_authority_error(goal, root, fingerprint) {
             gaps.push(format!("lifecycle-only replacement proof 无效: {error}"));
         }
@@ -1940,6 +2696,79 @@ fn goal_success_receipt_gaps_with_policy(
                 root,
                 fingerprint,
                 policy,
+            ));
+        }
+    }
+    gaps
+}
+
+/// Captured counterpart used only by the readiness decision.  Its public
+/// write/history helpers remain live because they intentionally verify the
+/// workspace at the transaction boundary; this version must never reopen it.
+pub(super) fn goal_success_receipt_gaps_with_context(
+    goal: &Goal,
+    decision: &GoalDecisionContext<'_>,
+    all_goals: &[Goal],
+    policy: ReceiptValidationPolicy,
+) -> Vec<String> {
+    let Some(current) = decision.current() else {
+        return vec!["current captured workspace snapshot 缺失".into()];
+    };
+    let fingerprint = &current.workspace_fingerprint;
+    let mut gaps = Vec::new();
+    if goal.status != GoalStatus::Success {
+        gaps.push(format!("goal 状态为 {}，不是 success", goal.status));
+    }
+    if goal.replacement_authority.is_some() {
+        if policy != ReceiptValidationPolicy::CurrentV3 {
+            gaps.push("lifecycle-only replacement 只接受 current-v3 receipt policy".into());
+        } else if let Some(error) =
+            replacement_authority_error_with_context(goal, decision, all_goals)
+        {
+            gaps.push(format!("lifecycle-only replacement proof 无效: {error}"));
+        }
+        return gaps;
+    }
+    for requirement in &goal.requirements {
+        if requirement.kind != RequirementKind::Must {
+            continue;
+        }
+        if requirement.status != RequirementStatus::Done
+            || requirement
+                .evidence
+                .as_deref()
+                .map(str::trim)
+                .unwrap_or_default()
+                .is_empty()
+        {
+            gaps.push(format!("must {} 未完成或缺少 evidence", requirement.id));
+            continue;
+        }
+        let Ok(contract_sha256) = validation_contract_sha256(goal, &requirement.id) else {
+            gaps.push(format!(
+                "must {} immutable contract 无法计算",
+                requirement.id
+            ));
+            continue;
+        };
+        if !requirement.validations.iter().any(|validation| {
+            proof_kind_matches(
+                requirement.proof_kind,
+                validation_proof_kind_with_context(decision, &validation.command)
+                    .ok()
+                    .unwrap_or_default(),
+            ) && validation_has_receipt_for_fingerprint_with_context(
+                validation,
+                decision,
+                fingerprint,
+                &contract_sha256,
+                policy == ReceiptValidationPolicy::CurrentV3,
+                policy,
+            )
+        }) {
+            gaps.push(format!(
+                "must {} 缺少当前成功 validation receipt",
+                requirement.id
             ));
         }
     }

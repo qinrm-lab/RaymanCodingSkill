@@ -9,6 +9,7 @@ param(
     [string]$SkillPath,
 
     [Parameter(ParameterSetName = 'Audit')]
+    [Parameter(ParameterSetName = 'PrepareAuditTools')]
     [ValidateSet('1.97.1')]
     [string]$MsrvToolchain = '1.97.1',
 
@@ -17,8 +18,12 @@ param(
     [int]$MinimumCliLineCoverage = 75,
 
     [Parameter(ParameterSetName = 'Audit')]
+    [Parameter(ParameterSetName = 'PrepareAuditTools')]
     [ValidateSet('0.8.7')]
     [string]$CoverageToolVersion = '0.8.7',
+
+    [Parameter(Mandatory = $true, ParameterSetName = 'PrepareAuditTools')]
+    [switch]$PrepareAuditTools,
 
     [Parameter(ParameterSetName = 'Audit')]
     [Parameter(ParameterSetName = 'DependencyPolicy')]
@@ -37,11 +42,29 @@ $ErrorActionPreference = 'Stop'
 if ($PSVersionTable.PSVersion.Major -lt 7) {
     throw 'audit-repository.ps1 requires PowerShell 7+. Run it with pwsh, not Windows PowerShell.'
 }
-. (Join-Path $PSScriptRoot 'repository-quality.ps1')
+
+switch ($PSCmdlet.ParameterSetName) {
+    'PrepareAuditTools' {
+        if (-not $PrepareAuditTools.IsPresent) {
+            throw 'The PrepareAuditTools parameter set requires -PrepareAuditTools to be present and true; -PrepareAuditTools:$false grants no provisioning authority.'
+        }
+    }
+    'DependencyPolicy' {
+        if (-not $DependencyPolicyOnly.IsPresent) {
+            throw 'The DependencyPolicy parameter set requires -DependencyPolicyOnly to be present and true.'
+        }
+    }
+    'SelfTest' {
+        if (-not $SelfTest.IsPresent) {
+            throw 'The SelfTest parameter set requires -SelfTest to be present and true.'
+        }
+    }
+}
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $artifactName = if ($IsWindows) { 'rayman.exe' } else { 'rayman' }
 $script:CurrentAuditPhase = 'bootstrap'
+$script:AuditIntegrationTestName = 'audit_self_test_exercises_only_the_audit_contract'
 
 function Write-AuditPhase {
     param(
@@ -66,6 +89,31 @@ function Write-AuditPhase {
         $record.detail = $Detail
     }
     Write-Output ('RAYMAN_AUDIT_PHASE ' + ($record | ConvertTo-Json -Compress))
+}
+
+function Invoke-SourceFreshInputInspection {
+    $verifier = Join-Path $PSScriptRoot 'verify-release-contract.ps1'
+    if (-not (Test-Path -LiteralPath $verifier -PathType Leaf)) {
+        throw "Audit cannot find the release verifier source-fresh input inspector: $verifier"
+    }
+    $output = & $verifier -InspectSourceFreshInputs
+    $text = ($output | Out-String).Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        throw 'Release verifier source-fresh input inspection returned no output.'
+    }
+    try {
+        $inspection = $text | ConvertFrom-Json -Depth 20 -ErrorAction Stop
+        if ($inspection.schema -ne 'rayman.source-fresh.input-inspection.v1' -or
+            $inspection.workspace_activation.schema -ne 'rayman.workspace-activation.snapshot.v1' -or
+            $inspection.source_fresh_environment.schema -ne 'rayman.source-fresh.environment.v1' -or
+            $inspection.source_fresh_environment.clear -ne $true -or
+            @($inspection.source_fresh_environment.rejected_names).Count -ne 0) {
+            throw 'inspection contract is incomplete or not clear'
+        }
+    } catch {
+        throw "Release verifier source-fresh input inspection failed closed: $($_.Exception.Message)"
+    }
+    return $inspection
 }
 
 $pathComparison = if ($IsWindows) {
@@ -118,6 +166,10 @@ function Resolve-AuditNativeApplications {
     param(
         [Parameter(Mandatory = $true)]
         [bool]$IncludeCompleteAuditTools,
+
+        [Parameter(Mandatory = $true)]
+        [bool]$IncludePreinstalledCoverageTool,
+
         [scriptblock]$Resolver
     )
 
@@ -136,6 +188,15 @@ function Resolve-AuditNativeApplications {
         $applications.Git = & $Resolver -Name 'git' -Label 'Git'
         $applications.Rustc = & $Resolver -Name 'rustc' -Label 'rustc'
     }
+    if ($IncludePreinstalledCoverageTool) {
+        try {
+            $applications.CargoLlvmCov = & $Resolver `
+                -Name 'cargo-llvm-cov' `
+                -Label 'cargo-llvm-cov'
+        } catch {
+            throw "A preinstalled cargo-llvm-cov $CoverageToolVersion Application is required by the default audit. Run 'pwsh -NoProfile -File scripts/audit-repository.ps1 -PrepareAuditTools' as a separate explicit provisioning step, then rerun the audit. $($_.Exception.Message)"
+        }
+    }
     return $applications
 }
 
@@ -143,6 +204,10 @@ function Invoke-AuditBootstrap {
     param(
         [Parameter(Mandatory = $true)]
         [bool]$IncludeCompleteAuditTools,
+
+        [Parameter(Mandatory = $true)]
+        [bool]$IncludePreinstalledCoverageTool,
+
         [Parameter(Mandatory = $true)]
         [ref]$Applications,
         [scriptblock]$Resolver,
@@ -159,6 +224,7 @@ function Invoke-AuditBootstrap {
     try {
         $Applications.Value = Resolve-AuditNativeApplications `
             -IncludeCompleteAuditTools $IncludeCompleteAuditTools `
+            -IncludePreinstalledCoverageTool $IncludePreinstalledCoverageTool `
             -Resolver $Resolver
         & $PhaseWriter -Name 'bootstrap' -Status 'pass' -Detail $null
     } catch {
@@ -435,6 +501,8 @@ function Invoke-IsolatedMsrvChecks {
         [Parameter(Mandatory = $true)]
         $RustcIdentity,
 
+        [string]$SkippedIntegrationTest,
+
         [scriptblock]$CommandRunner
     )
 
@@ -465,9 +533,13 @@ function Invoke-IsolatedMsrvChecks {
         & $CommandRunner `
             -FilePath $CargoIdentity.Path `
             -Arguments @('build', '--locked', '--release', '-p', 'rayman')
+        $testArguments = @('test', '--locked', '--workspace', '--all-targets')
+        if (-not [string]::IsNullOrWhiteSpace($SkippedIntegrationTest)) {
+            $testArguments += @('--', '--skip', $SkippedIntegrationTest)
+        }
         & $CommandRunner `
             -FilePath $CargoIdentity.Path `
-            -Arguments @('test', '--locked', '--workspace', '--all-targets')
+            -Arguments $testArguments
         Assert-ExactApplicationIdentity -Identity $CargoIdentity
         Assert-ExactApplicationIdentity -Identity $RustcIdentity
     } finally {
@@ -498,6 +570,8 @@ function Invoke-IsolatedCoverageCheck {
 
         [Parameter(Mandatory = $true)]
         [int]$MinimumLineCoverage,
+
+        [string]$SkippedIntegrationTest,
 
         [scriptblock]$CommandRunner
     )
@@ -549,12 +623,16 @@ function Invoke-IsolatedCoverageCheck {
         )) {
             Assert-ExactApplicationIdentity -Identity $identity
         }
+        $coverageArguments = @(
+            'llvm-cov', '--locked', '--workspace', '--all-features', '--all-targets',
+            '--fail-under-lines', $MinimumLineCoverage.ToString()
+        )
+        if (-not [string]::IsNullOrWhiteSpace($SkippedIntegrationTest)) {
+            $coverageArguments += @('--', '--skip', $SkippedIntegrationTest)
+        }
         & $CommandRunner `
             -FilePath $CoverageIdentity.Path `
-            -Arguments @(
-                'llvm-cov', '--locked', '--workspace', '--all-features', '--all-targets',
-                '--fail-under-lines', $MinimumLineCoverage.ToString()
-            )
+            -Arguments $coverageArguments
         foreach ($identity in @(
             $CoverageIdentity,
             $CargoIdentity,
@@ -605,6 +683,64 @@ function Get-CoverageToolVersion {
         throw "Managed coverage application version check failed with exit code ${exitCode}:`n$text"
     }
     Assert-CoverageToolVersionText -Text $text -ExpectedVersion $ExpectedVersion
+}
+
+function Get-MsrvLlvmPreparationArguments {
+    param(
+        [Parameter(Mandatory = $true)]
+        [bool]$Authorized,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Toolchain
+    )
+
+    if (-not $Authorized) {
+        return @()
+    }
+    return [string[]]@(
+        'component', 'add', 'llvm-tools-preview', '--toolchain', $Toolchain
+    )
+}
+
+function Get-CoverageToolPreparationArguments {
+    param(
+        [Parameter(Mandatory = $true)]
+        [bool]$Authorized,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Version,
+
+        [string]$Root
+    )
+
+    if (-not $Authorized) {
+        return @()
+    }
+    if ([string]::IsNullOrWhiteSpace($Root)) {
+        throw 'Coverage tool preparation requires a managed installation root.'
+    }
+    return [string[]]@(
+        'install', 'cargo-llvm-cov', '--locked', '--version', $Version,
+        '--root', $Root
+    )
+}
+
+function Resolve-PersistentCargoInstallRoot {
+    $candidate = if (-not [string]::IsNullOrWhiteSpace($env:CARGO_INSTALL_ROOT)) {
+        $env:CARGO_INSTALL_ROOT
+    } elseif (-not [string]::IsNullOrWhiteSpace($env:CARGO_HOME)) {
+        $env:CARGO_HOME
+    } else {
+        $profileRoot = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
+        if ([string]::IsNullOrWhiteSpace($profileRoot)) {
+            throw 'Cannot resolve a persistent Cargo install root: UserProfile is empty.'
+        }
+        Join-Path $profileRoot '.cargo'
+    }
+    if (-not [IO.Path]::IsPathFullyQualified($candidate)) {
+        throw "Persistent Cargo install root must be an absolute path: $candidate"
+    }
+    return [IO.Path]::GetFullPath($candidate)
 }
 
 function Invoke-NativeChecked {
@@ -960,6 +1096,7 @@ function Invoke-AuditScriptSelfTest {
     try {
         Invoke-AuditBootstrap `
             -IncludeCompleteAuditTools $true `
+            -IncludePreinstalledCoverageTool $true `
             -Applications ([ref]$bootstrapApplications) `
             -Resolver $missingRustupResolver `
             -PhaseWriter $bootstrapWriter
@@ -974,6 +1111,64 @@ function Invoke-AuditScriptSelfTest {
         $bootstrapRecords[1].Status -ne 'fail' -or
         $bootstrapRecords[1].Detail -notmatch 'rustup application is missing') {
         throw 'Audit self-test failed: missing rustup did not produce a structured bootstrap start/fail pair.'
+    }
+
+    $missingCoverageRecords = [Collections.Generic.List[object]]::new()
+    $missingCoverageWriter = {
+        param([string]$Name, [string]$Status, [string]$Detail)
+        $missingCoverageRecords.Add([pscustomobject]@{
+            Name = $Name
+            Status = $Status
+            Detail = $Detail
+        })
+    }.GetNewClosure()
+    $missingCoverageResolver = {
+        param([string]$Name, [string]$Label)
+        if ($Name -eq 'cargo-llvm-cov') {
+            throw 'cargo-llvm-cov application is missing from PATH: cargo-llvm-cov'
+        }
+        return [pscustomobject]@{
+            Name = $Name
+            Label = $Label
+            Path = "self-test-$Name"
+            Sha256 = ('a' * 64)
+        }
+    }
+    $missingCoverageApplications = $null
+    $missingCoverageRejected = $false
+    try {
+        Invoke-AuditBootstrap `
+            -IncludeCompleteAuditTools $true `
+            -IncludePreinstalledCoverageTool $true `
+            -Applications ([ref]$missingCoverageApplications) `
+            -Resolver $missingCoverageResolver `
+            -PhaseWriter $missingCoverageWriter
+    } catch {
+        $missingCoverageRejected = $_.Exception.Message -match 'preinstalled cargo-llvm-cov 0\.8\.7.*-PrepareAuditTools'
+    }
+    if (-not $missingCoverageRejected -or
+        $missingCoverageRecords.Count -ne 2 -or
+        $missingCoverageRecords[0].Status -ne 'start' -or
+        $missingCoverageRecords[1].Status -ne 'fail') {
+        throw 'Audit self-test failed: missing preinstalled coverage tool did not fail closed with the explicit preparation recovery.'
+    }
+
+    if (@(Get-MsrvLlvmPreparationArguments -Authorized $false -Toolchain '1.97.1').Count -ne 0 -or
+        @(Get-CoverageToolPreparationArguments -Authorized $false -Version '0.8.7').Count -ne 0) {
+        throw 'Audit self-test failed: default audit generated an unauthorized tool preparation command.'
+    }
+    $llvmPreparation = @(
+        Get-MsrvLlvmPreparationArguments -Authorized $true -Toolchain '1.97.1'
+    )
+    $coveragePreparation = @(
+        Get-CoverageToolPreparationArguments `
+            -Authorized $true `
+            -Version '0.8.7' `
+            -Root 'persistent-cargo-root'
+    )
+    if (($llvmPreparation -join ' ') -ne 'component add llvm-tools-preview --toolchain 1.97.1' -or
+        ($coveragePreparation -join ' ') -ne 'install cargo-llvm-cov --locked --version 0.8.7 --root persistent-cargo-root') {
+        throw 'Audit self-test failed: explicit tool preparation command shape drifted.'
     }
 
     foreach ($identity in $NativeIdentities) {
@@ -1145,6 +1340,7 @@ function Invoke-AuditScriptSelfTest {
             Invoke-IsolatedMsrvChecks `
                 -CargoIdentity $msrvApplications.Cargo `
                 -RustcIdentity $msrvApplications.Rustc `
+                -SkippedIntegrationTest $script:AuditIntegrationTestName `
                 -CommandRunner $commandRunner
         } catch {
             $msrvFailureMessage = $_.Exception.Message
@@ -1153,7 +1349,7 @@ function Invoke-AuditScriptSelfTest {
         if (-not $expectedFailureObserved -or
             $commandCalls.Count -ne 2 -or
             $commandCalls[0] -ne 'build --locked --release -p rayman' -or
-            $commandCalls[1] -ne 'test --locked --workspace --all-targets' -or
+            $commandCalls[1] -ne "test --locked --workspace --all-targets -- --skip $script:AuditIntegrationTestName" -or
             $createdTargets.Count -ne 1 -or
             (Test-Path -LiteralPath $createdTargets[0]) -or
             $env:RUSTC -ne 'ambient-rustc' -or
@@ -1226,6 +1422,7 @@ function Invoke-AuditScriptSelfTest {
                 -LlvmCovIdentity $msrvLlvmApplications.LlvmCov `
                 -LlvmProfdataIdentity $msrvLlvmApplications.LlvmProfdata `
                 -MinimumLineCoverage 75 `
+                -SkippedIntegrationTest $script:AuditIntegrationTestName `
                 -CommandRunner $coverageRunner
         } catch {
             $coverageFailureMessage = $_.Exception.Message
@@ -1233,7 +1430,7 @@ function Invoke-AuditScriptSelfTest {
         }
         if (-not $coverageFailureObserved -or
             $coverageCalls.Count -ne 1 -or
-            $coverageCalls[0] -ne 'llvm-cov --locked --workspace --all-features --all-targets --fail-under-lines 75' -or
+            $coverageCalls[0] -ne "llvm-cov --locked --workspace --all-features --all-targets --fail-under-lines 75 -- --skip $script:AuditIntegrationTestName" -or
             $coverageTargets.Count -ne 1 -or
             (Test-Path -LiteralPath $coverageTargets[0]) -or
             $env:PATH -ne 'ambient-path' -or
@@ -1345,53 +1542,160 @@ db-path = "unexpected"
         Remove-ManagedAuditDirectory -Path $cargoDenyFixture
     }
 
-    $closeout = Join-Path $PSScriptRoot 'release-closeout.ps1'
-    if (-not (Test-Path -LiteralPath $closeout -PathType Leaf)) {
-        throw "Audit self-test cannot find the release closeout: $closeout"
-    }
-    & $closeout -SelfTest
-
-    $installer = Join-Path $PSScriptRoot 'install-rayman.ps1'
-    if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
-        throw "Audit self-test cannot find the installer: $installer"
-    }
-    & $installer -SelfTest
-
-    $verifier = Join-Path $PSScriptRoot 'verify-release-contract.ps1'
-    if (-not (Test-Path -LiteralPath $verifier -PathType Leaf)) {
-        throw "Audit self-test cannot find the release verifier: $verifier"
-    }
-    & $verifier -SelfTest
-
-    $profileRepair = Join-Path $PSScriptRoot 'repair-rayman-powershell-profile.ps1'
-    if (-not (Test-Path -LiteralPath $profileRepair -PathType Leaf)) {
-        throw "Audit self-test cannot find the PowerShell profile repair tool: $profileRepair"
-    }
-    & $profileRepair -SelfTest
-
     foreach ($identity in $NativeIdentities) {
         Assert-NativeApplicationIdentity -Identity $identity
     }
-    Write-Host 'Audit script self-test passed: native shadow/identity, exact isolated MSRV, release closeout/installer/verifier/profile regressions, isolated advisory state, and managed coverage guards fail closed.'
+    Write-Host 'Audit script self-test passed: native shadow/identity, explicit preparation authority, exact isolated MSRV, isolated advisory state, and managed coverage guards fail closed.'
 }
 
 $nativeApplications = $null
 $msrvApplications = $null
+if ($PSCmdlet.ParameterSetName -eq 'PrepareAuditTools') {
+    Write-AuditPhase -Name 'prepare_audit_tools' -Status 'start'
+    try {
+        # This parameter set is deliberately a provisioning command, not an
+        # audit modifier. It needs no installed CLI/SKILL identity, runs no
+        # repository lane, persists the pinned tools, verifies their exact
+        # effective paths/versions/hashes, and exits.
+        $cargoIdentity = Resolve-NativeApplication -Name 'cargo' -Label 'Cargo'
+        $rustupIdentity = Resolve-NativeApplication -Name 'rustup' -Label 'rustup'
+        Invoke-NativeChecked `
+            -FilePath $rustupIdentity.Path `
+            -Arguments (Get-MsrvLlvmPreparationArguments -Authorized $true -Toolchain $MsrvToolchain)
+
+        $preparedMsrv = Resolve-MsrvToolchainApplications `
+            -RustupIdentity $rustupIdentity `
+            -Toolchain $MsrvToolchain
+        Assert-RustToolVersion -Identity $preparedMsrv.Cargo -ExpectedVersion $MsrvToolchain
+        Assert-RustToolVersion -Identity $preparedMsrv.Rustc -ExpectedVersion $MsrvToolchain
+        $preparedLlvm = Resolve-MsrvLlvmApplications -RustcIdentity $preparedMsrv.Rustc
+
+        $cargoInstallRoot = Resolve-PersistentCargoInstallRoot
+        Invoke-NativeChecked `
+            -FilePath $cargoIdentity.Path `
+            -Arguments (Get-CoverageToolPreparationArguments `
+                -Authorized $true `
+                -Version $CoverageToolVersion `
+                -Root $cargoInstallRoot)
+        $coverageIdentity = Resolve-NativeApplication `
+            -Name 'cargo-llvm-cov' `
+            -Label 'cargo-llvm-cov'
+        $coverageApplicationName = if ($IsWindows) { 'cargo-llvm-cov.exe' } else { 'cargo-llvm-cov' }
+        Assert-ExpectedApplicationPath `
+            -Identity $coverageIdentity `
+            -ExpectedPath (Join-Path (Join-Path $cargoInstallRoot 'bin') $coverageApplicationName)
+        Get-CoverageToolVersion `
+            -Identity $coverageIdentity `
+            -ExpectedVersion $CoverageToolVersion
+
+        Assert-NativeApplicationIdentity -Identity $cargoIdentity
+        Assert-NativeApplicationIdentity -Identity $rustupIdentity
+        Assert-NativeApplicationIdentity -Identity $coverageIdentity
+        $terminalMsrv = Resolve-MsrvToolchainApplications `
+            -RustupIdentity $rustupIdentity `
+            -Toolchain $MsrvToolchain
+        foreach ($name in @('Cargo', 'Rustc')) {
+            $initial = $preparedMsrv.$name
+            $terminal = $terminalMsrv.$name
+            if (-not $terminal.Path.Equals($initial.Path, $pathComparison) -or
+                $terminal.Sha256 -ne $initial.Sha256) {
+                throw "$($initial.Label) binding changed during audit-tool preparation."
+            }
+        }
+        $terminalLlvm = Resolve-MsrvLlvmApplications -RustcIdentity $terminalMsrv.Rustc
+        foreach ($name in @('LlvmCov', 'LlvmProfdata')) {
+            $initial = $preparedLlvm.$name
+            $terminal = $terminalLlvm.$name
+            if (-not $terminal.Path.Equals($initial.Path, $pathComparison) -or
+                $terminal.Sha256 -ne $initial.Sha256) {
+                throw "$($initial.Label) binding changed during audit-tool preparation."
+            }
+        }
+        $report = [ordered]@{
+            schema = 'rayman.audit.tool-preparation.v1'
+            status = 'pass'
+            msrv_toolchain = $MsrvToolchain
+            cargo_install_root = $cargoInstallRoot
+            cargo_llvm_cov = [ordered]@{
+                version = $CoverageToolVersion
+                path = $coverageIdentity.Path
+                sha256 = $coverageIdentity.Sha256
+            }
+            llvm_cov = [ordered]@{
+                path = $preparedLlvm.LlvmCov.Path
+                sha256 = $preparedLlvm.LlvmCov.Sha256
+            }
+            llvm_profdata = [ordered]@{
+                path = $preparedLlvm.LlvmProfdata.Path
+                sha256 = $preparedLlvm.LlvmProfdata.Sha256
+            }
+        }
+        Write-Output ('RAYMAN_AUDIT_TOOL_PREPARATION ' + ($report | ConvertTo-Json -Depth 5 -Compress))
+        Write-AuditPhase -Name 'prepare_audit_tools' -Status 'pass'
+        return
+    } catch {
+        Write-AuditPhase -Name 'prepare_audit_tools' -Status 'fail' -Detail $_.Exception.Message
+        throw
+    }
+}
+. (Join-Path $PSScriptRoot 'repository-quality.ps1')
 # Self-test and the focused dependency-policy lane intentionally avoid the
 # complete-audit MSRV/Git/compiler resolver. A complete audit still requires
 # all five applications, but a missing one now has a structured bootstrap fail.
 Invoke-AuditBootstrap `
-    -IncludeCompleteAuditTools (-not ($DependencyPolicyOnly -or $SelfTest)) `
+    -IncludeCompleteAuditTools ($PSCmdlet.ParameterSetName -eq 'Audit') `
+    -IncludePreinstalledCoverageTool ($PSCmdlet.ParameterSetName -eq 'Audit') `
     -Applications ([ref]$nativeApplications)
 $capturedNativeIdentities = @($nativeApplications.Values)
+$coverageIdentity = $null
+if ($PSCmdlet.ParameterSetName -eq 'Audit') {
+    Write-AuditPhase -Name 'coverage_tool_preflight' -Status 'start'
+    try {
+        $coverageIdentity = $nativeApplications.CargoLlvmCov
+        Get-CoverageToolVersion `
+            -Identity $coverageIdentity `
+            -ExpectedVersion $CoverageToolVersion
+        Write-AuditPhase -Name 'coverage_tool_preflight' -Status 'pass'
+    } catch {
+        Write-AuditPhase `
+            -Name 'coverage_tool_preflight' `
+            -Status 'fail' `
+            -Detail $_.Exception.Message
+        throw
+    }
+}
 Write-AuditPhase -Name 'script_self_test' -Status 'start'
 Invoke-AuditScriptSelfTest -NativeIdentities $capturedNativeIdentities
 Write-AuditPhase -Name 'script_self_test' -Status 'pass'
-if ($SelfTest) {
+if ($PSCmdlet.ParameterSetName -eq 'SelfTest') {
     Write-Host 'audit-repository.ps1 self-test passed.'
     return
 }
-if ($DependencyPolicyOnly) {
+if ($PSCmdlet.ParameterSetName -eq 'Audit') {
+    Write-AuditPhase -Name 'release_script_self_tests' -Status 'start'
+    try {
+        foreach ($scriptName in @(
+            'release-closeout.ps1',
+            'install-rayman.ps1',
+            'verify-release-contract.ps1',
+            'repair-rayman-powershell-profile.ps1'
+        )) {
+            $scriptPath = Join-Path $PSScriptRoot $scriptName
+            if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) {
+                throw "Audit cannot find sibling self-test script: $scriptPath"
+            }
+            & $scriptPath -SelfTest
+        }
+        Write-AuditPhase -Name 'release_script_self_tests' -Status 'pass'
+    } catch {
+        Write-AuditPhase `
+            -Name 'release_script_self_tests' `
+            -Status 'fail' `
+            -Detail $_.Exception.Message
+        throw
+    }
+}
+if ($PSCmdlet.ParameterSetName -eq 'DependencyPolicy') {
     Push-Location $repoRoot
     try {
         Write-AuditPhase -Name 'dependency_policy' -Status 'start'
@@ -1407,31 +1711,39 @@ if ($DependencyPolicyOnly) {
 }
 Push-Location $repoRoot
 try {
-    # Fail fast on environment permission boundaries: the isolated advisory-DB
-    # copy, the MSRV toolchain, and the user-profile llvm-tools component are
-    # exactly the operations a restricted sandbox denies. Probing them first
-    # costs seconds instead of aborting the audit tens of minutes in.
+    # Fail fast on environment and authorization boundaries before the
+    # multi-minute lanes. A normal audit validates preinstalled host tools and
+    # never changes the rustup component set or installs cargo-llvm-cov.
     Write-AuditPhase -Name 'environment_preflight' -Status 'start'
+    # Keep the rejection policy in verify-release-contract.ps1. The audit only
+    # invokes its read-only inspector, so it cannot drift to a smaller local
+    # list of build-shaping environment variables.
+    $sourceFreshInputInspection = Invoke-SourceFreshInputInspection
     Invoke-IsolatedCargoDenyChecks `
         -CargoDenyIdentity $nativeApplications.CargoDeny `
         -DatabaseSeedPath $CargoDenyDatabaseSeedPath
-    Invoke-NativeChecked $nativeApplications.Rustup.Path @(
-        'component', 'add', 'llvm-tools-preview', '--toolchain', $MsrvToolchain
-    )
     $msrvApplications = Resolve-MsrvToolchainApplications `
         -RustupIdentity $nativeApplications.Rustup `
         -Toolchain $MsrvToolchain
     Assert-RustToolVersion -Identity $msrvApplications.Cargo -ExpectedVersion $MsrvToolchain
     Assert-RustToolVersion -Identity $msrvApplications.Rustc -ExpectedVersion $MsrvToolchain
-    $msrvLlvmApplications = Resolve-MsrvLlvmApplications `
-        -RustcIdentity $msrvApplications.Rustc
+    try {
+        $msrvLlvmApplications = Resolve-MsrvLlvmApplications `
+            -RustcIdentity $msrvApplications.Rustc
+    } catch {
+        throw "The MSRV $MsrvToolchain llvm-tools-preview component is unavailable. Run 'pwsh -NoProfile -File scripts/audit-repository.ps1 -PrepareAuditTools' as a separate explicit provisioning step, then rerun the audit. $($_.Exception.Message)"
+    }
     Write-AuditPhase -Name 'environment_preflight' -Status 'pass'
 
     Write-AuditPhase -Name 'root_quality' -Status 'start'
     foreach ($qualityCommand in @(Get-RepositoryQualityCommands -Suite Root)) {
+        $qualityArguments = @($qualityCommand.Arguments)
+        if ($qualityCommand.Name -eq 'test') {
+            $qualityArguments += @('--', '--skip', $script:AuditIntegrationTestName)
+        }
         Invoke-NativeChecked `
             -FilePath $nativeApplications.Cargo.Path `
-            -Arguments $qualityCommand.Arguments
+            -Arguments $qualityArguments
     }
     Write-AuditPhase -Name 'root_quality' -Status 'pass'
 
@@ -1441,41 +1753,22 @@ try {
     Write-AuditPhase -Name 'msrv' -Status 'start'
     Invoke-IsolatedMsrvChecks `
         -CargoIdentity $msrvApplications.Cargo `
-        -RustcIdentity $msrvApplications.Rustc
+        -RustcIdentity $msrvApplications.Rustc `
+        -SkippedIntegrationTest $script:AuditIntegrationTestName
     Write-AuditPhase -Name 'msrv' -Status 'pass'
 
-    # Real shipped-CLI coverage. Always install the exact measurement tool into
-    # a fresh managed root, resolve that exact Application, and invoke it by its
-    # captured path. Compile the coverage lane with the exact MSRV cargo/rustc
-    # and its matching llvm-tools so a system Rust that is not owned by rustup
-    # cannot make the preflight claim tools that the coverage compiler cannot use.
+    # Real shipped-CLI coverage uses the exact preinstalled PATH Application
+    # captured and version-checked before any long lane. Provisioning is a
+    # separate explicit command and never changes this audit invocation.
     Write-AuditPhase -Name 'cli_coverage' -Status 'start'
-    $coverageToolRoot = New-ManagedAuditDirectory -Label "cargo-llvm-cov-$CoverageToolVersion"
-    try {
-        Invoke-NativeChecked $nativeApplications.Cargo.Path @(
-            'install', 'cargo-llvm-cov', '--locked', '--version', $CoverageToolVersion,
-            '--root', $coverageToolRoot
-        )
-        $coverageBin = Join-Path $coverageToolRoot 'bin'
-        $coverageApplicationName = if ($IsWindows) { 'cargo-llvm-cov.exe' } else { 'cargo-llvm-cov' }
-        $expectedCoveragePath = Join-Path $coverageBin $coverageApplicationName
-        $coverageIdentity = New-ExactApplicationIdentity `
-            -Name 'cargo-llvm-cov' `
-            -Label 'Managed cargo-llvm-cov' `
-            -Path $expectedCoveragePath
-        Get-CoverageToolVersion `
-            -Identity $coverageIdentity `
-            -ExpectedVersion $CoverageToolVersion
-        Invoke-IsolatedCoverageCheck `
-            -CoverageIdentity $coverageIdentity `
-            -CargoIdentity $msrvApplications.Cargo `
-            -RustcIdentity $msrvApplications.Rustc `
-            -LlvmCovIdentity $msrvLlvmApplications.LlvmCov `
-            -LlvmProfdataIdentity $msrvLlvmApplications.LlvmProfdata `
-            -MinimumLineCoverage $MinimumCliLineCoverage
-    } finally {
-        Remove-ManagedAuditDirectory -Path $coverageToolRoot
-    }
+    Invoke-IsolatedCoverageCheck `
+        -CoverageIdentity $coverageIdentity `
+        -CargoIdentity $msrvApplications.Cargo `
+        -RustcIdentity $msrvApplications.Rustc `
+        -LlvmCovIdentity $msrvLlvmApplications.LlvmCov `
+        -LlvmProfdataIdentity $msrvLlvmApplications.LlvmProfdata `
+        -MinimumLineCoverage $MinimumCliLineCoverage `
+        -SkippedIntegrationTest $script:AuditIntegrationTestName
     Write-AuditPhase -Name 'cli_coverage' -Status 'pass'
 
     Write-AuditPhase -Name 'evals' -Status 'start'
@@ -1608,9 +1901,16 @@ try {
         -RequirePath `
         -RequireSourceFresh
 
+    $terminalSourceFreshInputInspection = Invoke-SourceFreshInputInspection
+    if (($sourceFreshInputInspection | ConvertTo-Json -Depth 20 -Compress) -cne
+        ($terminalSourceFreshInputInspection | ConvertTo-Json -Depth 20 -Compress)) {
+        throw 'Workspace activation or source-fresh environment policy drifted during repository audit.'
+    }
+
     foreach ($identity in $capturedNativeIdentities) {
         Assert-NativeApplicationIdentity -Identity $identity
     }
+    Assert-ExactApplicationIdentity -Identity $coverageIdentity
     $terminalMsrvApplications = Resolve-MsrvToolchainApplications `
         -RustupIdentity $nativeApplications.Rustup `
         -Toolchain $MsrvToolchain

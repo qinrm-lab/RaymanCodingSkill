@@ -65,6 +65,7 @@ fn legacy_success_archive_does_not_repair_corrupt_current_lifecycle_proof() {
         .contract_sha256 = contract_sha256;
     goal.lifecycle_proof = Some(LifecycleProof {
         recorded_at: now_iso(),
+        workspace_identity: None,
         workspace_fingerprint: workspace_fingerprint(dir.path()).unwrap(),
         contract_sha256: "0".repeat(64),
         migration: Some(INTEGRITY_QUARANTINE_MIGRATION.into()),
@@ -995,6 +996,7 @@ fn mark_current_keeps_the_retired_lifecycle_proof_as_a_time_lower_bound() {
         old_proof.migration,
         old_proof.receipt_policy,
         PROOF.into(),
+        old_proof.workspace_identity,
     ));
     assert!(archived.lifecycle_proof_error(dir.path()).is_none());
     let path = dir
@@ -1028,6 +1030,55 @@ fn archive_uses_the_latest_timestamp_from_the_complete_goal_ledger() {
         FUTURE_VALIDATION
     );
     assert!(archived.lifecycle_proof_error(dir.path()).is_none());
+}
+
+#[test]
+fn archived_v3_receipts_retain_the_proof_workspace_identity_after_path_moves() {
+    let source = tempfile::tempdir().unwrap();
+    let store = GoalStore::new(source.path());
+    let archived = planned_non_code_success(&store, source.path());
+    let archived = store
+        .archive(&archived.id, "retain archived v3 identity", false)
+        .unwrap();
+    let mut moved = archived.clone();
+    let recorded_identity = moved
+        .lifecycle_proof
+        .as_ref()
+        .and_then(|proof| proof.workspace_identity.as_deref())
+        .unwrap()
+        .to_string();
+    assert_eq!(
+        moved.requirements[0].validations[0]
+            .receipt
+            .as_ref()
+            .unwrap()
+            .workspace_identity,
+        recorded_identity
+    );
+
+    let destination = tempfile::tempdir().unwrap();
+    assert_ne!(workspace_identity(destination.path()), recorded_identity);
+    assert!(moved.lifecycle_proof_error(destination.path()).is_none());
+
+    moved.requirements[0].validations[0]
+        .receipt
+        .as_mut()
+        .unwrap()
+        .workspace_identity = workspace_identity(destination.path());
+    let proof = moved.lifecycle_proof.take().unwrap();
+    moved.lifecycle_proof = Some(issue_lifecycle_proof_at(
+        &moved,
+        proof.workspace_fingerprint,
+        proof.migration,
+        proof.receipt_policy,
+        proof.recorded_at,
+        proof.workspace_identity,
+    ));
+    assert!(
+        moved
+            .lifecycle_proof_error(destination.path())
+            .is_some_and(|error| error.contains("workspace identity"))
+    );
 }
 
 #[test]
@@ -1158,6 +1209,7 @@ fn replacement_and_supersession_times_follow_every_referenced_goal() {
         old_proof.migration,
         old_proof.receipt_policy,
         AUTHORITY.into(),
+        old_proof.workspace_identity,
     ));
     write_json(&store.goal_path(&authority.id).unwrap(), &authority).unwrap();
     assert!(authority.lifecycle_proof_error(root).is_none());
@@ -1269,6 +1321,7 @@ fn replacement_authority_read_side_rejects_rehashed_timestamp_forgery() {
         old_authority_proof.migration,
         old_authority_proof.receipt_policy,
         PROOF_AT.into(),
+        old_authority_proof.workspace_identity,
     ));
     write_json(&store.goal_path(&authority.id).unwrap(), &authority).unwrap();
 
@@ -1412,6 +1465,7 @@ fn restored_current_replacement_allows_proof_before_updated_at() {
         old_lifecycle_proof.migration,
         old_lifecycle_proof.receipt_policy,
         RESTORED_AT.into(),
+        old_lifecycle_proof.workspace_identity,
     ));
     write_json(&store.goal_path(&archived.id).unwrap(), &archived).unwrap();
     assert!(archived.lifecycle_proof_error(root).is_none());
@@ -1444,6 +1498,7 @@ fn supersession_read_side_rejects_predecessor_before_replacement_authority() {
         old_lifecycle_proof.migration,
         old_lifecycle_proof.receipt_policy,
         FORGED_SUPERSESSION_AT.into(),
+        old_lifecycle_proof.workspace_identity,
     ));
     write_json(&store.goal_path(&forged.id).unwrap(), &forged).unwrap();
     assert!(forged.lifecycle_proof_error(root).is_none());
