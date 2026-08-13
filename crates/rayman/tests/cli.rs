@@ -3301,6 +3301,10 @@ fn lifecycle_only_replacement_cli_uses_exact_archived_authority() {
 fn lifecycle_only_replacement_cli_rebinds_only_the_maintenance_cycle_path() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
+    // Keep this fixture authoritative even when the process TEMP happens to
+    // sit below a parent Git worktree. Otherwise workspace discovery can walk
+    // into the production repository before the helper activates the fixture.
+    std::fs::create_dir_all(root.join(".RaymanCodingSkill")).unwrap();
     write(
         root,
         "Cargo.toml",

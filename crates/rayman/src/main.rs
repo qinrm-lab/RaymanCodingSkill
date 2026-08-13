@@ -1228,10 +1228,10 @@ fn run_validation_command(
 ) -> Result<std::process::Output> {
     let mut executable = command.clone();
     if let Some(script) = goal::resolve_live_powershell_script(root, command)? {
-        // The receipt preserves the user's canonical logical command text, but
-        // the process gets the exact live path that passed the component-wise
-        // preflight. Do not validate an alias and then spawn the alias.
-        executable.args[2] = script.canonical_path.to_string_lossy().into_owned();
+        // The receipt preserves the user's canonical logical command text. The
+        // process gets a PowerShell-compatible path whose canonical round trip
+        // was proven equal to the live identity that passed preflight.
+        executable.args[2] = script.launch_argument().to_owned();
     }
     ProcessCommand::new(&executable.program)
         .args(&executable.args)

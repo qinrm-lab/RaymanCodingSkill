@@ -94,6 +94,37 @@ pub(super) struct CapturedGateIdentity {
 pub struct LiveWorkspaceScript {
     pub canonical_path: PathBuf,
     pub logical_key: String,
+    launch_argument: String,
+}
+
+impl LiveWorkspaceScript {
+    /// PowerShell rejects Windows verbatim paths during its authorization
+    /// check. This argument is safe to spawn only because resolution proved
+    /// that canonicalizing it returns the exact identity above.
+    pub fn launch_argument(&self) -> &str {
+        &self.launch_argument
+    }
+}
+
+fn powershell_launch_argument(canonical_path: &Path) -> Result<String> {
+    powershell_launch_argument_with(canonical_path, |path| path.canonicalize())
+}
+
+fn powershell_launch_argument_with<F>(canonical_path: &Path, canonicalize: F) -> Result<String>
+where
+    F: FnOnce(&Path) -> std::io::Result<PathBuf>,
+{
+    let launch_argument = crate::pathfmt::display_path(canonical_path);
+    let launch_path = Path::new(&launch_argument);
+    if !launch_path.is_absolute() {
+        bail!("PowerShell validation launch path must be absolute");
+    }
+    let launch_identity = canonicalize(launch_path)
+        .context("PowerShell validation launch path could not be canonicalized")?;
+    if launch_identity != canonical_path {
+        bail!("PowerShell validation launch path changed the canonical script identity");
+    }
+    Ok(launch_argument)
 }
 
 fn strict_authority_key(raw: &str, require_ps1: bool) -> Result<String> {
@@ -294,9 +325,11 @@ pub fn resolve_live_powershell_script(
         bail!("PowerShell validation script must be an ordinary workspace .ps1 file");
     }
     let logical_key = relative.to_string_lossy().replace('\\', "/");
+    let launch_argument = powershell_launch_argument(&canonical_path)?;
     Ok(Some(LiveWorkspaceScript {
         canonical_path,
         logical_key,
+        launch_argument,
     }))
 }
 
@@ -852,4 +885,71 @@ pub fn validate_authority_command_for_goal(root: &Path, goal: &Goal, command: &s
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod launch_path_tests {
+    use super::{powershell_launch_argument, powershell_launch_argument_with};
+    use std::path::Path;
+
+    #[cfg(windows)]
+    #[test]
+    fn verbatim_drive_path_launches_only_after_identity_round_trip() {
+        let canonical = Path::new(r"\\?\C:\workspace\scripts\check.ps1");
+        let launch = powershell_launch_argument_with(canonical, |path| {
+            assert_eq!(path, Path::new(r"C:\workspace\scripts\check.ps1"));
+            Ok(canonical.to_path_buf())
+        })
+        .unwrap();
+        assert_eq!(launch, r"C:\workspace\scripts\check.ps1");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn verbatim_unc_path_launches_only_after_identity_round_trip() {
+        let canonical = Path::new(r"\\?\UNC\server\share\scripts\check.ps1");
+        let launch = powershell_launch_argument_with(canonical, |path| {
+            assert_eq!(path, Path::new(r"\\server\share\scripts\check.ps1"));
+            Ok(canonical.to_path_buf())
+        })
+        .unwrap();
+        assert_eq!(launch, r"\\server\share\scripts\check.ps1");
+    }
+
+    #[test]
+    fn launch_path_identity_mismatch_fails_closed() {
+        let directory = tempfile::tempdir().unwrap();
+        let canonical = directory.path().canonicalize().unwrap();
+        let other = canonical.join("other.ps1");
+        let error = powershell_launch_argument_with(&canonical, |_| Ok(other)).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("changed the canonical script identity")
+        );
+    }
+
+    #[test]
+    fn launch_path_canonicalization_failure_fails_closed() {
+        let directory = tempfile::tempdir().unwrap();
+        let canonical = directory.path().canonicalize().unwrap();
+        assert!(
+            powershell_launch_argument_with(&canonical, |_| {
+                Err(std::io::Error::new(std::io::ErrorKind::NotFound, "missing"))
+            })
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn real_canonical_path_round_trips_through_the_launch_argument() {
+        let directory = tempfile::tempdir().unwrap();
+        let script = directory.path().join("check.ps1");
+        std::fs::write(&script, "exit 0\n").unwrap();
+        let canonical = script.canonicalize().unwrap();
+        let launch = powershell_launch_argument(&canonical).unwrap();
+        assert_eq!(Path::new(&launch).canonicalize().unwrap(), canonical);
+        #[cfg(windows)]
+        assert!(!launch.starts_with(r"\\?\"));
+    }
 }
