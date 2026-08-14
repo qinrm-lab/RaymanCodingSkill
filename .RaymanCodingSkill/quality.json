@@ -93,6 +93,11 @@
       "reason": "Managed-state containment is a shared security boundary by design; the full root suite and release self-dogfood validate all state consumers together."
     },
     {
+      "path": "crates/rayman/src/source_state.rs",
+      "kind": "high_fan_in",
+      "reason": "Git HEAD, clean and dirty counts, changed paths, path-encoding status, and the exact porcelain XY-byte hash intentionally form one source-fingerprint contract shared by workspace inspection, goal decisions and handoff, task workflow, and readiness; the staged-versus-unstaged regression test, focused goal and readiness tests, CLI integration tests, and the full repository gate cover this shared boundary."
+    },
+    {
       "path": "crates/rayman/src/walk.rs",
       "kind": "high_fan_in",
       "reason": "Workspace traversal is intentionally the single shared ignore and completeness boundary; walk unit tests plus the full root suite cover its callers."

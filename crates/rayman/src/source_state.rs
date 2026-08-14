@@ -175,7 +175,60 @@ fn failed(error: String) -> SourceState {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
+
+    fn git_ok(root: &Path, args: &[&str]) {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn inspect_binds_exact_porcelain_xy_state_not_just_paths_and_counts() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        git_ok(root, &["init", "--quiet"]);
+        fs::write(root.join("tracked.txt"), "baseline\n").unwrap();
+        git_ok(root, &["add", "tracked.txt"]);
+        git_ok(
+            root,
+            &[
+                "-c",
+                "user.name=Rayman Tests",
+                "-c",
+                "user.email=rayman-tests@example.invalid",
+                "commit",
+                "--quiet",
+                "-m",
+                "baseline",
+            ],
+        );
+
+        fs::write(root.join("tracked.txt"), "changed\n").unwrap();
+        let unstaged = inspect(root);
+        git_ok(root, &["add", "tracked.txt"]);
+        let staged = inspect(root);
+
+        let mut unstaged_without_porcelain = unstaged.clone();
+        let mut staged_without_porcelain = staged.clone();
+        let unstaged_porcelain = unstaged_without_porcelain.porcelain_sha256.take().unwrap();
+        let staged_porcelain = staged_without_porcelain.porcelain_sha256.take().unwrap();
+
+        assert_eq!(unstaged_without_porcelain, staged_without_porcelain);
+        assert_ne!(unstaged_porcelain, staged_porcelain);
+        assert_ne!(unstaged, staged);
+    }
 
     #[test]
     fn porcelain_z_preserves_spaces_controls_and_rename_paths() {
