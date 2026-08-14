@@ -1638,7 +1638,58 @@ if ($PSCmdlet.ParameterSetName -eq 'PrepareAuditTools') {
         throw
     }
 }
-. (Join-Path $PSScriptRoot 'repository-quality.ps1')
+function Get-RepositoryQualityCommands {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('Root', 'Evals')]
+        [string]$Suite,
+        [string]$ProviderPath = (Join-Path $PSScriptRoot 'repository-quality.ps1')
+    )
+
+    $helper = $ProviderPath
+    if (-not (Test-Path -LiteralPath $helper -PathType Leaf)) {
+        throw "Repository quality command provider is missing: $helper"
+    }
+    $json = & $helper -Suite $Suite | Out-String
+    if (-not $? -or [string]::IsNullOrWhiteSpace($json)) {
+        throw "Repository quality command provider failed for suite $Suite"
+    }
+    try {
+        $document = $json | ConvertFrom-Json -Depth 8 -NoEnumerate -ErrorAction Stop
+    } catch {
+        throw "Repository quality command provider returned invalid JSON for suite ${Suite}: $($_.Exception.Message)"
+    }
+    $expectedNames = @('fmt', 'clippy', 'test')
+    if ($document -is [array] -or
+        $document -isnot [pscustomobject] -or
+        $document.schema -isnot [string] -or
+        $document.suite -isnot [string] -or
+        $document.commands -isnot [array]) {
+        throw "Repository quality command provider returned invalid JSON types for suite $Suite"
+    }
+    $commands = $document.commands
+    if ($document.schema -cne 'rayman.repository-quality.commands.v1' -or
+        $document.suite -cne $Suite -or
+        $commands.Count -ne $expectedNames.Count) {
+        throw "Repository quality command provider contract mismatch for suite $Suite"
+    }
+    for ($index = 0; $index -lt $commands.Count; $index++) {
+        $command = $commands[$index]
+        if ($command -is [array] -or
+            $command -isnot [pscustomobject] -or
+            $command.name -isnot [string] -or
+            $command.argv -isnot [array]) {
+            throw "Repository quality command provider returned invalid command types at index $index for suite $Suite"
+        }
+        $argv = $command.argv
+        if ($command.name -cne $expectedNames[$index] -or
+            $argv.Count -eq 0 -or
+            @($argv | Where-Object { $_ -isnot [string] -or [string]::IsNullOrWhiteSpace($_) }).Count -ne 0) {
+            throw "Repository quality command provider returned an invalid command at index $index for suite $Suite"
+        }
+    }
+    return $commands
+}
 # Self-test and the focused dependency-policy lane intentionally avoid the
 # complete-audit MSRV/Git/compiler resolver. A complete audit still requires
 # all five applications, but a missing one now has a structured bootstrap fail.
@@ -1737,8 +1788,8 @@ try {
 
     Write-AuditPhase -Name 'root_quality' -Status 'start'
     foreach ($qualityCommand in @(Get-RepositoryQualityCommands -Suite Root)) {
-        $qualityArguments = @($qualityCommand.Arguments)
-        if ($qualityCommand.Name -eq 'test') {
+        $qualityArguments = @($qualityCommand.argv)
+        if ($qualityCommand.name -eq 'test') {
             $qualityArguments += @('--', '--skip', $script:AuditIntegrationTestName)
         }
         Invoke-NativeChecked `
@@ -1775,7 +1826,7 @@ try {
     foreach ($qualityCommand in @(Get-RepositoryQualityCommands -Suite Evals)) {
         Invoke-NativeChecked `
             -FilePath $nativeApplications.Cargo.Path `
-            -Arguments $qualityCommand.Arguments
+            -Arguments $qualityCommand.argv
     }
 
     Invoke-NativeExpectedFailure $nativeApplications.Cargo.Path @(
@@ -1893,7 +1944,7 @@ try {
     Write-AuditPhase -Name 'workspace_self_dogfood' -Status 'pass'
     Write-AuditPhase -Name 'installed_release_identity' -Status 'start'
 
-    & './scripts/verify-release-contract.ps1' `
+    & (Join-Path $PSScriptRoot 'verify-release-contract.ps1') `
         -CliPath $resolvedCli `
         -ReferenceCliPath $referenceArtifact `
         -SkillPath $resolvedSkill `

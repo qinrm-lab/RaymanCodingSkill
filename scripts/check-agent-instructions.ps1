@@ -166,7 +166,8 @@ function Assert-AuditAuthorizationDocumentation {
             'switch ($PSCmdlet.ParameterSetName)',
             'if (-not $PrepareAuditTools.IsPresent)',
             "if (`$PSCmdlet.ParameterSetName -eq 'PrepareAuditTools')",
-            ". (Join-Path `$PSScriptRoot 'repository-quality.ps1')",
+            "Join-Path `$PSScriptRoot 'repository-quality.ps1'",
+            "schema -cne 'rayman.repository-quality.commands.v1'",
             "schema = 'rayman.audit.tool-preparation.v1'",
             'Resolve-PersistentCargoInstallRoot',
             'Get-MsrvLlvmPreparationArguments',
@@ -185,7 +186,7 @@ function Assert-AuditAuthorizationDocumentation {
         }
     }
     $prepareBranch = $Source.IndexOf("if (`$PSCmdlet.ParameterSetName -eq 'PrepareAuditTools')", [StringComparison]::Ordinal)
-    $helperLoad = $Source.IndexOf(". (Join-Path `$PSScriptRoot 'repository-quality.ps1')", [StringComparison]::Ordinal)
+    $helperLoad = $Source.IndexOf("function Get-RepositoryQualityCommands", [StringComparison]::Ordinal)
     if ($prepareBranch -lt 0 -or $helperLoad -lt 0 -or $prepareBranch -ge $helperLoad) {
         throw 'Audit preparation must branch before loading the repository quality helper.'
     }

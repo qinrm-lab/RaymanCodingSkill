@@ -2,8 +2,69 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+use serde_json::Value;
+
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+
+fn powershell_path(path: &Path) -> String {
+    let path = path.to_string_lossy();
+    #[cfg(windows)]
+    {
+        if let Some(path) = path.strip_prefix(r"\\?\UNC\") {
+            return format!(r"\\{path}");
+        }
+        if let Some(path) = path.strip_prefix(r"\\?\") {
+            return path.to_owned();
+        }
+    }
+    path.into_owned()
+}
+
+fn powershell_function(source: &str, name: &str) -> String {
+    let marker = format!("function {name}");
+    let start = source
+        .find(&marker)
+        .unwrap_or_else(|| panic!("PowerShell source lost {name}"));
+    let opening = source[start..]
+        .find('{')
+        .map(|offset| start + offset)
+        .unwrap_or_else(|| panic!("PowerShell function {name} lost opening brace"));
+    let bytes = source.as_bytes();
+    let mut depth = 0_u32;
+    let mut quote = None;
+    let mut index = opening;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if let Some(active) = quote {
+            if byte == b'`' {
+                index += 2;
+                continue;
+            }
+            if byte == active {
+                if index + 1 < bytes.len() && bytes[index + 1] == active {
+                    index += 2;
+                    continue;
+                }
+                quote = None;
+            }
+        } else {
+            match byte {
+                b'\'' | b'"' => quote = Some(byte),
+                b'{' => depth += 1,
+                b'}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return source[start..=index].to_owned();
+                    }
+                }
+                _ => {}
+            }
+        }
+        index += 1;
+    }
+    panic!("PowerShell function {name} lost closing brace");
+}
 
 #[test]
 fn audit_self_test_exercises_only_the_audit_contract() {
@@ -81,6 +142,157 @@ fn audit_self_test_exercises_only_the_audit_contract() {
 }
 
 #[test]
+fn repository_quality_provider_emits_the_exact_versioned_command_contract() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("repository root must resolve");
+    let script = repo_root.join("scripts/repository-quality.ps1");
+    let expected = [
+        (
+            "Root",
+            serde_json::json!([
+                {"name": "fmt", "argv": ["fmt", "--all", "--check"]},
+                {"name": "clippy", "argv": ["clippy", "--locked", "--workspace", "--all-targets", "--all-features", "--", "-D", "warnings"]},
+                {"name": "test", "argv": ["test", "--locked", "--workspace", "--all-targets"]}
+            ]),
+        ),
+        (
+            "Evals",
+            serde_json::json!([
+                {"name": "fmt", "argv": ["fmt", "--manifest-path", "evals/Cargo.toml", "--all", "--check"]},
+                {"name": "clippy", "argv": ["clippy", "--manifest-path", "evals/Cargo.toml", "--locked", "--all-targets", "--all-features", "--", "-D", "warnings"]},
+                {"name": "test", "argv": ["test", "--manifest-path", "evals/Cargo.toml", "--locked", "--all-targets"]}
+            ]),
+        ),
+    ];
+    let script = powershell_path(&script);
+
+    for (suite, expected_commands) in expected {
+        let output = Command::new("pwsh")
+            .args([
+                "-NoProfile",
+                "-Command",
+                "& $env:RAYMAN_TEST_SCRIPT -Suite $env:RAYMAN_TEST_SUITE",
+            ])
+            .current_dir(&repo_root)
+            .env("RAYMAN_TEST_SCRIPT", &script)
+            .env("RAYMAN_TEST_SUITE", suite)
+            .output()
+            .expect("PowerShell 7 must run the repository quality provider");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success(),
+            "repository quality provider failed for {suite}\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        );
+        let document: Value = serde_json::from_slice(&output.stdout)
+            .unwrap_or_else(|error| panic!("invalid provider JSON for {suite}: {error}\n{stdout}"));
+        assert_eq!(
+            document,
+            serde_json::json!({
+                "schema": "rayman.repository-quality.commands.v1",
+                "suite": suite,
+                "commands": expected_commands
+            })
+        );
+    }
+}
+
+#[test]
+fn repository_quality_consumers_reject_malformed_types_and_ignore_stale_native_exit_codes() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("repository root must resolve");
+    let fixture = tempfile::tempdir().expect("quality contract fixture must be created");
+    let provider = fixture.path().join("provider.ps1");
+    let process_temp = fixture.path().join("process-temp");
+    fs::create_dir_all(&process_temp).expect("process temp must be created");
+    let consumer_sources = [
+        fs::read_to_string(repo_root.join("scripts/check-repo.ps1"))
+            .expect("check-repo consumer must be readable"),
+        fs::read_to_string(repo_root.join("scripts/audit-repository.ps1"))
+            .expect("audit consumer must be readable"),
+    ];
+    let cases = [
+        (
+            "valid after stale native exit code",
+            "$global:LASTEXITCODE = 7\nWrite-Output '{\"schema\":\"rayman.repository-quality.commands.v1\",\"suite\":\"Root\",\"commands\":[{\"name\":\"fmt\",\"argv\":[\"fmt\"]},{\"name\":\"clippy\",\"argv\":[\"clippy\"]},{\"name\":\"test\",\"argv\":[\"test\"]}]}'\n",
+            true,
+        ),
+        (
+            "top-level array",
+            "Write-Output '[{\"schema\":\"rayman.repository-quality.commands.v1\",\"suite\":\"Root\",\"commands\":[{\"name\":\"fmt\",\"argv\":[\"fmt\"]},{\"name\":\"clippy\",\"argv\":[\"clippy\"]},{\"name\":\"test\",\"argv\":[\"test\"]}]}]'\n",
+            false,
+        ),
+        (
+            "scalar argv",
+            "Write-Output '{\"schema\":\"rayman.repository-quality.commands.v1\",\"suite\":\"Root\",\"commands\":[{\"name\":\"fmt\",\"argv\":\"fmt\"},{\"name\":\"clippy\",\"argv\":[\"clippy\"]},{\"name\":\"test\",\"argv\":[\"test\"]}]}'\n",
+            false,
+        ),
+        (
+            "array schema",
+            "Write-Output '{\"schema\":[\"rayman.repository-quality.commands.v1\"],\"suite\":\"Root\",\"commands\":[{\"name\":\"fmt\",\"argv\":[\"fmt\"]},{\"name\":\"clippy\",\"argv\":[\"clippy\"]},{\"name\":\"test\",\"argv\":[\"test\"]}]}'\n",
+            false,
+        ),
+        (
+            "array command name",
+            "Write-Output '{\"schema\":\"rayman.repository-quality.commands.v1\",\"suite\":\"Root\",\"commands\":[{\"name\":[\"fmt\"],\"argv\":[\"fmt\"]},{\"name\":\"clippy\",\"argv\":[\"clippy\"]},{\"name\":\"test\",\"argv\":[\"test\"]}]}'\n",
+            false,
+        ),
+        (
+            "blank argv entry",
+            "Write-Output '{\"schema\":\"rayman.repository-quality.commands.v1\",\"suite\":\"Root\",\"commands\":[{\"name\":\"fmt\",\"argv\":[\"   \"]},{\"name\":\"clippy\",\"argv\":[\"clippy\"]},{\"name\":\"test\",\"argv\":[\"test\"]}]}'\n",
+            false,
+        ),
+    ];
+
+    for (label, provider_source, should_succeed) in cases {
+        fs::write(&provider, provider_source).expect("provider fixture must be written");
+        for (consumer_index, consumer_source) in consumer_sources.iter().enumerate() {
+            let consumer = fixture
+                .path()
+                .join(format!("consumer-{consumer_index}.ps1"));
+            let function = powershell_function(consumer_source, "Get-RepositoryQualityCommands");
+            fs::write(
+                &consumer,
+                format!(
+                    "Set-StrictMode -Version Latest\n$ErrorActionPreference = 'Stop'\n{function}\nif ($ExecutionContext.SessionState.LanguageMode -cne 'ConstrainedLanguage') {{ throw 'consumer self-test did not enter ConstrainedLanguage' }}\n$null = Get-RepositoryQualityCommands -Suite Root -ProviderPath $env:RAYMAN_TEST_PROVIDER\nWrite-Output 'repository-quality consumer self-test: PASS'\n"
+                ),
+            )
+            .expect("consumer fixture must be written");
+            let consumer = powershell_path(&consumer);
+            let provider_path = powershell_path(&provider);
+            let output = Command::new("pwsh")
+                .args([
+                    "-NoProfile",
+                    "-Command",
+                    "$ExecutionContext.SessionState.LanguageMode = 'ConstrainedLanguage'; & $env:RAYMAN_TEST_CONSUMER",
+                ])
+                .current_dir(&repo_root)
+                .env("RAYMAN_TEST_CONSUMER", &consumer)
+                .env("RAYMAN_TEST_PROVIDER", &provider_path)
+                .env("TMP", &process_temp)
+                .env("TEMP", &process_temp)
+                .output()
+                .expect("PowerShell 7 must run the quality consumer self-test");
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert_eq!(
+                output.status.success(),
+                should_succeed,
+                "quality consumer result mismatch for {label}: {}\nstdout:\n{stdout}\nstderr:\n{stderr}",
+                consumer
+            );
+            if should_succeed {
+                assert!(stdout.contains("repository-quality consumer self-test: PASS"));
+            }
+        }
+    }
+}
+
+#[test]
 fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -90,6 +302,8 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
         .expect("audit script must be readable UTF-8");
     let check_repo = fs::read_to_string(repo_root.join("scripts/check-repo.ps1"))
         .expect("check-repo script must be readable UTF-8");
+    let repository_quality = fs::read_to_string(repo_root.join("scripts/repository-quality.ps1"))
+        .expect("repository quality provider must be readable UTF-8");
     let release_closeout = fs::read_to_string(repo_root.join("scripts/release-closeout.ps1"))
         .expect("release closeout script must be readable UTF-8");
     let release_verifier =
@@ -106,8 +320,8 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
         .find("if ($PSCmdlet.ParameterSetName -eq 'PrepareAuditTools') {")
         .expect("explicit preparation entrypoint must exist");
     let repository_helper = source
-        .find(". (Join-Path $PSScriptRoot 'repository-quality.ps1')")
-        .expect("normal audit must load the repository quality helper");
+        .find("function Get-RepositoryQualityCommands")
+        .expect("normal audit must define the repository quality provider consumer");
     assert!(preparation_start < repository_helper);
     let preparation = &source[preparation_start..repository_helper];
     for forbidden in [
@@ -147,6 +361,33 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
     }
     assert!(source.contains("--skip', $SkippedIntegrationTest"));
     assert!(check_repo.contains("--skip', $auditIntegrationTestName"));
+    for consumer in [&source, &check_repo] {
+        assert!(consumer.contains("Join-Path $PSScriptRoot 'repository-quality.ps1'"));
+        assert!(consumer.contains("rayman.repository-quality.commands.v1"));
+        assert!(consumer.contains("ConvertFrom-Json -Depth 8 -NoEnumerate"));
+        assert!(consumer.contains("$document -is [array]"));
+        assert!(consumer.contains("$document -isnot [pscustomobject]"));
+        assert!(consumer.contains("$document.commands -isnot [array]"));
+        assert!(consumer.contains("$command.argv -isnot [array]"));
+        assert!(consumer.contains("$command -is [array]"));
+        assert!(consumer.contains("[string]::IsNullOrWhiteSpace($_)"));
+        assert!(consumer.contains("if (-not $? -or [string]::IsNullOrWhiteSpace($json))"));
+        assert!(
+            !consumer.contains("if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($json))")
+        );
+        assert!(!consumer.contains(". (Join-Path $PSScriptRoot 'repository-quality.ps1')"));
+    }
+    for expected in [
+        "schema = 'rayman.repository-quality.commands.v1'",
+        "suite = $Suite",
+        "name = 'fmt'",
+        "name = 'clippy'",
+        "name = 'test'",
+    ] {
+        assert!(repository_quality.contains(expected));
+    }
+    assert!(source.contains("& (Join-Path $PSScriptRoot 'verify-release-contract.ps1')"));
+    assert!(!source.contains("& './scripts/verify-release-contract.ps1'"));
     assert!(source.contains("Invoke-SourceFreshInputInspection"));
     assert!(source.contains("-InspectSourceFreshInputs"));
     for duplicated_policy in [

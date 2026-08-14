@@ -6,7 +6,6 @@ $ErrorActionPreference = 'Stop'
 if ($PSVersionTable.PSVersion.Major -lt 7) {
     throw 'check-repo.ps1 requires PowerShell 7+. Run it with pwsh, not Windows PowerShell.'
 }
-. (Join-Path $PSScriptRoot 'repository-quality.ps1')
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $repoRoot
@@ -46,13 +45,66 @@ function Invoke-NativeChecked {
     }
 }
 
+function Get-RepositoryQualityCommands {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('Root', 'Evals')]
+        [string]$Suite,
+        [string]$ProviderPath = (Join-Path $PSScriptRoot 'repository-quality.ps1')
+    )
+
+    $helper = $ProviderPath
+    if (-not (Test-Path -LiteralPath $helper -PathType Leaf)) {
+        throw "Repository quality command provider is missing: $helper"
+    }
+    $json = & $helper -Suite $Suite | Out-String
+    if (-not $? -or [string]::IsNullOrWhiteSpace($json)) {
+        throw "Repository quality command provider failed for suite $Suite"
+    }
+    try {
+        $document = $json | ConvertFrom-Json -Depth 8 -NoEnumerate -ErrorAction Stop
+    } catch {
+        throw "Repository quality command provider returned invalid JSON for suite ${Suite}: $($_.Exception.Message)"
+    }
+    $expectedNames = @('fmt', 'clippy', 'test')
+    if ($document -is [array] -or
+        $document -isnot [pscustomobject] -or
+        $document.schema -isnot [string] -or
+        $document.suite -isnot [string] -or
+        $document.commands -isnot [array]) {
+        throw "Repository quality command provider returned invalid JSON types for suite $Suite"
+    }
+    $commands = $document.commands
+    if ($document.schema -cne 'rayman.repository-quality.commands.v1' -or
+        $document.suite -cne $Suite -or
+        $commands.Count -ne $expectedNames.Count) {
+        throw "Repository quality command provider contract mismatch for suite $Suite"
+    }
+    for ($index = 0; $index -lt $commands.Count; $index++) {
+        $command = $commands[$index]
+        if ($command -is [array] -or
+            $command -isnot [pscustomobject] -or
+            $command.name -isnot [string] -or
+            $command.argv -isnot [array]) {
+            throw "Repository quality command provider returned invalid command types at index $index for suite $Suite"
+        }
+        $argv = $command.argv
+        if ($command.name -cne $expectedNames[$index] -or
+            $argv.Count -eq 0 -or
+            @($argv | Where-Object { $_ -isnot [string] -or [string]::IsNullOrWhiteSpace($_) }).Count -ne 0) {
+            throw "Repository quality command provider returned an invalid command at index $index for suite $Suite"
+        }
+    }
+    return $commands
+}
+
 $cargo = Resolve-NativeApplication -Name 'cargo'
 $git = Resolve-NativeApplication -Name 'git'
 
 foreach ($suite in @('Root', 'Evals')) {
     foreach ($qualityCommand in @(Get-RepositoryQualityCommands -Suite $suite)) {
-        $qualityArguments = @($qualityCommand.Arguments)
-        if ($suite -eq 'Root' -and $qualityCommand.Name -eq 'test') {
+        $qualityArguments = @($qualityCommand.argv)
+        if ($suite -eq 'Root' -and $qualityCommand.name -eq 'test') {
             # DependencyPolicyOnly already executed the real audit PowerShell
             # self-test above. Skip exactly that one integration test here so
             # the selector-free outer Cargo suite does not recursively launch it.
