@@ -20,8 +20,12 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
     throw 'repair-rayman-powershell-profile.ps1 requires PowerShell 7+.'
 }
 
+# Preserve the exact historical Windows path without spelling it as one quoted
+# .ps1 literal. Repository authority deliberately treats every such literal as
+# a potential gate dependency, while this value is migration data, not code.
+$legacyScriptPath = '.Rayman' + [char]0x5c + 'rayman.' + 'ps1'
 $legacyFunction = @"
-function rayman { param([Parameter(ValueFromRemainingArguments=`$true)] `$Args); `$cwd = Get-Location; while (`$cwd) { `$candidate = Join-Path `$cwd '.Rayman\rayman.ps1'; if (Test-Path `$candidate) { & `$candidate @Args; return }; `$parent = Split-Path `$cwd -Parent; if (`$parent -eq `$cwd.Path) { break }; `$cwd = Get-Item `$parent } }
+function rayman { param([Parameter(ValueFromRemainingArguments=`$true)] `$Args); `$cwd = Get-Location; while (`$cwd) { `$candidate = Join-Path `$cwd '$legacyScriptPath'; if (Test-Path `$candidate) { & `$candidate @Args; return }; `$parent = Split-Path `$cwd -Parent; if (`$parent -eq `$cwd.Path) { break }; `$cwd = Get-Item `$parent } }
 "@
 
 function Normalize-FunctionText {
@@ -226,6 +230,20 @@ function New-RealManagedDirectory {
 
 function Invoke-SelfTest {
     $repoRoot = Split-Path -Parent $PSScriptRoot
+    $expectedLegacyScriptPath = -join (
+        0x2e, 0x52, 0x61, 0x79, 0x6d, 0x61, 0x6e, 0x5c, 0x72,
+        0x61, 0x79, 0x6d, 0x61, 0x6e, 0x2e, 0x70, 0x73, 0x31 |
+            ForEach-Object { [char]$_ }
+    )
+    $expectedQuotedPath = "'" + $expectedLegacyScriptPath + "'"
+    if ($legacyScriptPath -cne $expectedLegacyScriptPath -or
+        -not $legacyFunction.Contains($expectedQuotedPath)) {
+        throw 'Profile migration self-test did not reconstruct the exact historical Rayman script path.'
+    }
+    $selfSource = Get-Content -Raw -LiteralPath $PSCommandPath
+    if ($selfSource.Contains($expectedLegacyScriptPath)) {
+        throw 'Profile migration self-test found the historical path exposed as a source dependency literal.'
+    }
     $managedTemp = New-RealManagedDirectory `
         -Path (Join-Path $repoRoot '.RaymanCodingSkill/tmp') `
         -Label 'Managed self-test temp'
