@@ -93,6 +93,11 @@
       "reason": "Managed-state containment is a shared security boundary by design; the full root suite and release self-dogfood validate all state consumers together."
     },
     {
+      "path": "crates/rayman/src/temp.rs",
+      "kind": "high_fan_in",
+      "reason": "Managed scratch and manifest-owned pytest leases intentionally share one temp contract across the CLI, autosave, state audit, and goal validation; focused temp and pytest-isolation tests, cross-process CLI tests, and the full root suite cover all consumers."
+    },
+    {
       "path": "crates/rayman/src/source_state.rs",
       "kind": "high_fan_in",
       "reason": "Git HEAD, clean and dirty counts, changed paths, path-encoding status, and the exact porcelain XY-byte hash intentionally form one source-fingerprint contract shared by workspace inspection, goal decisions and handoff, task workflow, and readiness; the staged-versus-unstaged regression test, focused goal and readiness tests, CLI integration tests, and the full repository gate cover this shared boundary."
