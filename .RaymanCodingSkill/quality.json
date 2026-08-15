@@ -28,6 +28,11 @@
       "reason": "GoalStore remains the single fail-closed transaction boundary for baseline-bound goal state, workspace CAS checks, legacy quarantine, and atomic persistence. Deterministic plan-publication hashing, state conversion, and envelope validation now live in goal/plan_publication.rs; focused goal tests, CLI integration tests, and the full repository gate cover the remaining transactional module."
     },
     {
+      "path": "crates/rayman/src/goal/workspace_baseline.rs",
+      "kind": "public_api_without_test_evidence",
+      "reason": "Workspace baseline capture, fingerprint and delta calculation, and plan/receipt reconciliation are exercised across goal workflow unit tests and cross-process CLI tests: immutable plan extension, baseline-less and tampered-baseline rejection, planned and out-of-plan delta enforcement, lifecycle replacement, and workspace-snapshot refusal."
+    },
+    {
       "path": "crates/rayman/src/state_lock.rs",
       "kind": "public_api_without_test_evidence",
       "reason": "This OS advisory-lock module is shared by the goal store and checkpoint restore, which is why it sits at the crate root; focused contention and ACL classification tests run through the goal test module and the full repository gate."
