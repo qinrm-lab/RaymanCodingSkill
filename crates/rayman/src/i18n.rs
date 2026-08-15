@@ -397,6 +397,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "workspace snapshot receipt 要求 goal baseline delta 为空；发现真实变更: {}",
     "托管临时目录: {} (exists={}, entries={}, files={}, dirs={}, {:.1} MB, traversal_errors={})",
     "lifecycle authority 第 {run_index} 次运行前 source fingerprint 漂移；不会写入 proof",
+    "lifecycle authority 第 {run_index}/{repeat} 次执行失败；不会写入 proof",
     "停止状态写入失败；计划任务已重新注册，autosave 保持 active：{state_error}",
     "工作区遍历不完整（{} 个错误），拒绝把不完整结果当作完整文件集: {}",
     "自动保存状态损坏或不可读取；未修改状态，也未注销计划任务：{error}",
@@ -456,6 +457,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "  仓库源码产物: 未由 doctor 检查；交接/CI 由 `{}` 验证",
     "  资产: 过时候选 {}，未完成标记 {}（提示，不阻塞）",
     "lifecycle authority 独立 test list proof 失败；不会写入 proof",
+    "lifecycle authority 独立 test list proof 执行失败；不会写入 proof",
     "受管状态存在，但缺少显式 workspace_skill.yaml 激活合同",
     "实际变更 {} 个文件但缺少首次修改前的 goal plan receipt",
     "独立 test list proof 没有列出任何测试；不会写入 receipt",
@@ -495,6 +497,8 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "需求 {} 缺少验证 receipt",
     "注销计划任务失败（任务仍可能在运行）：{detail}",
     "独立 test list proof 失败（exit={}）；不会写入 receipt",
+    "独立 test list proof 执行失败；不会写入 receipt",
+    "验证命令第 {run_index}/{repeat} 次执行失败；不会写入 receipt",
     "资产扫描: 干净（无过时候选、无未完成标记）。",
     "maintenance cycle rebind 路径必须是唯一规范文本形式",
     "已记录 {req} 证据（目标 {}，impact={}，validated={}）",
@@ -1005,6 +1009,17 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "目标 {} 不是当前 schema，不能作为 plan reconciliation authority",
     "目标 {} 缺少开工 baseline；不能核对实际变更，请用新的 baseline-bound goal supersede，或将已完成记录显式 archive",
     "缺少 baseline 的 goal 不得携带 plan publication state",
+    "pytest 隔离由 Rayman 管理；不能覆盖 --basetemp、cache_dir 或 addopts: {argument}",
+    "pytest 隔离由 Rayman 管理；Python -E/-I 或 -X pycache_prefix 会绕过受管 pycache: {argument}",
+    "pytest 隔离由 Rayman 管理；不能使用会在检查后展开的 @argsfile: {argument}",
+    "受管 pytest 参数只能注入 pytest 调用",
+    "pytest 验证结束后 lease 未被释放；stdout_sha256={} stderr_sha256={}",
+    "pytest 验证进程非零退出（exit={}）且 lease 未被释放；stdout_sha256={} stderr_sha256={}",
+    "pytest 验证结束后无法释放受管 lease；stdout_sha256={} stderr_sha256={}: {cleanup_error:#}",
+    "pytest 验证进程非零退出（exit={}）且 lease 释放失败；stdout_sha256={} stderr_sha256={}: {cleanup_error:#}",
+    "pytest 执行准备或启动失败且 lease 未被释放: {execution_error:#}",
+    "pytest 执行准备或启动失败: {execution_error:#}; lease 释放也失败: {cleanup_error:#}",
+    "pytest lease 创建或探测失败后的清理也失败: {cleanup_error}",
 ];
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
@@ -1787,6 +1802,66 @@ const MESSAGE_PREFIX_CATALOG: &[(&str, &str)] = &[
     (
         "pytest 成功退出但没有可验证的 passed>0 汇总；不会写入 receipt",
         "pytest succeeded but has no verifiable passed>0 summary; receipt will not be recorded",
+    ),
+    (
+        "pytest 隔离由 Rayman 管理；不能覆盖 --basetemp、cache_dir 或 addopts: {argument}",
+        "pytest isolation is managed by Rayman; --basetemp, cache_dir, or addopts cannot be overridden: {argument}",
+    ),
+    (
+        "pytest 隔离由 Rayman 管理；Python -E/-I 或 -X pycache_prefix 会绕过受管 pycache: {argument}",
+        "pytest isolation is managed by Rayman; Python -E/-I or -X pycache_prefix bypasses the managed pycache: {argument}",
+    ),
+    (
+        "pytest 隔离由 Rayman 管理；不能使用会在检查后展开的 @argsfile: {argument}",
+        "pytest isolation is managed by Rayman; pre-separator @argsfile expansion is not allowed: {argument}",
+    ),
+    (
+        "受管 pytest 参数只能注入 pytest 调用",
+        "managed pytest arguments can only be injected into a pytest invocation",
+    ),
+    (
+        "pytest 验证结束后 lease 未被释放；stdout_sha256={} stderr_sha256={}",
+        "pytest lease was not released after validation; stdout_sha256={} stderr_sha256={}",
+    ),
+    (
+        "pytest 验证进程非零退出（exit={}）且 lease 未被释放；stdout_sha256={} stderr_sha256={}",
+        "pytest validation process exited nonzero (exit={}) and its lease was not released; stdout_sha256={} stderr_sha256={}",
+    ),
+    (
+        "pytest 验证结束后无法释放受管 lease；stdout_sha256={} stderr_sha256={}: {cleanup_error:#}",
+        "failed to release the managed lease after pytest validation; stdout_sha256={} stderr_sha256={}: {cleanup_error:#}",
+    ),
+    (
+        "pytest 验证进程非零退出（exit={}）且 lease 释放失败；stdout_sha256={} stderr_sha256={}: {cleanup_error:#}",
+        "pytest validation process exited nonzero (exit={}) and lease release failed; stdout_sha256={} stderr_sha256={}: {cleanup_error:#}",
+    ),
+    (
+        "独立 test list proof 执行失败；不会写入 receipt",
+        "independent test-list proof execution failed; receipt will not be recorded",
+    ),
+    (
+        "验证命令第 {run_index}/{repeat} 次执行失败；不会写入 receipt",
+        "validation command execution {run_index}/{repeat} failed; receipt will not be recorded",
+    ),
+    (
+        "lifecycle authority 独立 test list proof 执行失败；不会写入 proof",
+        "lifecycle authority independent test-list proof execution failed; proof will not be recorded",
+    ),
+    (
+        "lifecycle authority 第 {run_index}/{repeat} 次执行失败；不会写入 proof",
+        "lifecycle authority execution {run_index}/{repeat} failed; proof will not be recorded",
+    ),
+    (
+        "pytest 执行准备或启动失败且 lease 未被释放: {execution_error:#}",
+        "pytest preparation or startup failed and its lease was not released: {execution_error:#}",
+    ),
+    (
+        "pytest 执行准备或启动失败: {execution_error:#}; lease 释放也失败: {cleanup_error:#}",
+        "pytest preparation or startup failed: {execution_error:#}; lease release also failed: {cleanup_error:#}",
+    ),
+    (
+        "pytest lease 创建或探测失败后的清理也失败: {cleanup_error}",
+        "cleanup after pytest lease creation or probe failure also failed: {cleanup_error}",
     ),
     (
         "测试命令成功退出但没有可验证的 passed>0 汇总；不会写入 receipt",

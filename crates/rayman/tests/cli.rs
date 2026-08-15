@@ -1,14 +1,22 @@
 //! 端到端集成测试：驱动真实的 `rayman` 二进制在临时工作区跑完整流程。
 //! 这些测试补足单元测试无法覆盖的东西——真实进程、真实退出码、真实文件系统状态。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use serde_json::Value;
 
 const BIN: &str = env!("CARGO_BIN_EXE_rayman");
+
+fn rayman_command() -> Command {
+    let mut command = Command::new(BIN);
+    // Text assertions are intentionally Chinese unless a test explicitly
+    // overrides the language through argv or an environment fixture.
+    command.env("RAYMAN_LANG", "zh-CN");
+    command
+}
 
 struct Output {
     status: i32,
@@ -26,7 +34,7 @@ fn current_activation_contract(skill_hash: &str) -> String {
 
 /// 在 `dir` 下运行 `rayman <args...>`，返回退出码与输出。
 fn run_raw(dir: &Path, args: &[&str]) -> Output {
-    let output = Command::new(BIN)
+    let output = rayman_command()
         .args(args)
         .current_dir(dir)
         .output()
@@ -39,7 +47,7 @@ fn run_raw(dir: &Path, args: &[&str]) -> Output {
 }
 
 fn run_raw_with_stdin(dir: &Path, args: &[&str], stdin: &str) -> Output {
-    let mut child = Command::new(BIN)
+    let mut child = rayman_command()
         .args(args)
         .current_dir(dir)
         .stdin(Stdio::piped())
@@ -101,6 +109,16 @@ fn run_with_path(
     path_prefix: &[&Path],
     pathext: Option<&str>,
 ) -> Output {
+    run_with_path_and_env(dir, args, path_prefix, pathext, &[])
+}
+
+fn run_with_path_and_env(
+    dir: &Path,
+    args: &[&str],
+    path_prefix: &[&Path],
+    pathext: Option<&str>,
+    environment: &[(&str, &str)],
+) -> Output {
     let mut entries = path_prefix
         .iter()
         .map(|path| path.to_path_buf())
@@ -109,8 +127,9 @@ fn run_with_path(
         entries.extend(std::env::split_paths(&parent_path));
     }
     let path = std::env::join_paths(entries).expect("PATH entries must be representable");
-    let mut command = Command::new(BIN);
+    let mut command = rayman_command();
     command.args(args).current_dir(dir).env("PATH", path);
+    command.envs(environment.iter().copied());
     if let Some(pathext) = pathext {
         command.env("PATHEXT", pathext);
     }
@@ -119,6 +138,296 @@ fn run_with_path(
         status: output.status.code().unwrap_or(-1),
         stdout: String::from_utf8(output.stdout).expect("rayman stdout 必须是有效 UTF-8"),
         stderr: String::from_utf8(output.stderr).expect("rayman stderr 必须是有效 UTF-8"),
+    }
+}
+
+fn run_with_exact_path_and_env(
+    dir: &Path,
+    args: &[&str],
+    exact_path: &Path,
+    pathext: Option<&str>,
+    environment: &[(&str, &str)],
+) -> Output {
+    let mut command = rayman_command();
+    command
+        .args(args)
+        .current_dir(dir)
+        .env("PATH", exact_path)
+        .envs(environment.iter().copied());
+    if let Some(pathext) = pathext {
+        command.env("PATHEXT", pathext);
+    }
+    let output = command.output().expect("无法启动 rayman 二进制");
+    Output {
+        status: output.status.code().unwrap_or(-1),
+        stdout: String::from_utf8(output.stdout).expect("rayman stdout 必须是有效 UTF-8"),
+        stderr: String::from_utf8(output.stderr).expect("rayman stderr 必须是有效 UTF-8"),
+    }
+}
+
+struct NativePytestProbe {
+    _temp: tempfile::TempDir,
+    bin_dir: PathBuf,
+}
+
+impl NativePytestProbe {
+    fn build() -> Self {
+        const SOURCE: &str = r##"
+use std::env;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::process;
+
+fn fail(message: impl AsRef<str>) -> ! {
+    eprintln!("pytest probe rejected invocation: {}", message.as_ref());
+    process::exit(86);
+}
+
+fn required_path(name: &str) -> PathBuf {
+    env::var_os(name)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| fail(format!("missing {name}")))
+}
+
+fn main() {
+    let args = env::args().skip(1).collect::<Vec<_>>();
+    let pytest_start = if args.first().map(String::as_str) == Some("-m")
+        && args.get(1).map(String::as_str) == Some("pytest")
+    {
+        2
+    } else if args.first().is_some_and(|arg| arg.starts_with("-3"))
+        && args.get(1).map(String::as_str) == Some("-m")
+        && args.get(2).map(String::as_str) == Some("pytest")
+    {
+        3
+    } else {
+        0
+    };
+    let pytest = &args[pytest_start..];
+    let separator = pytest
+        .iter()
+        .position(|argument| argument == "--")
+        .unwrap_or(pytest.len());
+    let options = &pytest[..separator];
+
+    let mut basetemps = Vec::new();
+    let mut cache_dirs = Vec::new();
+    let mut addopts = Vec::new();
+    let mut index = 0;
+    while let Some(argument) = options.get(index) {
+        if argument == "--basetemp" {
+            basetemps.push(
+                options
+                    .get(index + 1)
+                    .cloned()
+                    .unwrap_or_else(|| fail("--basetemp has no value")),
+            );
+            index += 2;
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--basetemp=") {
+            basetemps.push(value.to_string());
+        }
+        if argument == "-o" {
+            if let Some(value) = options.get(index + 1) {
+                if let Some(path) = value.strip_prefix("cache_dir=") {
+                    cache_dirs.push(path.to_string());
+                }
+                if let Some(value) = value.strip_prefix("addopts=") {
+                    addopts.push(value.to_string());
+                }
+            }
+            index += 2;
+            continue;
+        }
+        let inline = argument
+            .strip_prefix("-o=")
+            .or_else(|| argument.strip_prefix("-o").filter(|value| !value.is_empty()));
+        if let Some(path) = inline.and_then(|value| value.strip_prefix("cache_dir=")) {
+            cache_dirs.push(path.to_string());
+        }
+        if let Some(value) = inline.and_then(|value| value.strip_prefix("addopts=")) {
+            addopts.push(value.to_string());
+        }
+        index += 1;
+    }
+    if basetemps.len() != 1 || cache_dirs.len() != 1 || addopts != [""] {
+        fail(format!(
+            "expected one basetemp/cache_dir and one empty addopts, got {}/{}/{} in {options:?}",
+            basetemps.len(),
+            cache_dirs.len(),
+            addopts.len()
+        ));
+    }
+
+    let basetemp = PathBuf::from(&basetemps[0]);
+    let lease_root = basetemp
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| fail("basetemp has no lease root"));
+    let expected_cache = lease_root.join("cache");
+    if Path::new(&cache_dirs[0]) != expected_cache {
+        fail("cache_dir is outside the basetemp lease");
+    }
+    for (name, expected) in [
+        ("TEMP", lease_root.join("temp")),
+        ("TMP", lease_root.join("temp")),
+        ("TMPDIR", lease_root.join("temp")),
+        ("PYTHONPYCACHEPREFIX", lease_root.join("pycache")),
+    ] {
+        let actual = required_path(name);
+        if actual != expected || !actual.is_dir() {
+            fail(format!("{name} is not the live managed path"));
+        }
+    }
+    if !basetemp.is_dir() || !expected_cache.is_dir() {
+        fail("managed pytest directories were not probed before spawn");
+    }
+    if env::var("PYTHONDONTWRITEBYTECODE").as_deref() != Ok("1") {
+        fail("PYTHONDONTWRITEBYTECODE is not managed");
+    }
+    if env::var_os("PYTEST_ADDOPTS").is_some() {
+        fail("PYTEST_ADDOPTS was inherited");
+    }
+
+    let collect_count = options
+        .iter()
+        .filter(|argument| argument.as_str() == "--collect-only")
+        .count();
+    if collect_count > 1 {
+        fail("collect-only was injected more than once");
+    }
+    let phase = if collect_count == 1 { "collect" } else { "run" };
+    let trace_path = env::var_os("RAYMAN_PYTEST_PROBE_LOG")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| fail("missing RAYMAN_PYTEST_PROBE_LOG"));
+    let mut trace = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(trace_path)
+        .unwrap_or_else(|error| fail(format!("cannot open trace: {error}")));
+    writeln!(trace, "{phase}\t{}", lease_root.display())
+        .unwrap_or_else(|error| fail(format!("cannot write trace: {error}")));
+    drop(trace);
+
+    let mode = env::var("RAYMAN_PYTEST_PROBE_MODE").unwrap_or_else(|_| "success".into());
+    if phase == "collect" {
+        if mode == "collect-fail" {
+            eprintln!("collection failed by probe");
+            process::exit(41);
+        }
+        if mode == "collect-zero" {
+            println!("0 tests collected in 0.01s");
+            return;
+        }
+        println!("1 test collected in 0.01s");
+        return;
+    }
+
+    if matches!(mode.as_str(), "cleanup-fail" | "run-cleanup-fail") {
+        fs::write(lease_root.join("lease.json"), b"{}")
+            .unwrap_or_else(|error| fail(format!("cannot corrupt manifest: {error}")));
+    }
+    if matches!(mode.as_str(), "run-fail" | "run-cleanup-fail") {
+        println!("1 failed in 0.01s");
+        process::exit(37);
+    }
+    println!("1 passed in 0.01s");
+}
+"##;
+
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("pytest-probe.rs");
+        let bin_dir = temp.path().join("bin");
+        std::fs::create_dir(&bin_dir).unwrap();
+        std::fs::write(&source, SOURCE).unwrap();
+        let compiled = temp
+            .path()
+            .join(format!("pytest-probe{}", std::env::consts::EXE_SUFFIX));
+        let rustc = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
+        let output = Command::new(rustc)
+            .arg("--edition=2024")
+            .arg(&source)
+            .arg("-o")
+            .arg(&compiled)
+            .output()
+            .expect("must start rustc for pytest probe");
+        assert!(
+            output.status.success(),
+            "pytest probe did not compile: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        for launcher in ["pytest", "python", "py"] {
+            let target = bin_dir.join(format!("{launcher}{}", std::env::consts::EXE_SUFFIX));
+            if std::fs::hard_link(&compiled, &target).is_err() {
+                std::fs::copy(&compiled, &target).unwrap();
+            }
+        }
+        Self {
+            _temp: temp,
+            bin_dir,
+        }
+    }
+
+    fn pathext(&self) -> Option<&'static str> {
+        cfg!(windows).then_some(".EXE")
+    }
+}
+
+fn start_pytest_validation_goal(root: &Path) -> String {
+    write(root, "README.md", "pytest validation fixture\n");
+    write(root, "pytest.ini", "[pytest]\naddopts = -k never\n");
+    run_json(root, &["context", "refresh"]);
+    run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "managed pytest execution",
+            "--must-proof",
+            "test::run managed pytest",
+        ],
+    )["id"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
+fn pytest_trace(path: &Path) -> Vec<(String, PathBuf)> {
+    std::fs::read_to_string(path)
+        .unwrap_or_default()
+        .lines()
+        .map(|line| {
+            let (phase, root) = line.split_once('\t').expect("phase and lease root");
+            (phase.to_string(), PathBuf::from(root))
+        })
+        .collect()
+}
+
+fn assert_no_live_pytest_leases(root: &Path) {
+    let leases = root.join(".RaymanCodingSkill/tmp/leases");
+    assert!(
+        !leases.exists() || std::fs::read_dir(&leases).unwrap().next().is_none(),
+        "managed pytest lease remained under {}",
+        leases.display()
+    );
+}
+
+fn visit_json_strings(value: &Value, visitor: &mut impl FnMut(&str)) {
+    match value {
+        Value::String(text) => visitor(text),
+        Value::Array(items) => {
+            for item in items {
+                visit_json_strings(item, visitor);
+            }
+        }
+        Value::Object(fields) => {
+            for item in fields.values() {
+                visit_json_strings(item, visitor);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -1255,7 +1564,7 @@ fn doctor_check_rejects_an_unsatisfied_untrusted_context_requirement_without_cha
         &std::env::var_os("PATH").unwrap_or_default(),
     ));
     let path = std::env::join_paths(entries).unwrap();
-    let output = Command::new(BIN)
+    let output = rayman_command()
         .args(["--format", "json", "doctor", "--check"])
         .current_dir(root)
         .env("PATH", path)
@@ -1301,7 +1610,7 @@ fn doctor_profile_requirement_uses_the_token_profile_not_userprofile() {
     ));
     let path = std::env::join_paths(entries).unwrap();
 
-    let baseline = Command::new(BIN)
+    let baseline = rayman_command()
         .args(["--format", "json", "doctor"])
         .current_dir(root)
         .env("PATH", &path)
@@ -1321,7 +1630,7 @@ fn doctor_profile_requirement_uses_the_token_profile_not_userprofile() {
         // but no registered Windows profile directory. That is an observable
         // Unknown result, not permission to fall back to attacker-controlled
         // USERPROFILE.
-        let unavailable = Command::new(BIN)
+        let unavailable = rayman_command()
             .args(["--format", "json", "doctor", "--check"])
             .current_dir(root)
             .env("PATH", &path)
@@ -1348,7 +1657,7 @@ fn doctor_profile_requirement_uses_the_token_profile_not_userprofile() {
         forged_profile.to_ascii_lowercase()
     );
 
-    let forged = Command::new(BIN)
+    let forged = rayman_command()
         .args(["--format", "json", "doctor", "--check"])
         .current_dir(root)
         .env("PATH", &path)
@@ -1378,7 +1687,7 @@ fn doctor_profile_requirement_uses_the_token_profile_not_userprofile() {
     );
     assert_eq!(forged_report["doctor_check"]["ready"], false);
 
-    let token_bound = Command::new(BIN)
+    let token_bound = rayman_command()
         .args(["--format", "json", "doctor", "--check"])
         .current_dir(root)
         .env("PATH", path)
@@ -2733,6 +3042,282 @@ fn goal_validate_failure_never_records_a_receipt() {
             .unwrap()
             .is_empty()
     );
+}
+
+#[test]
+fn goal_validate_isolates_every_pytest_process_without_receipt_leakage() {
+    let probe = NativePytestProbe::build();
+    let py_program = probe
+        .bin_dir
+        .join(format!("py{}", std::env::consts::EXE_SUFFIX))
+        .to_string_lossy()
+        .replace('\\', "/");
+    let commands = [
+        "pytest -q --".to_string(),
+        "python -m pytest -q --".to_string(),
+        format!("\"{py_program}\" -3.12 -m pytest -q --"),
+    ];
+    for (index, command) in commands.iter().enumerate() {
+        let command = command.as_str();
+        let workspace = tempfile::tempdir().unwrap();
+        let root = workspace.path();
+        let id = start_pytest_validation_goal(root);
+        let trace = probe._temp.path().join(format!("success-{index}.trace"));
+        let trace_text = trace.to_str().unwrap();
+        let output = run_with_path_and_env(
+            root,
+            &[
+                "--format",
+                "json",
+                "goal",
+                "validate",
+                &id,
+                "--req",
+                "req_1",
+                "-m",
+                "managed pytest authority",
+                "--command",
+                command,
+                "--workspace-snapshot",
+                "--authority",
+                "--repeat",
+                "2",
+            ],
+            &[probe.bin_dir.as_path()],
+            probe.pathext(),
+            &[
+                ("RAYMAN_PYTEST_PROBE_LOG", trace_text),
+                ("RAYMAN_PYTEST_PROBE_MODE", "success"),
+                (
+                    "PYTEST_ADDOPTS",
+                    "--basetemp inherited -o cache_dir=inherited",
+                ),
+            ],
+        );
+        assert_eq!(
+            output.status, 0,
+            "command={command}\nstdout={}\nstderr={}",
+            output.stdout, output.stderr
+        );
+        let returned: Value = serde_json::from_str(&output.stdout).unwrap();
+        let goal: rayman::goal::Goal = serde_json::from_value(returned).unwrap();
+        let validation = &goal.requirements[0].validations[0];
+        let receipt = validation.receipt.as_ref().unwrap();
+        let authority = &goal.authority_receipts[0];
+        assert_eq!(validation.command, command);
+        assert_eq!(authority.command, command);
+        assert_eq!(authority.repeat, 2);
+        assert_eq!(authority.runs.len(), 2);
+        assert_eq!(
+            receipt.invocation_sha256,
+            rayman::goal::validation_invocation_sha256_scoped_mode(
+                command,
+                &validation.impact_scopes,
+                validation.non_code,
+                validation.workspace_snapshot,
+            )
+        );
+        assert_eq!(
+            authority.invocation_sha256,
+            rayman::goal::authority_invocation_sha256_mode(
+                command,
+                "req_1",
+                2,
+                &authority.impact_scopes,
+                authority.non_code,
+                authority.workspace_snapshot,
+            )
+        );
+
+        let records = pytest_trace(&trace);
+        assert_eq!(
+            records
+                .iter()
+                .map(|(phase, _)| phase.as_str())
+                .collect::<Vec<_>>(),
+            ["collect", "run", "run"],
+            "command={command} records={records:?}"
+        );
+        let roots = records
+            .iter()
+            .map(|(_, lease_root)| lease_root.clone())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            roots.len(),
+            3,
+            "every physical pytest process needs a new lease"
+        );
+        for lease_root in &roots {
+            assert!(
+                !lease_root.exists(),
+                "successful validation left {}",
+                lease_root.display()
+            );
+        }
+        assert_no_live_pytest_leases(root);
+
+        let persisted_path = root
+            .join(".RaymanCodingSkill/goals")
+            .join(format!("{id}.json"));
+        let persisted: Value =
+            serde_json::from_str(&std::fs::read_to_string(persisted_path).unwrap()).unwrap();
+        visit_json_strings(&persisted, &mut |text| {
+            assert!(!text.contains("--basetemp"), "managed argv leaked: {text}");
+            assert!(!text.contains("cache_dir="), "managed argv leaked: {text}");
+            assert!(!text.contains("addopts="), "managed argv leaked: {text}");
+            assert!(
+                !text.contains("PYTHONPYCACHEPREFIX"),
+                "managed environment leaked: {text}"
+            );
+            for lease_root in &roots {
+                assert!(
+                    !text.contains(lease_root.to_string_lossy().as_ref()),
+                    "lease path leaked into goal JSON: {text}"
+                );
+                let lease_id = lease_root.file_name().unwrap().to_string_lossy();
+                assert!(!text.contains(lease_id.as_ref()), "lease id leaked: {text}");
+            }
+        });
+    }
+}
+
+#[test]
+fn goal_validate_pytest_failures_cleanup_and_never_write_receipts() {
+    let probe = NativePytestProbe::build();
+    for (index, mode) in [
+        "collect-fail",
+        "collect-zero",
+        "run-fail",
+        "cleanup-fail",
+        "run-cleanup-fail",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let workspace = tempfile::tempdir().unwrap();
+        let root = workspace.path();
+        let id = start_pytest_validation_goal(root);
+        let trace = probe._temp.path().join(format!("failure-{index}.trace"));
+        let trace_text = trace.to_str().unwrap();
+        let output = run_with_path_and_env(
+            root,
+            &[
+                "goal",
+                "validate",
+                &id,
+                "--req",
+                "req_1",
+                "-m",
+                "pytest failure must not persist",
+                "--command",
+                "python -m pytest -q --",
+                "--workspace-snapshot",
+                "--authority",
+                "--repeat",
+                "2",
+            ],
+            &[probe.bin_dir.as_path()],
+            probe.pathext(),
+            &[
+                ("RAYMAN_PYTEST_PROBE_LOG", trace_text),
+                ("RAYMAN_PYTEST_PROBE_MODE", mode),
+                ("RAYMAN_LANG", "zh-CN"),
+            ],
+        );
+        assert_eq!(
+            output.status, 1,
+            "mode={mode}\nstdout={}\nstderr={}",
+            output.stdout, output.stderr
+        );
+        match mode {
+            "collect-fail" => assert!(output.stderr.contains("exit=41"), "{}", output.stderr),
+            "collect-zero" => assert!(
+                output.stderr.contains("没有收集任何测试"),
+                "{}",
+                output.stderr
+            ),
+            "run-fail" => assert!(output.stderr.contains("exit=37"), "{}", output.stderr),
+            "cleanup-fail" => assert!(
+                output.stderr.contains("lease") && output.stderr.contains("释放"),
+                "{}",
+                output.stderr
+            ),
+            "run-cleanup-fail" => assert!(
+                output.stderr.contains("exit=37") && output.stderr.contains("lease 释放失败"),
+                "{}",
+                output.stderr
+            ),
+            _ => unreachable!(),
+        }
+
+        let shown = run_json(root, &["goal", "show", &id]);
+        assert_eq!(shown["requirements"][0]["status"], "open");
+        assert!(
+            shown["requirements"][0]["validations"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        assert!(shown["authority_receipts"].as_array().unwrap().is_empty());
+
+        let records = pytest_trace(&trace);
+        let cleanup_was_corrupted = matches!(mode, "cleanup-fail" | "run-cleanup-fail");
+        for (record_index, (_, lease_root)) in records.iter().enumerate() {
+            let final_record = record_index + 1 == records.len();
+            if cleanup_was_corrupted && final_record {
+                assert!(lease_root.exists(), "corrupt manifest must fail closed");
+            } else {
+                assert!(
+                    !lease_root.exists(),
+                    "mode={mode} left {}",
+                    lease_root.display()
+                );
+            }
+        }
+        if !cleanup_was_corrupted {
+            assert_no_live_pytest_leases(root);
+        }
+    }
+
+    let workspace = tempfile::tempdir().unwrap();
+    let root = workspace.path();
+    let id = start_pytest_validation_goal(root);
+    let empty_path = tempfile::tempdir().unwrap();
+    let trace = probe._temp.path().join("spawn-failure.trace");
+    let trace_text = trace.to_str().unwrap();
+    let output = run_with_exact_path_and_env(
+        root,
+        &[
+            "goal",
+            "validate",
+            &id,
+            "--req",
+            "req_1",
+            "-m",
+            "spawn failure must release",
+            "--command",
+            "pytest -q --",
+            "--workspace-snapshot",
+            "--authority",
+            "--repeat",
+            "2",
+        ],
+        empty_path.path(),
+        probe.pathext(),
+        &[("RAYMAN_PYTEST_PROBE_LOG", trace_text)],
+    );
+    assert_eq!(output.status, 1, "{}", output.stderr);
+    assert!(output.stderr.contains("pytest"), "{}", output.stderr);
+    assert!(pytest_trace(&trace).is_empty());
+    assert_no_live_pytest_leases(root);
+    let shown = run_json(root, &["goal", "show", &id]);
+    assert!(
+        shown["requirements"][0]["validations"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(shown["authority_receipts"].as_array().unwrap().is_empty());
 }
 
 #[test]

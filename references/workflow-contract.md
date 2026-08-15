@@ -233,6 +233,24 @@ zero-delta audit uses the authority-only `--workspace-snapshot` scope: the goal
 baseline delta must be empty before any validation program starts, and any real
 change still requires ordinary `--changed` coverage.
 
+Every Rayman-managed physical pytest process is isolated automatically. The
+recognized `pytest`, `python -m pytest`, and `py -3.x -m pytest` forms each
+create and probe a fresh manifest-owned lease before spawn; collect, every run,
+and every authority repeat use different leases. Rayman inserts `--basetemp`
+and `-o cache_dir=...` before the user's `--`, then injects a final `-o
+addopts=` so repository configuration cannot narrow or disable the run. It
+clears inherited `PYTEST_ADDOPTS` and sets `TEMP`, `TMP`, `TMPDIR`, and
+`PYTHONPYCACHEPREFIX` to lease-owned paths. A user command that overrides
+`--basetemp`, `cache_dir`, or `addopts` before the separator is rejected before
+execution, including an override hidden in a valid short-option cluster.
+Pre-separator `@argsfile` expansion and Python `-E`, `-I`, or
+`-X pycache_prefix=...` are also rejected because they can bypass inspection or
+the managed pycache environment. Lease release is attempted after success,
+nonzero exit, collection failure, and spawn failure; a release failure fails
+validation and prevents a receipt. Receipts and invocation hashes retain the
+user's logical command and never persist the effective argv, environment,
+randomized lease id, or lease paths.
+
 Authority accepts only a reviewed repository gate, selector-free workspace
 Cargo tests, or selector-free workspace pytest, repeated on one unchanged
 fingerprint. Current must receipts must collectively declare the real baseline

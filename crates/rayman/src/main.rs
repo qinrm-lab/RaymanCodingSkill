@@ -871,7 +871,8 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 .unwrap_or(goal::workspace_fingerprint(root)?);
             let (listed_tests, list_stdout_sha256, list_stderr_sha256) =
                 if let Some(list_command) = goal::validation_list_command(&parsed)? {
-                    let list_output = run_validation_command(root, &list_command)?;
+                    let list_output = run_validation_command(root, &list_command)
+                        .context("独立 test list proof 执行失败；不会写入 receipt")?;
                     if !list_output.status.success() {
                         bail!(
                             "独立 test list proof 失败（exit={}）；不会写入 receipt",
@@ -900,7 +901,9 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                         "authority validation 第 {run_index} 次运行前 workspace fingerprint 漂移；不会写入 receipt"
                     );
                 }
-                let output = run_validation_command(root, &parsed)?;
+                let output = run_validation_command(root, &parsed).with_context(|| {
+                    format!("验证命令第 {run_index}/{repeat} 次执行失败；不会写入 receipt")
+                })?;
                 let run_after = goal::workspace_fingerprint(root)?;
                 if !output.status.success() {
                     bail!(
@@ -1054,7 +1057,8 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 None => (goal::parse_validation_command(&command)?, None),
             };
             let listed_tests = if let Some(list_command) = goal::validation_list_command(&parsed)? {
-                let output = run_validation_command(root, &list_command)?;
+                let output = run_validation_command(root, &list_command)
+                    .context("lifecycle authority 独立 test list proof 执行失败；不会写入 proof")?;
                 if !output.status.success() {
                     bail!("lifecycle authority 独立 test list proof 失败；不会写入 proof");
                 }
@@ -1078,7 +1082,11 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                         "lifecycle authority 第 {run_index} 次运行前 source fingerprint 漂移；不会写入 proof"
                     );
                 }
-                let output = run_validation_command(root, &parsed)?;
+                let output = run_validation_command(root, &parsed).with_context(|| {
+                    format!(
+                        "lifecycle authority 第 {run_index}/{repeat} 次执行失败；不会写入 proof"
+                    )
+                })?;
                 if let Some(rebind) = command_rebind.as_ref() {
                     goal::verify_maintenance_cycle_rebind_artifact(root, rebind)?;
                 }
@@ -1233,11 +1241,20 @@ fn run_validation_command(
         // was proven equal to the live identity that passed preflight.
         executable.args[2] = script.launch_argument().to_owned();
     }
-    ProcessCommand::new(&executable.program)
-        .args(&executable.args)
-        .current_dir(root)
-        .output()
-        .with_context(|| format!("无法执行验证程序: {}", executable.program))
+    goal::run_with_managed_pytest_lease(root, &executable, |effective, environment| {
+        let mut process = ProcessCommand::new(&effective.program);
+        process.args(&effective.args).current_dir(root);
+        if let Some(environment) = environment {
+            // Parent-level pytest configuration is untrusted input. The lease
+            // owns every temp/cache path, so inherited addopts must not be able
+            // to inject a second basetemp, cache_dir, or non-executing mode.
+            process.env_remove("PYTEST_ADDOPTS");
+            process.envs(environment);
+        }
+        process
+            .output()
+            .with_context(|| format!("无法执行验证程序: {}", effective.program))
+    })
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {

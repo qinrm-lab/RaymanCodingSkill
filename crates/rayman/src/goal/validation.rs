@@ -1,7 +1,13 @@
 use super::*;
 
+mod pytest_isolation;
 mod receipts;
 
+pub use pytest_isolation::run_with_managed_pytest_lease;
+use pytest_isolation::{
+    insert_pytest_args_before_separator, pytest_has_pre_separator_option,
+    validate_pytest_isolation_overrides,
+};
 use receipts::GoalPlanningValidationPolicy;
 pub(crate) use receipts::validation_has_current_receipt_with_context;
 #[allow(
@@ -506,6 +512,7 @@ fn validate_test_execution_mode(command: &ParsedValidationCommand) -> Result<()>
     if !test_invocation(command) {
         return Ok(());
     }
+    validate_pytest_isolation_overrides(command)?;
     // Exact literals only covered the spellings someone happened to think of.
     // pytest accepts `--co` for `--collect-only` and has several other modes
     // that collect or plan without executing, each of which would otherwise
@@ -583,13 +590,16 @@ pub fn validation_list_command(
         }
         args.extend(["--".into(), "--list".into()]);
     } else if pytest_invocation(command) {
-        args.push("--collect-only".into());
-        if !args
-            .iter()
-            .any(|argument| argument == "-q" || argument == "--quiet")
-        {
-            args.push("-q".into());
+        let mut collect_arguments = vec!["--collect-only".into()];
+        if !pytest_has_pre_separator_option(command, &["-q", "--quiet"]) {
+            collect_arguments.push("-q".into());
         }
+        let mut list = ParsedValidationCommand {
+            program: command.program.clone(),
+            args,
+        };
+        insert_pytest_args_before_separator(&mut list, collect_arguments)?;
+        return Ok(Some(list));
     } else {
         return Ok(None);
     }
@@ -1239,6 +1249,29 @@ fn cargo_command_is_narrowed(command: &ParsedValidationCommand) -> bool {
 }
 
 /// pytest options that select a subset of the collected tests.
+fn pytest_short_option_is_narrowing(argument: &str) -> bool {
+    let Some(flags) = argument
+        .strip_prefix('-')
+        .filter(|flags| !flags.is_empty() && !flags.starts_with('-'))
+    else {
+        return false;
+    };
+
+    for flag in flags.chars() {
+        if matches!(flag, 'k' | 'm') {
+            return true;
+        }
+        // The remainder is a value, not more clustered flags. Keeping this
+        // list explicit prevents values such as `-pmark_plugin` or `-rA` from
+        // being mistaken for selectors. Unknown/plugin flags are treated as
+        // valueless so a later `k`/`m` fails closed.
+        if matches!(flag, 'p' | 'r' | 'o' | 'c' | 'n' | 'W') {
+            return false;
+        }
+    }
+    false
+}
+
 fn pytest_command_is_narrowed(command: &ParsedValidationCommand) -> bool {
     if !pytest_path_arguments(command).is_empty() {
         return true;
@@ -1248,7 +1281,7 @@ fn pytest_command_is_narrowed(command: &ParsedValidationCommand) -> bool {
         matches!(
             name,
             "-k" | "-m" | "--deselect" | "--ignore" | "--ignore-glob" | "--lf" | "--last-failed"
-        )
+        ) || pytest_short_option_is_narrowing(argument)
     })
 }
 

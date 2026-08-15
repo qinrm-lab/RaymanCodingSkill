@@ -644,6 +644,29 @@ fn authority_classification_rejects_a_focused_command_promoted_by_flag() {
 }
 
 #[test]
+fn pytest_authority_rejects_attached_and_clustered_selectors() {
+    let dir = tempfile::tempdir().unwrap();
+    for command in [
+        "pytest -kfoo",
+        "pytest -mfoo",
+        "pytest -qkfoo",
+        "python -m pytest -vvmfoo",
+        "py -3.12 -m pytest -qk expr",
+    ] {
+        assert!(
+            validate_authority_command(dir.path(), command).is_err(),
+            "attached or clustered selector must reject authority: {command}"
+        );
+    }
+    for command in ["pytest -qv", "pytest -pmark_plugin", "pytest -rA"] {
+        assert!(
+            validate_authority_command(dir.path(), command).is_ok(),
+            "non-selector short value must remain workspace-wide: {command}"
+        );
+    }
+}
+
+#[test]
 fn state_lock_contention_excludes_acl_denial_and_only_retries_os_lock_conflicts() {
     assert!(is_state_lock_contention(&std::io::Error::from(
         std::io::ErrorKind::WouldBlock
@@ -956,6 +979,98 @@ fn pytest_receipt_requires_collect_proof_and_matches_python_impact() {
     );
     let collect_only = parse_validation_command("pytest --collect-only").unwrap();
     assert!(validate_command_security(root.path(), &collect_only).is_err());
+}
+
+#[test]
+fn pytest_collect_arguments_precede_the_user_separator_for_every_launcher() {
+    for command in [
+        "pytest -- tests/test_api.py",
+        "python -m pytest -- tests/test_api.py",
+        "py -3.12 -m pytest -- tests/test_api.py",
+    ] {
+        let parsed = parse_validation_command(command).unwrap();
+        let list = validation_list_command(&parsed).unwrap().unwrap();
+        let separator = list
+            .args
+            .iter()
+            .position(|argument| argument == "--")
+            .unwrap();
+        let collect = list
+            .args
+            .iter()
+            .position(|argument| argument == "--collect-only")
+            .unwrap();
+        let quiet = list
+            .args
+            .iter()
+            .position(|argument| argument == "-q")
+            .unwrap();
+
+        assert!(collect < separator, "{command}: {:?}", list.args);
+        assert!(quiet < separator, "{command}: {:?}", list.args);
+        assert_eq!(list.args.last().unwrap(), "tests/test_api.py");
+    }
+}
+
+#[test]
+fn pytest_managed_isolation_overrides_fail_security_before_execution() {
+    let root = tempfile::tempdir().unwrap();
+    for override_args in [
+        "--basetemp user",
+        "--basetemp=user",
+        "-o cache_dir=user",
+        "-ocache_dir=user",
+        "-o=cache_dir=user",
+        "-qocache_dir=user",
+        "-docache_dir=user",
+        "-doaddopts=-x",
+        "-zocache_dir=user",
+        "-vvo addopts=-x",
+        "--override-ini cache_dir=user",
+        "--override-ini=cache_dir=user",
+        "-o addopts=-x",
+        "-o=addopts=-x",
+        "-oaddopts=-x",
+        "--override-ini addopts=-x",
+        "--override-ini=addopts=-x",
+        "@managed-overrides.txt",
+    ] {
+        let parsed =
+            parse_validation_command(&format!("python -m pytest {override_args}")).unwrap();
+        let error = validate_command_security(root.path(), &parsed).unwrap_err();
+        assert!(
+            format!("{error:#}").contains("pytest 隔离由 Rayman 管理"),
+            "override={override_args} error={error:#}"
+        );
+    }
+
+    for command in [
+        "python -E -m pytest",
+        "python -Is -m pytest",
+        "python -X pycache_prefix=outside -m pytest",
+        "python -Xpycache_prefix=outside -m pytest",
+    ] {
+        let parsed = parse_validation_command(command).unwrap();
+        let error = validate_command_security(root.path(), &parsed).unwrap_err();
+        assert!(
+            format!("{error:#}").contains("pytest 隔离由 Rayman 管理"),
+            "command={command} error={error:#}"
+        );
+    }
+
+    for allowed in [
+        "pytest -o log_cli=true",
+        "python -m pytest -- --basetemp",
+        "py -3.12 -m pytest -- cache_dir=user",
+        "python -m pytest -- -qocache_dir=user",
+        "python -m pytest -- @literal-selector.txt",
+    ] {
+        let parsed = parse_validation_command(allowed).unwrap();
+        assert!(
+            validate_command_security(root.path(), &parsed).is_ok(),
+            "must allow {allowed}"
+        );
+    }
 }
 
 #[test]

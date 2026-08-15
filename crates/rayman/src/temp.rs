@@ -143,6 +143,13 @@ fn path_text(path: &Path) -> String {
 /// Create a unique pytest lease and prove every directory can be traversed,
 /// written, read and cleaned by the current execution token.
 pub fn create_pytest_lease(root: &Path, label: &str) -> Result<PytestLease> {
+    create_pytest_lease_with_probe(root, label, probe_directory)
+}
+
+fn create_pytest_lease_with_probe<F>(root: &Path, label: &str, mut probe: F) -> Result<PytestLease>
+where
+    F: FnMut(&Path) -> Result<()>,
+{
     let sequence = LEASE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
     let timestamp = crate::timefmt::now_iso()
         .chars()
@@ -163,38 +170,50 @@ pub fn create_pytest_lease(root: &Path, label: &str) -> Result<PytestLease> {
     );
     let lease_root =
         lease_path(root, &id, true)?.ok_or_else(|| anyhow::anyhow!("无法创建 pytest lease"))?;
-    let basetemp = lease_root.join("basetemp");
-    let cache_dir = lease_root.join("cache");
-    let temp_dir = lease_root.join("temp");
-    let pycache_dir = lease_root.join("pycache");
-    for path in [&basetemp, &cache_dir, &temp_dir, &pycache_dir] {
-        fs::create_dir_all(path)
-            .with_context(|| format!("无法创建 pytest lease 子目录: {}", display_path(path)))?;
-        ensure_real_directory(path)?;
-        probe_directory(path)?;
-    }
+    let creation = (|| {
+        let basetemp = lease_root.join("basetemp");
+        let cache_dir = lease_root.join("cache");
+        let temp_dir = lease_root.join("temp");
+        let pycache_dir = lease_root.join("pycache");
+        for path in [&basetemp, &cache_dir, &temp_dir, &pycache_dir] {
+            fs::create_dir_all(path)
+                .with_context(|| format!("无法创建 pytest lease 子目录: {}", display_path(path)))?;
+            ensure_real_directory(path)?;
+            probe(path)?;
+        }
 
-    let environment = lease_environment(&temp_dir, &pycache_dir);
-    let lease = PytestLease {
-        schema: "rayman.pytest-lease.v1".into(),
-        id: id.clone(),
-        label: label.to_string(),
-        created_at: crate::timefmt::now_iso(),
-        root: path_text(&lease_root),
-        basetemp: path_text(&basetemp),
-        cache_dir: path_text(&cache_dir),
-        temp_dir: path_text(&temp_dir),
-        pycache_dir: path_text(&pycache_dir),
-        environment,
-        pytest_args: vec![
-            "--basetemp".into(),
-            path_text(&basetemp),
-            "-o".into(),
-            format!("cache_dir={}", path_text(&cache_dir)),
-        ],
-    };
-    crate::file_io::write_json(&lease_root.join(LEASE_MANIFEST), &lease)?;
-    verify_pytest_lease(root, &id)
+        let environment = lease_environment(&temp_dir, &pycache_dir);
+        let lease = PytestLease {
+            schema: "rayman.pytest-lease.v1".into(),
+            id: id.clone(),
+            label: label.to_string(),
+            created_at: crate::timefmt::now_iso(),
+            root: path_text(&lease_root),
+            basetemp: path_text(&basetemp),
+            cache_dir: path_text(&cache_dir),
+            temp_dir: path_text(&temp_dir),
+            pycache_dir: path_text(&pycache_dir),
+            environment,
+            pytest_args: vec![
+                "--basetemp".into(),
+                path_text(&basetemp),
+                "-o".into(),
+                format!("cache_dir={}", path_text(&cache_dir)),
+            ],
+        };
+        crate::file_io::write_json(&lease_root.join(LEASE_MANIFEST), &lease)?;
+        verify_pytest_lease(root, &id)
+    })();
+
+    match creation {
+        Ok(lease) => Ok(lease),
+        Err(creation_error) => match fs::remove_dir_all(&lease_root) {
+            Ok(()) => Err(creation_error),
+            Err(cleanup_error) => Err(creation_error).context(format!(
+                "pytest lease 创建或探测失败后的清理也失败: {cleanup_error}"
+            )),
+        },
+    }
 }
 
 /// 受管 lease 的**完整** environment。create 与 verify 共用同一份构造，
@@ -261,7 +280,7 @@ fn lease_id_matches_label(id: &str, sanitized_label: &str) -> bool {
         && sequence.chars().all(|ch| ch.is_ascii_digit())
 }
 
-pub fn verify_pytest_lease(root: &Path, id: &str) -> Result<PytestLease> {
+fn load_pytest_lease_identity(root: &Path, id: &str) -> Result<(PathBuf, PytestLease)> {
     let lease_root =
         lease_path(root, id, false)?.ok_or_else(|| anyhow::anyhow!("pytest lease 不存在: {id}"))?;
     let lease = crate::file_io::read_json::<PytestLease>(&lease_root.join(LEASE_MANIFEST))?
@@ -297,6 +316,16 @@ pub fn verify_pytest_lease(root: &Path, id: &str) -> Result<PytestLease> {
     {
         anyhow::bail!("pytest lease manifest 与受管路径不一致: {id}");
     }
+    ensure_real_directory(&lease_root)?;
+    Ok((lease_root, lease))
+}
+
+pub fn verify_pytest_lease(root: &Path, id: &str) -> Result<PytestLease> {
+    let (_, lease) = load_pytest_lease_identity(root, id)?;
+    let basetemp = PathBuf::from(&lease.basetemp);
+    let cache_dir = PathBuf::from(&lease.cache_dir);
+    let temp_dir = PathBuf::from(&lease.temp_dir);
+    let pycache_dir = PathBuf::from(&lease.pycache_dir);
     for path in [&basetemp, &cache_dir, &temp_dir, &pycache_dir] {
         ensure_real_directory(path)?;
         probe_directory(path)?;
@@ -305,10 +334,13 @@ pub fn verify_pytest_lease(root: &Path, id: &str) -> Result<PytestLease> {
 }
 
 /// Remove exactly one manifest-owned lease. Arbitrary paths are never
-/// accepted and a missing/corrupt manifest fails closed.
+/// accepted and a missing/corrupt manifest fails closed. Release deliberately
+/// does not re-probe child directories: pytest owns their runtime contents and
+/// may replace or remove basetemp before exiting. The manifest and managed
+/// lease root prove deletion authority; remove_dir_all then removes that exact
+/// root without following child links.
 pub fn release_pytest_lease(root: &Path, id: &str) -> Result<bool> {
-    let lease = verify_pytest_lease(root, id)?;
-    let lease_root = PathBuf::from(&lease.root);
+    let (lease_root, _) = load_pytest_lease_identity(root, id)?;
     fs::remove_dir_all(&lease_root)
         .with_context(|| format!("无法释放 pytest lease: {}", display_path(&lease_root)))?;
     Ok(true)
@@ -500,6 +532,36 @@ mod tests {
         assert!(verify_pytest_lease(dir.path(), &first.id).is_err());
         assert!(verify_pytest_lease(dir.path(), "../outside").is_err());
         assert!(Path::new(&second.root).is_dir());
+    }
+
+    #[test]
+    fn pytest_lease_creation_failure_removes_the_partial_lease() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut probes = 0;
+        let error = create_pytest_lease_with_probe(dir.path(), "creation-failure", |_| {
+            probes += 1;
+            if probes == 2 {
+                anyhow::bail!("injected probe failure");
+            }
+            Ok(())
+        })
+        .unwrap_err();
+        assert!(error.to_string().contains("injected probe failure"));
+        let leases = dir.path().join(".RaymanCodingSkill/tmp/leases");
+        assert!(
+            !leases.exists() || fs::read_dir(leases).unwrap().next().is_none(),
+            "partial create left an orphan lease"
+        );
+    }
+
+    #[test]
+    fn pytest_lease_release_tolerates_runtime_owned_child_removal() {
+        let dir = tempfile::tempdir().unwrap();
+        let lease = create_pytest_lease(dir.path(), "runtime-removal").unwrap();
+        fs::remove_dir_all(&lease.basetemp).unwrap();
+
+        assert!(release_pytest_lease(dir.path(), &lease.id).unwrap());
+        assert!(!Path::new(&lease.root).exists());
     }
 
     #[test]
