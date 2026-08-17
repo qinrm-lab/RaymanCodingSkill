@@ -437,8 +437,10 @@ fn dependency_literals(source: &[u8]) -> Result<Vec<String>> {
 }
 
 /// Return literal repository-local PowerShell dependencies from the immutable
-/// decision capture. An unresolved literal is an authority error, never an
-/// inert `None`: a later helper cannot disappear from the closure by spelling.
+/// decision capture. In current-goal independence mode, an absent literal is
+/// retained as an empty dependency slot: baseline/current comparison can then
+/// distinguish a fixture that stayed absent from a helper that was added or
+/// deleted. Receipt-era binding still omits literals absent from that baseline.
 fn trusted_workspace_gate_dependency_keys_with_context(
     decision: &GoalDecisionContext<'_>,
     command: &ParsedValidationCommand,
@@ -486,6 +488,9 @@ fn trusted_workspace_gate_dependency_keys_with_context(
                         .flatten()
                         .is_none()
                 }) => {}
+                None if receipt_baseline.is_none() => {
+                    dependencies.insert(helper);
+                }
                 None => bail!("PowerShell gate dependency is absent from capture: {helper}"),
             }
         }
@@ -531,13 +536,13 @@ fn trusted_workspace_gate_dependency_paths(
                     }
                     pending.push(helper);
                 }
-                Err(error) if error_is_not_found(&error) => {
-                    // Literal dynamic fixtures are optional until they exist.
-                    // Once a helper appears it is retained above; the
-                    // goal-baseline comparison then turns a post-baseline
-                    // appearance into a self-validation conflict instead of
-                    // silently freezing it out of the preflight closure.
-                    let _ = (error, missing_at_goal_baseline);
+                Err(error) if error_is_not_found(&error) && missing_at_goal_baseline => {}
+                Err(error) if error_is_not_found(&error) && receipt_baseline.is_none() => {
+                    // Retain the missing literal as an empty dependency slot.
+                    // The caller compares `None` with the goal baseline, so a
+                    // fixture absent on both sides is harmless while deletion
+                    // of a baseline helper remains a self-validation conflict.
+                    dependencies.insert(helper);
                 }
                 Err(error) => return Err(error),
             }
@@ -850,8 +855,12 @@ fn authority_command_goal_delta_conflicts(
     for key in dependencies {
         let baseline_hash = baseline_hash_for_path(baseline, &key)?;
         let path = root.join(&key);
-        crate::context::ensure_source_file(root, &path)?;
-        if baseline_hash.map(String::as_str) != Some(crate::hash::sha256_file(&path)?.as_str()) {
+        let current_hash = match crate::context::ensure_source_file(root, &path) {
+            Ok(()) => Some(crate::hash::sha256_file(&path)?),
+            Err(error) if error_is_not_found(&error) => None,
+            Err(error) => return Err(error),
+        };
+        if baseline_hash.map(String::as_str) != current_hash.as_deref() {
             conflicts.push(key);
         }
     }

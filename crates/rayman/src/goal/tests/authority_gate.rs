@@ -49,6 +49,17 @@ fn receipt(goal: &Goal, root: &Path, command: &str) -> AuthorityReceipt {
     }
 }
 
+fn captured_stable_authority(goal: &Goal, root: &Path) -> bool {
+    let current = workspace_baseline(root).unwrap();
+    let captured_files = current
+        .files
+        .keys()
+        .map(|key| (key.clone(), fs::read(root.join(key)).unwrap()))
+        .collect::<BTreeMap<_, _>>();
+    let decision = GoalDecisionContext::captured(root, Some(&current), &captured_files);
+    has_current_stable_authority_receipt_with_context(goal, std::slice::from_ref(goal), &decision)
+}
+
 fn write(root: &Path, relative: &str, body: &str) {
     let path = root.join(relative);
     fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -1126,6 +1137,115 @@ fn receipt_binding_tracks_real_dynamic_helpers_without_freezing_fixtures() {
         error.to_string().contains("scripts/late-helper.ps1"),
         "unexpected authority error: {error:#}"
     );
+}
+
+#[test]
+fn absent_dynamic_fixture_preserves_live_and_captured_authority() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    write(
+        root,
+        "scripts/check-repo.ps1",
+        "$scripts = @('real-helper.ps1', 'missing-fixture.ps1')\nforeach ($scriptName in $scripts) { & (Join-Path $PSScriptRoot $scriptName) }\n",
+    );
+    write(root, "scripts/real-helper.ps1", "Write-Output 'real'\n");
+    let store = GoalStore::new(root);
+    let mut goal = store
+        .start(
+            "stable captured finish",
+            &[("prove repository".into(), true)],
+        )
+        .unwrap();
+    let command = "pwsh -NoProfile -File scripts/check-repo.ps1";
+    goal.authority_receipts.push(receipt(&goal, root, command));
+    let fingerprint = workspace_fingerprint(root).unwrap();
+
+    assert!(has_current_stable_authority_receipt(
+        &goal,
+        root,
+        &fingerprint
+    ));
+    assert!(captured_stable_authority(&goal, root));
+}
+
+#[test]
+fn dependency_slots_reject_added_deleted_and_changed_helpers_in_live_and_capture() {
+    fn assert_rejected(goal: &Goal, root: &Path) {
+        let fingerprint = workspace_fingerprint(root).unwrap();
+        assert!(!has_current_stable_authority_receipt(
+            goal,
+            root,
+            &fingerprint
+        ));
+        assert!(!captured_stable_authority(goal, root));
+    }
+
+    let command = "pwsh -NoProfile -File scripts/check-repo.ps1";
+
+    let added = tempfile::tempdir().unwrap();
+    write(
+        added.path(),
+        "scripts/check-repo.ps1",
+        ". (Join-Path $PSScriptRoot 'helper.ps1')\n",
+    );
+    let store = GoalStore::new(added.path());
+    let mut goal = store
+        .start("reject added helper", &[("prove repository".into(), true)])
+        .unwrap();
+    write(added.path(), "scripts/helper.ps1", "Write-Output 'added'\n");
+    goal.authority_receipts
+        .push(receipt(&goal, added.path(), command));
+    assert_rejected(&goal, added.path());
+
+    let deleted = tempfile::tempdir().unwrap();
+    write(
+        deleted.path(),
+        "scripts/check-repo.ps1",
+        ". (Join-Path $PSScriptRoot 'helper.ps1')\n",
+    );
+    write(
+        deleted.path(),
+        "scripts/helper.ps1",
+        "Write-Output 'baseline'\n",
+    );
+    let store = GoalStore::new(deleted.path());
+    let mut goal = store
+        .start(
+            "reject deleted helper",
+            &[("prove repository".into(), true)],
+        )
+        .unwrap();
+    fs::remove_file(deleted.path().join("scripts/helper.ps1")).unwrap();
+    goal.authority_receipts
+        .push(receipt(&goal, deleted.path(), command));
+    assert_rejected(&goal, deleted.path());
+
+    let changed = tempfile::tempdir().unwrap();
+    write(
+        changed.path(),
+        "scripts/check-repo.ps1",
+        ". (Join-Path $PSScriptRoot 'helper.ps1')\n",
+    );
+    write(
+        changed.path(),
+        "scripts/helper.ps1",
+        "Write-Output 'baseline'\n",
+    );
+    let store = GoalStore::new(changed.path());
+    let mut goal = store
+        .start(
+            "reject changed helper",
+            &[("prove repository".into(), true)],
+        )
+        .unwrap();
+    write(
+        changed.path(),
+        "scripts/helper.ps1",
+        "Write-Output 'changed'\n",
+    );
+    goal.authority_receipts
+        .push(receipt(&goal, changed.path(), command));
+    assert_rejected(&goal, changed.path());
 }
 
 #[test]

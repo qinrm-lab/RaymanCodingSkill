@@ -835,6 +835,113 @@ mod tests {
     }
 
     #[test]
+    fn finish_keeps_stable_repository_authority_with_an_absent_dynamic_fixture() {
+        let workspace = tempfile::tempdir().unwrap();
+        let root = workspace.path();
+        std::fs::create_dir_all(root.join("scripts")).unwrap();
+        std::fs::write(
+            root.join("scripts/check-repo.ps1"),
+            "$scripts = @('missing-fixture.ps1')\nforeach ($scriptName in $scripts) { & (Join-Path $PSScriptRoot $scriptName) }\n",
+        )
+        .unwrap();
+
+        let store = goal::GoalStore::new(root);
+        let goal = store
+            .start(
+                "finish with an absent dynamic fixture",
+                &[("prove repository".into(), true)],
+            )
+            .unwrap();
+        let command = "pwsh -NoProfile -File scripts/check-repo.ps1";
+        let fingerprint = goal::workspace_fingerprint(root).unwrap();
+        let contract_sha256 = goal::validation_contract_sha256(&goal, "req_1").unwrap();
+        let impact_scopes = Vec::new();
+        let authority = goal::AuthorityReceipt {
+            requirement_id: "req_1".into(),
+            command: command.into(),
+            recorded_at: rayman::timefmt::now_iso(),
+            workspace_fingerprint: fingerprint.clone(),
+            repeat: 2,
+            impact_scopes: impact_scopes.clone(),
+            non_code: false,
+            workspace_snapshot: true,
+            invocation_sha256: goal::authority_invocation_sha256_mode(
+                command,
+                "req_1",
+                2,
+                &impact_scopes,
+                false,
+                true,
+            ),
+            contract_sha256: contract_sha256.clone(),
+            runs: (0..2)
+                .map(|_| goal::AuthorityRunReceipt {
+                    exit_code: 0,
+                    workspace_fingerprint_before: fingerprint.clone(),
+                    workspace_fingerprint_after: fingerprint.clone(),
+                    stdout_sha256: "a".repeat(64),
+                    stderr_sha256: "b".repeat(64),
+                })
+                .collect(),
+        };
+        let validation = goal::ValidationReceipt {
+            exit_code: 0,
+            cwd: root.display().to_string(),
+            workspace_identity: context::workspace_identity(root),
+            workspace_fingerprint_before: fingerprint.clone(),
+            workspace_fingerprint_after: fingerprint,
+            stdout_sha256: "a".repeat(64),
+            stderr_sha256: "b".repeat(64),
+            invocation_sha256: goal::validation_invocation_sha256_scoped_mode(
+                command,
+                &impact_scopes,
+                false,
+                true,
+            ),
+            passed_tests: None,
+            listed_tests: None,
+            ignored_tests: None,
+            list_stdout_sha256: None,
+            list_stderr_sha256: None,
+            contract_sha256,
+        };
+        store
+            .record_authority_validation_receipt(
+                &goal.id,
+                "req_1",
+                goal::AuthorityReceiptSubmission {
+                    validation: goal::ValidationReceiptSubmission {
+                        evidence: "repository authority stayed stable".into(),
+                        command: command.into(),
+                        receipt: validation,
+                        impacts: Vec::new(),
+                        non_code: false,
+                    },
+                    authority,
+                },
+            )
+            .unwrap();
+        let goal = store.close(&goal.id, "success").unwrap();
+        let command = CheckCmd {
+            profile: CheckProfile::Quick,
+            goal: Some(goal.id.clone()),
+            require_current_goal: true,
+            refresh_context: false,
+        };
+
+        let (_, evaluation) = evaluate_finish_with_hook(root, &command, || {}).unwrap();
+
+        assert!(
+            !evaluation
+                .task_blockers
+                .iter()
+                .any(|blocker| blocker.contains("finish 要求当前稳定 authority receipt")),
+            "{:?}",
+            evaluation.task_blockers
+        );
+    }
+
+    #[test]
     fn terminal_capture_rejects_a_gate_side_workspace_write() {
         let workspace = tempfile::tempdir().unwrap();
         let root = workspace.path();
