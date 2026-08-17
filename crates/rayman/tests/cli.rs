@@ -165,6 +165,28 @@ fn run_with_exact_path_and_env(
     }
 }
 
+#[cfg(windows)]
+fn run_binary_with_env(
+    binary: &Path,
+    dir: &Path,
+    args: &[&str],
+    environment: &[(&str, &str)],
+) -> Output {
+    let output = Command::new(binary)
+        .args(args)
+        .current_dir(dir)
+        .env("RAYMAN_LANG", "zh-CN")
+        .env_remove("CARGO_TARGET_DIR")
+        .envs(environment.iter().copied())
+        .output()
+        .expect("无法启动指定 rayman 二进制");
+    Output {
+        status: output.status.code().unwrap_or(-1),
+        stdout: String::from_utf8(output.stdout).expect("rayman stdout 必须是有效 UTF-8"),
+        stderr: String::from_utf8(output.stderr).expect("rayman stderr 必须是有效 UTF-8"),
+    }
+}
+
 struct NativePytestProbe {
     _temp: tempfile::TempDir,
     bin_dir: PathBuf,
@@ -2993,6 +3015,203 @@ fn legacy_goal_mutation_remains_legacy_history_after_writeback() {
     assert_eq!(standard.status, 1, "stdout={}", standard.stdout);
     assert!(standard.stdout.contains("legacy goal goal_legacy_active"));
     assert!(!standard.stdout.contains("合约无效"));
+}
+
+#[cfg(windows)]
+#[test]
+fn goal_validate_self_hosted_gate_uses_one_managed_target_without_rewriting_running_cli() {
+    let workspace = tempfile::tempdir().unwrap();
+    let root = workspace.path();
+    let trace_home = tempfile::tempdir().unwrap();
+    let trace = trace_home.path().join("self-hosted-target.trace");
+    write(
+        root,
+        "Cargo.toml",
+        "[package]\nname = \"self-hosted-validation-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\nbuild = \"build.rs\"\n\n[[bin]]\nname = \"rayman\"\npath = \"src/main.rs\"\n",
+    );
+    write(root, "src/main.rs", "fn main() {}\n");
+    write(
+        root,
+        "build.rs",
+        r#"use std::fs::OpenOptions;
+use std::io::Write;
+
+fn main() {
+    println!("cargo:rerun-if-changed=build.rs");
+    let trace = std::env::var("RAYMAN_SELF_HOST_TRACE").unwrap();
+    let target = std::env::var("CARGO_TARGET_DIR").unwrap();
+    let mut file = OpenOptions::new().create(true).append(true).open(trace).unwrap();
+    writeln!(file, "build\t{target}").unwrap();
+}
+"#,
+    );
+    write(
+        root,
+        "tests/target_trace.rs",
+        r#"use std::fs::OpenOptions;
+use std::io::Write;
+use std::path::Path;
+
+#[test]
+fn records_the_managed_target() {
+    assert!(Path::new(env!("CARGO_BIN_EXE_rayman")).is_file());
+    let trace = std::env::var("RAYMAN_SELF_HOST_TRACE").unwrap();
+    let target = std::env::var("CARGO_TARGET_DIR").unwrap();
+    let mut file = OpenOptions::new().create(true).append(true).open(trace).unwrap();
+    writeln!(file, "run\t{target}").unwrap();
+}
+"#,
+    );
+    generate_lockfile(root);
+    run_json(root, &["context", "refresh"]);
+    let goal = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "self-hosted gate",
+            "--must-proof",
+            "test::run the self-hosted gate",
+        ],
+    );
+    let id = goal["id"].as_str().unwrap();
+
+    let collision_target = root.join(".RaymanCodingSkill/tmp/collision-target");
+    let copied_cli = collision_target.join("debug/rayman.exe");
+    std::fs::create_dir_all(copied_cli.parent().unwrap()).unwrap();
+    std::fs::copy(BIN, &copied_cli).unwrap();
+    let original_bytes = std::fs::read(&copied_cli).unwrap();
+    let collision_text = collision_target.to_str().unwrap();
+    let trace_text = trace.to_str().unwrap();
+    let logical_command = "cargo test --workspace --all-targets";
+    let output = run_binary_with_env(
+        &copied_cli,
+        root,
+        &[
+            "--format",
+            "json",
+            "goal",
+            "validate",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "self-hosted gate stayed isolated",
+            "--command",
+            logical_command,
+            "--workspace-snapshot",
+            "--authority",
+            "--repeat",
+            "2",
+        ],
+        &[
+            ("CARGO_TARGET_DIR", collision_text),
+            ("RAYMAN_SELF_HOST_TRACE", trace_text),
+        ],
+    );
+    assert_eq!(
+        output.status, 0,
+        "stdout={}\nstderr={}",
+        output.stdout, output.stderr
+    );
+    assert_eq!(std::fs::read(&copied_cli).unwrap(), original_bytes);
+    assert!(!collision_target.join("debug/deps").exists());
+    assert!(!collision_target.join(".rustc_info.json").exists());
+
+    let records = std::fs::read_to_string(&trace)
+        .unwrap()
+        .lines()
+        .map(|line| {
+            let (phase, target) = line.split_once('\t').unwrap();
+            (phase.to_string(), PathBuf::from(target))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        records
+            .iter()
+            .map(|(phase, _)| phase.as_str())
+            .collect::<Vec<_>>(),
+        ["build", "run", "run"],
+        "list proof and both repeats must be observable: {records:?}"
+    );
+    assert!(
+        records.windows(2).all(|pair| pair[0].1 == pair[1].1),
+        "list proof and repeats must reuse one target: {records:?}"
+    );
+    let managed_target = &records[0].1;
+    assert!(
+        managed_target.starts_with(root.join(".RaymanCodingSkill/tmp/cargo-target-leases")),
+        "unexpected managed target: {}",
+        managed_target.display()
+    );
+    assert!(!managed_target.starts_with(&collision_target));
+    assert!(!managed_target.to_string_lossy().starts_with(r"\\?\"));
+    assert!(
+        !managed_target.exists(),
+        "successful validation did not release {}",
+        managed_target.display()
+    );
+
+    let returned: Value = serde_json::from_str(&output.stdout).unwrap();
+    let validated: rayman::goal::Goal = serde_json::from_value(returned).unwrap();
+    let validation = &validated.requirements[0].validations[0];
+    let authority = &validated.authority_receipts[0];
+    assert_eq!(validation.command, logical_command);
+    assert_eq!(authority.command, logical_command);
+    assert_eq!(authority.repeat, 2);
+    assert_eq!(authority.runs.len(), 2);
+    let receipt = validation.receipt.as_ref().unwrap();
+    assert_eq!(receipt.listed_tests, Some(1));
+    assert_eq!(receipt.passed_tests, Some(1));
+    assert_eq!(
+        receipt.invocation_sha256,
+        rayman::goal::validation_invocation_sha256_scoped_mode(
+            logical_command,
+            &validation.impact_scopes,
+            validation.non_code,
+            validation.workspace_snapshot,
+        )
+    );
+    assert_eq!(
+        authority.invocation_sha256,
+        rayman::goal::authority_invocation_sha256_mode(
+            logical_command,
+            "req_1",
+            2,
+            &authority.impact_scopes,
+            authority.non_code,
+            authority.workspace_snapshot,
+        )
+    );
+    let lease_id = managed_target
+        .parent()
+        .and_then(Path::file_name)
+        .and_then(|value| value.to_str())
+        .unwrap();
+
+    let persisted_path = root
+        .join(".RaymanCodingSkill/goals")
+        .join(format!("{id}.json"));
+    let persisted: Value =
+        serde_json::from_str(&std::fs::read_to_string(persisted_path).unwrap()).unwrap();
+    visit_json_strings(&persisted, &mut |text| {
+        assert!(
+            !text.contains(collision_text),
+            "collision target leaked: {text}"
+        );
+        assert!(
+            !text.contains(managed_target.to_string_lossy().as_ref()),
+            "managed target leaked: {text}"
+        );
+        assert!(
+            !text.contains(lease_id),
+            "Cargo target lease id leaked: {text}"
+        );
+        assert!(
+            !text.contains(copied_cli.to_string_lossy().as_ref()),
+            "copied CLI leaked: {text}"
+        );
+    });
 }
 
 #[test]

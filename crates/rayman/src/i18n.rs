@@ -1013,13 +1013,107 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "pytest 隔离由 Rayman 管理；Python -E/-I 或 -X pycache_prefix 会绕过受管 pycache: {argument}",
     "pytest 隔离由 Rayman 管理；不能使用会在检查后展开的 @argsfile: {argument}",
     "受管 pytest 参数只能注入 pytest 调用",
-    "pytest 验证结束后 lease 未被释放；stdout_sha256={} stderr_sha256={}",
-    "pytest 验证进程非零退出（exit={}）且 lease 未被释放；stdout_sha256={} stderr_sha256={}",
     "pytest 验证结束后无法释放受管 lease；stdout_sha256={} stderr_sha256={}: {cleanup_error:#}",
     "pytest 验证进程非零退出（exit={}）且 lease 释放失败；stdout_sha256={} stderr_sha256={}: {cleanup_error:#}",
-    "pytest 执行准备或启动失败且 lease 未被释放: {execution_error:#}",
     "pytest 执行准备或启动失败: {execution_error:#}; lease 释放也失败: {cleanup_error:#}",
+    "pytest lease manifest 无法解析: {id}",
+    "pytest lease 在已验证释放前消失: {id}",
+    "pytest lease 在已验证释放前消失: {}",
+    "pytest lease 释放身份与 validation session 不一致: {}",
     "pytest lease 创建或探测失败后的清理也失败: {cleanup_error}",
+    "Cargo target lease manifest 无法解析: {id}",
+    "Cargo target lease manifest 与受管路径不一致: {id}",
+    "Cargo target lease 不存在: {id}",
+    "Cargo target lease 在已验证释放前消失: {}",
+    "Cargo target lease 释放身份与 session 不一致: {}",
+    "Cargo target lease 写探针失败: {}",
+    "Cargo target lease 创建后消失: {id}",
+    "Cargo target lease 创建或探测失败后的清理也失败: {cleanup_error}",
+    "Cargo target lease 复验身份发生变化: {}",
+    "Cargo target lease 子目录创建后消失: {id}",
+    "Cargo target lease 探针内容不一致: {}",
+    "Cargo target lease 清理探针失败: {}",
+    "Cargo target lease 缺少 manifest: {id}",
+    "Cargo target lease 读探针失败: {}",
+    "Windows 自托管验证已执行，但 Cargo target lease 释放失败；不会写入 receipt",
+    "Windows 自托管验证拒绝多个 --target-dir；无法证明 Cargo 输出不会覆盖当前 rayman",
+    "Windows 自托管验证拒绝带 --config 的 Cargo 命令；其 build.target-dir 可能绕过环境隔离",
+    "Windows 自托管验证拒绝指向当前 rayman 的显式 --target-dir；环境隔离无法覆盖命令行参数",
+    "Windows 自托管验证拒绝空 --target-dir",
+    "无法创建 Cargo target lease 子目录: {}",
+    "无法创建 Cargo target lease 根",
+    "无法独占创建 Cargo target lease: {}",
+    "无法独占创建 Cargo target lease（连续名称冲突）",
+    "无法规范化候选 Cargo target: {}",
+    "无法规范化当前 rayman: {}",
+    "无法释放 Cargo target lease: {}",
+    "验证失败后 Cargo target lease 释放也失败: {cleanup:#}",
+    "Cargo artifact 缺少强文件身份: {}",
+    "Cargo target lease 创建失败后受管目录已消失",
+    "Windows 自托管验证拒绝多个 --manifest-path；无法唯一解析 Cargo workspace",
+    "Windows 自托管验证拒绝空 --manifest-path",
+    "cargo metadata 无法证明 Windows 自托管验证的有效 target（exit={}）；拒绝回退到猜测路径",
+    "cargo metadata 缺少有效 target_directory",
+    "cargo metadata 返回非绝对 target_directory: {target}",
+    "pytest lease 创建失败后受管目录已消失",
+    "候选 Cargo target 含链接/reparse 条目: {}",
+    "{label}不是预期的普通{}: {}",
+    "{label}名称在句柄读取后发生替换: {}",
+    "{label}在句柄读取后无法复验: {}",
+    "{label}在句柄读取期间发生变化: {}",
+    "{label}缺少 Windows 强文件身份: {}",
+    "{label}超过 1 MiB 安全上限: {}",
+    "NtQueryDirectoryFile 返回无效字节数 {used}/{capacity}: {}",
+    "Windows 目录枚举 NextEntryOffset 无效: {next}",
+    "Windows 目录枚举下一记录偏移溢出",
+    "Windows 目录枚举名称越过有效返回字节",
+    "Windows 目录枚举名称长度无效: {name_bytes}",
+    "Windows 目录枚举名称长度溢出",
+    "Windows 目录枚举记录偏移越界",
+    "Windows 目录枚举记录未按结构体对齐",
+    "Windows 目录枚举记录短于固定头",
+    "Windows 目录枚举返回不安全的单组件名称",
+    "受管状态删除分量跨越了父目录卷身份: {}",
+    "受管状态删除后同名 replacement 仍存在；保留并失败: {}",
+    "受管状态删除拒绝链接/reparse 条目: {}",
+    "受管状态删除条目",
+    "受管状态删除条目名称在删除前已消失或换位: {}",
+    "受管状态删除条目名称指向了 replacement: {}",
+    "受管状态删除条目复验",
+    "受管状态删除条目枚举 ID 与句柄 ID 不一致: {}",
+    "受管状态删除检测到并发 refill；保留 orphan: {}",
+    "受管状态删除目录",
+    "受管状态删除目录在稳定枚举期间发生变化: {}",
+    "受管状态删除目录枚举出现重复名称: {}",
+    "受管状态删除路径不能为空",
+    "受管状态删除祖先发生身份替换: {}",
+    "受管状态删除祖先名称已消失或不可重开: {}",
+    "受管状态删除祖先复验",
+    "受管状态工作区根",
+    "文件",
+    "当前 rayman 不是可读取的普通文件: {}",
+    "无效 Cargo target lease id: {id}",
+    "无法删除受管状态目录树: {}",
+    "无法从受管目录句柄打开{label}: {}",
+    "无法从句柄枚举受管状态删除目录: {} (NTSTATUS=0x{:08x})",
+    "无法按句柄删除受管状态{}: {}",
+    "无法按父目录句柄打开受管状态删除分量: {}",
+    "无法按目录句柄打开受管状态删除条目: {}",
+    "无法确认受管状态条目已从父目录移除: {}",
+    "无法打开当前 rayman 身份: {}",
+    "无法打开文件身份: {}",
+    "无法执行 cargo metadata 以确定 Windows 自托管验证 target",
+    "无法枚举候选 Cargo target 子目录: {}",
+    "无法枚举候选 Cargo target: {}",
+    "无法规范化 Windows 自托管工作区: {}",
+    "无法解析 cargo metadata 的 Windows 自托管 target 结果",
+    "无法读取{label}句柄元数据: {}",
+    "无法读取已锁定受管状态目录元数据: {}",
+    "无法读取当前 rayman 硬链接计数: {}",
+    "无法读取文件句柄元数据: {}",
+    "无法读取文件身份: {}",
+    "无法释放 pytest lease: {id}",
+    "无法锁定受管状态目录身份: {}",
 ];
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
@@ -1903,6 +1997,393 @@ const MESSAGE_PREFIX_CATALOG: &[(&str, &str)] = &[
     (
         "pytest lease manifest 与受管路径不一致: {id}",
         "pytest lease manifest does not match its managed path: {id}",
+    ),
+    (
+        "pytest lease 在已验证释放前消失: {id}",
+        "pytest lease disappeared before its verified release: {id}",
+    ),
+    (
+        "pytest lease 在已验证释放前消失: {}",
+        "pytest lease disappeared before its verified release: {}",
+    ),
+    (
+        "pytest lease 释放身份与 validation session 不一致: {}",
+        "pytest lease release identity does not match the validation session: {}",
+    ),
+    (
+        "Cargo target lease manifest 与受管路径不一致: {id}",
+        "Cargo target lease manifest does not match its managed path: {id}",
+    ),
+    (
+        "Cargo target lease 在已验证释放前消失: {}",
+        "Cargo target lease disappeared before its verified release: {}",
+    ),
+    (
+        "Cargo target lease 释放身份与 session 不一致: {}",
+        "Cargo target lease release identity does not match the session: {}",
+    ),
+    (
+        "无法按父目录句柄打开受管状态删除分量: {}",
+        "unable to open managed-state removal component through its parent directory handle: {}",
+    ),
+    (
+        "无法读取{label}句柄元数据: {}",
+        "unable to read {label} handle metadata: {}",
+    ),
+    (
+        "{label}不是预期的普通{}: {}",
+        "{label} is not the expected regular {}: {}",
+    ),
+    (
+        "{label}缺少 Windows 强文件身份: {}",
+        "{label} lacks a strong Windows file identity: {}",
+    ),
+    (
+        "受管状态删除分量跨越了父目录卷身份: {}",
+        "managed-state removal component crossed its parent directory volume identity: {}",
+    ),
+    (
+        "受管状态删除祖先名称已消失或不可重开: {}",
+        "managed-state removal ancestor name disappeared or could not be reopened: {}",
+    ),
+    (
+        "受管状态删除祖先复验",
+        "managed-state removal ancestor revalidation",
+    ),
+    (
+        "受管状态删除祖先发生身份替换: {}",
+        "managed-state removal ancestor identity was replaced: {}",
+    ),
+    (
+        "无法从句柄枚举受管状态删除目录: {} (NTSTATUS=0x{:08x})",
+        "unable to enumerate managed-state removal directory from its handle: {} (NTSTATUS=0x{:08x})",
+    ),
+    (
+        "NtQueryDirectoryFile 返回无效字节数 {used}/{capacity}: {}",
+        "NtQueryDirectoryFile returned an invalid byte count {used}/{capacity}: {}",
+    ),
+    (
+        "受管状态删除目录枚举出现重复名称: {}",
+        "managed-state removal directory enumeration returned a duplicate name: {}",
+    ),
+    (
+        "Windows 目录枚举记录未按结构体对齐",
+        "Windows directory enumeration record is not structure-aligned",
+    ),
+    (
+        "Windows 目录枚举记录偏移越界",
+        "Windows directory enumeration record offset is out of bounds",
+    ),
+    (
+        "Windows 目录枚举记录短于固定头",
+        "Windows directory enumeration record is shorter than its fixed header",
+    ),
+    (
+        "Windows 目录枚举名称长度无效: {name_bytes}",
+        "Windows directory enumeration name length is invalid: {name_bytes}",
+    ),
+    (
+        "Windows 目录枚举名称长度溢出",
+        "Windows directory enumeration name length overflowed",
+    ),
+    (
+        "Windows 目录枚举 NextEntryOffset 无效: {next}",
+        "Windows directory enumeration NextEntryOffset is invalid: {next}",
+    ),
+    (
+        "Windows 目录枚举下一记录偏移溢出",
+        "Windows directory enumeration next-record offset overflowed",
+    ),
+    (
+        "Windows 目录枚举名称越过有效返回字节",
+        "Windows directory enumeration name exceeds the valid returned bytes",
+    ),
+    (
+        "Windows 目录枚举返回不安全的单组件名称",
+        "Windows directory enumeration returned an unsafe single-component name",
+    ),
+    (
+        "受管状态删除目录在稳定枚举期间发生变化: {}",
+        "managed-state removal directory changed during stable enumeration: {}",
+    ),
+    (
+        "无法按目录句柄打开受管状态删除条目: {}",
+        "unable to open managed-state removal entry through its directory handle: {}",
+    ),
+    (
+        "受管状态删除条目枚举 ID 与句柄 ID 不一致: {}",
+        "managed-state removal entry enumeration ID does not match its handle ID: {}",
+    ),
+    (
+        "受管状态删除检测到并发 refill；保留 orphan: {}",
+        "managed-state removal detected a concurrent refill; keeping the orphan: {}",
+    ),
+    (
+        "受管状态删除条目名称在删除前已消失或换位: {}",
+        "managed-state removal entry name disappeared or moved before deletion: {}",
+    ),
+    (
+        "受管状态删除条目复验",
+        "managed-state removal entry revalidation",
+    ),
+    (
+        "受管状态删除条目名称指向了 replacement: {}",
+        "managed-state removal entry name points to a replacement: {}",
+    ),
+    ("受管状态删除条目", "managed-state removal entry"),
+    (
+        "无法按句柄删除受管状态{}: {}",
+        "unable to delete managed-state {} by handle: {}",
+    ),
+    (
+        "受管状态删除后同名 replacement 仍存在；保留并失败: {}",
+        "a same-named replacement remains after managed-state removal; keeping it and failing: {}",
+    ),
+    (
+        "无法确认受管状态条目已从父目录移除: {}",
+        "unable to confirm the managed-state entry was removed from its parent directory: {}",
+    ),
+    (
+        "无法从受管目录句柄打开{label}: {}",
+        "unable to open {label} from the managed directory handle: {}",
+    ),
+    (
+        "{label}超过 1 MiB 安全上限: {}",
+        "{label} exceeds the 1 MiB safety limit: {}",
+    ),
+    (
+        "{label}在句柄读取期间发生变化: {}",
+        "{label} changed during handle-bound reading: {}",
+    ),
+    (
+        "{label}在句柄读取后无法复验: {}",
+        "{label} could not be revalidated after handle-bound reading: {}",
+    ),
+    (
+        "{label}名称在句柄读取后发生替换: {}",
+        "{label} name was replaced after handle-bound reading: {}",
+    ),
+    (
+        "Cargo target lease 不存在: {id}",
+        "Cargo target lease does not exist: {id}",
+    ),
+    (
+        "Cargo target lease 写探针失败: {}",
+        "Cargo target lease write probe failed: {}",
+    ),
+    (
+        "Cargo target lease 创建后消失: {id}",
+        "Cargo target lease disappeared after creation: {id}",
+    ),
+    (
+        "Cargo target lease 创建或探测失败后的清理也失败: {cleanup_error}",
+        "cleanup after Cargo target lease creation or probing also failed: {cleanup_error}",
+    ),
+    (
+        "Cargo target lease 复验身份发生变化: {}",
+        "Cargo target lease identity changed during revalidation: {}",
+    ),
+    (
+        "Cargo target lease 子目录创建后消失: {id}",
+        "Cargo target lease child directory disappeared after creation: {id}",
+    ),
+    (
+        "Cargo target lease 探针内容不一致: {}",
+        "Cargo target lease probe content does not match: {}",
+    ),
+    (
+        "Cargo target lease 清理探针失败: {}",
+        "Cargo target lease probe cleanup failed: {}",
+    ),
+    (
+        "Cargo target lease 缺少 manifest: {id}",
+        "Cargo target lease is missing its manifest: {id}",
+    ),
+    (
+        "Cargo target lease 读探针失败: {}",
+        "Cargo target lease read probe failed: {}",
+    ),
+    (
+        "Windows 自托管验证已执行，但 Cargo target lease 释放失败；不会写入 receipt",
+        "Windows self-hosted validation executed, but the Cargo target lease could not be released; receipt will not be recorded",
+    ),
+    (
+        "Windows 自托管验证拒绝多个 --target-dir；无法证明 Cargo 输出不会覆盖当前 rayman",
+        "Windows self-hosted validation rejects multiple --target-dir options because it cannot prove Cargo output will not overwrite the running rayman",
+    ),
+    (
+        "Windows 自托管验证拒绝带 --config 的 Cargo 命令；其 build.target-dir 可能绕过环境隔离",
+        "Windows self-hosted validation rejects Cargo commands with --config because build.target-dir may bypass environment isolation",
+    ),
+    (
+        "Windows 自托管验证拒绝指向当前 rayman 的显式 --target-dir；环境隔离无法覆盖命令行参数",
+        "Windows self-hosted validation rejects an explicit --target-dir that points to the running rayman because environment isolation cannot override a command-line option",
+    ),
+    (
+        "Windows 自托管验证拒绝空 --target-dir",
+        "Windows self-hosted validation rejects an empty --target-dir",
+    ),
+    (
+        "无法创建 Cargo target lease 子目录: {}",
+        "unable to create Cargo target lease child directory: {}",
+    ),
+    (
+        "无法创建 Cargo target lease 根",
+        "unable to create the Cargo target lease root",
+    ),
+    (
+        "无法独占创建 Cargo target lease: {}",
+        "unable to create Cargo target lease exclusively: {}",
+    ),
+    (
+        "无法独占创建 Cargo target lease（连续名称冲突）",
+        "unable to create Cargo target lease exclusively after repeated name collisions",
+    ),
+    (
+        "无法规范化候选 Cargo target: {}",
+        "unable to canonicalize the candidate Cargo target: {}",
+    ),
+    (
+        "无法规范化当前 rayman: {}",
+        "unable to canonicalize the running rayman: {}",
+    ),
+    (
+        "无法释放 Cargo target lease: {}",
+        "unable to release Cargo target lease: {}",
+    ),
+    (
+        "验证失败后 Cargo target lease 释放也失败: {cleanup:#}",
+        "validation failed and Cargo target lease release also failed: {cleanup:#}",
+    ),
+    (
+        "Cargo artifact 缺少强文件身份: {}",
+        "Cargo artifact lacks a strong file identity: {}",
+    ),
+    (
+        "Cargo target lease 创建失败后受管目录已消失",
+        "the managed directory disappeared after Cargo target lease creation failed",
+    ),
+    (
+        "Windows 自托管验证拒绝多个 --manifest-path；无法唯一解析 Cargo workspace",
+        "Windows self-hosted validation rejects multiple --manifest-path options because the Cargo workspace cannot be resolved uniquely",
+    ),
+    (
+        "Windows 自托管验证拒绝空 --manifest-path",
+        "Windows self-hosted validation rejects an empty --manifest-path",
+    ),
+    (
+        "cargo metadata 无法证明 Windows 自托管验证的有效 target（exit={}）；拒绝回退到猜测路径",
+        "cargo metadata could not prove the effective target for Windows self-hosted validation (exit={}); refusing to fall back to a guessed path",
+    ),
+    (
+        "cargo metadata 缺少有效 target_directory",
+        "cargo metadata did not return a valid target_directory",
+    ),
+    (
+        "cargo metadata 返回非绝对 target_directory: {target}",
+        "cargo metadata returned a non-absolute target_directory: {target}",
+    ),
+    (
+        "pytest lease 创建失败后受管目录已消失",
+        "the managed directory disappeared after pytest lease creation failed",
+    ),
+    (
+        "候选 Cargo target 含链接/reparse 条目: {}",
+        "candidate Cargo target contains a linked/reparse entry: {}",
+    ),
+    (
+        "受管状态删除拒绝链接/reparse 条目: {}",
+        "managed-state removal rejects a linked/reparse entry: {}",
+    ),
+    (
+        "受管状态删除拒绝非常规条目: {}",
+        "managed-state removal rejects an irregular entry: {}",
+    ),
+    (
+        "受管状态删除路径不能为空",
+        "managed-state removal path must not be empty",
+    ),
+    (
+        "当前 rayman 不是可读取的普通文件: {}",
+        "the running rayman is not a readable regular file: {}",
+    ),
+    (
+        "无效 Cargo target lease id: {id}",
+        "invalid Cargo target lease id: {id}",
+    ),
+    (
+        "无法删除受管状态文件: {}",
+        "unable to remove managed-state file: {}",
+    ),
+    (
+        "无法删除受管状态目录树: {}",
+        "unable to remove managed-state directory tree: {}",
+    ),
+    (
+        "无法删除已清空受管状态目录: {}",
+        "unable to remove emptied managed-state directory: {}",
+    ),
+    (
+        "无法打开当前 rayman 身份: {}",
+        "unable to open the running rayman identity: {}",
+    ),
+    ("无法打开文件身份: {}", "unable to open file identity: {}"),
+    (
+        "无法执行 cargo metadata 以确定 Windows 自托管验证 target",
+        "unable to run cargo metadata to determine the Windows self-hosted validation target",
+    ),
+    (
+        "无法枚举候选 Cargo target 子目录: {}",
+        "unable to enumerate candidate Cargo target child directory: {}",
+    ),
+    (
+        "无法枚举候选 Cargo target: {}",
+        "unable to enumerate candidate Cargo target: {}",
+    ),
+    (
+        "无法枚举受管状态删除目标: {}",
+        "unable to enumerate managed-state removal target: {}",
+    ),
+    (
+        "无法规范化 Windows 自托管工作区: {}",
+        "unable to canonicalize the Windows self-hosted workspace: {}",
+    ),
+    (
+        "无法解析 cargo metadata 的 Windows 自托管 target 结果",
+        "unable to parse the Windows self-hosted target result from cargo metadata",
+    ),
+    (
+        "无法读取受管状态删除条目: {}",
+        "unable to read managed-state removal entry: {}",
+    ),
+    (
+        "无法读取受管状态删除条目元数据: {}",
+        "unable to read managed-state removal entry metadata: {}",
+    ),
+    (
+        "无法读取受管状态删除父目录: {}",
+        "unable to read managed-state removal parent directory: {}",
+    ),
+    (
+        "无法读取受管状态删除目标: {}",
+        "unable to read managed-state removal target: {}",
+    ),
+    (
+        "无法读取已锁定受管状态目录元数据: {}",
+        "unable to read locked managed-state directory metadata: {}",
+    ),
+    (
+        "无法读取当前 rayman 硬链接计数: {}",
+        "unable to read the running rayman hard-link count: {}",
+    ),
+    (
+        "无法读取文件句柄元数据: {}",
+        "unable to read file-handle metadata: {}",
+    ),
+    ("无法读取文件身份: {}", "unable to read file identity: {}"),
+    (
+        "无法锁定受管状态目录身份: {}",
+        "unable to lock managed-state directory identity: {}",
     ),
     (
         "共享 quality policy 的父目录必须是工作区内真实目录，不能是链接/reparse: {}",

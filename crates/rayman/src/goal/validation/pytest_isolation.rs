@@ -236,23 +236,10 @@ pub fn run_with_managed_pytest_lease(
     // construction failure after lease creation must pass through cleanup.
     let execution = managed_pytest_command(command, &lease.pytest_args)
         .and_then(|executable| runner(&executable, Some(&lease.environment)));
-    let cleanup = crate::temp::release_pytest_lease(root, &lease.id);
+    let cleanup = crate::temp::release_managed_pytest_lease(root, &lease);
 
     match (execution, cleanup) {
-        (Ok(output), Ok(true)) => Ok(output),
-        (Ok(output), Ok(false)) if output.status.success() => {
-            bail!(
-                "pytest 验证结束后 lease 未被释放；stdout_sha256={} stderr_sha256={}",
-                sha256_hex(&output.stdout),
-                sha256_hex(&output.stderr)
-            )
-        }
-        (Ok(output), Ok(false)) => bail!(
-            "pytest 验证进程非零退出（exit={}）且 lease 未被释放；stdout_sha256={} stderr_sha256={}",
-            output.status.code().unwrap_or(-1),
-            sha256_hex(&output.stdout),
-            sha256_hex(&output.stderr)
-        ),
+        (Ok(output), Ok(())) => Ok(output),
         (Ok(output), Err(cleanup_error)) if output.status.success() => {
             bail!(
                 "pytest 验证结束后无法释放受管 lease；stdout_sha256={} stderr_sha256={}: {cleanup_error:#}",
@@ -266,10 +253,7 @@ pub fn run_with_managed_pytest_lease(
             sha256_hex(&output.stdout),
             sha256_hex(&output.stderr)
         ),
-        (Err(execution_error), Ok(true)) => Err(execution_error),
-        (Err(execution_error), Ok(false)) => {
-            bail!("pytest 执行准备或启动失败且 lease 未被释放: {execution_error:#}")
-        }
+        (Err(execution_error), Ok(())) => Err(execution_error),
         (Err(execution_error), Err(cleanup_error)) => bail!(
             "pytest 执行准备或启动失败: {execution_error:#}; lease 释放也失败: {cleanup_error:#}"
         ),
@@ -455,6 +439,27 @@ mod tests {
         assert!(output.status.success());
         let leases = root.path().join(".RaymanCodingSkill/tmp/leases");
         assert!(!leases.exists() || std::fs::read_dir(leases).unwrap().next().is_none());
+    }
+
+    #[test]
+    fn missing_managed_lease_blocks_a_successful_result() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join(".RaymanCodingSkill")).unwrap();
+        let command = super::super::parse_validation_command("pytest -q").unwrap();
+
+        let error = run_with_managed_pytest_lease(root.path(), &command, |_, environment| {
+            let temp = environment
+                .and_then(|values| values.get("TEMP"))
+                .expect("managed TEMP");
+            let lease_root = Path::new(temp).parent().expect("lease root");
+            std::fs::remove_dir_all(lease_root).unwrap();
+            Ok(process_output(0))
+        })
+        .unwrap_err();
+        let rendered = format!("{error:#}");
+
+        assert!(rendered.contains("无法释放受管 lease"), "{rendered}");
+        assert!(rendered.contains("消失"), "{rendered}");
     }
 
     #[test]

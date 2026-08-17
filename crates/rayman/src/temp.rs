@@ -17,6 +17,8 @@ const TEMP_ROOT: &str = ".RaymanCodingSkill/tmp";
 const MAX_REPORTED_ERRORS: usize = 64;
 const LEASES_RELATIVE: &str = "tmp/leases";
 const LEASE_MANIFEST: &str = "lease.json";
+const CARGO_TARGET_LEASES_RELATIVE: &str = "tmp/cargo-target-leases";
+const CARGO_TARGET_LEASE_MANIFEST: &str = "lease.json";
 static LEASE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 pub fn temp_root(root: &Path) -> PathBuf {
@@ -114,17 +116,20 @@ fn lease_relative(id: &str) -> Result<PathBuf> {
     // 删光所有兄弟 lease；下游 normal_components 守卫看到的是归一化之后
     // 的路径，永远拦不住它。Windows 还会剥掉尾部 `.`（`a.` → `a`），
     // 形成跨 lease 别名。两类都必须在 id 门口拒绝。
-    if id.is_empty()
+    if !is_valid_lease_id(id) {
+        anyhow::bail!("无效 pytest lease id: {id}");
+    }
+    Ok(Path::new(LEASES_RELATIVE).join(id))
+}
+
+fn is_valid_lease_id(id: &str) -> bool {
+    !(id.is_empty()
         || id.len() > 160
         || !id
             .chars()
             .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.'))
         || !id.chars().any(|ch| ch.is_ascii_alphanumeric())
-        || id.ends_with('.')
-    {
-        anyhow::bail!("无效 pytest lease id: {id}");
-    }
-    Ok(Path::new(LEASES_RELATIVE).join(id))
+        || id.ends_with('.'))
 }
 
 fn lease_path(root: &Path, id: &str, create: bool) -> Result<Option<PathBuf>> {
@@ -207,12 +212,15 @@ where
 
     match creation {
         Ok(lease) => Ok(lease),
-        Err(creation_error) => match fs::remove_dir_all(&lease_root) {
-            Ok(()) => Err(creation_error),
-            Err(cleanup_error) => Err(creation_error).context(format!(
-                "pytest lease 创建或探测失败后的清理也失败: {cleanup_error}"
-            )),
-        },
+        Err(creation_error) => {
+            match state_paths::remove_managed_state_dir_all(root, &lease_relative(&id)?) {
+                Ok(true) => Err(creation_error),
+                Ok(false) => Err(creation_error).context("pytest lease 创建失败后受管目录已消失"),
+                Err(cleanup_error) => Err(creation_error).context(format!(
+                    "pytest lease 创建或探测失败后的清理也失败: {cleanup_error}"
+                )),
+            }
+        }
     }
 }
 
@@ -285,6 +293,12 @@ fn load_pytest_lease_identity(root: &Path, id: &str) -> Result<(PathBuf, PytestL
         lease_path(root, id, false)?.ok_or_else(|| anyhow::anyhow!("pytest lease 不存在: {id}"))?;
     let lease = crate::file_io::read_json::<PytestLease>(&lease_root.join(LEASE_MANIFEST))?
         .ok_or_else(|| anyhow::anyhow!("pytest lease 缺少 manifest: {id}"))?;
+    validate_pytest_lease_manifest(id, &lease_root, &lease)?;
+    ensure_real_directory(&lease_root)?;
+    Ok((lease_root, lease))
+}
+
+fn validate_pytest_lease_manifest(id: &str, lease_root: &Path, lease: &PytestLease) -> Result<()> {
     let basetemp = lease_root.join("basetemp");
     let cache_dir = lease_root.join("cache");
     let temp_dir = lease_root.join("temp");
@@ -296,7 +310,7 @@ fn load_pytest_lease_identity(root: &Path, id: &str) -> Result<(PathBuf, PytestL
         // 光用 `starts_with` 是前缀测试：任何能 sanitize 成真实 label 前缀的
         // 篡改值都会照样通过。这里改为校验 id 的完整生成形态（见函数注释）。
         || !lease_id_matches_label(id, &safe_lease_id_label(&lease.label))
-        || lease.root != path_text(&lease_root)
+        || lease.root != path_text(lease_root)
         || lease.basetemp != path_text(&basetemp)
         || lease.cache_dir != path_text(&cache_dir)
         || lease.temp_dir != path_text(&temp_dir)
@@ -316,8 +330,14 @@ fn load_pytest_lease_identity(root: &Path, id: &str) -> Result<(PathBuf, PytestL
     {
         anyhow::bail!("pytest lease manifest 与受管路径不一致: {id}");
     }
-    ensure_real_directory(&lease_root)?;
-    Ok((lease_root, lease))
+    Ok(())
+}
+
+fn parse_pytest_lease_manifest(id: &str, lease_root: &Path, bytes: &[u8]) -> Result<PytestLease> {
+    let lease = serde_json::from_slice::<PytestLease>(bytes)
+        .with_context(|| format!("pytest lease manifest 无法解析: {id}"))?;
+    validate_pytest_lease_manifest(id, lease_root, &lease)?;
+    Ok(lease)
 }
 
 pub fn verify_pytest_lease(root: &Path, id: &str) -> Result<PytestLease> {
@@ -333,17 +353,381 @@ pub fn verify_pytest_lease(root: &Path, id: &str) -> Result<PytestLease> {
     Ok(lease)
 }
 
-/// Remove exactly one manifest-owned lease. Arbitrary paths are never
-/// accepted and a missing/corrupt manifest fails closed. Release deliberately
-/// does not re-probe child directories: pytest owns their runtime contents and
-/// may replace or remove basetemp before exiting. The manifest and managed
-/// lease root prove deletion authority; remove_dir_all then removes that exact
-/// root without following child links.
-pub fn release_pytest_lease(root: &Path, id: &str) -> Result<bool> {
-    let (lease_root, _) = load_pytest_lease_identity(root, id)?;
-    fs::remove_dir_all(&lease_root)
-        .with_context(|| format!("无法释放 pytest lease: {}", display_path(&lease_root)))?;
-    Ok(true)
+/// Remove exactly one manifest-owned lease selected by its operator-visible
+/// id. Arbitrary paths are never accepted and a corrupt manifest fails closed.
+/// On Windows the manifest is read from the same held leaf handle that
+/// authorizes handle-bound deletion.
+pub fn release_pytest_lease(root: &Path, id: &str) -> Result<()> {
+    #[cfg(windows)]
+    {
+        let removed = release_pytest_lease_by_id_windows(root, id)?;
+        if !removed {
+            anyhow::bail!("pytest lease 在已验证释放前消失: {id}");
+        }
+        Ok(())
+    }
+
+    #[cfg(not(windows))]
+    {
+        let (lease_root, _) = load_pytest_lease_identity(root, id)?;
+        let removed = state_paths::remove_managed_state_dir_all(root, &lease_relative(id)?)
+            .with_context(|| format!("无法释放 pytest lease: {}", display_path(&lease_root)))?;
+        if !removed {
+            anyhow::bail!("pytest lease 在已验证释放前消失: {id}");
+        }
+        Ok(())
+    }
+}
+
+#[cfg(windows)]
+fn release_pytest_lease_by_id_windows(root: &Path, id: &str) -> Result<bool> {
+    let relative = lease_relative(id)?;
+    state_paths::remove_managed_state_dir_all_windows_verified(
+        root,
+        &relative,
+        |leaf, lease_root| {
+            let bytes = state_paths::read_windows_file_from_directory_handle(
+                leaf,
+                std::ffi::OsStr::new(LEASE_MANIFEST),
+                lease_root,
+                "pytest lease manifest",
+            )?;
+            parse_pytest_lease_manifest(id, lease_root, &bytes)?;
+            Ok(())
+        },
+    )
+    .with_context(|| format!("无法释放 pytest lease: {id}"))
+}
+
+/// Release the exact lease created for one managed pytest process. The full
+/// in-memory identity must match the manifest read from the deletion leaf, and
+/// a missing lease is an error so validation cannot mint a receipt after lost
+/// cleanup authority.
+pub(crate) fn release_managed_pytest_lease(root: &Path, expected: &PytestLease) -> Result<()> {
+    #[cfg(windows)]
+    {
+        release_managed_pytest_lease_windows(root, expected, |_| Ok(()))
+    }
+
+    #[cfg(not(windows))]
+    {
+        let (lease_root, actual) = load_pytest_lease_identity(root, &expected.id)?;
+        if actual != *expected {
+            anyhow::bail!(
+                "pytest lease 释放身份与 validation session 不一致: {}",
+                expected.id
+            );
+        }
+        let removed =
+            state_paths::remove_managed_state_dir_all(root, &lease_relative(&expected.id)?)
+                .with_context(|| format!("无法释放 pytest lease: {}", display_path(&lease_root)))?;
+        if !removed {
+            anyhow::bail!("pytest lease 在已验证释放前消失: {}", expected.id);
+        }
+        Ok(())
+    }
+}
+
+#[cfg(windows)]
+fn release_managed_pytest_lease_windows<F>(
+    root: &Path,
+    expected: &PytestLease,
+    after_verified: F,
+) -> Result<()>
+where
+    F: FnOnce(&Path) -> Result<()>,
+{
+    let relative = lease_relative(&expected.id)?;
+    let removed = state_paths::remove_managed_state_dir_all_windows_verified(
+        root,
+        &relative,
+        |leaf, lease_root| {
+            let bytes = state_paths::read_windows_file_from_directory_handle(
+                leaf,
+                std::ffi::OsStr::new(LEASE_MANIFEST),
+                lease_root,
+                "pytest lease manifest",
+            )?;
+            let actual = parse_pytest_lease_manifest(&expected.id, lease_root, &bytes)?;
+            if actual != *expected {
+                anyhow::bail!(
+                    "pytest lease 释放身份与 validation session 不一致: {}",
+                    expected.id
+                );
+            }
+            after_verified(lease_root)
+        },
+    )
+    .with_context(|| {
+        format!(
+            "无法释放 pytest lease: {}",
+            display_path(Path::new(&expected.root))
+        )
+    })?;
+    if !removed {
+        anyhow::bail!("pytest lease 在已验证释放前消失: {}", expected.id);
+    }
+    Ok(())
+}
+
+/// A unique Cargo target owned by one outer validation execution. Keeping the
+/// manifest beside, rather than inside, `target` prevents `cargo clean` from
+/// deleting the ownership record that makes release safe.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CargoTargetLease {
+    pub schema: String,
+    pub id: String,
+    pub label: String,
+    pub created_at: String,
+    pub root: String,
+    pub target_dir: String,
+}
+
+fn cargo_target_lease_relative(id: &str) -> Result<PathBuf> {
+    if !is_valid_lease_id(id) {
+        anyhow::bail!("无效 Cargo target lease id: {id}");
+    }
+    Ok(Path::new(CARGO_TARGET_LEASES_RELATIVE).join(id))
+}
+
+fn cargo_target_lease_path(root: &Path, id: &str, create: bool) -> Result<Option<PathBuf>> {
+    state_paths::managed_state_dir(root, &cargo_target_lease_relative(id)?, create)
+}
+
+/// Create and probe a manifest-owned Cargo target. The leaf lease directory is
+/// created exclusively so a stale or pre-planted directory is never adopted
+/// and later removed as if this process owned it.
+pub fn create_cargo_target_lease(root: &Path, label: &str) -> Result<CargoTargetLease> {
+    create_cargo_target_lease_with_probe(root, label, probe_cargo_target_directory)
+}
+
+fn create_cargo_target_lease_with_probe<F>(
+    root: &Path,
+    label: &str,
+    mut probe: F,
+) -> Result<CargoTargetLease>
+where
+    F: FnMut(&Path) -> Result<()>,
+{
+    let parent =
+        state_paths::managed_state_dir(root, Path::new(CARGO_TARGET_LEASES_RELATIVE), true)?
+            .ok_or_else(|| anyhow::anyhow!("无法创建 Cargo target lease 根"))?;
+    let label = label.trim();
+
+    for _ in 0..32 {
+        let sequence = LEASE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let timestamp = crate::timefmt::now_iso()
+            .chars()
+            .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })
+            .collect::<String>();
+        let id = format!(
+            "{}-{}-{}-{}",
+            safe_lease_id_label(label),
+            timestamp,
+            std::process::id(),
+            sequence
+        );
+        let lease_root = parent.join(&id);
+        match fs::create_dir(&lease_root) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(error).with_context(|| {
+                    format!(
+                        "无法独占创建 Cargo target lease: {}",
+                        display_path(&lease_root)
+                    )
+                });
+            }
+        }
+
+        let creation = (|| {
+            let relative = cargo_target_lease_relative(&id)?;
+            let lease_root = state_paths::managed_state_dir(root, &relative, false)?
+                .ok_or_else(|| anyhow::anyhow!("Cargo target lease 创建后消失: {id}"))?;
+            let target_dir = lease_root.join("target");
+            fs::create_dir(&target_dir).with_context(|| {
+                format!(
+                    "无法创建 Cargo target lease 子目录: {}",
+                    display_path(&target_dir)
+                )
+            })?;
+            let target_dir = state_paths::managed_state_dir(root, &relative.join("target"), false)?
+                .ok_or_else(|| anyhow::anyhow!("Cargo target lease 子目录创建后消失: {id}"))?;
+            probe(&target_dir)?;
+            let lease = CargoTargetLease {
+                schema: "rayman.cargo-target-lease.v1".into(),
+                id: id.clone(),
+                label: label.to_string(),
+                created_at: crate::timefmt::now_iso(),
+                root: path_text(&lease_root),
+                target_dir: path_text(&target_dir),
+            };
+            crate::file_io::write_json(&lease_root.join(CARGO_TARGET_LEASE_MANIFEST), &lease)?;
+            verify_cargo_target_lease(root, &id)
+        })();
+
+        return match creation {
+            Ok(lease) => Ok(lease),
+            Err(creation_error) => match state_paths::remove_managed_state_dir_all(
+                root,
+                &cargo_target_lease_relative(&id)?,
+            ) {
+                Ok(true) => Err(creation_error),
+                Ok(false) => {
+                    Err(creation_error).context("Cargo target lease 创建失败后受管目录已消失")
+                }
+                Err(cleanup_error) => Err(creation_error).context(format!(
+                    "Cargo target lease 创建或探测失败后的清理也失败: {cleanup_error}"
+                )),
+            },
+        };
+    }
+
+    anyhow::bail!("无法独占创建 Cargo target lease（连续名称冲突）")
+}
+
+fn probe_cargo_target_directory(path: &Path) -> Result<()> {
+    let sequence = LEASE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let probe = path.join(format!(
+        ".rayman-cargo-target-probe-{}-{sequence}.tmp",
+        std::process::id()
+    ));
+    fs::write(&probe, b"rayman-cargo-target-probe")
+        .with_context(|| format!("Cargo target lease 写探针失败: {}", display_path(&probe)))?;
+    let bytes = fs::read(&probe)
+        .with_context(|| format!("Cargo target lease 读探针失败: {}", display_path(&probe)))?;
+    if bytes != b"rayman-cargo-target-probe" {
+        anyhow::bail!(
+            "Cargo target lease 探针内容不一致: {}",
+            display_path(&probe)
+        );
+    }
+    fs::remove_file(&probe)
+        .with_context(|| format!("Cargo target lease 清理探针失败: {}", display_path(&probe)))?;
+    Ok(())
+}
+
+fn load_cargo_target_lease_identity(root: &Path, id: &str) -> Result<(PathBuf, CargoTargetLease)> {
+    let lease_root = cargo_target_lease_path(root, id, false)?
+        .ok_or_else(|| anyhow::anyhow!("Cargo target lease 不存在: {id}"))?;
+    let lease = crate::file_io::read_json::<CargoTargetLease>(
+        &lease_root.join(CARGO_TARGET_LEASE_MANIFEST),
+    )?
+    .ok_or_else(|| anyhow::anyhow!("Cargo target lease 缺少 manifest: {id}"))?;
+    validate_cargo_target_lease_manifest(id, &lease_root, &lease)?;
+    ensure_real_directory(&lease_root)?;
+    Ok((lease_root, lease))
+}
+
+fn validate_cargo_target_lease_manifest(
+    id: &str,
+    lease_root: &Path,
+    lease: &CargoTargetLease,
+) -> Result<()> {
+    let target_dir = lease_root.join("target");
+    if lease.schema != "rayman.cargo-target-lease.v1"
+        || lease.id != id
+        || !lease_id_matches_label(id, &safe_lease_id_label(&lease.label))
+        || lease.root != path_text(lease_root)
+        || lease.target_dir != path_text(&target_dir)
+    {
+        anyhow::bail!("Cargo target lease manifest 与受管路径不一致: {id}");
+    }
+    Ok(())
+}
+
+fn parse_cargo_target_lease_manifest(
+    id: &str,
+    lease_root: &Path,
+    bytes: &[u8],
+) -> Result<CargoTargetLease> {
+    let lease = serde_json::from_slice::<CargoTargetLease>(bytes)
+        .with_context(|| format!("Cargo target lease manifest 无法解析: {id}"))?;
+    validate_cargo_target_lease_manifest(id, lease_root, &lease)?;
+    Ok(lease)
+}
+
+/// Revalidate ownership, containment, directory identity and write capability
+/// immediately before every child process spawn.
+pub fn verify_cargo_target_lease(root: &Path, id: &str) -> Result<CargoTargetLease> {
+    let (_, lease) = load_cargo_target_lease_identity(root, id)?;
+    let target_dir = PathBuf::from(&lease.target_dir);
+    ensure_real_directory(&target_dir)?;
+    probe_cargo_target_directory(&target_dir)?;
+    Ok(lease)
+}
+
+/// Release exactly one manifest-owned Cargo target. Runtime children below the
+/// target may be absent; the verified lease root and manifest remain the delete
+/// authority.
+pub fn release_cargo_target_lease(root: &Path, expected: &CargoTargetLease) -> Result<()> {
+    #[cfg(windows)]
+    {
+        release_cargo_target_lease_windows(root, expected, |_| Ok(()))
+    }
+
+    #[cfg(not(windows))]
+    {
+        let (lease_root, actual) = load_cargo_target_lease_identity(root, &expected.id)?;
+        if actual != *expected {
+            anyhow::bail!(
+                "Cargo target lease 释放身份与 session 不一致: {}",
+                expected.id
+            );
+        }
+        let removed = state_paths::remove_managed_state_dir_all(
+            root,
+            &cargo_target_lease_relative(&expected.id)?,
+        )
+        .with_context(|| format!("无法释放 Cargo target lease: {}", display_path(&lease_root)))?;
+        if !removed {
+            anyhow::bail!("Cargo target lease 在已验证释放前消失: {}", expected.id);
+        }
+        Ok(())
+    }
+}
+
+#[cfg(windows)]
+fn release_cargo_target_lease_windows<F>(
+    root: &Path,
+    expected: &CargoTargetLease,
+    after_verified: F,
+) -> Result<()>
+where
+    F: FnOnce(&Path) -> Result<()>,
+{
+    let relative = cargo_target_lease_relative(&expected.id)?;
+    let removed = state_paths::remove_managed_state_dir_all_windows_verified(
+        root,
+        &relative,
+        |leaf, lease_root| {
+            let bytes = state_paths::read_windows_file_from_directory_handle(
+                leaf,
+                std::ffi::OsStr::new(CARGO_TARGET_LEASE_MANIFEST),
+                lease_root,
+                "Cargo target lease manifest",
+            )?;
+            let actual = parse_cargo_target_lease_manifest(&expected.id, lease_root, &bytes)?;
+            if actual != *expected {
+                anyhow::bail!(
+                    "Cargo target lease 释放身份与 session 不一致: {}",
+                    expected.id
+                );
+            }
+            after_verified(lease_root)
+        },
+    )
+    .with_context(|| {
+        format!(
+            "无法释放 Cargo target lease: {}",
+            display_path(Path::new(&expected.root))
+        )
+    })?;
+    if !removed {
+        anyhow::bail!("Cargo target lease 在已验证释放前消失: {}", expected.id);
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone)]
@@ -528,7 +912,7 @@ mod tests {
         assert_eq!(first.schema, "rayman.pytest-lease.v1");
         assert!(Path::new(&first.basetemp).is_dir());
         assert_eq!(verify_pytest_lease(dir.path(), &first.id).unwrap(), first);
-        assert!(release_pytest_lease(dir.path(), &first.id).unwrap());
+        release_pytest_lease(dir.path(), &first.id).unwrap();
         assert!(verify_pytest_lease(dir.path(), &first.id).is_err());
         assert!(verify_pytest_lease(dir.path(), "../outside").is_err());
         assert!(Path::new(&second.root).is_dir());
@@ -560,7 +944,7 @@ mod tests {
         let lease = create_pytest_lease(dir.path(), "runtime-removal").unwrap();
         fs::remove_dir_all(&lease.basetemp).unwrap();
 
-        assert!(release_pytest_lease(dir.path(), &lease.id).unwrap());
+        release_pytest_lease(dir.path(), &lease.id).unwrap();
         assert!(!Path::new(&lease.root).exists());
     }
 
@@ -622,6 +1006,139 @@ mod tests {
             "keep"
         );
         assert!(Path::new(&lease.root).is_dir());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn pytest_lease_release_binds_manifest_to_the_guarded_leaf() {
+        let dir = tempfile::tempdir().unwrap();
+        let lease = create_pytest_lease(dir.path(), "guarded-pytest-manifest").unwrap();
+        let lease_root = PathBuf::from(&lease.root);
+        fs::write(
+            PathBuf::from(&lease.temp_dir).join("original-sentinel.txt"),
+            b"original",
+        )
+        .unwrap();
+        let displaced = lease_root.with_file_name(format!("{}-displaced", lease.id));
+
+        let error = release_managed_pytest_lease_windows(dir.path(), &lease, |verified_leaf| {
+            assert_eq!(display_path(verified_leaf), lease.root);
+            fs::rename(verified_leaf, &displaced)?;
+            fs::create_dir(verified_leaf)?;
+            crate::file_io::write_json(&verified_leaf.join(LEASE_MANIFEST), &lease)?;
+            fs::write(
+                verified_leaf.join("replacement-sentinel.txt"),
+                b"replacement",
+            )?;
+            Ok(())
+        })
+        .unwrap_err();
+
+        assert!(format!("{error:#}").contains("身份"), "{error:#}");
+        assert_eq!(
+            fs::read(displaced.join("temp").join("original-sentinel.txt")).unwrap(),
+            b"original"
+        );
+        assert_eq!(
+            fs::read(lease_root.join("replacement-sentinel.txt")).unwrap(),
+            b"replacement"
+        );
+    }
+
+    #[test]
+    fn cargo_target_lease_is_unique_probed_and_manifest_owned() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = create_cargo_target_lease(dir.path(), "validation cargo").unwrap();
+        let second = create_cargo_target_lease(dir.path(), "validation cargo").unwrap();
+        assert_ne!(first.id, second.id);
+        assert_eq!(first.schema, "rayman.cargo-target-lease.v1");
+        assert!(Path::new(&first.target_dir).is_dir());
+        assert_eq!(
+            verify_cargo_target_lease(dir.path(), &first.id).unwrap(),
+            first
+        );
+        release_cargo_target_lease(dir.path(), &first).unwrap();
+        assert!(!Path::new(&first.root).exists());
+        assert!(Path::new(&second.root).is_dir());
+    }
+
+    #[test]
+    fn cargo_target_lease_creation_failure_removes_the_partial_lease() {
+        let dir = tempfile::tempdir().unwrap();
+        let error = create_cargo_target_lease_with_probe(dir.path(), "creation-failure", |_| {
+            anyhow::bail!("injected cargo target probe failure")
+        })
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("injected cargo target probe failure")
+        );
+        let leases = dir
+            .path()
+            .join(".RaymanCodingSkill/tmp/cargo-target-leases");
+        assert!(
+            !leases.exists() || fs::read_dir(leases).unwrap().next().is_none(),
+            "partial Cargo target create left an orphan lease"
+        );
+    }
+
+    #[test]
+    fn cargo_target_lease_rejects_tampering_without_deleting_external_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let lease = create_cargo_target_lease(dir.path(), "tamper").unwrap();
+        let outside = dir.path().join("outside-cargo-target");
+        fs::create_dir(&outside).unwrap();
+        fs::write(outside.join("keep.txt"), "keep").unwrap();
+        let manifest = Path::new(&lease.root).join(CARGO_TARGET_LEASE_MANIFEST);
+        let mut tampered = lease.clone();
+        tampered.target_dir = outside.display().to_string();
+        crate::file_io::write_json(&manifest, &tampered).unwrap();
+
+        assert!(verify_cargo_target_lease(dir.path(), &lease.id).is_err());
+        assert!(release_cargo_target_lease(dir.path(), &lease).is_err());
+        assert_eq!(
+            fs::read_to_string(outside.join("keep.txt")).unwrap(),
+            "keep"
+        );
+        assert!(Path::new(&lease.root).is_dir());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn cargo_target_lease_release_binds_manifest_to_the_guarded_leaf() {
+        let dir = tempfile::tempdir().unwrap();
+        let lease = create_cargo_target_lease(dir.path(), "guarded-manifest").unwrap();
+        let lease_root = PathBuf::from(&lease.root);
+        fs::write(
+            PathBuf::from(&lease.target_dir).join("artifact.bin"),
+            b"original",
+        )
+        .unwrap();
+        let displaced = lease_root.with_file_name(format!("{}-displaced", lease.id));
+
+        let error = release_cargo_target_lease_windows(dir.path(), &lease, |verified_leaf| {
+            assert_eq!(display_path(verified_leaf), lease.root);
+            fs::rename(verified_leaf, &displaced)?;
+            fs::create_dir_all(verified_leaf.join("target"))?;
+            crate::file_io::write_json(&verified_leaf.join(CARGO_TARGET_LEASE_MANIFEST), &lease)?;
+            fs::write(
+                verified_leaf.join("replacement-sentinel.txt"),
+                b"replacement",
+            )?;
+            Ok(())
+        })
+        .unwrap_err();
+
+        assert!(format!("{error:#}").contains("身份"), "{error:#}");
+        assert_eq!(
+            fs::read(displaced.join("target").join("artifact.bin")).unwrap(),
+            b"original"
+        );
+        assert_eq!(
+            fs::read(lease_root.join("replacement-sentinel.txt")).unwrap(),
+            b"replacement"
+        );
     }
 
     #[cfg(unix)]

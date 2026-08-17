@@ -1,8 +1,10 @@
 use super::*;
 
+mod cargo_isolation;
 mod pytest_isolation;
 mod receipts;
 
+pub use cargo_isolation::ValidationExecutionSession;
 pub use pytest_isolation::run_with_managed_pytest_lease;
 use pytest_isolation::{
     insert_pytest_args_before_separator, pytest_has_pre_separator_option,

@@ -247,9 +247,46 @@ Pre-separator `@argsfile` expansion and Python `-E`, `-I`, or
 `-X pycache_prefix=...` are also rejected because they can bypass inspection or
 the managed pycache environment. Lease release is attempted after success,
 nonzero exit, collection failure, and spawn failure; a release failure fails
-validation and prevents a receipt. Receipts and invocation hashes retain the
-user's logical command and never persist the effective argv, environment,
-randomized lease id, or lease paths.
+validation and prevents a receipt. On Windows, release reads the manifest from
+the same held leaf handle that authorizes deletion and requires the full
+manifest to match the lease created for that physical process; a missing,
+replaced, or mismatched lease fails closed. Receipts and invocation hashes
+retain the user's logical command and never persist the effective argv,
+environment, randomized lease id, or lease paths.
+
+On Windows, validation also protects a self-hosted Rayman CLI from Cargo's
+running-image lock. The effective target comes from a non-empty
+`CARGO_TARGET_DIR`, or from locked/offline `cargo metadata` so workspace
+configuration and an explicit `--manifest-path` cannot silently move it. The
+running image is matched by canonical path and strong Windows file identity,
+including an NTFS hard-link alias. When that image is a direct artifact under
+the effective target, one outer validation operation creates and probes a
+unique manifest-owned Cargo target below `.RaymanCodingSkill/tmp`.
+Its internal lease label stays deliberately concise so Cargo's deeper
+build-script and package outputs retain enough path budget for MSVC tools that
+are not fully long-path compatible.
+Independent test listing and every authority repeat receive that same absolute
+target through their child-process environment, so the first build is cached
+without letting a concurrent validation relink its running CLI. The lease is
+revalidated before each spawn and released before any receipt is written;
+execution or cleanup failure therefore cannot mint evidence. Non-Windows and
+non-self-hosted executions preserve the inherited target exactly and create no
+lease. A direct Cargo command whose `--target-dir` overlaps the running image,
+or whose `--config` can make the effective target ambiguous, fails before
+spawn because those command-line settings can override environment isolation.
+Receipts continue to bind only the user's logical command: the physical target,
+lease id, and injected environment are never persisted.
+Cleanup opens the Windows workspace root once, opens every later component
+relative to its held parent with `OBJ_DONT_REPARSE`, and enumerates directories
+from their handles. Enumeration IDs are cross-checked with both legacy and
+128-bit handle identities; the lease manifest is read through the same held
+leaf handle that authorizes the transaction. Files and empty directories are
+removed only with `FileDispositionInfoEx` on their verified handles. Namespace
+renames are deliberately allowed and detected by re-opening every name from its
+parent handle, so an ancestor/leaf replacement, junction/reparse entry,
+irregular entry, malformed enumeration, or concurrent refill leaves a
+fail-closed orphan and prevents evidence instead of widening the deletion
+target.
 
 Authority accepts only a reviewed repository gate, selector-free workspace
 Cargo tests, or selector-free workspace pytest, repeated on one unchanged

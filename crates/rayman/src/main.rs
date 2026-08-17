@@ -251,9 +251,9 @@ fn run(cli: Cli) -> Result<()> {
                 }
             }
             TempAction::PytestRelease { id } => {
-                let removed = temp::release_pytest_lease(&root, &id)?;
+                temp::release_pytest_lease(&root, &id)?;
                 if json {
-                    print(&json!({ "id": id, "removed": removed }));
+                    print(&json!({ "id": id, "removed": true }));
                 } else {
                     println!("pytest lease {id} 已释放");
                 }
@@ -869,74 +869,100 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 .as_ref()
                 .map(|baseline| baseline.workspace_fingerprint.clone())
                 .unwrap_or(goal::workspace_fingerprint(root)?);
-            let (listed_tests, list_stdout_sha256, list_stderr_sha256) =
-                if let Some(list_command) = goal::validation_list_command(&parsed)? {
-                    let list_output = run_validation_command(root, &list_command)
+            let mut validation_session = goal::ValidationExecutionSession::prepare(root, &parsed)?;
+            let execution = (|| -> Result<_> {
+                let (listed_tests, list_stdout_sha256, list_stderr_sha256) =
+                    if let Some(list_command) = goal::validation_list_command(&parsed)? {
+                        let list_output = run_validation_command_in_session(
+                            root,
+                            &list_command,
+                            &validation_session,
+                        )
                         .context("独立 test list proof 执行失败；不会写入 receipt")?;
-                    if !list_output.status.success() {
+                        if !list_output.status.success() {
+                            bail!(
+                                "独立 test list proof 失败（exit={}）；不会写入 receipt",
+                                list_output.status.code().unwrap_or(-1)
+                            );
+                        }
+                        (
+                            Some(goal::listed_test_count(
+                                &list_command,
+                                &list_output.stdout,
+                                &list_output.stderr,
+                            )?),
+                            Some(sha256_hex(&list_output.stdout)),
+                            Some(sha256_hex(&list_output.stderr)),
+                        )
+                    } else {
+                        (None, None, None)
+                    };
+                let mut stable_runs = Vec::new();
+                let mut final_output = None;
+                let mut final_test_proof = None;
+                for run_index in 1..=repeat {
+                    let run_before = goal::workspace_fingerprint(root)?;
+                    if run_before != before {
                         bail!(
-                            "独立 test list proof 失败（exit={}）；不会写入 receipt",
-                            list_output.status.code().unwrap_or(-1)
+                            "authority validation 第 {run_index} 次运行前 workspace fingerprint 漂移；不会写入 receipt"
                         );
                     }
-                    (
-                        Some(goal::listed_test_count(
-                            &list_command,
-                            &list_output.stdout,
-                            &list_output.stderr,
-                        )?),
-                        Some(sha256_hex(&list_output.stdout)),
-                        Some(sha256_hex(&list_output.stderr)),
-                    )
-                } else {
-                    (None, None, None)
-                };
-            let mut stable_runs = Vec::new();
-            let mut final_output = None;
-            let mut final_test_proof = None;
-            for run_index in 1..=repeat {
-                let run_before = goal::workspace_fingerprint(root)?;
-                if run_before != before {
-                    bail!(
-                        "authority validation 第 {run_index} 次运行前 workspace fingerprint 漂移；不会写入 receipt"
-                    );
+                    let output =
+                        run_validation_command_in_session(root, &parsed, &validation_session)
+                            .with_context(|| {
+                                format!(
+                                    "验证命令第 {run_index}/{repeat} 次执行失败；不会写入 receipt"
+                                )
+                            })?;
+                    let run_after = goal::workspace_fingerprint(root)?;
+                    if !output.status.success() {
+                        bail!(
+                            "验证命令第 {run_index}/{repeat} 次失败（exit={}）；不会写入 receipt。stdout_sha256={} stderr_sha256={}",
+                            output.status.code().unwrap_or(-1),
+                            sha256_hex(&output.stdout),
+                            sha256_hex(&output.stderr)
+                        );
+                    }
+                    let test_proof = goal::validation_execution_proof(
+                        &parsed,
+                        &output.stdout,
+                        &output.stderr,
+                        listed_tests,
+                    )?;
+                    if run_before != run_after || run_after != before {
+                        bail!(
+                            "验证命令第 {run_index}/{repeat} 次修改了工作区内容；不会写入 receipt。before={} after={}",
+                            run_before,
+                            run_after
+                        );
+                    }
+                    stable_runs.push(goal::AuthorityRunReceipt {
+                        exit_code: output.status.code().unwrap_or(0),
+                        workspace_fingerprint_before: run_before,
+                        workspace_fingerprint_after: run_after,
+                        stdout_sha256: sha256_hex(&output.stdout),
+                        stderr_sha256: sha256_hex(&output.stderr),
+                    });
+                    final_test_proof = test_proof;
+                    final_output = Some(output);
                 }
-                let output = run_validation_command(root, &parsed).with_context(|| {
-                    format!("验证命令第 {run_index}/{repeat} 次执行失败；不会写入 receipt")
-                })?;
-                let run_after = goal::workspace_fingerprint(root)?;
-                if !output.status.success() {
-                    bail!(
-                        "验证命令第 {run_index}/{repeat} 次失败（exit={}）；不会写入 receipt。stdout_sha256={} stderr_sha256={}",
-                        output.status.code().unwrap_or(-1),
-                        sha256_hex(&output.stdout),
-                        sha256_hex(&output.stderr)
-                    );
-                }
-                let test_proof = goal::validation_execution_proof(
-                    &parsed,
-                    &output.stdout,
-                    &output.stderr,
+                Ok((
                     listed_tests,
-                )?;
-                if run_before != run_after || run_after != before {
-                    bail!(
-                        "验证命令第 {run_index}/{repeat} 次修改了工作区内容；不会写入 receipt。before={} after={}",
-                        run_before,
-                        run_after
-                    );
-                }
-                stable_runs.push(goal::AuthorityRunReceipt {
-                    exit_code: output.status.code().unwrap_or(0),
-                    workspace_fingerprint_before: run_before,
-                    workspace_fingerprint_after: run_after,
-                    stdout_sha256: sha256_hex(&output.stdout),
-                    stderr_sha256: sha256_hex(&output.stderr),
-                });
-                final_test_proof = test_proof;
-                final_output = Some(output);
-            }
-            let output = final_output.expect("repeat is nonzero");
+                    list_stdout_sha256,
+                    list_stderr_sha256,
+                    stable_runs,
+                    final_output.expect("repeat is nonzero"),
+                    final_test_proof,
+                ))
+            })();
+            let (
+                _listed_tests,
+                list_stdout_sha256,
+                list_stderr_sha256,
+                stable_runs,
+                output,
+                final_test_proof,
+            ) = validation_session.finish_with(execution)?;
             let after = before.clone();
             let test_proof = final_test_proof;
             let impact_scopes = goal::validation_scopes_for_impacts(&impacts);
@@ -1056,66 +1082,81 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 }
                 None => (goal::parse_validation_command(&command)?, None),
             };
-            let listed_tests = if let Some(list_command) = goal::validation_list_command(&parsed)? {
-                let output = run_validation_command(root, &list_command)
-                    .context("lifecycle authority 独立 test list proof 执行失败；不会写入 proof")?;
-                if !output.status.success() {
-                    bail!("lifecycle authority 独立 test list proof 失败；不会写入 proof");
-                }
-                Some(goal::listed_test_count(
-                    &list_command,
-                    &output.stdout,
-                    &output.stderr,
-                )?)
-            } else {
-                None
-            };
             let fingerprint = goal::workspace_fingerprint(root)?;
-            let mut runs = Vec::new();
-            for run_index in 1..=repeat {
-                if let Some(rebind) = command_rebind.as_ref() {
-                    goal::verify_maintenance_cycle_rebind_artifact(root, rebind)?;
-                }
-                let before = goal::workspace_fingerprint(root)?;
-                if before != fingerprint {
-                    bail!(
-                        "lifecycle authority 第 {run_index} 次运行前 source fingerprint 漂移；不会写入 proof"
-                    );
-                }
-                let output = run_validation_command(root, &parsed).with_context(|| {
-                    format!(
-                        "lifecycle authority 第 {run_index}/{repeat} 次执行失败；不会写入 proof"
+            let mut validation_session = goal::ValidationExecutionSession::prepare(root, &parsed)?;
+            let execution = (|| -> Result<_> {
+                let listed_tests = if let Some(list_command) =
+                    goal::validation_list_command(&parsed)?
+                {
+                    let output =
+                        run_validation_command_in_session(root, &list_command, &validation_session)
+                            .context(
+                                "lifecycle authority 独立 test list proof 执行失败；不会写入 proof",
+                            )?;
+                    if !output.status.success() {
+                        bail!("lifecycle authority 独立 test list proof 失败；不会写入 proof");
+                    }
+                    Some(goal::listed_test_count(
+                        &list_command,
+                        &output.stdout,
+                        &output.stderr,
+                    )?)
+                } else {
+                    None
+                };
+                let mut runs = Vec::new();
+                for run_index in 1..=repeat {
+                    if let Some(rebind) = command_rebind.as_ref() {
+                        goal::verify_maintenance_cycle_rebind_artifact(root, rebind)?;
+                    }
+                    let before = goal::workspace_fingerprint(root)?;
+                    if before != fingerprint {
+                        bail!(
+                            "lifecycle authority 第 {run_index} 次运行前 source fingerprint 漂移；不会写入 proof"
+                        );
+                    }
+                    let output = run_validation_command_in_session(
+                        root,
+                        &parsed,
+                        &validation_session,
                     )
-                })?;
-                if let Some(rebind) = command_rebind.as_ref() {
-                    goal::verify_maintenance_cycle_rebind_artifact(root, rebind)?;
+                    .with_context(|| {
+                        format!(
+                            "lifecycle authority 第 {run_index}/{repeat} 次执行失败；不会写入 proof"
+                        )
+                    })?;
+                    if let Some(rebind) = command_rebind.as_ref() {
+                        goal::verify_maintenance_cycle_rebind_artifact(root, rebind)?;
+                    }
+                    let after = goal::workspace_fingerprint(root)?;
+                    if !output.status.success() {
+                        bail!(
+                            "lifecycle authority 第 {run_index}/{repeat} 次失败（exit={}）；不会写入 proof",
+                            output.status.code().unwrap_or(-1)
+                        );
+                    }
+                    goal::validation_execution_proof(
+                        &parsed,
+                        &output.stdout,
+                        &output.stderr,
+                        listed_tests,
+                    )?;
+                    if before != after || after != fingerprint {
+                        bail!(
+                            "lifecycle authority 第 {run_index}/{repeat} 次修改了工作区；不会写入 proof"
+                        );
+                    }
+                    runs.push(goal::AuthorityRunReceipt {
+                        exit_code: output.status.code().unwrap_or(0),
+                        workspace_fingerprint_before: before,
+                        workspace_fingerprint_after: after,
+                        stdout_sha256: sha256_hex(&output.stdout),
+                        stderr_sha256: sha256_hex(&output.stderr),
+                    });
                 }
-                let after = goal::workspace_fingerprint(root)?;
-                if !output.status.success() {
-                    bail!(
-                        "lifecycle authority 第 {run_index}/{repeat} 次失败（exit={}）；不会写入 proof",
-                        output.status.code().unwrap_or(-1)
-                    );
-                }
-                goal::validation_execution_proof(
-                    &parsed,
-                    &output.stdout,
-                    &output.stderr,
-                    listed_tests,
-                )?;
-                if before != after || after != fingerprint {
-                    bail!(
-                        "lifecycle authority 第 {run_index}/{repeat} 次修改了工作区；不会写入 proof"
-                    );
-                }
-                runs.push(goal::AuthorityRunReceipt {
-                    exit_code: output.status.code().unwrap_or(0),
-                    workspace_fingerprint_before: before,
-                    workspace_fingerprint_after: after,
-                    stdout_sha256: sha256_hex(&output.stdout),
-                    stderr_sha256: sha256_hex(&output.stderr),
-                });
-            }
+                Ok(runs)
+            })();
+            let runs = validation_session.finish_with(execution)?;
             let invocation_sha256 = goal::replacement_authority_invocation_sha256_with_rebind(
                 &command,
                 &id,
@@ -1234,6 +1275,16 @@ fn run_validation_command(
     root: &Path,
     command: &goal::ParsedValidationCommand,
 ) -> Result<std::process::Output> {
+    let mut session = goal::ValidationExecutionSession::prepare(root, command)?;
+    let output = run_validation_command_in_session(root, command, &session);
+    session.finish_with(output)
+}
+
+fn run_validation_command_in_session(
+    root: &Path,
+    command: &goal::ParsedValidationCommand,
+    session: &goal::ValidationExecutionSession,
+) -> Result<std::process::Output> {
     let mut executable = command.clone();
     if let Some(script) = goal::resolve_live_powershell_script(root, command)? {
         // The receipt preserves the user's canonical logical command text. The
@@ -1244,6 +1295,7 @@ fn run_validation_command(
     goal::run_with_managed_pytest_lease(root, &executable, |effective, environment| {
         let mut process = ProcessCommand::new(&effective.program);
         process.args(&effective.args).current_dir(root);
+        session.apply(&mut process)?;
         if let Some(environment) = environment {
             // Parent-level pytest configuration is untrusted input. The lease
             // owns every temp/cache path, so inherited addopts must not be able
