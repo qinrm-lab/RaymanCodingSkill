@@ -1292,15 +1292,17 @@ fn run_validation_command_in_session(
         // was proven equal to the live identity that passed preflight.
         executable.args[2] = script.launch_argument().to_owned();
     }
-    goal::run_with_managed_pytest_lease(root, &executable, |effective, environment| {
+    goal::run_with_managed_validation_temp(root, &executable, |effective, environment| {
         let mut process = ProcessCommand::new(&effective.program);
         process.args(&effective.args).current_dir(root);
         session.apply(&mut process)?;
         if let Some(environment) = environment {
-            // Parent-level pytest configuration is untrusted input. The lease
-            // owns every temp/cache path, so inherited addopts must not be able
-            // to inject a second basetemp, cache_dir, or non-executing mode.
-            process.env_remove("PYTEST_ADDOPTS");
+            if goal::test_invocation_requires_pytest_isolation(effective) {
+                // Parent-level pytest configuration is untrusted input. The
+                // lease owns every temp/cache path, so inherited addopts must
+                // not inject a second basetemp, cache_dir, or non-executing mode.
+                process.env_remove("PYTEST_ADDOPTS");
+            }
             process.envs(environment);
         }
         process

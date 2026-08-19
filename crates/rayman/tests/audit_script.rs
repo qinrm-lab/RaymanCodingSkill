@@ -302,6 +302,9 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
         .expect("audit script must be readable UTF-8");
     let check_repo = fs::read_to_string(repo_root.join("scripts/check-repo.ps1"))
         .expect("check-repo script must be readable UTF-8");
+    let codex_temp_config =
+        fs::read_to_string(repo_root.join("scripts/configure-codex-validation-temp.ps1"))
+            .expect("Codex validation temp configurator must be readable UTF-8");
     let repository_quality = fs::read_to_string(repo_root.join("scripts/repository-quality.ps1"))
         .expect("repository quality provider must be readable UTF-8");
     let release_closeout = fs::read_to_string(repo_root.join("scripts/release-closeout.ps1"))
@@ -311,6 +314,14 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
             .expect("release verifier must be readable UTF-8");
 
     assert!(!source.contains("RAYMAN_AUDIT_SELF_TEST"));
+    assert!(codex_temp_config.contains("RAYMAN_VALIDATION_TEMP_ROOT"));
+    assert!(codex_temp_config.contains("TEMP"));
+    assert!(codex_temp_config.contains("TMPDIR"));
+    assert!(codex_temp_config.contains(r"E:\codex-sandbox\temp"));
+    assert!(codex_temp_config.contains(r"E:\codex-sandbox\rayman-validation"));
+    assert!(!codex_temp_config.contains(r"E:\codex-cache\cargo\codex-sandbox"));
+    assert!(codex_temp_config.contains("does not cover managed root"));
+    assert!(check_repo.contains("'configure-codex-validation-temp.ps1') -SelfTest"));
     assert!(source.contains("switch ($PSCmdlet.ParameterSetName)"));
     assert!(source.contains("-PrepareAuditTools:$false grants no provisioning authority"));
     assert!(source.contains("-IncludeCompleteAuditTools ($PSCmdlet.ParameterSetName -eq 'Audit')"));

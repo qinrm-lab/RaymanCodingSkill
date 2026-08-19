@@ -1,10 +1,14 @@
 use super::*;
 
 mod cargo_isolation;
+mod process_temp;
 mod pytest_isolation;
 mod receipts;
 
 pub use cargo_isolation::ValidationExecutionSession;
+pub use process_temp::{
+    run_with_managed_validation_temp, test_invocation_requires_pytest_isolation,
+};
 pub use pytest_isolation::run_with_managed_pytest_lease;
 use pytest_isolation::{
     insert_pytest_args_before_separator, pytest_has_pre_separator_option,

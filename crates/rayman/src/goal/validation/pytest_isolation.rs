@@ -1,11 +1,80 @@
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Output;
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use sha2::{Digest, Sha256};
 
 use super::{ParsedValidationCommand, pytest_invocation, python_pytest_module_index};
+
+struct ManagedPytestLeaseGuard {
+    root: PathBuf,
+    storage: ManagedPytestLeaseStorage,
+    lease: Option<crate::temp::ManagedPytestLease>,
+}
+
+#[derive(Clone, Copy)]
+#[cfg_attr(not(test), allow(dead_code))]
+enum ManagedPytestLeaseStorage {
+    Workspace,
+    External,
+}
+
+impl ManagedPytestLeaseGuard {
+    fn prepare(root: &Path, storage: ManagedPytestLeaseStorage) -> Result<Self> {
+        let lease = match storage {
+            ManagedPytestLeaseStorage::Workspace => {
+                crate::temp::create_managed_pytest_lease(root, "goal-validation")?
+            }
+            ManagedPytestLeaseStorage::External => {
+                crate::temp::create_external_managed_pytest_lease(root, "p")?
+            }
+        };
+        Ok(Self {
+            root: root.to_path_buf(),
+            storage,
+            lease: Some(lease),
+        })
+    }
+
+    fn lease(&self) -> Result<&crate::temp::PytestLease> {
+        let lease = self
+            .lease
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("pytest lease 已释放"))?;
+        lease.verify_current()?;
+        Ok(lease.lease())
+    }
+
+    fn finish(&mut self) -> Result<()> {
+        let Some(lease) = self.lease.take() else {
+            return Ok(());
+        };
+        match self.storage {
+            ManagedPytestLeaseStorage::Workspace => {
+                crate::temp::release_managed_pytest_lease(&self.root, &lease)
+            }
+            ManagedPytestLeaseStorage::External => {
+                crate::temp::release_external_managed_pytest_lease(&self.root, &lease)
+            }
+        }
+    }
+}
+
+impl Drop for ManagedPytestLeaseGuard {
+    fn drop(&mut self) {
+        if let Some(lease) = self.lease.take() {
+            let _ = match self.storage {
+                ManagedPytestLeaseStorage::Workspace => {
+                    crate::temp::release_managed_pytest_lease(&self.root, &lease)
+                }
+                ManagedPytestLeaseStorage::External => {
+                    crate::temp::release_external_managed_pytest_lease(&self.root, &lease)
+                }
+            };
+        }
+    }
+}
 
 fn pytest_argument_start(command: &ParsedValidationCommand) -> Option<usize> {
     if !pytest_invocation(command) {
@@ -224,6 +293,93 @@ pub fn run_with_managed_pytest_lease(
     command: &ParsedValidationCommand,
     runner: impl FnOnce(&ParsedValidationCommand, Option<&BTreeMap<String, String>>) -> Result<Output>,
 ) -> Result<Output> {
+    run_with_managed_pytest_lease_storage(
+        root,
+        command,
+        ManagedPytestLeaseStorage::Workspace,
+        runner,
+    )
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+pub(super) fn run_with_external_managed_pytest_lease(
+    root: &Path,
+    command: &ParsedValidationCommand,
+    runner: impl FnOnce(&ParsedValidationCommand, Option<&BTreeMap<String, String>>) -> Result<Output>,
+) -> Result<Output> {
+    run_with_managed_pytest_lease_storage(
+        root,
+        command,
+        ManagedPytestLeaseStorage::External,
+        runner,
+    )
+}
+
+pub(super) fn run_with_external_managed_pytest_lease_at_host_root(
+    host_root: &crate::temp::ValidationProcessStateRoot,
+    command: &ParsedValidationCommand,
+    runner: impl FnOnce(&ParsedValidationCommand, Option<&BTreeMap<String, String>>) -> Result<Output>,
+) -> Result<Output> {
+    if !pytest_invocation(command) {
+        host_root.verify_current()?;
+        let result = runner(command, None);
+        host_root.verify_current()?;
+        return result;
+    }
+    validate_pytest_isolation_overrides(command)?;
+    host_root.verify_current()?;
+    let lease = crate::temp::create_external_managed_pytest_lease_at_host_root(host_root, "p")?;
+    let execution = (|| -> Result<Output> {
+        host_root.verify_current()?;
+        lease.verify_current_at_host_root(host_root)?;
+        host_root.verify_current()?;
+        let logical = lease.lease();
+        let executable = managed_pytest_command(command, &logical.pytest_args)?;
+        runner(&executable, Some(&logical.environment))
+    })();
+    let cleanup =
+        crate::temp::release_external_managed_pytest_lease_at_host_root(host_root, &lease);
+    let root_recheck = host_root.verify_current();
+    match (execution, cleanup, root_recheck) {
+        (Ok(output), Ok(()), Ok(())) => Ok(output),
+        (Ok(output), Err(cleanup_error), Ok(())) if output.status.success() => bail!(
+            "pytest 验证结束后无法释放受管 lease；stdout_sha256={} stderr_sha256={}: {cleanup_error:#}",
+            sha256_hex(&output.stdout),
+            sha256_hex(&output.stderr)
+        ),
+        (Ok(output), Err(cleanup_error), Ok(())) => bail!(
+            "pytest 验证进程非零退出（exit={}）且 lease 释放失败；stdout_sha256={} stderr_sha256={}: {cleanup_error:#}",
+            output.status.code().unwrap_or(-1),
+            sha256_hex(&output.stdout),
+            sha256_hex(&output.stderr)
+        ),
+        (Err(error), Ok(()), Ok(())) => Err(error),
+        (Err(error), Err(cleanup_error), Ok(())) => bail!(
+            "pytest 执行准备或启动失败: {error:#}; lease 释放也失败: {cleanup_error:#}"
+        ),
+        (Ok(_), Ok(()), Err(root_error)) => Err(root_error.context(
+            "pytest validation child completed but validation host-temp root identity changed",
+        )),
+        (Ok(output), Err(cleanup_error), Err(root_error)) => Err(root_error).context(format!(
+            "pytest validation child completed with lease cleanup failure; stdout_sha256={} stderr_sha256={}: {cleanup_error:#}",
+            sha256_hex(&output.stdout),
+            sha256_hex(&output.stderr)
+        )),
+        (Err(error), Ok(()), Err(root_error)) => Err(error).context(format!(
+            "validation host-temp root identity changed during pytest execution: {root_error:#}"
+        )),
+        (Err(error), Err(cleanup_error), Err(root_error)) => Err(error).context(format!(
+            "validation process lease cleanup and host-temp root identity both failed: cleanup={cleanup_error:#}; root={root_error:#}"
+        )),
+    }
+}
+
+fn run_with_managed_pytest_lease_storage(
+    root: &Path,
+    command: &ParsedValidationCommand,
+    storage: ManagedPytestLeaseStorage,
+    runner: impl FnOnce(&ParsedValidationCommand, Option<&BTreeMap<String, String>>) -> Result<Output>,
+) -> Result<Output> {
     if !pytest_invocation(command) {
         return runner(command, None);
     }
@@ -231,12 +387,13 @@ pub fn run_with_managed_pytest_lease(
 
     // create_pytest_lease finishes by verifying the manifest and probing every
     // directory. The physical command is built only from that verified object.
-    let lease = crate::temp::create_pytest_lease(root, "goal-validation")?;
+    let mut guard = ManagedPytestLeaseGuard::prepare(root, storage)?;
+    let lease = guard.lease()?;
     // Keep command construction inside the operation result. Even an internal
     // construction failure after lease creation must pass through cleanup.
     let execution = managed_pytest_command(command, &lease.pytest_args)
         .and_then(|executable| runner(&executable, Some(&lease.environment)));
-    let cleanup = crate::temp::release_managed_pytest_lease(root, &lease);
+    let cleanup = guard.finish();
 
     match (execution, cleanup) {
         (Ok(output), Ok(())) => Ok(output),
@@ -442,6 +599,143 @@ mod tests {
     }
 
     #[test]
+    fn external_execution_uses_a_marker_free_tree_and_releases_on_success() {
+        let root = tempfile::tempdir().unwrap();
+        let command = super::super::parse_validation_command("pytest -q").unwrap();
+        let mut observed_root = None;
+
+        let output =
+            run_with_external_managed_pytest_lease(root.path(), &command, |_, environment| {
+                let temp = environment
+                    .and_then(|values| values.get("TEMP"))
+                    .expect("managed TEMP");
+                let lease_root = PathBuf::from(temp).parent().unwrap().to_path_buf();
+                assert!(lease_root.starts_with(root.path().join("p")));
+                assert!(!root.path().join(".RaymanCodingSkill").exists());
+                observed_root = Some(lease_root);
+                Ok(process_output(0))
+            })
+            .unwrap();
+
+        assert!(output.status.success());
+        assert!(!observed_root.expect("lease root was observed").exists());
+        assert!(!root.path().join(".RaymanCodingSkill").exists());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn external_pre_release_leaf_replacement_blocks_success() {
+        let root = tempfile::tempdir().unwrap();
+        let command = super::super::parse_validation_command("pytest -q").unwrap();
+        let mut observed = None;
+
+        let error =
+            run_with_external_managed_pytest_lease(root.path(), &command, |_, environment| {
+                let temp = environment
+                    .and_then(|values| values.get("TEMP"))
+                    .expect("managed TEMP");
+                let lease_root = PathBuf::from(temp).parent().unwrap().to_path_buf();
+                let manifest = std::fs::read(lease_root.join("lease.json")).unwrap();
+                let id = lease_root.file_name().unwrap().to_string_lossy();
+                let displaced = lease_root.with_file_name(format!("{id}-displaced"));
+                std::fs::rename(&lease_root, &displaced).unwrap();
+                std::fs::create_dir(&lease_root).unwrap();
+                for name in ["b", "c", "t", "y", "n"] {
+                    std::fs::create_dir(lease_root.join(name)).unwrap();
+                }
+                std::fs::write(lease_root.join("lease.json"), manifest).unwrap();
+                observed = Some((displaced, lease_root));
+                Ok(process_output(0))
+            })
+            .unwrap_err();
+
+        assert!(format!("{error:#}").contains("创建目录"), "{error:#}");
+        let (displaced, replacement) = observed.expect("replacement paths");
+        assert!(
+            displaced.is_dir() && replacement.is_dir(),
+            "identity mismatch must preserve both the original object and replacement"
+        );
+        assert!(!root.path().join(".RaymanCodingSkill").exists());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn external_pre_spawn_leaf_replacement_blocks_runner() {
+        let root = tempfile::tempdir().unwrap();
+        let mut guard =
+            ManagedPytestLeaseGuard::prepare(root.path(), ManagedPytestLeaseStorage::External)
+                .unwrap();
+        let lease = guard.lease().unwrap().clone();
+        let original = PathBuf::from(&lease.root);
+        let displaced = original.with_file_name(format!("{}-displaced", lease.id));
+        std::fs::rename(&original, &displaced).unwrap();
+        std::fs::create_dir(&original).unwrap();
+        for name in ["b", "c", "t", "y", "n"] {
+            std::fs::create_dir(original.join(name)).unwrap();
+        }
+        crate::file_io::write_json(&original.join("lease.json"), &lease).unwrap();
+
+        let mut runner_called = false;
+        let error = guard
+            .lease()
+            .map(|_| {
+                runner_called = true;
+            })
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("创建目录"), "{error:#}");
+        assert!(
+            !runner_called,
+            "runner must not receive a replacement lease"
+        );
+        assert!(guard.finish().is_err());
+        assert!(displaced.is_dir() && original.is_dir());
+        assert!(!root.path().join(".RaymanCodingSkill").exists());
+    }
+
+    #[test]
+    fn panic_unwind_uses_the_best_effort_release_guard() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join(".RaymanCodingSkill")).unwrap();
+        let command = super::super::parse_validation_command("pytest -q").unwrap();
+        let mut observed_root = None;
+
+        let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = run_with_managed_pytest_lease(root.path(), &command, |_, environment| {
+                let temp = environment
+                    .and_then(|values| values.get("TEMP"))
+                    .expect("managed TEMP");
+                observed_root = Some(PathBuf::from(temp).parent().unwrap().to_path_buf());
+                panic!("simulated validation panic");
+            });
+        }));
+
+        assert!(panic.is_err());
+        assert!(!observed_root.expect("lease root was observed").exists());
+    }
+
+    #[test]
+    fn external_panic_unwind_releases_the_same_storage_kind() {
+        let root = tempfile::tempdir().unwrap();
+        let command = super::super::parse_validation_command("pytest -q").unwrap();
+        let mut observed_root = None;
+
+        let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ =
+                run_with_external_managed_pytest_lease(root.path(), &command, |_, environment| {
+                    let temp = environment
+                        .and_then(|values| values.get("TEMP"))
+                        .expect("managed TEMP");
+                    observed_root = Some(PathBuf::from(temp).parent().unwrap().to_path_buf());
+                    panic!("simulated external validation panic");
+                });
+        }));
+
+        assert!(panic.is_err());
+        assert!(!observed_root.expect("lease root was observed").exists());
+        assert!(!root.path().join(".RaymanCodingSkill").exists());
+    }
+
+    #[test]
     fn missing_managed_lease_blocks_a_successful_result() {
         let root = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(root.path().join(".RaymanCodingSkill")).unwrap();
@@ -459,7 +753,10 @@ mod tests {
         let rendered = format!("{error:#}");
 
         assert!(rendered.contains("无法释放受管 lease"), "{rendered}");
-        assert!(rendered.contains("消失"), "{rendered}");
+        assert!(
+            rendered.contains("消失") || rendered.contains("系统找不到指定的文件"),
+            "{rendered}"
+        );
     }
 
     #[test]

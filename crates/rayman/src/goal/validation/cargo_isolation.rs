@@ -7,8 +7,7 @@ use anyhow::{Context, Result, bail};
 
 use super::{ParsedValidationCommand, cargo_subcommand};
 use crate::temp::{
-    CargoTargetLease, create_cargo_target_lease, release_cargo_target_lease,
-    verify_cargo_target_lease,
+    ManagedCargoTargetLease, create_managed_cargo_target_lease, release_managed_cargo_target_lease,
 };
 
 const CARGO_TARGET_DIR: &str = "CARGO_TARGET_DIR";
@@ -21,7 +20,7 @@ const CARGO_TARGET_DIR: &str = "CARGO_TARGET_DIR";
 pub struct ValidationExecutionSession {
     root: PathBuf,
     inherited_target: Option<OsString>,
-    lease: Option<CargoTargetLease>,
+    lease: Option<ManagedCargoTargetLease>,
 }
 
 impl ValidationExecutionSession {
@@ -116,7 +115,7 @@ impl ValidationExecutionSession {
             // appends deep build-script/package/hash components below target.
             // The manifest and exclusive id carry ownership; a verbose label
             // only consumes the compatibility budget without adding authority.
-            Some(create_cargo_target_lease(root, "cargo")?)
+            Some(create_managed_cargo_target_lease(root, "c")?)
         } else {
             None
         };
@@ -132,12 +131,10 @@ impl ValidationExecutionSession {
     /// reuse and preserves an empty inherited value exactly.
     pub fn apply(&self, process: &mut Command) -> Result<()> {
         process.env_remove(CARGO_TARGET_DIR);
-        if let Some(lease) = &self.lease {
-            let verified = verify_cargo_target_lease(&self.root, &lease.id)?;
-            if verified != *lease {
-                bail!("Cargo target lease 复验身份发生变化: {}", lease.id);
-            }
-            process.env(CARGO_TARGET_DIR, &verified.target_dir);
+        if let Some(managed) = &self.lease {
+            managed.verify_current()?;
+            let lease = managed.lease();
+            process.env(CARGO_TARGET_DIR, &lease.target_dir);
         } else if let Some(value) = &self.inherited_target {
             process.env(CARGO_TARGET_DIR, value);
         }
@@ -148,7 +145,7 @@ impl ValidationExecutionSession {
         let Some(lease) = self.lease.take() else {
             return Ok(());
         };
-        release_cargo_target_lease(&self.root, &lease)?;
+        release_managed_cargo_target_lease(&self.root, &lease)?;
         Ok(())
     }
 
@@ -173,14 +170,14 @@ impl ValidationExecutionSession {
     fn managed_target_dir(&self) -> Option<&Path> {
         self.lease
             .as_ref()
-            .map(|lease| Path::new(&lease.target_dir))
+            .map(|lease| Path::new(&lease.lease().target_dir))
     }
 }
 
 impl Drop for ValidationExecutionSession {
     fn drop(&mut self) {
         if let Some(lease) = self.lease.take() {
-            let _ = release_cargo_target_lease(&self.root, &lease);
+            let _ = release_managed_cargo_target_lease(&self.root, &lease);
         }
     }
 }
@@ -230,6 +227,17 @@ fn resolve_target_dir(root: &Path, value: Option<&OsStr>) -> PathBuf {
     }
 }
 
+fn run_cargo_metadata_process(root: &Path, process: &mut Command) -> Result<std::process::Output> {
+    crate::temp::run_with_validation_process_lease(root, "m", |environment| {
+        if let Some(environment) = environment {
+            process.envs(environment);
+        }
+        process
+            .output()
+            .context("无法执行 cargo metadata 以确定 Windows 自托管验证 target")
+    })
+}
+
 fn cargo_reported_target_dir(
     root: &Path,
     command: &ParsedValidationCommand,
@@ -265,9 +273,7 @@ fn cargo_reported_target_dir(
     if let Some(manifest) = manifest_paths.first() {
         process.args(["--manifest-path", manifest]);
     }
-    let output = process
-        .output()
-        .context("无法执行 cargo metadata 以确定 Windows 自托管验证 target")?;
+    let output = run_cargo_metadata_process(root, &mut process)?;
     if !output.status.success() {
         bail!(
             "cargo metadata 无法证明 Windows 自托管验证的有效 target（exit={}）；拒绝回退到猜测路径",
@@ -494,6 +500,59 @@ fn same_windows_file_object(
 mod tests {
     use super::*;
 
+    #[cfg(windows)]
+    #[test]
+    fn validation_process_temp_probe_child() {
+        if std::env::var("RAYMAN_CARGO_METADATA_TEMP_PROBE").as_deref() == Ok("1") {
+            println!(
+                "RAYMAN_CARGO_METADATA_TEMP={}",
+                std::env::var("TEMP").expect("managed TEMP")
+            );
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn internal_cargo_metadata_process_uses_and_releases_host_temp() {
+        let workspace = tempfile::tempdir_in(std::env::current_dir().unwrap()).unwrap();
+        let root = workspace.path();
+        let test_name = format!("{}::validation_process_temp_probe_child", module_path!());
+        let test_name = test_name
+            .strip_prefix("rayman::")
+            .unwrap_or(&test_name)
+            .to_string();
+        let mut process = Command::new(std::env::current_exe().unwrap());
+        process
+            .arg(&test_name)
+            .args(["--exact", "--nocapture"])
+            .env("RAYMAN_CARGO_METADATA_TEMP_PROBE", "1");
+
+        let output = run_cargo_metadata_process(root, &mut process).unwrap();
+        assert!(
+            output.status.success(),
+            "child stderr={}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        let process_temp = stdout
+            .lines()
+            .find_map(|line| line.strip_prefix("RAYMAN_CARGO_METADATA_TEMP="))
+            .map(PathBuf::from)
+            .unwrap_or_else(|| panic!("missing managed temp marker in {stdout:?}"));
+        let host_root = crate::temp::validation_process_state_root(root).unwrap();
+        let host_root = PathBuf::from(crate::pathfmt::display_path(&host_root));
+        assert!(
+            process_temp.starts_with(host_root.join("v")),
+            "metadata temp escaped host root: {}",
+            process_temp.display()
+        );
+        assert!(
+            !process_temp.exists(),
+            "metadata temp lease was not released: {}",
+            process_temp.display()
+        );
+    }
+
     fn command(text: &str) -> ParsedValidationCommand {
         super::super::parse_validation_command(text).unwrap()
     }
@@ -718,7 +777,7 @@ mod tests {
         let mut tampered =
             ValidationExecutionSession::prepare_for(root, &parsed, &executable, None, true)
                 .unwrap();
-        let lease = tampered.lease.as_ref().unwrap().clone();
+        let lease = tampered.lease.as_ref().unwrap().lease().clone();
         let mut altered = lease.clone();
         altered.target_dir = root.join("outside").display().to_string();
         crate::file_io::write_json(&Path::new(&lease.root).join("lease.json"), &altered).unwrap();
@@ -737,15 +796,73 @@ mod tests {
         let mut session =
             ValidationExecutionSession::prepare_for(root, &parsed, &executable, None, true)
                 .unwrap();
-        let lease_root = PathBuf::from(&session.lease.as_ref().unwrap().root);
+        let lease_root = PathBuf::from(&session.lease.as_ref().unwrap().lease().root);
         fs::remove_dir_all(&lease_root).unwrap();
 
         let error = session.finish_with(Ok(())).unwrap_err();
         assert!(error.to_string().contains("不会写入 receipt"), "{error:#}");
         assert!(
             format!("{error:#}").contains("已验证释放前消失")
-                || format!("{error:#}").contains("不存在"),
+                || format!("{error:#}").contains("不存在")
+                || format!("{error:#}").contains("系统找不到指定的文件"),
             "{error:#}"
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn pre_release_target_leaf_replacement_blocks_success_receipt() {
+        let workspace = tempfile::tempdir().unwrap();
+        let root = workspace.path();
+        let target = root.join("target");
+        let executable = fake_rayman(root, &target);
+        let parsed = command("cargo test --workspace --all-targets");
+        let mut session =
+            ValidationExecutionSession::prepare_for(root, &parsed, &executable, None, true)
+                .unwrap();
+        let lease = session.lease.as_ref().unwrap().lease().clone();
+        let original = PathBuf::from(&lease.root);
+        let displaced = original.with_file_name(format!("{}-displaced", lease.id));
+        fs::rename(&original, &displaced).unwrap();
+        fs::create_dir(&original).unwrap();
+        fs::create_dir(original.join("t")).unwrap();
+        crate::file_io::write_json(&original.join("lease.json"), &lease).unwrap();
+
+        let error = session.finish_with(Ok(())).unwrap_err();
+        assert!(error.to_string().contains("不会写入 receipt"), "{error:#}");
+        assert!(format!("{error:#}").contains("创建目录"), "{error:#}");
+        assert!(
+            displaced.is_dir() && original.is_dir(),
+            "identity mismatch must preserve both the original target and replacement"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn pre_spawn_target_leaf_replacement_blocks_child_setup() {
+        let workspace = tempfile::tempdir().unwrap();
+        let root = workspace.path();
+        let target = root.join("target");
+        let executable = fake_rayman(root, &target);
+        let parsed = command("cargo test --workspace --all-targets");
+        let mut session =
+            ValidationExecutionSession::prepare_for(root, &parsed, &executable, None, true)
+                .unwrap();
+        let lease = session.lease.as_ref().unwrap().lease().clone();
+        let original = PathBuf::from(&lease.root);
+        let displaced = original.with_file_name(format!("{}-displaced", lease.id));
+        fs::rename(&original, &displaced).unwrap();
+        fs::create_dir(&original).unwrap();
+        fs::create_dir(original.join("t")).unwrap();
+        crate::file_io::write_json(&original.join("lease.json"), &lease).unwrap();
+
+        let mut child = Command::new("must-not-spawn-after-target-replacement");
+        let error = session.apply(&mut child).unwrap_err();
+        assert!(format!("{error:#}").contains("创建目录"), "{error:#}");
+        assert!(
+            session.finish_with(Ok(())).is_err(),
+            "replacement must also prevent later cleanup authority"
+        );
+        assert!(displaced.is_dir() && original.is_dir());
     }
 }

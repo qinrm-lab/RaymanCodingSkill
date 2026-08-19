@@ -98,9 +98,24 @@
       "reason": "Managed-state containment is a shared security boundary by design; the full root suite and release self-dogfood validate all state consumers together."
     },
     {
+      "path": "crates/rayman/src/state_paths.rs",
+      "kind": "large_file",
+      "reason": "Windows no-follow directory handles, strong identities, handle-relative probes, and guarded cleanup deliberately share private invariants; splitting them would widen the security surface and complicate ordering review. Focused state_paths replacement tests, the full root suite, and release self-dogfood cover the boundary."
+    },
+    {
       "path": "crates/rayman/src/temp.rs",
       "kind": "high_fan_in",
       "reason": "Managed scratch and manifest-owned pytest leases intentionally share one temp contract across the CLI, autosave, state audit, and goal validation; focused temp and pytest-isolation tests, cross-process CLI tests, and the full root suite cover all consumers."
+    },
+    {
+      "path": "crates/rayman/src/temp.rs",
+      "kind": "large_file",
+      "reason": "Managed pytest, Cargo, and validation leases intentionally share one private manifest, identity, and cleanup contract; splitting it would duplicate release-sensitive logic. Focused temp and isolation tests, cross-process CLI tests, the full root suite, and release self-dogfood cover all paths."
+    },
+    {
+      "path": "crates/rayman/src/temp/validation_process.rs",
+      "kind": "large_file",
+      "reason": "Windows host-root binding, child publication, manifest sealing, and fail-closed cleanup must remain co-located to preserve identity revalidation order. Focused validation-process tests, Cargo and pytest isolation tests, the full root suite, and release self-dogfood cover this lifecycle."
     },
     {
       "path": "crates/rayman/src/source_state.rs",

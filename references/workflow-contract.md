@@ -254,6 +254,68 @@ replaced, or mismatched lease fails closed. Receipts and invocation hashes
 retain the user's logical command and never persist the effective argv,
 environment, randomized lease id, or lease paths.
 
+On native Windows, every other Rayman-managed validation child also receives a
+fresh manifest-owned host-temp lease, including test listing, every repeat,
+goal progress, repository gates, and the internal `cargo metadata` used before
+self-hosted Cargo isolation. `TEMP`, `TMP`, and `TMPDIR` all name the probed
+leaf for that one physical process. Pytest does not create a redundant generic
+lease: its existing richer lease is relocated to the same external host root
+and remains the sole owner of its temp, basetemp, cache, and pycache paths. The
+external root contains two marker-free sibling trees, `v/<id>` for generic
+validation children and `p/<id>` for external pytest; these compact physical
+aliases are manifest-owned implementation details, not an operator-facing
+path contract. It never creates a `.RaymanCodingSkill` directory. A configured
+root nested below a pre-existing
+`.RaymanCodingSkill` or `.git` marker is rejected before any lease directory is
+created, so temporary descendants cannot mistake the cleanup authority root for
+a workspace.
+Inside each generic Windows validation lease, compact `t` and `n` directories
+are separate siblings bound by the same manifest and held leaf identity. The
+physical child receives `TEMP`/`TMP`/`TMPDIR=<lease>/t` and
+`RAYMAN_VALIDATION_TEMP_ROOT=<lease>/n`. A test may therefore
+create a temporary workspace below its process temp and run Rayman recursively
+without making the cleanup-authority root an ancestor of that workspace. Each
+nested Rayman process repeats the same layout one level deeper; the outer lease
+still owns and releases the whole tree. External managed pytest uses compact
+`b`, `c`, `t`, `y`, and `n` directories for basetemp, cache, process temp,
+pycache, and nested validation respectively. The operator-only Windows
+workspace-local pytest lease retains its compatibility layout
+`basetemp`, `cache`, `temp`, `pycache`, and `nested-validation`; it does not
+publish its marker-contained nested-validation directory as validation authority.
+Release completes before output parsing or receipt creation; success, nonzero
+exit, spawn failure, panic unwind, manifest mismatch, or cleanup failure can
+therefore never turn an unverified or live lease into evidence.
+Every Windows validation-owned lease leaf is created exclusively and its
+no-follow directory handle remains open from creation through child exit.
+Release compares both legacy and 128-bit strong identity from that held object
+with the current parent-handle-opened leaf before reading the manifest or
+deleting anything. A child that renames the original leaf and clones its
+manifest into a same-named replacement therefore leaves both objects
+fail-closed and cannot mint a receipt. The same creation-identity token also
+protects the self-hosted Cargo target lease.
+
+The durable local-Codex default uses two sibling directories below the dedicated
+`E:\codex-sandbox` data root: `TEMP`, `TMP`, and `TMPDIR` use
+`E:\codex-sandbox\temp`, while `RAYMAN_VALIDATION_TEMP_ROOT` uses
+`E:\codex-sandbox\rayman-validation`. Neither may be `E:\` or another volume
+root. Keeping ordinary process temp separate from the Rayman lease root allows a
+temporary workspace to remain disjoint from the cleanup authority that validates
+it. The user-level `~/.codex/config.toml` may set these values for all newly
+started local Codex projects. The active permission profile must independently
+grant write access to each managed leaf, either directly or through its dedicated
+non-volume parent; shell environment values do not grant filesystem permission.
+Use
+`scripts/configure-codex-validation-temp.ps1 -Check|-Yes` to inspect or apply
+this contract. The script must preserve unrelated TOML bytes and structure,
+refuse unknown or incompatible permission layouts, back up and roll back a
+concurrent or invalid write, and never enable Full access, reset ACLs, or grant
+the whole E drive. A changed user-level configuration takes effect only after
+Codex is fully restarted. Rayman still resolves, probes, strongly revalidates,
+and releases every physical-process lease at runtime; it rejects an empty,
+relative, reparse-backed, volume-root, workspace-overlapping, or inaccessible
+configured root instead of silently falling back. Non-Windows validation keeps
+its inherited process environment unchanged.
+
 On Windows, validation also protects a self-hosted Rayman CLI from Cargo's
 running-image lock. The effective target comes from a non-empty
 `CARGO_TARGET_DIR`, or from locked/offline `cargo metadata` so workspace
@@ -261,10 +323,10 @@ configuration and an explicit `--manifest-path` cannot silently move it. The
 running image is matched by canonical path and strong Windows file identity,
 including an NTFS hard-link alias. When that image is a direct artifact under
 the effective target, one outer validation operation creates and probes a
-unique manifest-owned Cargo target below `.RaymanCodingSkill/tmp`.
-Its internal lease label stays deliberately concise so Cargo's deeper
-build-script and package outputs retain enough path budget for MSVC tools that
-are not fully long-path compatible.
+unique manifest-owned Cargo target at `.RaymanCodingSkill/tmp/c/<id>/t`.
+Its root, target child, and internal lease label stay deliberately concise so
+Cargo's deeper build-script and package outputs retain enough path budget for
+MSVC tools that are not fully long-path compatible.
 Independent test listing and every authority repeat receive that same absolute
 target through their child-process environment, so the first build is cached
 without letting a concurrent validation relink its running CLI. The lease is

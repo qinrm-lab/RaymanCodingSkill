@@ -19,6 +19,7 @@ $auditIntegrationTestName = 'audit_self_test_exercises_only_the_audit_contract'
 & (Join-Path $PSScriptRoot 'install-rayman.ps1') -SelfTest
 & (Join-Path $PSScriptRoot 'verify-release-contract.ps1') -SelfTest
 & (Join-Path $PSScriptRoot 'repair-rayman-powershell-profile.ps1') -SelfTest
+& (Join-Path $PSScriptRoot 'configure-codex-validation-temp.ps1') -SelfTest
 # Runs the audit script self-test plus the isolated-advisory-DB dependency
 # policy checks before the multi-minute fmt/clippy/test stages.
 & (Join-Path $PSScriptRoot 'audit-repository.ps1') -DependencyPolicyOnly

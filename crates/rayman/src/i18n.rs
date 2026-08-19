@@ -681,7 +681,6 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "无法创建 pytest lease 子目录: {}",
     "goal {} 需求 {} 缺少验证 receipt",
     "progress receipt 源码快照已过期",
-    "pytest lease 探针内容不一致: {}",
     "superseded goal 缺少 lifecycle_proof",
     "无法独占创建计划任务 XML: {}",
     "疑似过时文件名后缀 `{suffix}`",
@@ -709,6 +708,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "work package 不存在: {package_id}",
     "work package 已存在: {package_id}",
     "受管状态文件路径不能为空",
+    "外部受管目录路径不能为空",
     "已存快照 {}（{} 个文件）。",
     "父 work package 不存在: {parent}",
     "验证命令不覆盖 {}；需要 {}",
@@ -718,7 +718,6 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "--repeat 必须在 1..=10 范围内",
     "goal 至少需要一个 must 需求",
     "must {} 未完成或缺少 evidence",
-    "pytest lease 清理探针失败: {}",
     "skill_file 路径不能包含换行",
     "只有 success/partial/blocked goal 可以 archived",
     "无法复查 autosave 独占锁: {}",
@@ -758,8 +757,50 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "验证命令缺少可执行程序",
     "goal 文件不可读取: {} ({})",
     "lane {} delta_paths 未规范化",
-    "pytest lease 写探针失败: {}",
-    "pytest lease 读探针失败: {}",
+    "Windows validation host-temp 必须是绝对路径: {}",
+    "Windows validation host-temp 缺少 {VALIDATION_TEMP_ROOT_ENV}、{CARGO_HOME_ENV} 和 {LOCALAPPDATA_ENV}",
+    "pytest lease 已释放",
+    "validation host-temp 含不安全路径分量: {}",
+    "validation host-temp 必须与工作区互不包含: temp={} workspace={}",
+    "validation host-temp 必须是卷内专用子目录，不能直接使用磁盘根: {}",
+    "validation host-temp 不能位于工作区标记之内: temp={} marker={}",
+    "validation host-temp 根",
+    "validation host-temp 根不可写/读/删: {}",
+    "validation host-temp 路径不是目录: {}",
+    "validation host-temp 路径拒绝链接/reparse: {}",
+    "validation process lease manifest 与受管路径不一致: {id}",
+    "validation process lease manifest 无法解析: {id}",
+    "validation process lease 不存在: {id}",
+    "validation process lease 临时目录",
+    "validation process lease 嵌套验证根",
+    "validation process lease 创建后消失: {id}",
+    "validation process lease 创建失败后受管目录已消失",
+    "validation process lease 创建或探测失败后的清理也失败: {cleanup_error:#}",
+    "validation process lease 在已验证释放前消失: {}",
+    "validation process lease 复验身份发生变化: {}",
+    "validation process lease 已释放",
+    "validation process lease 缺少 manifest: {id}",
+    "validation process lease 释放身份与 session 不一致: {}",
+    "validation process 启动失败后 host-temp lease 释放也失败；不会写入 receipt: {cleanup_error:#}",
+    "validation process 成功退出但 host-temp lease 释放失败；不会写入 receipt；stdout_sha256={} stderr_sha256={}: {cleanup_error:#}",
+    "validation process 非零退出（exit={}）且 host-temp lease 释放失败；不会写入 receipt；stdout_sha256={} stderr_sha256={}: {cleanup_error:#}",
+    "{VALIDATION_TEMP_ROOT_ENV} 已设置但为空；拒绝静默回退",
+    "受管临时目录写探针失败: {}",
+    "受管临时目录探针内容不一致: {}",
+    "受管临时目录清理探针失败: {}",
+    "受管临时目录读探针失败: {}",
+    "无效 validation process lease id: {id}",
+    "无法创建 validation host-temp 目录: {}",
+    "无法创建 validation process lease 临时目录: {}",
+    "无法独占创建 validation process 嵌套验证根: {}",
+    "无法创建 validation process lease 根",
+    "无法独占创建 validation process lease: {}",
+    "无法独占创建 validation process lease（连续名称冲突）",
+    "无法规范化 validation host-temp: {}",
+    "无法规范化 validation 工作区: {}",
+    "无法读取 validation host-temp 路径: {}",
+    "无法读取新建 validation host-temp 目录: {}",
+    "无法释放 validation process lease: {}",
     "validation contract 无法计算",
     "{label} 不能包含空字符串",
     "找不到可验证的 checkpoint",
@@ -819,7 +860,28 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "重复 work package id: {}",
     "cargo metadata 失败: {}",
     "lane 不存在: {lane_id}",
-    "无法创建 pytest lease",
+    "Cargo target lease 创建目录",
+    "pytest lease 创建后消失: {id}",
+    "pytest lease 创建目录",
+    "validation process lease 创建目录",
+    "{label}当前 leaf 复验",
+    "{label}必须使用绝对路径持有 Windows 目录对象: {}",
+    "{label}持有对象复验",
+    "{label}持有的 Windows 目录对象强身份在释放前发生变化: {}",
+    "{label}释放复验必须使用绝对路径: {}",
+    "{label}释放拒绝目录对象替换；当前 leaf 与创建时强身份不一致: 创建={} 当前={}",
+    "无法通过持有父目录重新打开{label}: {}",
+    "父目录复验后无法重新打开{label}: {}",
+    "无法原子创建{label}；目录可能已存在: {}",
+    "{label}必须使用绝对 Windows 父目录: {}",
+    "原子目录创建使用了不安全的相对 Windows 分量",
+    "原子目录创建父目录",
+    "发布子目录父目录",
+    "目录文件读取父目录",
+    "无法创建 pytest lease 根",
+    "无法持有{label}的 Windows 目录对象: {}",
+    "无法独占创建 pytest lease: {}",
+    "无法独占创建 pytest lease（连续名称冲突）",
     "无法同步父目录: {}",
     "无法复查状态锁: {}",
     "无法检查状态锁: {}",
@@ -1029,7 +1091,6 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "Cargo target lease 写探针失败: {}",
     "Cargo target lease 创建后消失: {id}",
     "Cargo target lease 创建或探测失败后的清理也失败: {cleanup_error}",
-    "Cargo target lease 复验身份发生变化: {}",
     "Cargo target lease 子目录创建后消失: {id}",
     "Cargo target lease 探针内容不一致: {}",
     "Cargo target lease 清理探针失败: {}",
@@ -1114,6 +1175,58 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "无法读取文件身份: {}",
     "无法释放 pytest lease: {id}",
     "无法锁定受管状态目录身份: {}",
+    "无法重新打开{label}当前 Windows 目录对象: {}",
+    "无法持有 validation host-temp 根；拒绝向身份未知的根创建 lease: {}",
+    "Cargo target lease manifest 与 validation session 不一致: {}",
+    "Cargo target lease target 子目录",
+    "pytest external lease 必须通过持有 validation host-temp 根复验",
+    "pytest external lease 必须通过持有 validation host-temp 根释放",
+    "pytest external lease 释放缺少外部 host-root 身份绑定",
+    "pytest lease TEMP 子目录",
+    "pytest lease basetemp 子目录",
+    "pytest lease cache 子目录",
+    "pytest lease manifest 与 validation session 不一致: {}",
+    "pytest lease pycache 子目录",
+    "pytest lease 创建或探测失败后的清理也失败: {cleanup_error:#}",
+    "pytest lease 嵌套验证子目录",
+    "pytest 执行准备或启动失败: {error:#}; lease 释放也失败: {cleanup_error:#}",
+    "validation host-temp lease 命名空间",
+    "validation host-temp 外部 lease 命名空间或根在句柄操作期间发生身份变化",
+    "validation host-temp 外部 lease 命名空间或根在句柄操作期间发生身份变化: {binding_error:#}",
+    "validation process external lease 必须通过持有 validation host-temp 根复验",
+    "validation process external lease 必须通过持有 validation host-temp 根释放",
+    "validation process lease manifest 已发布但临时目录未创建",
+    "validation process lease manifest 已发布但嵌套验证根未创建",
+    "validation process lease 创建部分状态的 manifest 封存不完整",
+    "{label}写入后的长度与预期不一致: {}",
+    "{label}写探针失败: {}",
+    "{label}同步探针失败: {}",
+    "{label}在创建句柄封存期间发生变化: {}",
+    "{label}在创建后发生身份或内容变化: {}",
+    "{label}在创建后名称或内容发生替换: {}",
+    "{label}子目录身份路径与其持有父目录不匹配: child={} expected={}",
+    "{label}当前 child 复验",
+    "{label}探针内容或身份不一致: {}",
+    "{label}探针写入期间发生身份或长度变化: {}",
+    "{label}清理探针失败: {}",
+    "{label}释放拒绝目录对象替换；当前 child 与创建时强身份不一致: 创建={} 当前={}",
+    "原子文件创建父目录",
+    "外部受管目录删除目录",
+    "外部受管目录删除路径不能为空",
+    "外部受管目录清理根",
+    "无法写入{label}: {}",
+    "无法原子创建{label}；文件可能已存在: {}",
+    "无法同步{label}: {}",
+    "无法复制外部受管目录清理根句柄: {}",
+    "无法按持有外部根目录句柄打开受管删除分量: {}",
+    "无法规范化 validation host-temp（Windows 根必须由受管配置预先创建）: {}",
+    "无法通过持有 validation host-temp 根独占创建 pytest lease: {}",
+    "无法通过持有 validation host-temp 根独占创建 validation process lease: {}",
+    "无法通过持有父目录创建{label}: {}",
+    "无法通过持有父目录打开{label}: {}",
+    "无法通过持有父目录打开{label}以执行写探针: {}",
+    "无法通过持有父目录打开并发创建后的{label}: {}",
+    "无法通过持有父目录短暂打开{label}: {}",
 ];
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
@@ -2164,6 +2277,92 @@ const MESSAGE_PREFIX_CATALOG: &[(&str, &str)] = &[
         "{label} name was replaced after handle-bound reading: {}",
     ),
     (
+        "{label}必须使用绝对路径持有 Windows 目录对象: {}",
+        "{label} must use an absolute path when holding a Windows directory object: {}",
+    ),
+    (
+        "无法持有{label}的 Windows 目录对象: {}",
+        "unable to hold the Windows directory object for {label}: {}",
+    ),
+    (
+        "无法重新打开{label}当前 Windows 目录对象: {}",
+        "unable to reopen the current Windows directory object for {label}: {}",
+    ),
+    (
+        "{label}释放复验必须使用绝对路径: {}",
+        "{label} release revalidation must use an absolute path: {}",
+    ),
+    ("{label}持有对象复验", "{label} held-object revalidation"),
+    (
+        "{label}持有的 Windows 目录对象强身份在释放前发生变化: {}",
+        "the strong identity of the Windows directory object held for {label} changed before release: {}",
+    ),
+    ("{label}当前 leaf 复验", "{label} current-leaf revalidation"),
+    (
+        "{label}释放拒绝目录对象替换；当前 leaf 与创建时强身份不一致: 创建={} 当前={}",
+        "{label} release rejected a directory-object replacement; the current leaf does not match the creation-time strong identity: created={} current={}",
+    ),
+    (
+        "Cargo target lease 创建目录",
+        "Cargo target lease creation directory",
+    ),
+    (
+        "无法持有 Cargo target lease 创建目录；为避免删除身份未知的目录，保留孤儿: {}",
+        "unable to hold the Cargo target lease creation directory; preserving the orphan to avoid deleting an identity-unknown directory: {}",
+    ),
+    ("pytest lease 创建目录", "pytest lease creation directory"),
+    (
+        "validation process lease 创建目录",
+        "validation process lease creation directory",
+    ),
+    (
+        "{label}子目录 guard 路径与其持有父目录不匹配: child={} expected={}",
+        "{label} child guard path does not match its held parent: child={} expected={}",
+    ),
+    (
+        "无法通过持有父目录重新打开{label}: {}",
+        "unable to re-open {label} through its held parent directory: {}",
+    ),
+    (
+        "父目录复验后无法重新打开{label}: {}",
+        "unable to re-open {label} after parent revalidation: {}",
+    ),
+    (
+        "无法原子创建{label}；目录可能已存在: {}",
+        "unable to atomically create {label}; the directory may already exist: {}",
+    ),
+    (
+        "{label}必须使用绝对 Windows 父目录: {}",
+        "{label} must use an absolute Windows parent directory: {}",
+    ),
+    (
+        "原子目录创建使用了不安全的相对 Windows 分量",
+        "atomic directory creation used an unsafe relative Windows component",
+    ),
+    ("原子目录创建父目录", "atomic directory-creation parent"),
+    ("发布子目录父目录", "published child directory parent"),
+    ("目录文件读取父目录", "directory file-read parent"),
+    (
+        "pytest lease 创建后消失: {id}",
+        "pytest lease disappeared after creation: {id}",
+    ),
+    (
+        "无法创建 pytest lease 根",
+        "unable to create the pytest lease root",
+    ),
+    (
+        "无法独占创建 pytest lease: {}",
+        "unable to create pytest lease exclusively: {}",
+    ),
+    (
+        "无法独占创建 pytest lease（连续名称冲突）",
+        "unable to create pytest lease exclusively after repeated name collisions",
+    ),
+    (
+        "无法持有 pytest lease 创建目录；为避免删除身份未知的目录，保留孤儿: {}",
+        "unable to hold the pytest lease creation directory; preserving the orphan to avoid deleting an identity-unknown directory: {}",
+    ),
+    (
         "Cargo target lease 不存在: {id}",
         "Cargo target lease does not exist: {id}",
     ),
@@ -2304,6 +2503,10 @@ const MESSAGE_PREFIX_CATALOG: &[(&str, &str)] = &[
         "managed-state removal path must not be empty",
     ),
     (
+        "外部受管目录路径不能为空",
+        "external managed-directory path must not be empty",
+    ),
+    (
         "当前 rayman 不是可读取的普通文件: {}",
         "the running rayman is not a readable regular file: {}",
     ),
@@ -2402,6 +2605,379 @@ const MESSAGE_PREFIX_CATALOG: &[(&str, &str)] = &[
 // have been extracted. Short entries are therefore safe: user titles, paths, and
 // evidence text are reinserted byte-for-byte after the static template is translated.
 const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
+    (
+        "Cargo target lease manifest 与 validation session 不一致: {}",
+        "Cargo target lease manifest does not match the validation session: {}",
+    ),
+    (
+        "Cargo target lease target 子目录",
+        "Cargo target lease target child directory",
+    ),
+    (
+        "pytest external lease 必须通过持有 validation host-temp 根复验",
+        "pytest external lease must be revalidated through the held validation host-temp root",
+    ),
+    (
+        "pytest external lease 必须通过持有 validation host-temp 根释放",
+        "pytest external lease must be released through the held validation host-temp root",
+    ),
+    (
+        "pytest external lease 释放缺少外部 host-root 身份绑定",
+        "pytest external lease release lacks external host-root identity binding",
+    ),
+    (
+        "pytest lease TEMP 子目录",
+        "pytest lease TEMP child directory",
+    ),
+    (
+        "pytest lease basetemp 子目录",
+        "pytest lease basetemp child directory",
+    ),
+    (
+        "pytest lease cache 子目录",
+        "pytest lease cache child directory",
+    ),
+    (
+        "pytest lease manifest 与 validation session 不一致: {}",
+        "pytest lease manifest does not match the validation session: {}",
+    ),
+    (
+        "pytest lease pycache 子目录",
+        "pytest lease pycache child directory",
+    ),
+    (
+        "pytest lease 创建或探测失败后的清理也失败: {cleanup_error:#}",
+        "cleanup after pytest lease creation or probe failure also failed: {cleanup_error:#}",
+    ),
+    (
+        "pytest lease 嵌套验证子目录",
+        "pytest lease nested-validation child directory",
+    ),
+    (
+        "pytest 执行准备或启动失败: {error:#}; lease 释放也失败: {cleanup_error:#}",
+        "pytest execution preparation or startup failed: {error:#}; lease release also failed: {cleanup_error:#}",
+    ),
+    (
+        "validation host-temp lease 命名空间",
+        "validation host-temp lease namespace",
+    ),
+    (
+        "validation host-temp 外部 lease 命名空间或根在句柄操作期间发生身份变化",
+        "validation host-temp external lease namespace or root identity changed during handle operation",
+    ),
+    (
+        "validation host-temp 外部 lease 命名空间或根在句柄操作期间发生身份变化: {binding_error:#}",
+        "validation host-temp external lease namespace or root identity changed during handle operation: {binding_error:#}",
+    ),
+    (
+        "validation process external lease 必须通过持有 validation host-temp 根复验",
+        "validation process external lease must be revalidated through the held validation host-temp root",
+    ),
+    (
+        "validation process external lease 必须通过持有 validation host-temp 根释放",
+        "validation process external lease must be released through the held validation host-temp root",
+    ),
+    (
+        "validation process lease manifest 已发布但临时目录未创建",
+        "validation process lease manifest was published but the temporary directory was not created",
+    ),
+    (
+        "validation process lease manifest 已发布但嵌套验证根未创建",
+        "validation process lease manifest was published but the nested validation root was not created",
+    ),
+    (
+        "validation process lease 创建部分状态的 manifest 封存不完整",
+        "validation process lease partial-creation manifest sealing is incomplete",
+    ),
+    (
+        "{label}写入后的长度与预期不一致: {}",
+        "{label} length after write does not match the expected length: {}",
+    ),
+    ("{label}写探针失败: {}", "{label} write probe failed: {}"),
+    ("{label}同步探针失败: {}", "{label} probe sync failed: {}"),
+    (
+        "{label}在创建句柄封存期间发生变化: {}",
+        "{label} changed while its creation handle was sealed: {}",
+    ),
+    (
+        "{label}在创建后发生身份或内容变化: {}",
+        "{label} identity or content changed after creation: {}",
+    ),
+    (
+        "{label}在创建后名称或内容发生替换: {}",
+        "{label} name or content was replaced after creation: {}",
+    ),
+    (
+        "{label}子目录身份路径与其持有父目录不匹配: child={} expected={}",
+        "{label} child identity path does not match its held parent directory: child={} expected={}",
+    ),
+    (
+        "{label}当前 child 复验",
+        "{label} current-child revalidation",
+    ),
+    (
+        "{label}探针内容或身份不一致: {}",
+        "{label} probe content or identity mismatch: {}",
+    ),
+    (
+        "{label}探针写入期间发生身份或长度变化: {}",
+        "{label} identity or length changed during probe write: {}",
+    ),
+    (
+        "{label}清理探针失败: {}",
+        "{label} probe cleanup failed: {}",
+    ),
+    (
+        "{label}释放拒绝目录对象替换；当前 child 与创建时强身份不一致: 创建={} 当前={}",
+        "{label} release rejected a directory-object replacement; the current child does not match the creation-time strong identity: created={} current={}",
+    ),
+    (
+        "原子文件创建父目录",
+        "atomic file-creation parent directory",
+    ),
+    (
+        "外部受管目录删除目录",
+        "external managed-directory removal directory",
+    ),
+    (
+        "外部受管目录删除路径不能为空",
+        "external managed-directory removal path must not be empty",
+    ),
+    (
+        "外部受管目录清理根",
+        "external managed-directory cleanup root",
+    ),
+    ("无法写入{label}: {}", "unable to write {label}: {}"),
+    (
+        "无法原子创建{label}；文件可能已存在: {}",
+        "unable to atomically create {label}; the file may already exist: {}",
+    ),
+    ("无法同步{label}: {}", "unable to sync {label}: {}"),
+    (
+        "无法复制外部受管目录清理根句柄: {}",
+        "unable to duplicate the external managed-directory cleanup-root handle: {}",
+    ),
+    (
+        "无法按持有外部根目录句柄打开受管删除分量: {}",
+        "unable to open the managed removal component through the held external-root handle: {}",
+    ),
+    (
+        "无法规范化 validation host-temp（Windows 根必须由受管配置预先创建）: {}",
+        "unable to canonicalize validation host-temp (the Windows root must be pre-created by managed configuration): {}",
+    ),
+    (
+        "无法通过持有 validation host-temp 根独占创建 pytest lease: {}",
+        "unable to exclusively create pytest lease through the held validation host-temp root: {}",
+    ),
+    (
+        "无法通过持有 validation host-temp 根独占创建 validation process lease: {}",
+        "unable to exclusively create validation process lease through the held validation host-temp root: {}",
+    ),
+    (
+        "无法通过持有父目录创建{label}: {}",
+        "unable to create {label} through its held parent directory: {}",
+    ),
+    (
+        "无法通过持有父目录打开{label}: {}",
+        "unable to open {label} through its held parent directory: {}",
+    ),
+    (
+        "无法通过持有父目录打开{label}以执行写探针: {}",
+        "unable to open {label} through its held parent directory for the write probe: {}",
+    ),
+    (
+        "无法通过持有父目录打开并发创建后的{label}: {}",
+        "unable to open concurrently created {label} through its held parent directory: {}",
+    ),
+    (
+        "无法通过持有父目录短暂打开{label}: {}",
+        "unable to temporarily open {label} through its held parent directory: {}",
+    ),
+    (
+        "Windows validation host-temp 必须是绝对路径: {}",
+        "Windows validation host-temp must be an absolute path: {}",
+    ),
+    (
+        "Windows validation host-temp 缺少 {VALIDATION_TEMP_ROOT_ENV}、{CARGO_HOME_ENV} 和 {LOCALAPPDATA_ENV}",
+        "Windows validation host-temp is missing {VALIDATION_TEMP_ROOT_ENV}, {CARGO_HOME_ENV}, and {LOCALAPPDATA_ENV}",
+    ),
+    (
+        "pytest lease 已释放",
+        "pytest lease has already been released",
+    ),
+    (
+        "validation host-temp 含不安全路径分量: {}",
+        "validation host-temp contains an unsafe path component: {}",
+    ),
+    (
+        "validation host-temp 必须与工作区互不包含: temp={} workspace={}",
+        "validation host-temp and the workspace must not contain one another: temp={} workspace={}",
+    ),
+    (
+        "validation host-temp 必须是卷内专用子目录，不能直接使用磁盘根: {}",
+        "validation host-temp must be a dedicated subdirectory on the volume, not the volume root: {}",
+    ),
+    (
+        "validation host-temp 不能位于工作区标记之内: temp={} marker={}",
+        "validation host-temp must not be nested under a workspace marker: temp={} marker={}",
+    ),
+    ("validation host-temp 根", "validation host-temp root"),
+    (
+        "validation host-temp 根不可写/读/删: {}",
+        "validation host-temp root failed its write/read/delete probe: {}",
+    ),
+    (
+        "validation host-temp 路径不是目录: {}",
+        "validation host-temp path is not a directory: {}",
+    ),
+    (
+        "validation host-temp 路径拒绝链接/reparse: {}",
+        "validation host-temp path rejects links/reparse points: {}",
+    ),
+    (
+        "validation host-temp 根在持有期间更换: 创建={} 当前={}",
+        "validation host-temp root changed while held: created={} current={}",
+    ),
+    (
+        "无法持有 validation host-temp 根；拒绝向身份未知的根创建 lease: {}",
+        "unable to hold the validation host-temp root; refusing to create a lease under an identity-unknown root: {}",
+    ),
+    (
+        "validation process lease manifest 与受管路径不一致: {id}",
+        "validation process lease manifest does not match the managed path: {id}",
+    ),
+    (
+        "validation process lease manifest 无法解析: {id}",
+        "validation process lease manifest cannot be parsed: {id}",
+    ),
+    (
+        "validation process lease 不存在: {id}",
+        "validation process lease does not exist: {id}",
+    ),
+    (
+        "validation process lease 临时目录",
+        "validation process lease temporary directory",
+    ),
+    (
+        "validation process lease 嵌套验证根",
+        "validation process lease nested validation root",
+    ),
+    (
+        "validation process lease 创建后消失: {id}",
+        "validation process lease disappeared after creation: {id}",
+    ),
+    (
+        "validation process lease 创建失败后受管目录已消失",
+        "the managed directory disappeared after validation process lease creation failed",
+    ),
+    (
+        "validation process lease 创建或探测失败后的清理也失败: {cleanup_error:#}",
+        "cleanup after validation process lease creation or probe failure also failed: {cleanup_error:#}",
+    ),
+    (
+        "无法持有 validation process lease 创建目录；为避免删除身份未知的目录，保留孤儿: {}",
+        "unable to hold the validation process lease creation directory; preserving the orphan to avoid deleting an identity-unknown directory: {}",
+    ),
+    (
+        "validation process lease 在已验证释放前消失: {}",
+        "validation process lease disappeared before verified release: {}",
+    ),
+    (
+        "validation process lease 复验身份发生变化: {}",
+        "validation process lease identity changed during revalidation: {}",
+    ),
+    (
+        "validation process lease 已释放",
+        "validation process lease has already been released",
+    ),
+    (
+        "validation process lease 缺少 manifest: {id}",
+        "validation process lease is missing its manifest: {id}",
+    ),
+    (
+        "validation process lease 释放身份与 session 不一致: {}",
+        "validation process lease release identity does not match the session: {}",
+    ),
+    (
+        "validation process 启动失败后 host-temp lease 释放也失败；不会写入 receipt: {cleanup_error:#}",
+        "validation process startup failed and host-temp lease release also failed; no receipt will be recorded: {cleanup_error:#}",
+    ),
+    (
+        "validation process 成功退出但 host-temp lease 释放失败；不会写入 receipt；stdout_sha256={} stderr_sha256={}: {cleanup_error:#}",
+        "validation process succeeded but host-temp lease release failed; no receipt will be recorded; stdout_sha256={} stderr_sha256={}: {cleanup_error:#}",
+    ),
+    (
+        "validation process 非零退出（exit={}）且 host-temp lease 释放失败；不会写入 receipt；stdout_sha256={} stderr_sha256={}: {cleanup_error:#}",
+        "validation process exited nonzero (exit={}) and host-temp lease release failed; no receipt will be recorded; stdout_sha256={} stderr_sha256={}: {cleanup_error:#}",
+    ),
+    (
+        "{VALIDATION_TEMP_ROOT_ENV} 已设置但为空；拒绝静默回退",
+        "{VALIDATION_TEMP_ROOT_ENV} is set but empty; refusing a silent fallback",
+    ),
+    (
+        "受管临时目录写探针失败: {}",
+        "managed temporary-directory write probe failed: {}",
+    ),
+    (
+        "受管临时目录探针内容不一致: {}",
+        "managed temporary-directory probe content mismatch: {}",
+    ),
+    (
+        "受管临时目录清理探针失败: {}",
+        "managed temporary-directory probe cleanup failed: {}",
+    ),
+    (
+        "受管临时目录读探针失败: {}",
+        "managed temporary-directory read probe failed: {}",
+    ),
+    (
+        "无效 validation process lease id: {id}",
+        "invalid validation process lease id: {id}",
+    ),
+    (
+        "无法创建 validation host-temp 目录: {}",
+        "unable to create validation host-temp directory: {}",
+    ),
+    (
+        "无法创建 validation process lease 临时目录: {}",
+        "unable to create validation process lease temporary directory: {}",
+    ),
+    (
+        "无法独占创建 validation process 嵌套验证根: {}",
+        "unable to exclusively create validation process nested validation root: {}",
+    ),
+    (
+        "无法创建 validation process lease 根",
+        "unable to create validation process lease root",
+    ),
+    (
+        "无法独占创建 validation process lease: {}",
+        "unable to exclusively create validation process lease: {}",
+    ),
+    (
+        "无法独占创建 validation process lease（连续名称冲突）",
+        "unable to exclusively create validation process lease after consecutive name collisions",
+    ),
+    (
+        "无法规范化 validation host-temp: {}",
+        "unable to canonicalize validation host-temp: {}",
+    ),
+    (
+        "无法规范化 validation 工作区: {}",
+        "unable to canonicalize validation workspace: {}",
+    ),
+    (
+        "无法读取 validation host-temp 路径: {}",
+        "unable to read validation host-temp path: {}",
+    ),
+    (
+        "无法读取新建 validation host-temp 目录: {}",
+        "unable to read the newly created validation host-temp directory: {}",
+    ),
+    (
+        "无法释放 validation process lease: {}",
+        "unable to release validation process lease: {}",
+    ),
     (
         "PowerShell replacement authority binding 与 captured authority gate closure 不一致",
         "the PowerShell replacement authority binding does not match the captured authority-gate closure",
