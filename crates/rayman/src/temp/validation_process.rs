@@ -1389,7 +1389,7 @@ fn validate_validation_process_manifest(
     Ok(())
 }
 
-#[cfg(any(windows, test))]
+#[cfg(windows)]
 fn parse_validation_process_manifest(
     id: &str,
     lease_root: &Path,

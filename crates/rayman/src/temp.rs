@@ -1339,7 +1339,7 @@ fn validate_pytest_lease_manifest(
     Ok(())
 }
 
-#[cfg(any(windows, test))]
+#[cfg(windows)]
 fn parse_pytest_lease_manifest(
     id: &str,
     lease_root: &Path,
@@ -2005,7 +2005,7 @@ fn validate_cargo_target_lease_manifest(
     Ok(())
 }
 
-#[cfg(any(windows, test))]
+#[cfg(windows)]
 fn parse_cargo_target_lease_manifest(
     id: &str,
     lease_root: &Path,

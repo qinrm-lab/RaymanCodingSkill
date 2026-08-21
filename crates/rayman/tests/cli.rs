@@ -908,6 +908,11 @@ fn state_snapshot(root: &Path) -> BTreeMap<String, (u64, std::time::SystemTime, 
     out
 }
 
+#[cfg(windows)]
+fn canonical_display_path(path: &Path) -> PathBuf {
+    PathBuf::from(rayman::pathfmt::display_path(&path.canonicalize().unwrap()))
+}
+
 fn rebind_activation_path(root: &Path) -> std::path::PathBuf {
     root.join(".RaymanCodingSkill/workspace_skill.yaml")
 }
@@ -977,6 +982,25 @@ fn managed_state_without_activation(
     let mut snapshot = state_snapshot(root);
     snapshot.remove("workspace_skill.yaml");
     snapshot
+}
+
+#[cfg(target_os = "linux")]
+fn remove_linux_retained_activation(
+    snapshot: &mut BTreeMap<String, (u64, std::time::SystemTime, Vec<u8>)>,
+    expected_bytes: &[u8],
+) {
+    let retained = snapshot
+        .keys()
+        .filter(|path| path.starts_with("tmp/activation-retained/"))
+        .cloned()
+        .collect::<Vec<_>>();
+    assert_eq!(
+        retained.len(),
+        1,
+        "Linux rebind must retain exactly one prior activation: {retained:?}"
+    );
+    let (_, _, bytes) = snapshot.remove(&retained[0]).unwrap();
+    assert_eq!(bytes, expected_bytes);
 }
 
 fn assert_rebind_rejected_without_state_changes(root: &Path, case: &str) {
@@ -3329,6 +3353,7 @@ fn generic_validation_child_can_run_nested_goal_validate_from_its_managed_temp()
     let evidence_home = tempfile::tempdir().unwrap();
     let host_temp_root = evidence_home.path().join("host-temp");
     std::fs::create_dir_all(&host_temp_root).unwrap();
+    let canonical_host_temp_root = canonical_display_path(&host_temp_root);
     let trace = evidence_home.path().join("nested-validation.trace");
     let skill = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -3388,7 +3413,7 @@ fn generic_validation_child_can_run_nested_goal_validate_from_its_managed_temp()
     let outer_lease_root = outer_temp.parent().unwrap();
     let inner_lease_root = inner_temp.parent().unwrap();
     assert!(
-        outer_lease_root.starts_with(host_temp_root.join("v")),
+        outer_lease_root.starts_with(canonical_host_temp_root.join("v")),
         "outer lease escaped configured root: {}",
         outer_lease_root.display()
     );
@@ -3506,6 +3531,7 @@ fn records_the_managed_target() {
     let inherited_temp = trace_home.path().join("inherited-temp");
     std::fs::create_dir(&host_temp_root).unwrap();
     std::fs::create_dir(&inherited_temp).unwrap();
+    let canonical_host_temp_root = canonical_display_path(&host_temp_root);
     let host_temp_text = host_temp_root.to_str().unwrap();
     let inherited_temp_text = inherited_temp.to_str().unwrap();
     let logical_command = "cargo test --workspace --all-targets";
@@ -3589,7 +3615,7 @@ fn records_the_managed_target() {
     );
     for process_temp in &process_temps {
         assert!(
-            process_temp.starts_with(host_temp_root.join("v")),
+            process_temp.starts_with(canonical_host_temp_root.join("v")),
             "validation process temp escaped the configured root: {}",
             process_temp.display()
         );
@@ -3600,7 +3626,7 @@ fn records_the_managed_target() {
             process_temp.display()
         );
         let process_lease = process_temp.parent().unwrap();
-        let compact_process_parent = host_temp_root.join("v");
+        let compact_process_parent = canonical_host_temp_root.join("v");
         assert_eq!(
             process_lease.parent(),
             Some(compact_process_parent.as_path()),
@@ -3822,6 +3848,7 @@ fn main() {
     let inherited_temp = probe_home.path().join("inherited-temp");
     std::fs::create_dir(&host_temp_root).unwrap();
     std::fs::create_dir(&inherited_temp).unwrap();
+    let canonical_host_temp_root = canonical_display_path(&host_temp_root);
     let trace = probe_home.path().join("progress-temp.trace");
     let command = format!("\"{}\"", executable.display());
     let output = run_with_path_and_env(
@@ -3856,7 +3883,7 @@ fn main() {
 
     let process_temp = PathBuf::from(std::fs::read_to_string(&trace).unwrap());
     assert!(
-        process_temp.starts_with(host_temp_root.join("v")),
+        process_temp.starts_with(canonical_host_temp_root.join("v")),
         "progress temp escaped configured host root: {}",
         process_temp.display()
     );
@@ -4092,6 +4119,8 @@ fn goal_validate_isolates_every_pytest_process_without_receipt_leakage() {
         let id = start_pytest_validation_goal(root);
         let host_temp_root = probe._temp.path().join(format!("pytest-host-temp-{index}"));
         std::fs::create_dir(&host_temp_root).unwrap();
+        #[cfg(windows)]
+        let canonical_host_temp_root = canonical_display_path(&host_temp_root);
         let host_temp_text = host_temp_root.to_str().unwrap();
         let trace = probe._temp.path().join(format!("success-{index}.trace"));
         let trace_text = trace.to_str().unwrap();
@@ -4182,7 +4211,7 @@ fn goal_validate_isolates_every_pytest_process_without_receipt_leakage() {
         for lease_root in &roots {
             #[cfg(windows)]
             assert!(
-                lease_root.starts_with(host_temp_root.join("p")),
+                lease_root.starts_with(canonical_host_temp_root.join("p")),
                 "Windows pytest lease escaped the configured host root: {}",
                 lease_root.display()
             );
@@ -5700,6 +5729,36 @@ fn workspace_rebind_repairs_only_hash_and_cli_identity_drift() {
         rebound_report["expected_sha256"],
         rebound_report["actual_sha256"]
     );
+    let retained_evidence = rebound_report
+        .as_object_mut()
+        .unwrap()
+        .remove("retained_evidence");
+    #[cfg(target_os = "linux")]
+    {
+        let retained = retained_evidence
+            .expect("Linux rebind must report retained evidence")
+            .as_array()
+            .unwrap()
+            .clone();
+        assert_eq!(retained.len(), 1);
+        assert_eq!(
+            retained[0]["action"],
+            "workspace rebind preserved prior activation"
+        );
+        let retained_path = Path::new(retained[0]["path"].as_str().unwrap());
+        assert!(
+            retained_path.canonicalize().unwrap().starts_with(
+                root.join(".RaymanCodingSkill/tmp/activation-retained")
+                    .canonicalize()
+                    .unwrap()
+            )
+        );
+        assert!(retained[0]["sha256"].as_str().is_some());
+        assert!(retained[0]["metadata_sha256"].as_str().is_some());
+        assert!(retained[0]["identity"].as_str().is_some());
+    }
+    #[cfg(not(target_os = "linux"))]
+    assert!(retained_evidence.is_none());
 
     let changed = rebound_report
         .as_object_mut()
@@ -5740,7 +5799,14 @@ fn workspace_rebind_repairs_only_hash_and_cli_identity_drift() {
             .lines()
             .any(|line| line == "cli_version: 0.1.0")
     );
-    assert_eq!(managed_state_without_activation(root), other_state_before);
+    let other_state_after = managed_state_without_activation(root);
+    #[cfg(target_os = "linux")]
+    let other_state_after = {
+        let mut state = other_state_after;
+        remove_linux_retained_activation(&mut state, config_before.as_bytes());
+        state
+    };
+    assert_eq!(other_state_after, other_state_before);
 }
 
 #[test]
@@ -5891,13 +5957,17 @@ fn workspace_ensure_current_only_rebinds_eligible_identity_drift_with_yes() {
             .unwrap(),
         skill_file_before
     );
+    let state_after = managed_state_without_activation(root);
+    #[cfg(target_os = "linux")]
+    let state_after = {
+        let mut state = state_after;
+        remove_linux_retained_activation(&mut state, config_before.as_bytes());
+        state
+    };
+    let mut expected_state = state_before;
+    expected_state.remove("workspace_skill.yaml");
     assert_eq!(
-        managed_state_without_activation(root),
-        {
-            let mut before = state_before;
-            before.remove("workspace_skill.yaml");
-            before
-        },
+        state_after, expected_state,
         "ensure-current must not modify unrelated managed state"
     );
 }
@@ -7385,7 +7455,14 @@ fn pytest_lease_cli_is_manifest_owned_and_releasable() {
     let lease = run_json(root, &["temp", "pytest-lease", "focused tests"]);
     let id = lease["id"].as_str().unwrap();
     assert_eq!(lease["schema"], "rayman.pytest-lease.v1");
-    assert!(lease["root"].as_str().unwrap().contains("tmp\\leases"));
+    let lease_root = Path::new(lease["root"].as_str().unwrap())
+        .canonicalize()
+        .unwrap();
+    let expected_root = root
+        .join(".RaymanCodingSkill/tmp/leases")
+        .canonicalize()
+        .unwrap();
+    assert!(lease_root.starts_with(expected_root));
     assert_eq!(lease["pytest_args"].as_array().unwrap().len(), 4);
     let probed = run_json(root, &["temp", "pytest-probe", id]);
     assert_eq!(probed["id"], id);

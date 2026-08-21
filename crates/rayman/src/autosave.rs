@@ -875,7 +875,7 @@ fn task_registration(name: &str) -> Result<TaskRegistration> {
     bail!("查询 autosave 计划任务失败，不能把未知状态当作未注册：{detail}")
 }
 
-#[cfg(any(windows, test))]
+#[cfg(windows)]
 fn scheduler_output_text(stdout: &[u8], stderr: &[u8]) -> String {
     let stdout = String::from_utf8_lossy(stdout).trim().to_string();
     let stderr = String::from_utf8_lossy(stderr).trim().to_string();
@@ -887,7 +887,7 @@ fn scheduler_output_text(stdout: &[u8], stderr: &[u8]) -> String {
     }
 }
 
-#[cfg(any(windows, test))]
+#[cfg(windows)]
 fn scheduler_reports_not_found(exit_code: Option<i32>, detail: &str) -> bool {
     // HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND/ERROR_PATH_NOT_FOUND), their raw values,
     // and the stable English/Chinese schtasks diagnostics.  Generic exit 1 is
