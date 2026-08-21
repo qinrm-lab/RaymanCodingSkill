@@ -11,6 +11,7 @@
 //!   没有本二进制可证明可靠的 descendant supervisor，因此在 shell spawn 前 fail closed。
 
 use std::ffi::{OsStr, OsString};
+#[cfg(windows)]
 use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
@@ -859,6 +860,7 @@ pub fn ensure_no_top_level_rayman_command(workspace: &Path) -> Result<(), String
     Ok(())
 }
 
+#[cfg(windows)]
 fn is_rayman_command_name(name: &OsStr) -> bool {
     let name = name.to_string_lossy();
     name.eq_ignore_ascii_case("rayman")

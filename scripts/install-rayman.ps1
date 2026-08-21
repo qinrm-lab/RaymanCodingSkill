@@ -4212,8 +4212,8 @@ function Invoke-InstallPathSelfTest {
                 }
                 $mask = [RaymanInstallerV2.LinuxDirectoryLease]::RequiredStatxMaskForSelfTest
                 [RaymanInstallerV2.LinuxDirectoryLease]::ValidateStatxMaskForSelfTest($mask)
-                [RaymanInstallerV2.LinuxDirectoryLease]::ValidateStatxMaskForSelfTest([uint32]($mask -bor [uint32]0x80000000))
-                $missingMode = [uint32]($mask -band [uint32]0xfffffffd)
+                [RaymanInstallerV2.LinuxDirectoryLease]::ValidateStatxMaskForSelfTest([uint32]($mask -bor [uint32]0x80000000L))
+                $missingMode = [uint32]($mask -band [uint32]0xfffffffdL)
                 $rejected = $false
                 try {
                     [RaymanInstallerV2.LinuxDirectoryLease]::ValidateStatxMaskForSelfTest($missingMode)

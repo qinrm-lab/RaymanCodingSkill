@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::{self, Seek, SeekFrom, Write};
+use std::io::{self, Write};
+#[cfg(windows)]
+use std::io::{Seek, SeekFrom};
 #[cfg(windows)]
 use std::path::Prefix;
 use std::path::{Component, Path, PathBuf};

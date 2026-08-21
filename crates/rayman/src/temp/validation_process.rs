@@ -269,6 +269,8 @@ impl ManagedValidationProcessLease {
     }
 
     fn verify_current_at_host_root(&self, host_root: &ValidationProcessStateRoot) -> Result<()> {
+        #[cfg(not(windows))]
+        let _ = host_root;
         #[cfg(windows)]
         match &self.directory_guards {
             WindowsValidationProcessLeaseBinding::Direct(guards) => {
@@ -383,6 +385,7 @@ impl ValidationProcessStateRoot {
         )
     }
 
+    #[cfg(windows)]
     fn with_external_lease_root_after_operation<T>(
         &self,
         binding: &WindowsExternalLeaseIdentity,
@@ -414,7 +417,7 @@ impl ValidationProcessStateRoot {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, windows))]
     fn with_external_lease_root_after_operation_for_test<T>(
         &self,
         binding: &WindowsExternalLeaseIdentity,

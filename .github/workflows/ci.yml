@@ -240,6 +240,7 @@ jobs:
           if ($exitCode -eq 0 -or $text -notmatch '--unsafe-host-exec') {
             throw "A real backend must fail closed without --unsafe-host-exec. Exit=$exitCode`n$text"
           }
+          exit 0
 
       - name: Reject third-party grade command without separate acknowledgement
         shell: pwsh
@@ -257,6 +258,7 @@ jobs:
           if ($exitCode -eq 0 -or $text -notmatch '--unsafe-custom-grade-exec') {
             throw "A third-party grade must fail closed without --unsafe-custom-grade-exec. Exit=$exitCode`n$text"
           }
+          exit 0
 
       - name: Offline mock evaluator CLI smoke and report provenance
         shell: pwsh

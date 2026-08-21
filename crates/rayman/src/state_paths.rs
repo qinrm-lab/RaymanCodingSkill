@@ -1845,7 +1845,7 @@ fn parse_windows_directory_records(bytes: &[u8]) -> Result<Vec<WindowsDirectoryE
         let name_start = record_offset + NAME_OFFSET;
         let name_end = name_start + name_bytes;
         let mut wide = Vec::with_capacity(name_bytes / 2);
-        for chunk in bytes[name_start..name_end].chunks_exact(2) {
+        for chunk in bytes[name_start..name_end].as_chunks::<2>().0 {
             wide.push(u16::from_ne_bytes([chunk[0], chunk[1]]));
         }
         if wide != [46] && wide != [46, 46] {

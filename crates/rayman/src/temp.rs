@@ -8,7 +8,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use anyhow::{Context, Result, bail};
+#[cfg(windows)]
+use anyhow::bail;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 #[cfg(windows)]
@@ -21,7 +23,7 @@ mod validation_process;
 
 #[cfg(windows)]
 pub(crate) use validation_process::WindowsExternalLeaseIdentity;
-#[cfg(any(not(windows), test))]
+#[cfg(test)]
 pub(crate) use validation_process::validation_process_state_root;
 pub(crate) use validation_process::{
     ValidationProcessStateRoot, acquire_validation_process_state_root,
@@ -166,6 +168,8 @@ impl ManagedPytestLease {
         &self,
         host_root: &ValidationProcessStateRoot,
     ) -> Result<()> {
+        #[cfg(not(windows))]
+        let _ = host_root;
         #[cfg(windows)]
         match &self.directory_guards {
             WindowsPytestLeaseBinding::Direct(guards) => {
@@ -1123,10 +1127,9 @@ where
 
         #[cfg(not(windows))]
         {
-            let Some(lease_root) = create_exclusive_pytest_lease_leaf(&parent, &id)? else {
+            let Some(_lease_root) = create_exclusive_pytest_lease_leaf(&parent, &id)? else {
                 continue;
             };
-            let relative = pytest_lease_relative(&id, storage)?;
             let creation = (|| {
                 let lease_root = pytest_lease_path(root, &id, false, storage)?
                     .ok_or_else(|| anyhow::anyhow!("pytest lease 创建后消失: {id}"))?;
