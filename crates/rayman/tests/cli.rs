@@ -3525,6 +3525,8 @@ fn records_the_managed_target() {
     std::fs::create_dir_all(copied_cli.parent().unwrap()).unwrap();
     std::fs::copy(BIN, &copied_cli).unwrap();
     let original_bytes = std::fs::read(&copied_cli).unwrap();
+    let canonical_root = canonical_display_path(root);
+    let canonical_collision_target = canonical_display_path(&collision_target);
     let collision_text = collision_target.to_str().unwrap();
     let trace_text = trace.to_str().unwrap();
     let host_temp_root = trace_home.path().join("rayman-host-temp");
@@ -3653,7 +3655,7 @@ fn records_the_managed_target() {
     );
     let managed_target = &records[0].1;
     assert!(
-        managed_target.starts_with(root.join(".RaymanCodingSkill/tmp/c")),
+        managed_target.starts_with(canonical_root.join(".RaymanCodingSkill/tmp/c")),
         "unexpected managed target: {}",
         managed_target.display()
     );
@@ -3664,7 +3666,7 @@ fn records_the_managed_target() {
         managed_target.display()
     );
     let target_lease = managed_target.parent().unwrap();
-    let compact_target_parent = root.join(".RaymanCodingSkill/tmp/c");
+    let compact_target_parent = canonical_root.join(".RaymanCodingSkill/tmp/c");
     assert_eq!(
         target_lease.parent(),
         Some(compact_target_parent.as_path()),
@@ -3681,7 +3683,7 @@ fn records_the_managed_target() {
             .strip_prefix("c-")
             .expect("compact Cargo lease label")
     );
-    let legacy_target = root
+    let legacy_target = canonical_root
         .join(".RaymanCodingSkill/tmp/cargo-target-leases")
         .join(legacy_lease_id)
         .join("target");
@@ -3691,7 +3693,7 @@ fn records_the_managed_target() {
         managed_target.display(),
         legacy_target.display()
     );
-    assert!(!managed_target.starts_with(&collision_target));
+    assert!(!managed_target.starts_with(&canonical_collision_target));
     assert!(!managed_target.to_string_lossy().starts_with(r"\\?\"));
     assert!(
         !managed_target.exists(),
