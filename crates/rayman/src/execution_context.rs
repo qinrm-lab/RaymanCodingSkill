@@ -137,10 +137,12 @@ fn env_path(name: &str) -> Option<String> {
     env_text(name).map(|value| value.trim_end_matches(['\\', '/']).to_string())
 }
 
+#[cfg(any(windows, test))]
 fn normalized_account(value: &str) -> String {
     value.trim().replace('/', "\\").to_lowercase()
 }
 
+#[cfg(any(windows, test))]
 fn normalized_path(value: &str) -> String {
     value
         .trim()
@@ -149,6 +151,7 @@ fn normalized_path(value: &str) -> String {
         .to_lowercase()
 }
 
+#[cfg(any(windows, test))]
 fn classify_execution_context(
     principal_sid: Option<&str>,
     principal_account: Option<&str>,

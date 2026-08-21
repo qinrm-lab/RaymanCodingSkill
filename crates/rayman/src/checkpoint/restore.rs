@@ -962,7 +962,7 @@ fn validate_restore_journal(root: &Path, journal: &RestoreJournal) -> Result<()>
             journal.version
         );
     }
-    if journal.workspace_root != display_path(root) {
+    if !restore_journal_workspace_matches(root, &journal.workspace_root)? {
         bail!(
             "restore journal 工作区不匹配: recorded={:?} current={:?}",
             journal.workspace_root,
@@ -1044,6 +1044,29 @@ fn validate_restore_journal(root: &Path, journal: &RestoreJournal) -> Result<()>
         }
     }
     Ok(())
+}
+
+fn restore_journal_workspace_matches(root: &Path, recorded: &str) -> Result<bool> {
+    let recorded = Path::new(recorded);
+    if !recorded.is_absolute() {
+        return Ok(false);
+    }
+    let recorded = recorded
+        .canonicalize()
+        .with_context(|| format!("无法规范化工作区根: {}", display_path(recorded)))?;
+    let current = root
+        .canonicalize()
+        .with_context(|| format!("无法规范化工作区根: {}", display_path(root)))?;
+
+    #[cfg(windows)]
+    {
+        Ok(display_path(&recorded).eq_ignore_ascii_case(&display_path(&current)))
+    }
+
+    #[cfg(not(windows))]
+    {
+        Ok(recorded == current)
+    }
 }
 
 fn remove_restore_transaction(ws_dir: &Path, transaction: &Path) -> Result<()> {

@@ -593,8 +593,11 @@ mod tests {
         let first_target = first.managed_target_dir().unwrap().to_path_buf();
         let second_target = second.managed_target_dir().unwrap().to_path_buf();
         assert_ne!(first_target, second_target);
-        assert!(first_target.starts_with(root.join(".RaymanCodingSkill/tmp")));
-        assert!(!first_target.starts_with(&target));
+        let first_target_canonical = first_target.canonicalize().unwrap();
+        let managed_root = root.join(".RaymanCodingSkill/tmp").canonicalize().unwrap();
+        let original_target = target.canonicalize().unwrap();
+        assert!(first_target_canonical.starts_with(managed_root));
+        assert!(!first_target_canonical.starts_with(original_target));
 
         first.finish().unwrap();
         second.finish().unwrap();
@@ -804,7 +807,8 @@ mod tests {
         assert!(
             format!("{error:#}").contains("已验证释放前消失")
                 || format!("{error:#}").contains("不存在")
-                || format!("{error:#}").contains("系统找不到指定的文件"),
+                || format!("{error:#}").contains("系统找不到指定的文件")
+                || format!("{error:#}").contains("The system cannot find the file specified"),
             "{error:#}"
         );
     }

@@ -2684,7 +2684,7 @@ fn cleanup_owned_activation_temp(temp: OwnedActivationTemp, action: &str) -> Res
             );
         }
         drop(temp);
-        return Ok(());
+        Ok(())
     }
     #[cfg(windows)]
     {
@@ -3274,7 +3274,7 @@ fn finalize_captured_activation(
     {
         let evidence = retained_evidence(action, &captured.path, &captured.snapshot, None);
         drop(captured.file);
-        return Ok(Some(evidence));
+        Ok(Some(evidence))
     }
     #[cfg(windows)]
     {
@@ -6413,7 +6413,12 @@ mod tests {
             fs::read_to_string(&binding).unwrap(),
             "concurrent install activation\n"
         );
-        assert!(error.contains("refusing overwrite") || error.contains("appeared"));
+        assert!(
+            error.contains("refusing overwrite")
+                || error.contains("appeared")
+                || error.contains("publication did not move"),
+            "{error}"
+        );
     }
     #[test]
     fn install_bind_rollback_does_not_delete_a_recreated_target() {

@@ -610,7 +610,12 @@ mod tests {
                     .and_then(|values| values.get("TEMP"))
                     .expect("managed TEMP");
                 let lease_root = PathBuf::from(temp).parent().unwrap().to_path_buf();
-                assert!(lease_root.starts_with(root.path().join("p")));
+                assert!(
+                    lease_root
+                        .canonicalize()
+                        .unwrap()
+                        .starts_with(root.path().join("p").canonicalize().unwrap())
+                );
                 assert!(!root.path().join(".RaymanCodingSkill").exists());
                 observed_root = Some(lease_root);
                 Ok(process_output(0))
@@ -754,7 +759,10 @@ mod tests {
 
         assert!(rendered.contains("无法释放受管 lease"), "{rendered}");
         assert!(
-            rendered.contains("消失") || rendered.contains("系统找不到指定的文件"),
+            rendered.contains("消失")
+                || rendered.contains("不存在")
+                || rendered.contains("系统找不到指定的文件")
+                || rendered.contains("The system cannot find the file specified"),
             "{rendered}"
         );
     }

@@ -594,7 +594,7 @@ pub(crate) fn acquire_validation_process_state_root(
 ) -> Result<ValidationProcessStateRoot> {
     #[cfg(not(windows))]
     {
-        return bind_validation_process_state_root(validation_process_state_root(workspace)?);
+        bind_validation_process_state_root(validation_process_state_root(workspace)?)
     }
 
     #[cfg(windows)]
@@ -1389,6 +1389,7 @@ fn validate_validation_process_manifest(
     Ok(())
 }
 
+#[cfg(any(windows, test))]
 fn parse_validation_process_manifest(
     id: &str,
     lease_root: &Path,

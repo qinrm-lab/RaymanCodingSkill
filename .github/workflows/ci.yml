@@ -41,6 +41,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends acl
 
+      - name: Prepare Windows validation host root
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'rayman-validation'
+          $null = New-Item -ItemType Directory -Path $root -Force
+          $item = Get-Item -LiteralPath $root -Force
+          if (-not $item.PSIsContainer -or
+              ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw "Windows validation host root must be a real directory: $root"
+          }
+          Add-Content -LiteralPath $env:GITHUB_ENV `
+            -Value "RAYMAN_VALIDATION_TEMP_ROOT=$root" `
+            -Encoding utf8
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable, pinned 2026-07-14
         with:

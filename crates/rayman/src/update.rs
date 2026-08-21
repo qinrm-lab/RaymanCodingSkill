@@ -286,6 +286,7 @@ impl UpdateProvider for OfficialReleaseProvider {
 /// booleans; only a non-draft, non-prerelease string `tag_name` crosses this
 /// boundary.  Stable tag grammar is enforced by `check_for_update` so this
 /// parser stays a faithful transport/schema layer.
+#[cfg(any(windows, test))]
 fn parse_official_release_tags_json(response: &[u8]) -> Result<Vec<String>, UpdateProviderError> {
     if response.len() > MAX_RELEASE_RESPONSE_BYTES {
         return Err(UpdateProviderError::MalformedResponse);

@@ -4922,7 +4922,8 @@ function Invoke-InstallPathSelfTest {
             }
 
         $setfaclCommand = if ($IsLinux) {
-            Get-Command 'setfacl' -CommandType Application -ErrorAction SilentlyContinue
+            Get-Command 'setfacl' -CommandType Application -ErrorAction SilentlyContinue |
+                Select-Object -First 1
         } else {
             $null
         }
@@ -4945,7 +4946,8 @@ function Invoke-InstallPathSelfTest {
             ) `
             -Body {
                 param($ctx)
-                $setfacl = Get-Command 'setfacl' -CommandType Application -ErrorAction Stop
+                $setfacl = Get-Command 'setfacl' -CommandType Application -ErrorAction Stop |
+                    Select-Object -First 1
                 $case = New-InstallSelfTestCase `
                     -TestRoot $ctx.TestRoot `
                     -Name 'linux-acl-drift' `

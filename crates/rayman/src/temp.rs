@@ -23,7 +23,7 @@ mod validation_process;
 
 #[cfg(windows)]
 pub(crate) use validation_process::WindowsExternalLeaseIdentity;
-#[cfg(test)]
+#[cfg(all(test, windows))]
 pub(crate) use validation_process::validation_process_state_root;
 pub(crate) use validation_process::{
     ValidationProcessStateRoot, acquire_validation_process_state_root,
@@ -1339,6 +1339,7 @@ fn validate_pytest_lease_manifest(
     Ok(())
 }
 
+#[cfg(any(windows, test))]
 fn parse_pytest_lease_manifest(
     id: &str,
     lease_root: &Path,
@@ -2004,6 +2005,7 @@ fn validate_cargo_target_lease_manifest(
     Ok(())
 }
 
+#[cfg(any(windows, test))]
 fn parse_cargo_target_lease_manifest(
     id: &str,
     lease_root: &Path,
@@ -2394,7 +2396,12 @@ mod tests {
         let lease = managed.lease();
         let lease_root = PathBuf::from(&lease.root);
 
-        assert!(lease_root.starts_with(external.path().join("p")));
+        assert!(
+            lease_root
+                .canonicalize()
+                .unwrap()
+                .starts_with(external.path().join("p").canonicalize().unwrap())
+        );
         let layout = pytest_lease_layout(PytestLeaseStorage::External);
         assert_eq!(
             PathBuf::from(&lease.nested_validation_root),
