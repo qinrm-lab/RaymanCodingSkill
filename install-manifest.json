@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "clients": {
     "codex": {
       "deployment_scope": "global_skill",
@@ -9,6 +9,14 @@
       "deployment_scope": "repository_entrypoint_only",
       "entrypoint": "CLAUDE.md"
     }
+  },
+  "update_runtime": {
+    "protocol": "rayman.update.manifest.v1",
+    "manifest_asset": "rayman-update-manifest-v1.json",
+    "signature_asset": "rayman-update-manifest-v1.sig",
+    "worker_artifact_base": "rayman-update-worker",
+    "worker_destination_pattern": "rayman-update-worker-{version}{exe_suffix}",
+    "receipt_relative_to_user_data": "Rayman/install/receipt.json"
   },
   "codex_skill_resources": [
     {

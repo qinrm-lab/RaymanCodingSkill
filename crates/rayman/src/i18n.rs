@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use clap::ValueEnum;
 pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
+    "workspace ensure-current 无法安全自动修复当前激活合同: {}",
     "已存最后一次快照并停止自动保存（状态：{status}）。计划任务 '{}' 未注册。",
     "workspace 未激活：已停止自动保存；计划任务 '{}' 未注册。最终快照已跳过；如需抢救快照，运行 `rayman checkpoint salvage-save`。",
     "Codex hooks 正被另一个进程修改: {}；等待锁超过 {} 秒",
@@ -3659,6 +3660,10 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "workspace rebind found no update to apply, but activation is still invalid",
     ),
     (
+        "workspace ensure-current 无法安全自动修复当前激活合同: {}",
+        "workspace ensure-current cannot safely repair the current activation contract automatically: {}",
+    ),
+    (
         "workspace rebind 拒绝无法原样安全写回的 skill_file",
         "workspace rebind refuses a skill_file that cannot be safely written back verbatim",
     ),
@@ -6106,6 +6111,50 @@ const MESSAGE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     (
         "激活、重绑、停用或检查工作区契约",
         "Activate, rebind, deactivate, or inspect the workspace contract",
+    ),
+    (
+        "固定官方来源的版本通知与显式可信安装",
+        "Fixed-source version notification and explicitly trusted installation",
+    ),
+    (
+        "只读取本机更新偏好与上一次成功的发现结果",
+        "Read local update preferences and the last successful observation",
+    ),
+    (
+        "立即检查固定官方 Releases 元数据；只报告候选，不下载或安装",
+        "Check fixed official Releases metadata now; report only, never download or install",
+    ),
+    (
+        "配置用户级、显式 opt-in 的周期性检查",
+        "Configure user-level periodic checks and independent explicit consent",
+    ),
+    (
+        "启用调用 skill 时的周期性检查",
+        "Enable periodic checks when the skill is invoked",
+    ),
+    (
+        "停用调用 skill 时的周期性检查",
+        "Disable periodic checks when the skill is invoked",
+    ),
+    (
+        "显式允许已验签 bundle 通过独立 worker 自动安装",
+        "Allow a verified bundle to install automatically through the independent worker",
+    ),
+    (
+        "关闭自动安装但保留版本通知",
+        "Disable automatic installation while retaining version notification",
+    ),
+    (
+        "检查间隔（小时；仅配合 --auto-check）",
+        "Check interval in hours; requires --auto-check",
+    ),
+    (
+        "确认写入用户级更新偏好",
+        "Confirm the user-level update preference write",
+    ),
+    (
+        "仅在检查已启用且间隔到期时检查并写缓存；安装另需独立同意",
+        "Check when enabled and due, then write cache; installation needs independent consent",
     ),
     (
         "快照根目录（默认用户级：Windows 为 %LOCALAPPDATA%\\Rayman\\checkpoints）",

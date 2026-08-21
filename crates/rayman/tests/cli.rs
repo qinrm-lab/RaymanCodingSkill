@@ -1003,6 +1003,30 @@ fn assert_rebind_rejected_without_state_changes(root: &Path, case: &str) {
         state_before,
         "case={case} changed managed state"
     );
+
+    // `ensure-current --yes` must not turn any manual-repair state into a
+    // convenient activation path.  Unlike `rebind`, it rejects before taking
+    // a lock; this asserts both commands leave the parsed contract and every
+    // pre-existing managed file unchanged.
+    let ensure_rejected = run_raw(
+        root,
+        &["--format", "json", "workspace", "ensure-current", "--yes"],
+    );
+    assert_ne!(
+        ensure_rejected.status, 0,
+        "ensure-current case={case} stdout={} stderr={}",
+        ensure_rejected.stdout, ensure_rejected.stderr
+    );
+    assert_eq!(
+        std::fs::read(&activation_path).ok(),
+        activation_before,
+        "ensure-current case={case} changed workspace_skill.yaml"
+    );
+    assert_eq!(
+        state_snapshot(root),
+        state_before,
+        "ensure-current case={case} changed managed state"
+    );
 }
 
 fn assert_exact_rebind_hint(surface: &str, source: &str) {
@@ -5759,6 +5783,159 @@ fn workspace_rebind_is_idempotent_when_activation_is_already_current() {
 }
 
 #[test]
+fn workspace_ensure_current_reports_current_activation_without_writing() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    activate_rebind_fixture(root);
+    write(
+        root,
+        ".RaymanCodingSkill/goals/untouched.json",
+        "managed sentinel\n",
+    );
+    let activation_path = rebind_activation_path(root);
+    let activation_before = std::fs::read(&activation_path).unwrap();
+    let state_before = state_snapshot(root);
+
+    let report = run_raw(root, &["--format", "json", "workspace", "ensure-current"]);
+
+    assert_eq!(
+        report.status, 0,
+        "stdout={} stderr={}",
+        report.stdout, report.stderr
+    );
+    let report: Value = serde_json::from_str(&report.stdout).unwrap();
+    assert_eq!(report["status"], "active");
+    assert_eq!(report["activation"]["active"], true);
+    assert_eq!(report["changed"], false);
+    assert_eq!(std::fs::read(&activation_path).unwrap(), activation_before);
+    assert_eq!(state_snapshot(root), state_before);
+
+    let applied = run_raw(
+        root,
+        &["--format", "json", "workspace", "ensure-current", "--yes"],
+    );
+    assert_eq!(
+        applied.status, 0,
+        "stdout={} stderr={}",
+        applied.stdout, applied.stderr
+    );
+    let applied: Value = serde_json::from_str(&applied.stdout).unwrap();
+    assert_eq!(applied["status"], "active");
+    assert_eq!(applied["changed"], false);
+    assert_eq!(std::fs::read(&activation_path).unwrap(), activation_before);
+    assert_eq!(state_snapshot(root), state_before);
+}
+
+#[test]
+fn workspace_ensure_current_only_rebinds_eligible_identity_drift_with_yes() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let activation_path = make_rebind_eligible_identity_drift(root);
+    write(
+        root,
+        ".RaymanCodingSkill/goals/untouched.json",
+        "managed sentinel\n",
+    );
+    let config_before = std::fs::read_to_string(&activation_path).unwrap();
+    let skill_file_before = config_before
+        .lines()
+        .find(|line| line.starts_with("skill_file:"))
+        .unwrap()
+        .to_string();
+    let state_before = state_snapshot(root);
+
+    let text = run_raw(root, &["workspace", "ensure-current"]);
+    assert_eq!(
+        text.status, 0,
+        "stdout={} stderr={}",
+        text.stdout, text.stderr
+    );
+    assert!(text.stdout.contains("rebind_required"), "{}", text.stdout);
+    assert!(text.stdout.contains("changed: false"), "{}", text.stdout);
+    assert_exact_rebind_hint(
+        &format!("{}\n{}", text.stdout, text.stderr),
+        "ensure-current",
+    );
+    assert_eq!(state_snapshot(root), state_before);
+
+    let check = run_raw(root, &["--format", "json", "workspace", "ensure-current"]);
+    assert_eq!(
+        check.status, 0,
+        "stdout={} stderr={}",
+        check.stdout, check.stderr
+    );
+    let check: Value = serde_json::from_str(&check.stdout).unwrap();
+    assert_eq!(check["status"], "rebind_required");
+    assert_eq!(check["activation"]["rebind_eligible"], true);
+    assert_eq!(check["changed"], false);
+    assert_eq!(state_snapshot(root), state_before);
+
+    let applied = run_raw(
+        root,
+        &["--format", "json", "workspace", "ensure-current", "--yes"],
+    );
+    assert_eq!(
+        applied.status, 0,
+        "stdout={} stderr={}",
+        applied.stdout, applied.stderr
+    );
+    let applied: Value = serde_json::from_str(&applied.stdout).unwrap();
+    assert_eq!(applied["status"], "active");
+    assert_eq!(applied["activation"]["active"], true);
+    assert_eq!(applied["changed"], true);
+    let config_after = std::fs::read_to_string(&activation_path).unwrap();
+    assert_eq!(
+        config_after
+            .lines()
+            .find(|line| line.starts_with("skill_file:"))
+            .unwrap(),
+        skill_file_before
+    );
+    assert_eq!(
+        managed_state_without_activation(root),
+        {
+            let mut before = state_before;
+            before.remove("workspace_skill.yaml");
+            before
+        },
+        "ensure-current must not modify unrelated managed state"
+    );
+}
+
+#[test]
+fn workspace_ensure_current_fails_closed_without_activating_manual_states() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let state_before = state_snapshot(root);
+
+    let check = run_raw(root, &["--format", "json", "workspace", "ensure-current"]);
+    assert_eq!(
+        check.status, 0,
+        "stdout={} stderr={}",
+        check.stdout, check.stderr
+    );
+    let check: Value = serde_json::from_str(&check.stdout).unwrap();
+    assert_eq!(check["status"], "manual_repair_required");
+    assert_eq!(check["activation"]["active"], false);
+    assert_eq!(check["changed"], false);
+    assert_eq!(state_snapshot(root), state_before);
+
+    let rejected = run_raw(root, &["workspace", "ensure-current", "--yes"]);
+    assert_ne!(
+        rejected.status, 0,
+        "stdout={} stderr={}",
+        rejected.stdout, rejected.stderr
+    );
+    assert!(
+        rejected.stderr.contains("无法安全自动修复"),
+        "{}",
+        rejected.stderr
+    );
+    assert!(!root.join(".RaymanCodingSkill").exists());
+    assert_eq!(state_snapshot(root), state_before);
+}
+
+#[test]
 fn workspace_rebind_rejects_ineligible_contracts_without_writing_state() {
     {
         let temp = tempfile::tempdir().unwrap();
@@ -7963,4 +8140,136 @@ edition = \"2021\"
         audit.stdout
     );
     assert!(!id.is_empty());
+}
+
+fn run_update_with_user_root(root: &Path, user_root: &Path, args: &[&str]) -> Output {
+    let user_root = user_root.to_str().unwrap();
+    run_with_path_and_env(
+        root,
+        args,
+        &[],
+        None,
+        &[
+            ("RAYMAN_INTERNAL_TEST_UPDATE_ROOT", user_root),
+            ("LOCALAPPDATA", user_root),
+            ("XDG_DATA_HOME", user_root),
+            ("HOME", user_root),
+            ("USERPROFILE", user_root),
+        ],
+    )
+}
+
+#[test]
+fn update_status_is_activation_exempt_and_read_only_outside_a_workspace() {
+    let workspace = tempfile::tempdir().unwrap();
+    let user = tempfile::tempdir().unwrap();
+
+    let output = run_update_with_user_root(
+        workspace.path(),
+        user.path(),
+        &["--format", "json", "update", "status"],
+    );
+    assert_eq!(output.status, 0, "stderr={}", output.stderr);
+    let report: Value = serde_json::from_str(&output.stdout).unwrap();
+    assert_eq!(report["status"], "status");
+    assert_eq!(report["state"]["auto_check"], true);
+    assert_eq!(report["state"]["auto_install"], false);
+    assert_eq!(report["state_written"], false);
+    assert!(!workspace.path().join(".RaymanCodingSkill").exists());
+    assert!(!user.path().join("Rayman/update").exists());
+}
+
+#[test]
+fn update_configure_requires_an_exact_selector_and_yes_without_workspace_writes() {
+    let workspace = tempfile::tempdir().unwrap();
+    let user = tempfile::tempdir().unwrap();
+
+    let no_selector = run_update_with_user_root(
+        workspace.path(),
+        user.path(),
+        &["update", "configure", "--yes"],
+    );
+    assert_ne!(no_selector.status, 0);
+    assert!(!user.path().join("Rayman/update/update.json").exists());
+
+    let no_confirmation = run_update_with_user_root(
+        workspace.path(),
+        user.path(),
+        &["update", "configure", "--no-auto-check"],
+    );
+    assert_ne!(no_confirmation.status, 0);
+    assert!(!user.path().join("Rayman/update/update.json").exists());
+
+    let configured = run_update_with_user_root(
+        workspace.path(),
+        user.path(),
+        &[
+            "--format",
+            "json",
+            "update",
+            "configure",
+            "--auto-install",
+            "--yes",
+        ],
+    );
+    assert_eq!(configured.status, 0, "stderr={}", configured.stderr);
+    let report: Value = serde_json::from_str(&configured.stdout).unwrap();
+    assert_eq!(report["state"]["auto_check"], true);
+    assert_eq!(report["state"]["auto_install"], true);
+    assert_eq!(report["install_ready"], false);
+    assert!(user.path().join("Rayman/update/update.json").is_file());
+    assert!(!workspace.path().join(".RaymanCodingSkill").exists());
+}
+
+#[test]
+fn disabled_update_poll_is_zero_network_and_does_not_touch_workspace_state() {
+    let workspace = tempfile::tempdir().unwrap();
+    let user = tempfile::tempdir().unwrap();
+
+    let disabled = run_update_with_user_root(
+        workspace.path(),
+        user.path(),
+        &["update", "configure", "--no-auto-check", "--yes"],
+    );
+    assert_eq!(disabled.status, 0, "stderr={}", disabled.stderr);
+    let state_path = user.path().join("Rayman/update/update.json");
+    let before = std::fs::read(&state_path).unwrap();
+
+    let poll = run_update_with_user_root(
+        workspace.path(),
+        user.path(),
+        &["--format", "json", "update", "poll"],
+    );
+    assert_eq!(poll.status, 0, "stderr={}", poll.stderr);
+    let report: Value = serde_json::from_str(&poll.stdout).unwrap();
+    assert_eq!(report["status"], "not_due");
+    assert_eq!(report["checked"], false);
+    assert_eq!(report["state_written"], false);
+    assert_eq!(std::fs::read(&state_path).unwrap(), before);
+    assert!(!workspace.path().join(".RaymanCodingSkill").exists());
+}
+
+#[test]
+fn corrupt_update_state_is_preserved_and_never_becomes_install_consent() {
+    let workspace = tempfile::tempdir().unwrap();
+    let user = tempfile::tempdir().unwrap();
+    let update_dir = user.path().join("Rayman/update");
+    std::fs::create_dir_all(&update_dir).unwrap();
+    let state_path = update_dir.join("update.json");
+    let corrupt = b"{ not trusted state";
+    std::fs::write(&state_path, corrupt).unwrap();
+
+    let poll = run_update_with_user_root(
+        workspace.path(),
+        user.path(),
+        &["--format", "json", "update", "poll"],
+    );
+    assert_eq!(poll.status, 0, "stderr={}", poll.stderr);
+    let report: Value = serde_json::from_str(&poll.stdout).unwrap();
+    assert_eq!(report["status"], "state_error");
+    assert_eq!(report["checked"], false);
+    assert_eq!(report["state_written"], false);
+    assert_eq!(report["install_authorized"], false);
+    assert_eq!(std::fs::read(&state_path).unwrap(), corrupt);
+    assert!(!workspace.path().join(".RaymanCodingSkill").exists());
 }

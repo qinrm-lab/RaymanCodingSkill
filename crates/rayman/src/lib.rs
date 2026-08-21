@@ -2,7 +2,7 @@
 //! 只保留 load-bearing 能力：上下文索引、最小目标契约、只读资产扫描、托管临时目录。
 
 pub mod assets;
-pub const CLI_CONTRACT: &str = "rayman-cli-contract-v16";
+pub const CLI_CONTRACT: &str = "rayman-cli-contract-v17";
 pub const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub mod autosave;
@@ -20,6 +20,7 @@ pub mod state_lock;
 pub mod state_paths;
 pub mod temp;
 pub mod toolchain;
+pub mod update;
 pub mod walk;
 pub mod workspace;
 

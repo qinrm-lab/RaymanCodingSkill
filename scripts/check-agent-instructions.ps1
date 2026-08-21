@@ -311,6 +311,7 @@ foreach ($relativePath in @(
         'scripts/install-rayman.ps1',
         'scripts/release-closeout.ps1',
         'scripts/repair-rayman-powershell-profile.ps1',
+        'scripts/update-rayman.ps1',
         'scripts/verify-release-contract.ps1'
     )) {
     Assert-FileSystemProviderPaths `
@@ -429,13 +430,23 @@ try {
 } catch {
     throw "install-manifest.json is invalid JSON: $($_.Exception.Message)"
 }
-if ($manifest.schema_version -ne 1) { throw 'Unsupported install manifest schema.' }
+if ($manifest.schema_version -ne 2) { throw 'Unsupported install manifest schema.' }
 if ($manifest.clients.codex.deployment_scope -ne 'global_skill') {
     throw 'Codex deployment scope must be global_skill.'
 }
 if ($manifest.clients.claude_code.deployment_scope -ne 'repository_entrypoint_only' -or
     $manifest.clients.claude_code.entrypoint -ne 'CLAUDE.md') {
     throw 'Claude Code must remain a repository-only entrypoint.'
+}
+$updateRuntimeProperties = @($manifest.update_runtime.PSObject.Properties.Name | Sort-Object)
+if (($updateRuntimeProperties -join ',') -ne 'manifest_asset,protocol,receipt_relative_to_user_data,signature_asset,worker_artifact_base,worker_destination_pattern' -or
+    $manifest.update_runtime.protocol -ne 'rayman.update.manifest.v1' -or
+    $manifest.update_runtime.manifest_asset -ne 'rayman-update-manifest-v1.json' -or
+    $manifest.update_runtime.signature_asset -ne 'rayman-update-manifest-v1.sig' -or
+    $manifest.update_runtime.worker_artifact_base -ne 'rayman-update-worker' -or
+    $manifest.update_runtime.worker_destination_pattern -ne 'rayman-update-worker-{version}{exe_suffix}' -or
+    $manifest.update_runtime.receipt_relative_to_user_data -ne 'Rayman/install/receipt.json') {
+    throw 'Install manifest trusted update runtime contract is invalid.'
 }
 
 function Assert-ManifestResourceSet {

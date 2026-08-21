@@ -17,6 +17,7 @@ $auditIntegrationTestName = 'audit_self_test_exercises_only_the_audit_contract'
 # self-test now exercises only audit-repository.ps1, so root Cargo tests do not
 # recursively launch the installer/verifier/profile suites.
 & (Join-Path $PSScriptRoot 'install-rayman.ps1') -SelfTest
+& (Join-Path $PSScriptRoot 'update-rayman.ps1') -SelfTest
 & (Join-Path $PSScriptRoot 'verify-release-contract.ps1') -SelfTest
 & (Join-Path $PSScriptRoot 'repair-rayman-powershell-profile.ps1') -SelfTest
 & (Join-Path $PSScriptRoot 'configure-codex-validation-temp.ps1') -SelfTest

@@ -92,6 +92,31 @@ pub struct WorkspaceRebindReport {
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub enum WorkspaceEnsureCurrentStatus {
+    Active,
+    RebindRequired,
+    ManualRepairRequired,
+}
+
+impl WorkspaceEnsureCurrentStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::RebindRequired => "rebind_required",
+            Self::ManualRepairRequired => "manual_repair_required",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkspaceEnsureCurrentReport {
+    pub status: WorkspaceEnsureCurrentStatus,
+    pub activation: WorkspaceActivationReport,
+    pub changed: bool,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub enum ActivationMetadataProbePhase {
     NotApplicable,
     Lock,
@@ -4652,6 +4677,41 @@ pub fn rebind(root: &Path) -> Result<WorkspaceRebindReport> {
         &mut transaction_hook,
         &mut verifier,
     )
+}
+
+pub fn ensure_current(root: &Path, apply: bool) -> Result<WorkspaceEnsureCurrentReport> {
+    let activation = activation_status(root)?;
+    let status = if activation.active {
+        WorkspaceEnsureCurrentStatus::Active
+    } else if activation.rebind_eligible {
+        WorkspaceEnsureCurrentStatus::RebindRequired
+    } else {
+        WorkspaceEnsureCurrentStatus::ManualRepairRequired
+    };
+
+    if !apply || status == WorkspaceEnsureCurrentStatus::Active {
+        return Ok(WorkspaceEnsureCurrentReport {
+            status,
+            activation,
+            changed: false,
+        });
+    }
+    if status == WorkspaceEnsureCurrentStatus::ManualRepairRequired {
+        bail!(
+            "workspace ensure-current 无法安全自动修复当前激活合同: {}",
+            activation.issues.join("; ")
+        );
+    }
+
+    // Rebind repeats the lock-bound eligibility and input checks. A concurrent
+    // transition to current is a no-op; every other drift remains fail closed
+    // inside the existing identity-only transaction.
+    let rebound = rebind(root)?;
+    Ok(WorkspaceEnsureCurrentReport {
+        status: WorkspaceEnsureCurrentStatus::Active,
+        activation: rebound.activation,
+        changed: rebound.changed,
+    })
 }
 
 fn ensure_install_bind_target(

@@ -8,6 +8,14 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$ReferenceCliPath,
 
+    [Parameter(ParameterSetName = 'Verify')]
+    [ValidateNotNullOrEmpty()]
+    [string]$WorkerPath,
+
+    [Parameter(ParameterSetName = 'Verify')]
+    [ValidateNotNullOrEmpty()]
+    [string]$ReferenceWorkerPath,
+
     [Parameter(Mandatory = $true, ParameterSetName = 'Verify')]
     [ValidateNotNullOrEmpty()]
     [string]$SkillPath,
@@ -63,7 +71,7 @@ $crateManifest = Join-Path $repoRoot 'crates/rayman/Cargo.toml'
 $lockfile = Join-Path $repoRoot 'Cargo.lock'
 $canonicalSkill = Join-Path $repoRoot 'SKILL.md'
 $packagedCanonicalSkill = Join-Path $repoRoot 'crates/rayman/assets/canonical-skill.md'
-$expectedContract = 'rayman-cli-contract-v16'
+$expectedContract = 'rayman-cli-contract-v17'
 $requiredMsrv = '1.97.1'
 
 switch ($PSCmdlet.ParameterSetName) {
@@ -452,6 +460,15 @@ function Get-ManifestSkillResourceSnapshot {
         -Path (Join-Path $repoRoot 'install-manifest.json') `
         -Label 'Install manifest'
     $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+    if ($manifest.schema_version -ne 2 -or
+        $manifest.update_runtime.protocol -ne 'rayman.update.manifest.v1' -or
+        $manifest.update_runtime.manifest_asset -ne 'rayman-update-manifest-v1.json' -or
+        $manifest.update_runtime.signature_asset -ne 'rayman-update-manifest-v1.sig' -or
+        $manifest.update_runtime.worker_artifact_base -ne 'rayman-update-worker' -or
+        $manifest.update_runtime.worker_destination_pattern -ne 'rayman-update-worker-{version}{exe_suffix}' -or
+        $manifest.update_runtime.receipt_relative_to_user_data -ne 'Rayman/install/receipt.json') {
+        throw 'Install manifest trusted update runtime contract is invalid.'
+    }
     $verified = @()
     foreach ($resource in @($manifest.codex_skill_resources)) {
         if ($resource.destination -eq 'SKILL.md') { continue }  # checked independently
@@ -665,10 +682,13 @@ function Build-SourceFreshArtifact {
             }
         }
         $artifactName = if ($IsWindows) { 'rayman.exe' } else { 'rayman' }
+        $workerName = if ($IsWindows) { 'rayman-update-worker.exe' } else { 'rayman-update-worker' }
         $artifact = Join-Path (Join-Path $targetDir 'release') $artifactName
+        $worker = Join-Path (Join-Path $targetDir 'release') $workerName
         return [pscustomobject]@{
             TargetDir = $targetDir
             Artifact = Resolve-RequiredPath -Path $artifact -Label 'source-fresh release artifact'
+            Worker = Resolve-RequiredPath -Path $worker -Label 'source-fresh update worker'
         }
     } catch {
         Remove-SourceFreshBuild -TargetDir $targetDir
@@ -1508,6 +1528,15 @@ $script:resolvedCli = Resolve-RequiredPath -Path $CliPath -Label 'CLI artifact'
 $resolvedReference = if ($ReferenceCliPath) {
     Resolve-RequiredPath -Path $ReferenceCliPath -Label 'Reference CLI artifact'
 }
+$resolvedWorker = if ($WorkerPath) {
+    Resolve-RequiredPath -Path $WorkerPath -Label 'Update worker artifact'
+}
+$resolvedReferenceWorker = if ($ReferenceWorkerPath) {
+    Resolve-RequiredPath -Path $ReferenceWorkerPath -Label 'Reference update worker artifact'
+}
+if (($null -eq $resolvedWorker) -ne ($null -eq $resolvedReferenceWorker)) {
+    throw '-WorkerPath and -ReferenceWorkerPath must be supplied together.'
+}
 $effectiveWorkspaceSkillPath = if ([string]::IsNullOrWhiteSpace($WorkspaceSkillPath)) {
     $SkillPath
 } else {
@@ -1552,6 +1581,15 @@ if ($resolvedReference) {
         throw "CLI SHA-256 differs from the reference artifact: $cliHash != $referenceHash"
     }
 }
+$workerHash = if ($resolvedWorker) { Get-Sha256 -Path $resolvedWorker } else { $null }
+$referenceWorkerHash = if ($resolvedReferenceWorker) {
+    Get-Sha256 -Path $resolvedReferenceWorker
+} else {
+    $null
+}
+if ($resolvedWorker -and $workerHash -ne $referenceWorkerHash) {
+    throw "Update worker SHA-256 differs from the reference artifact: $workerHash != $referenceWorkerHash"
+}
 
 $deployedSkillHash = Get-Sha256 -Path $resolvedSkill
 $workspaceSkillHash = Get-Sha256 -Path $resolvedWorkspaceSkill
@@ -1579,6 +1617,7 @@ $verifiedSkillResources = @(
 )
 
 $sourceFreshHash = $null
+$sourceFreshWorkerHash = $null
 if ($RequireSourceFresh) {
     $sourceFreshBuild = $null
     try {
@@ -1592,6 +1631,7 @@ if ($RequireSourceFresh) {
             throw "Source HEAD changed during isolated source-fresh build: $sourceHeadBefore -> $sourceHeadAfter"
         }
         $sourceFreshHash = Get-Sha256 -Path $sourceFreshBuild.Artifact
+        $sourceFreshWorkerHash = Get-Sha256 -Path $sourceFreshBuild.Worker
         if ($cliHash -ne $sourceFreshHash) {
             throw "CLI SHA-256 differs from a locked fresh-source rebuild: $cliHash != $sourceFreshHash"
         }
@@ -1599,6 +1639,12 @@ if ($RequireSourceFresh) {
             $referenceHash = Get-Sha256 -Path $resolvedReference
             if ($referenceHash -ne $sourceFreshHash) {
                 throw "Reference CLI SHA-256 differs from a locked fresh-source rebuild: $referenceHash != $sourceFreshHash"
+            }
+        }
+        if ($resolvedWorker) {
+            if ($workerHash -ne $sourceFreshWorkerHash -or
+                $referenceWorkerHash -ne $sourceFreshWorkerHash) {
+                throw "Update worker SHA-256 differs from a locked fresh-source rebuild: supplied=$workerHash reference=$referenceWorkerHash fresh=$sourceFreshWorkerHash"
             }
         }
         $sourceHeadFinal = Assert-CleanGitSource
@@ -1653,6 +1699,19 @@ if ($resolvedReference) {
         (Get-Sha256 -Path $finalReferencePath) -ne $referenceHash) {
         throw 'Reference CLI artifact identity changed during release-contract verification.'
     }
+}
+$finalWorkerPath = if ($WorkerPath) {
+    Resolve-RequiredPath -Path $WorkerPath -Label 'Update worker artifact (final check)'
+}
+$finalReferenceWorkerPath = if ($ReferenceWorkerPath) {
+    Resolve-RequiredPath -Path $ReferenceWorkerPath -Label 'Reference update worker artifact (final check)'
+}
+if ($resolvedWorker -and
+    ($finalWorkerPath -ne $resolvedWorker -or
+     $finalReferenceWorkerPath -ne $resolvedReferenceWorker -or
+     (Get-Sha256 -Path $finalWorkerPath) -ne $workerHash -or
+     (Get-Sha256 -Path $finalReferenceWorkerPath) -ne $referenceWorkerHash)) {
+    throw 'Update worker artifact identity changed during release-contract verification.'
 }
 $finalSkillIdentity = Assert-SkillIdentitySnapshot `
     -Expected $skillIdentity `
@@ -1729,6 +1788,10 @@ if ($RequirePath -and $SkillResourceMode -eq 'Deployed') {
     Write-Host "Release artifact contract verified: rayman $expectedVersion (MSRV $expectedMsrv)"
 }
 Write-Host "  CLI SHA-256: $cliHash"
+if ($resolvedWorker) {
+    Write-Host "  Update worker SHA-256: $workerHash"
+    Write-Host "  Reference update worker: $resolvedReferenceWorker"
+}
 if ($resolvedReference) {
     Write-Host "  Reference artifact: $resolvedReference"
 }
@@ -1743,6 +1806,9 @@ if ($VerifyGitTag) {
 }
 if ($RequireSourceFresh) {
     Write-Host "  Source freshness: verified by locked isolated rebuild ($sourceFreshHash)"
+    if ($sourceFreshWorkerHash) {
+        Write-Host "  Update worker source freshness: verified by locked isolated rebuild ($sourceFreshWorkerHash)"
+    }
     Write-Host "  Compiler identity: $($rustcIdentityBefore.Split([Environment]::NewLine)[0]) (active compiler consistency only; not toolchain provenance)"
 } else {
     Write-Warning 'Source freshness was not checked. Release handoff/CI must pass -RequireSourceFresh.'

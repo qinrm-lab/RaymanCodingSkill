@@ -14,6 +14,10 @@ param(
 
     [Parameter(Mandatory = $true, ParameterSetName = 'Closeout')]
     [ValidateNotNullOrEmpty()]
+    [string]$WorkerPath,
+
+    [Parameter(Mandatory = $true, ParameterSetName = 'Closeout')]
+    [ValidateNotNullOrEmpty()]
     [string]$SkillPath,
 
     [Parameter(ParameterSetName = 'Closeout')]
@@ -328,6 +332,7 @@ function Get-AdvisoryDatabaseBinding {
 function Get-ReleaseBinding {
     param(
         [Parameter(Mandatory = $true)][string]$Cli,
+        [Parameter(Mandatory = $true)][string]$Worker,
         [Parameter(Mandatory = $true)][string]$Skill
     )
 
@@ -347,13 +352,16 @@ function Get-ReleaseBinding {
     }
 
     $resolvedCli = Resolve-OrdinaryFile $Cli 'CLI'
+    $resolvedWorker = Resolve-OrdinaryFile $Worker 'Update worker'
     $resolvedSkill = Resolve-OrdinaryFile $Skill 'Skill'
     $scripts = [ordered]@{}
     foreach ($name in @(
         'audit-repository.ps1',
         'check-repo.ps1',
+        'install-rayman.ps1',
         'repository-quality.ps1',
         'release-closeout.ps1',
+        'update-rayman.ps1',
         'verify-release-contract.ps1'
     )) {
         $path = Resolve-OrdinaryFile (Join-Path $PSScriptRoot $name) "Release script $name"
@@ -388,13 +396,14 @@ function Get-ReleaseBinding {
     $msrv['llvm'] = Resolve-MsrvLlvmIdentities -Rustc $msrv.rustc
 
     return [ordered]@{
-        schema = 'rayman.release.binding.v3'
+        schema = 'rayman.release.binding.v4'
         workspace = (Resolve-Path -LiteralPath $repoRoot).ProviderPath
         head = $head
         clean = $true
         workspace_activation = $sourceFreshInputs.workspace_activation
         source_fresh_environment = $sourceFreshInputs.source_fresh_environment
         cli = [ordered]@{ path = $resolvedCli; sha256 = Get-Sha256 $resolvedCli }
+        worker = [ordered]@{ path = $resolvedWorker; sha256 = Get-Sha256 $resolvedWorker }
         skill = [ordered]@{ path = $resolvedSkill; sha256 = Get-Sha256 $resolvedSkill }
         scripts = $scripts
         tools = $tools
@@ -410,7 +419,7 @@ function Test-ReusableEvidence {
     try {
         foreach ($candidate in @($Evidence.binding, $Binding)) {
             if ($null -eq $candidate -or
-                $candidate.schema -ne 'rayman.release.binding.v3' -or
+                $candidate.schema -ne 'rayman.release.binding.v4' -or
                 $candidate.workspace_activation.schema -ne 'rayman.workspace-activation.snapshot.v1' -or
                 $candidate.workspace_activation.path -notmatch '[\\/]\.RaymanCodingSkill[\\/]workspace_skill\.yaml$' -or
                 $candidate.workspace_activation.sha256 -notmatch '^[0-9a-f]{64}$' -or
@@ -420,6 +429,8 @@ function Test-ReusableEvidence {
                 $candidate.source_fresh_environment.policy_sha256 -ne (Get-ObjectSha256 $candidate.source_fresh_environment.policy) -or
                 $candidate.source_fresh_environment.clear -ne $true -or
                 @($candidate.source_fresh_environment.rejected_names).Count -ne 0 -or
+                $candidate.worker.path -eq $null -or
+                $candidate.worker.sha256 -notmatch '^[0-9a-f]{64}$' -or
                 $candidate.cargo_net_offline.effective -ne $true) {
                 return $false
             }
@@ -556,13 +567,14 @@ if ($PSCmdlet.ParameterSetName -eq 'SelfTest') {
         }
     }
     $binding = [ordered]@{
-        schema = 'rayman.release.binding.v3'
+        schema = 'rayman.release.binding.v4'
         workspace = 'repository'
         head = ('a' * 40)
         clean = $true
         workspace_activation = $selfTestSourceFreshInputs.workspace_activation
         source_fresh_environment = $selfTestSourceFreshInputs.source_fresh_environment
         cli = [ordered]@{ path = 'rayman'; sha256 = ('b' * 64) }
+        worker = [ordered]@{ path = 'rayman-update-worker'; sha256 = ('8' * 64) }
         skill = [ordered]@{ path = 'SKILL.md'; sha256 = ('c' * 64) }
         scripts = [ordered]@{ audit = ('c' * 64) }
         tools = [ordered]@{
@@ -596,7 +608,11 @@ if ($PSCmdlet.ParameterSetName -eq 'SelfTest') {
     if (-not (Test-ReusableEvidence $evidence $binding)) {
         throw 'release closeout self-test rejected an exact binding.'
     }
-    foreach ($legacySchema in @('rayman.release.binding.v1', 'rayman.release.binding.v2')) {
+    foreach ($legacySchema in @(
+        'rayman.release.binding.v1',
+        'rayman.release.binding.v2',
+        'rayman.release.binding.v3'
+    )) {
         $legacyBinding = $binding | ConvertTo-Json -Depth 20 | ConvertFrom-Json -Depth 20
         $legacyBinding.schema = $legacySchema
         $legacyEvidence = [pscustomobject]@{
@@ -695,6 +711,7 @@ Push-Location $repoRoot
 try {
     $binding = Get-ReleaseBinding `
         -Cli $CliPath `
+        -Worker $WorkerPath `
         -Skill $SkillPath
     $evidenceFile = Resolve-EvidencePath $EvidencePath
     $reuse = $false
@@ -714,9 +731,10 @@ try {
         # the cheap PATH-identity check (no rebuild, no repository audit) so a reused
         # closeout still fails when the effective PATH `rayman` differs from -CliPath, just
         # like the non-reuse branch below.
-        & (Join-Path $PSScriptRoot 'verify-release-contract.ps1') -CliPath $CliPath -ReferenceCliPath $CliPath -SkillPath $SkillPath -WorkspaceSkillPath (Join-Path $repoRoot 'SKILL.md') -RequirePath
+        & (Join-Path $PSScriptRoot 'verify-release-contract.ps1') -CliPath $CliPath -ReferenceCliPath $CliPath -WorkerPath $WorkerPath -ReferenceWorkerPath $WorkerPath -SkillPath $SkillPath -WorkspaceSkillPath (Join-Path $repoRoot 'SKILL.md') -RequirePath
         $reuseTerminalBinding = Get-ReleaseBinding `
             -Cli $CliPath `
+            -Worker $WorkerPath `
             -Skill $SkillPath
         if ((Get-ObjectSha256 $reuseTerminalBinding) -ne (Get-ObjectSha256 $binding) -or
             -not (Test-ReusableEvidence $existing $reuseTerminalBinding)) {
@@ -729,11 +747,21 @@ try {
             -Cli $CliPath `
             -Skill $SkillPath
         & (Join-Path $PSScriptRoot 'audit-repository.ps1') @auditArguments
+        & (Join-Path $PSScriptRoot 'verify-release-contract.ps1') `
+            -CliPath $CliPath `
+            -ReferenceCliPath $CliPath `
+            -WorkerPath $WorkerPath `
+            -ReferenceWorkerPath $WorkerPath `
+            -SkillPath $SkillPath `
+            -WorkspaceSkillPath (Join-Path $repoRoot 'SKILL.md') `
+            -RequirePath `
+            -RequireSourceFresh
         # The audit's installed_release_identity phase already performs the
         # clean isolated -RequireSourceFresh rebuild. Recomputing the exact
         # binding here detects any post-audit drift without a second rebuild.
         $after = Get-ReleaseBinding `
             -Cli $CliPath `
+            -Worker $WorkerPath `
             -Skill $SkillPath
         if ((Get-ObjectSha256 $after) -ne (Get-ObjectSha256 $binding)) {
             throw 'Release binding drifted during audit; evidence was not written.'
@@ -756,6 +784,7 @@ try {
     }
     $terminalBinding = Get-ReleaseBinding `
         -Cli $CliPath `
+        -Worker $WorkerPath `
         -Skill $SkillPath
     if ((Get-ObjectSha256 $terminalBinding) -ne (Get-ObjectSha256 $binding)) {
         throw 'Release binding drifted before closeout completion; no completion claim is valid.'

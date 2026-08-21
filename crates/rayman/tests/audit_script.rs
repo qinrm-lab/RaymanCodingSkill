@@ -443,10 +443,13 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
         );
     }
     for required in [
-        "schema = 'rayman.release.binding.v3'",
+        "schema = 'rayman.release.binding.v4'",
         "workspace_activation = $sourceFreshInputs.workspace_activation",
         "source_fresh_environment = $sourceFreshInputs.source_fresh_environment",
         "rayman.release.binding.v2",
+        "rayman.release.binding.v3",
+        "worker = [ordered]@{ path = $resolvedWorker; sha256 = Get-Sha256 $resolvedWorker }",
+        "-WorkerPath $WorkerPath",
         "cargo-deny",
         "cargo-llvm-cov",
         "llvm-cov",

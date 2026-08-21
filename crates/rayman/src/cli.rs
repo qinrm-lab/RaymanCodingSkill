@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
 
 use crate::i18n::Language;
 
@@ -40,6 +40,8 @@ pub enum Command {
     CodexHook(CodexHookCmd),
     /// 激活、重绑、停用或检查工作区契约
     Workspace(WorkspaceCmd),
+    /// 固定官方来源的版本通知与显式可信安装
+    Update(UpdateCmd),
     /// 工作区上下文索引（内容 hash 证明；map/check 会拒绝未验证内容）
     Context(ContextCmd),
     /// 最小目标契约与待完成项续接
@@ -141,6 +143,12 @@ pub enum WorkspaceAction {
         #[arg(long)]
         yes: bool,
     },
+    /// Report activation currency and optionally apply an eligible identity-only rebind.
+    EnsureCurrent {
+        /// Apply the existing rebind transaction when identity drift is safely repairable.
+        #[arg(long)]
+        yes: bool,
+    },
     /// Installer-only activation finalization after every other install check succeeds.
     #[command(name = "install-bind", hide = true)]
     InstallBind {
@@ -157,6 +165,49 @@ pub enum WorkspaceAction {
         #[arg(long)]
         yes: bool,
     },
+}
+
+#[derive(Args)]
+pub struct UpdateCmd {
+    #[command(subcommand)]
+    pub action: UpdateAction,
+}
+
+#[derive(Subcommand)]
+pub enum UpdateAction {
+    /// 只读取本机更新偏好与上一次成功的发现结果
+    Status,
+    /// 立即检查固定官方 Releases 元数据；只报告候选，不下载或安装
+    Check,
+    /// 配置用户级、显式 opt-in 的周期性检查
+    #[command(group(
+        ArgGroup::new("update_preference")
+            .required(true)
+            .multiple(true)
+            .args(["auto_check", "no_auto_check", "auto_install", "no_auto_install"])
+    ))]
+    Configure {
+        /// 启用调用 skill 时的周期性检查
+        #[arg(long, conflicts_with = "no_auto_check")]
+        auto_check: bool,
+        /// 停用调用 skill 时的周期性检查
+        #[arg(long, conflicts_with = "auto_check")]
+        no_auto_check: bool,
+        /// 显式允许已验签 bundle 通过独立 worker 自动安装
+        #[arg(long, conflicts_with_all = ["no_auto_install", "no_auto_check"])]
+        auto_install: bool,
+        /// 关闭自动安装但保留版本通知
+        #[arg(long, conflicts_with = "auto_install")]
+        no_auto_install: bool,
+        /// 检查间隔（小时；仅配合 --auto-check）
+        #[arg(long, requires = "auto_check")]
+        interval_hours: Option<u16>,
+        /// 确认写入用户级更新偏好
+        #[arg(long)]
+        yes: bool,
+    },
+    /// 仅在检查已启用且间隔到期时检查并写缓存；安装另需独立同意
+    Poll,
 }
 
 #[derive(Args)]

@@ -97,6 +97,29 @@ overwriting user-managed state still require user authority.
   in other workspaces. An exact-identity upgrade may therefore leave a prior
   binding invalid until that workspace explicitly runs `workspace rebind
   --yes`.
+- A non-read-only explicit Rayman invocation begins with activation-exempt
+  `rayman --format json update poll`. Stable-version notification is enabled
+  by default and writes only the user-level update cache; read-only work uses
+  `update status` and performs no poll/cache write. A tag, release API result,
+  prompt, or cached observation is untrusted notification data and can never
+  authorize a download, worker, or installation.
+- Automatic installation has an independent `auto_install=false` default and
+  requires `update configure --auto-install --yes`. Legacy auto-check state is
+  always migrated with install consent false. Trusted apply additionally
+  requires the exact supported-install receipt, managed CLI and versioned
+  worker identities, a canonical manifest signed by the compiled Ed25519 root,
+  monotonic key/sequence/version state, and every fixed-role asset size/hash.
+  Missing, expired, replayed, equivocated, malformed, or unverifiable input is
+  fail closed with no installation write.
+- The versioned update worker is a direct program plus argv returned by poll;
+  never execute it through a shell string or accept a remote path/URL. It
+  holds the installation-scoped OS mutex, stages under a creation-bound
+  no-reparse transaction root, and publishes the full CLI/worker/skill/receipt
+  tuple through the installer-equivalent handle-relative CAS and durable
+  journal. It does not change PATH, hooks, or any workspace activation. A
+  successful apply reports `restart_required=true`; the old loaded adapter
+  cannot claim the new runtime current. After restart, only the current
+  workspace may run eligible `workspace ensure-current --yes`.
 - Rebind is a narrow identity migration: it accepts only an existing complete,
   enabled `raymancodingskill` binding whose defects are limited to skill hash,
   CLI contract, or CLI version drift and whose current skill bytes match the

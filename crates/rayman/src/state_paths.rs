@@ -635,6 +635,52 @@ impl WindowsDirectoryObjectGuard {
         verify_windows_directory_object_at_path(self, self.path(), label)
     }
 
+    /// Write one new direct child through the held directory handle.  The
+    /// leaf is created exclusively, flushed, read back through the same
+    /// handle, and reopened by name for strong-identity revalidation before
+    /// its namespace path is returned to an external installer process.
+    pub(crate) fn write_file_exclusive(
+        &self,
+        name: &std::ffi::OsStr,
+        bytes: &[u8],
+        label: &str,
+    ) -> Result<PathBuf> {
+        ensure_windows_single_component(name)?;
+        verify_windows_directory_object_at_path(self, self.path(), label)?;
+        let path = self.path().join(name);
+        let mut file = create_windows_relative_file(
+            &self.directory,
+            name,
+            WINDOWS_FILE_CREATE_ACCESS,
+            WINDOWS_NAMESPACE_SHARE,
+        )
+        .with_context(|| format!("cannot exclusively create {label}: {}", display_path(&path)))?;
+        let created = windows_handle_identity(&file, &path, false, label)?;
+        file.write_all(bytes)
+            .with_context(|| format!("cannot write {label}: {}", display_path(&path)))?;
+        file.sync_all()
+            .with_context(|| format!("cannot flush {label}: {}", display_path(&path)))?;
+        let written = windows_handle_identity(&file, &path, false, label)?;
+        if !same_windows_file_object(&created, &written) || written.len != bytes.len() as u64 {
+            bail!(
+                "{label} changed identity or length while being written: {}",
+                display_path(&path)
+            );
+        }
+        let captured = read_bytes_from_handle(&file, written.len, &path, label)?;
+        let final_identity = windows_handle_identity(&file, &path, false, label)?;
+        if captured != bytes || !same_windows_file_object(&written, &final_identity) {
+            bail!(
+                "{label} changed while being verified: {}",
+                display_path(&path)
+            );
+        }
+        revalidate_windows_named_entry(&self.directory, name, &final_identity, false, &path)?;
+        verify_windows_directory_object_at_path(self, self.path(), label)?;
+        drop(file);
+        Ok(path)
+    }
+
     /// Open (or create) a persistent direct container through this held
     /// directory object. The returned guard is intended only for a short
     /// nested creation/cleanup scope: callers must not retain a direct-child

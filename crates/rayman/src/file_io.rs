@@ -276,13 +276,14 @@ pub(crate) fn read_handle_bound_file(path: &Path, label: &str) -> Result<(Vec<u8
             display_path(path)
         )
     })?;
-    read_open_handle_bound_file_with_hook(path, label, file, || {})
+    read_open_handle_bound_file_with_hook(path, label, file, None, || {})
 }
 
 fn read_open_handle_bound_file_with_hook(
     path: &Path,
     label: &str,
     file: fs::File,
+    maximum_bytes: Option<u64>,
     before_named_reopen: impl FnOnce(),
 ) -> Result<(Vec<u8>, FileIdentity)> {
     let before = file.metadata().with_context(|| {
@@ -298,6 +299,7 @@ fn read_open_handle_bound_file_with_hook(
         );
     }
     let before_identity = file_identity_from_handle(&file, &before, path, label)?;
+    ensure_bounded_identity(&before_identity, maximum_bytes, path, label)?;
     if !has_strong_file_identity(&before_identity) {
         bail!(
             "{label} lacks the strong file identity required for stable reads: {}",
@@ -313,6 +315,7 @@ fn read_open_handle_bound_file_with_hook(
         )
     })?;
     let middle_identity = file_identity_from_handle(&file, &middle, path, label)?;
+    ensure_bounded_identity(&middle_identity, maximum_bytes, path, label)?;
     let second = read_bytes_from_handle(&file, middle_identity.len, path, label)?;
     let after = file.metadata().with_context(|| {
         format!(
@@ -321,6 +324,7 @@ fn read_open_handle_bound_file_with_hook(
         )
     })?;
     let after_identity = file_identity_from_handle(&file, &after, path, label)?;
+    ensure_bounded_identity(&after_identity, maximum_bytes, path, label)?;
     if first != second
         || before_identity != middle_identity
         || middle_identity != after_identity
@@ -361,11 +365,46 @@ fn read_open_handle_bound_file_with_hook(
     Ok((second, after_identity))
 }
 
+fn ensure_bounded_identity(
+    identity: &FileIdentity,
+    maximum_bytes: Option<u64>,
+    path: &Path,
+    label: &str,
+) -> Result<()> {
+    if maximum_bytes.is_some_and(|maximum| identity.len > maximum) {
+        bail!(
+            "{label} exceeds the bounded read limit: {}",
+            display_path(path)
+        );
+    }
+    Ok(())
+}
+
 pub(crate) fn read_optional_handle_bound_file(
     path: &Path,
     label: &str,
 ) -> Result<Option<(Vec<u8>, FileIdentity)>> {
     read_optional_handle_bound_file_with_hook(path, label, || {})
+}
+
+pub(crate) fn read_optional_handle_bound_file_bounded(
+    path: &Path,
+    label: &str,
+    maximum_bytes: u64,
+) -> Result<Option<(Vec<u8>, FileIdentity)>> {
+    let file = match open_file_no_follow(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!(
+                    "cannot open {label} without following links: {}",
+                    display_path(path)
+                )
+            });
+        }
+    };
+    read_open_handle_bound_file_with_hook(path, label, file, Some(maximum_bytes), || {}).map(Some)
 }
 
 fn read_optional_handle_bound_file_with_hook(
@@ -385,7 +424,7 @@ fn read_optional_handle_bound_file_with_hook(
             });
         }
     };
-    read_open_handle_bound_file_with_hook(path, label, file, before_named_reopen).map(Some)
+    read_open_handle_bound_file_with_hook(path, label, file, None, before_named_reopen).map(Some)
 }
 
 /// 该 metadata 是否指向符号链接或 Windows reparse point。

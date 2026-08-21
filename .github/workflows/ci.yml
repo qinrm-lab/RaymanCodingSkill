@@ -128,7 +128,9 @@ jobs:
 
           $artifactDirectory = Join-Path $PWD "target/release"
           $artifactName = if ($IsWindows) { "rayman.exe" } else { "rayman" }
+          $workerName = if ($IsWindows) { "rayman-update-worker.exe" } else { "rayman-update-worker" }
           $artifact = Join-Path $artifactDirectory $artifactName
+          $worker = Join-Path $artifactDirectory $workerName
           $env:PATH = "$artifactDirectory$([IO.Path]::PathSeparator)$env:PATH"
 
           # doctor intentionally fails when this workspace-level binding is absent or stale.
@@ -169,6 +171,8 @@ jobs:
           $contractArgs = @{
             CliPath = $artifact
             ReferenceCliPath = $artifact
+            WorkerPath = $worker
+            ReferenceWorkerPath = $worker
             SkillPath = (Join-Path $PWD "SKILL.md")
             WorkspaceSkillPath = (Join-Path $PWD "SKILL.md")
             SkillResourceMode = "Source"
@@ -303,7 +307,9 @@ jobs:
           sudo apt-get install --yes --no-install-recommends acl
       - name: Installer identity/metadata/race self-test
         shell: pwsh
-        run: ./scripts/install-rayman.ps1 -SelfTest
+        run: |
+          ./scripts/install-rayman.ps1 -SelfTest
+          ./scripts/update-rayman.ps1 -SelfTest
 
   package-install:
     name: cargo package + install smoke
@@ -331,6 +337,106 @@ jobs:
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
       - run: cargo install cargo-llvm-cov --locked --version 0.8.7
       - run: cargo llvm-cov --locked --workspace --all-features --all-targets --fail-under-lines 75
+
+  signed-release:
+    name: signed Windows update release
+    if: github.ref_type == 'tag'
+    needs:
+      - check
+      - msrv
+      - release-contract
+      - deny
+      - evals
+      - installer-selftest
+      - package-install
+      - coverage
+    runs-on: windows-latest
+    environment: rayman-release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable, pinned 2026-07-14
+
+      - name: Build fixed Windows release assets
+        shell: pwsh
+        run: |
+          cargo build --locked --release -p rayman
+          if ($LASTEXITCODE -ne 0) { throw "release build failed: $LASTEXITCODE" }
+          New-Item -ItemType Directory -Path dist | Out-Null
+          Copy-Item target/release/rayman.exe dist/rayman-windows-x86_64.exe
+          Copy-Item target/release/rayman-update-worker.exe dist/rayman-update-worker-windows-x86_64.exe
+          Copy-Item SKILL.md dist/raymancodingskill-SKILL.md
+          Copy-Item AGENT_CONTRACT.md dist/raymancodingskill-AGENTS.md
+          Copy-Item references/workflow-contract.md dist/raymancodingskill-workflow-contract.md
+          Copy-Item scripts/install-rayman.ps1 dist/install-rayman.ps1
+
+      - name: Create and sign canonical update manifest
+        shell: pwsh
+        env:
+          RAYMAN_UPDATE_SIGNING_KEY_PEM_B64: ${{ secrets.RAYMAN_UPDATE_SIGNING_KEY_PEM_B64 }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:RAYMAN_UPDATE_SIGNING_KEY_PEM_B64)) {
+            throw 'Protected release environment is missing RAYMAN_UPDATE_SIGNING_KEY_PEM_B64.'
+          }
+          $commit = (git rev-parse HEAD).Trim()
+          $sequenceText = (git rev-list --count HEAD).Trim()
+          [uint64]$sequence = 0
+          if (-not [uint64]::TryParse($sequenceText, [ref]$sequence) -or $sequence -eq 0) {
+            throw "Unable to derive a positive release sequence: $sequenceText"
+          }
+          $issued = [DateTimeOffset]::UtcNow
+          $expires = $issued.AddDays(30)
+          $keyPath = Join-Path $env:RUNNER_TEMP 'rayman-update-signing-key.pem'
+          try {
+            [IO.File]::WriteAllBytes(
+              $keyPath,
+              [Convert]::FromBase64String($env:RAYMAN_UPDATE_SIGNING_KEY_PEM_B64)
+            )
+            ./scripts/update-rayman.ps1 `
+              -AssetRoot dist `
+              -InstallManifest install-manifest.json `
+              -Commit $commit `
+              -Sequence $sequence `
+              -IssuedAt $issued.ToString('yyyy-MM-ddTHH:mm:ssZ') `
+              -ExpiresAt $expires.ToString('yyyy-MM-ddTHH:mm:ssZ') `
+              -OutputDirectory dist `
+              -WorkerPath target/release/rayman-update-worker.exe `
+              -SigningKeyPath $keyPath
+          } finally {
+            if (Test-Path -LiteralPath $keyPath -PathType Leaf) {
+              Remove-Item -LiteralPath $keyPath -Force
+            }
+          }
+          Remove-Item -LiteralPath dist/rayman-update-manifest-v1.payload -Force
+
+      - name: Publish immutable asset set for the exact tag
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $assets = @(
+            'dist/rayman-windows-x86_64.exe',
+            'dist/rayman-update-worker-windows-x86_64.exe',
+            'dist/raymancodingskill-SKILL.md',
+            'dist/raymancodingskill-AGENTS.md',
+            'dist/raymancodingskill-workflow-contract.md',
+            'dist/install-rayman.ps1',
+            'dist/rayman-update-manifest-v1.json',
+            'dist/rayman-update-manifest-v1.sig'
+          )
+          foreach ($asset in $assets) {
+            if (-not (Test-Path -LiteralPath $asset -PathType Leaf)) {
+              throw "Release asset is missing: $asset"
+            }
+          }
+          gh release create $env:GITHUB_REF_NAME @assets `
+            --verify-tag `
+            --title "RaymanCodingSkill $env:GITHUB_REF_NAME" `
+            --notes "Signed Windows x86_64 update bundle for $env:GITHUB_SHA"
 
   scheduled-advisories:
     name: scheduled dependency advisory refresh

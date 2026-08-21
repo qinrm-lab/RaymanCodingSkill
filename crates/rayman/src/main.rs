@@ -8,6 +8,7 @@ mod goal_cli;
 mod readiness;
 mod state_audit_cli;
 mod task_workflow;
+mod update_cli;
 
 use std::path::Path;
 use std::process::Command as ProcessCommand;
@@ -71,6 +72,12 @@ fn run(cli: Cli) -> Result<()> {
     let json = matches!(cli.format, Format::Json);
     if let Command::CodexHook(command) = &cli.command {
         return codex_hook_cli::run(json, command);
+    }
+    // Update preferences and discovery are user-level and activation-exempt.
+    // Dispatch before workspace discovery so an unactivated directory or a
+    // safely rebindable post-install workspace cannot suppress notification.
+    if let Command::Update(command) = &cli.command {
+        return update_cli::run(json, command);
     }
     let root = workspace_root()?;
     if !matches!(
@@ -289,6 +296,7 @@ fn run(cli: Cli) -> Result<()> {
 
         Command::Doctor(cmd) => return doctor::run(&root, json, cmd),
         Command::CodexHook(_) => unreachable!(),
+        Command::Update(_) => unreachable!(),
         Command::LegacyAudit(_) => bail!(
             "`rayman audit` 已退役；工作区门禁使用 `rayman check --profile standard`，任务交付使用 `rayman finish --goal <id>`，状态卫生使用 `rayman state audit --check`"
         ),
@@ -348,6 +356,20 @@ fn run_workspace(root: &Path, json: bool, cmd: WorkspaceCmd) -> Result<()> {
             if json {
                 print(&serde_json::to_value(&report)?);
             } else {
+                print_workspace_activation(&report.activation);
+                println!("  changed: {}", report.changed);
+            }
+            return Ok(());
+        }
+        WorkspaceAction::EnsureCurrent { yes } => {
+            let report = workspace::ensure_current(root, yes)?;
+            if json {
+                print(&serde_json::to_value(&report)?);
+            } else {
+                println!(
+                    "RaymanCodingSkill workspace activation currency: {}",
+                    report.status.as_str()
+                );
                 print_workspace_activation(&report.activation);
                 println!("  changed: {}", report.changed);
             }

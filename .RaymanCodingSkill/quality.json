@@ -48,6 +48,16 @@
       "reason": "Clap command schemas are intentionally centralized so main dispatch, the Codex Stop hook, and focused command adapters share one parsed contract; CLI integration tests and the full repository gate cover all consumers."
     },
     {
+      "path": "crates/rayman/src/update.rs",
+      "kind": "high_fan_in",
+      "reason": "Release-version parsing and the untrusted notification boundary intentionally form the shared parent for separately tested trust, transport, state, and install modules. Focused update unit tests, four activation-exempt CLI tests, the independent worker transaction integration test, and the full repository gate cover every consumer."
+    },
+    {
+      "path": "crates/rayman/src/update_cli.rs",
+      "kind": "public_api_without_test_evidence",
+      "reason": "This binary-only adapter exposes one parent-visible dispatch function; four cross-process CLI tests cover offline status, explicit confirmation, disabled zero-network poll, corrupt-state preservation, activation exemption, and workspace zero-write behavior."
+    },
+    {
       "path": "crates/rayman/src/codex_host.rs",
       "kind": "high_fan_in",
       "reason": "Codex home resolution, patch availability, and Windows token fact collection remain one host adapter; client-neutral execution-context normalization and classification now live in execution_context.rs. Focused host/context tests, CLI integration tests, and the full repository gate cover both layers."

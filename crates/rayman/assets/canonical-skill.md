@@ -25,6 +25,31 @@ For explicit non-read-only use, apply the eligible rebind and continuation
 rules in the shared workflow reference. Activation writes remain fail closed;
 this adapter does not redefine their identity or permission contract.
 
+## Installed-version currency
+
+At the start of an explicit non-read-only Rayman task, run `rayman --format
+json update poll` before activation repair. Notification checks are enabled by
+default, use only the compiled official release source, and may update only
+the user-level update cache. A network, metadata, or cache failure never grants
+installation authority and must not block the original coding task.
+
+`auto_install` is a separate consent bit that defaults to false and can be set
+only by `rayman update configure --auto-install --yes`. When poll returns a
+`worker_launch`, execute exactly its program plus argv as a direct process,
+never as a shell string. The receipt-bound versioned worker must recheck
+consent, the current managed install tuple, signed canonical manifest, pinned
+key epoch, anti-replay floor, every asset size/hash, and the recoverable
+publication journal. Any missing or unverifiable link is fail closed. After a
+successful worker result reports `restart_required=true`, stop and request a
+Codex restart; the old loaded adapter must not claim the new skill/runtime is
+active. On the next invocation run `rayman workspace ensure-current --yes` and
+continue only if its existing activation is eligible for identity-only rebind.
+Never scan or rewrite another workspace.
+
+A read-only request does not run poll, a worker, or `ensure-current --yes`.
+It may use `rayman update status` and `rayman workspace ensure-current` only to
+report current state and an exact recovery command without writes.
+
 ## Codex adapter
 
 - This repository installer deploys the Codex adapter as a global skill.

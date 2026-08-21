@@ -32,20 +32,41 @@ if ($AddToUserPath -and -not $IsWindows) {
     throw '-AddToUserPath is supported only on Windows. Configure PATH before installation on this platform.'
 }
 
-$repoRoot = Split-Path -Parent $PSScriptRoot
+$repoRoot = if ($env:RAYMAN_UPDATE_WORKER -eq '1') {
+    $null
+} else {
+    Split-Path -Parent $PSScriptRoot
+}
 $artifactName = if ($IsWindows) { 'rayman.exe' } else { 'rayman' }
+$workerArtifactName = if ($IsWindows) { 'rayman-update-worker.exe' } else { 'rayman-update-worker' }
+$localAppData = if ($IsWindows) {
+    [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
+} else {
+    $null
+}
+$userProfileDirectory = if ($IsWindows) {
+    [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
+} else {
+    $HOME
+}
+if ($IsWindows -and [string]::IsNullOrWhiteSpace($localAppData)) {
+    throw 'The Windows LocalApplicationData known folder is unavailable.'
+}
+if ([string]::IsNullOrWhiteSpace($userProfileDirectory)) {
+    throw 'The current user profile directory is unavailable.'
+}
 # Set under StrictMode before any read: true only when nothing resolved `rayman`
 # and the destination was made reachable for the post-install verification.
 $script:processPathOnly = $false
 if ([string]::IsNullOrWhiteSpace($BinDirectory)) {
     $BinDirectory = if ($IsWindows) {
-        Join-Path $env:LOCALAPPDATA 'Rayman/bin'
+        Join-Path $localAppData 'Rayman/bin'
     } else {
         Join-Path $HOME '.local/bin'
     }
 }
 if ([string]::IsNullOrWhiteSpace($SkillDirectory)) {
-    $SkillDirectory = Join-Path $HOME '.codex/skills/raymancodingskill'
+    $SkillDirectory = Join-Path $userProfileDirectory '.codex/skills/raymancodingskill'
 }
 
 function Get-CodexSkillResourcePlan {
@@ -61,10 +82,16 @@ function Get-CodexSkillResourcePlan {
     } catch {
         throw "Install manifest is invalid: $($_.Exception.Message)"
     }
-    if ($manifest.schema_version -ne 1 -or
+    if ($manifest.schema_version -ne 2 -or
         $manifest.clients.codex.deployment_scope -ne 'global_skill' -or
         $manifest.clients.claude_code.deployment_scope -ne 'repository_entrypoint_only' -or
-        $manifest.clients.claude_code.entrypoint -ne 'CLAUDE.md') {
+        $manifest.clients.claude_code.entrypoint -ne 'CLAUDE.md' -or
+        $manifest.update_runtime.protocol -ne 'rayman.update.manifest.v1' -or
+        $manifest.update_runtime.manifest_asset -ne 'rayman-update-manifest-v1.json' -or
+        $manifest.update_runtime.signature_asset -ne 'rayman-update-manifest-v1.sig' -or
+        $manifest.update_runtime.worker_artifact_base -ne 'rayman-update-worker' -or
+        $manifest.update_runtime.worker_destination_pattern -ne 'rayman-update-worker-{version}{exe_suffix}' -or
+        $manifest.update_runtime.receipt_relative_to_user_data -ne 'Rayman/install/receipt.json') {
         throw 'Install manifest client deployment scopes are invalid.'
     }
 
@@ -3122,6 +3149,8 @@ function Install-FileWithRollback {
         [Parameter(Mandatory = $true)][string]$Destination,
         [Parameter(Mandatory = $true)][string]$Nonce,
         [Parameter(Mandatory = $true)][string]$ExpectedHash,
+        [AllowNull()][string]$ExpectedDestinationHash,
+        [switch]$ExpectDestinationAbsent,
         [AllowNull()]$TestHooks
     )
 
@@ -3246,8 +3275,19 @@ function Install-FileWithRollback {
 
         $destinationLease = Open-InstallLeafLease -ParentLease $parentLease -Leaf $destinationLeaf -DeleteAccess:$IsWindows
         if ($null -ne $destinationLease) {
+            if ($ExpectDestinationAbsent) {
+                $occupied = $destinationLease.CaptureSnapshot()
+                throw "Install destination was required to be absent but is occupied: $fullDestination identity=$(Get-InstallPlatformIdentity -Snapshot $occupied)"
+            }
             $record.HadOriginal = $true
             $backupIdentity = $destinationLease.CaptureSnapshot()
+            if (-not [string]::IsNullOrWhiteSpace($ExpectedDestinationHash)) {
+                Assert-InstallFileSnapshot `
+                    -Actual $backupIdentity `
+                    -Expected $backupIdentity `
+                    -ExpectedHash $ExpectedDestinationHash `
+                    -Label 'Receipt-bound current install destination'
+            }
             $record.BackupIdentity = $backupIdentity
             $record.BackupHash = [string]$backupIdentity.ContentSha256
             $originalEntry = Add-InstallLedgerEntry -Ledger $ledger -ParentLease $parentLease -Leaf $destinationLeaf -Role 'original_destination' -State 'captured' -Reason 'original destination captured before backup rename' -ExpectedPresence Present -Active $true -ExpectedSnapshot $backupIdentity
@@ -3295,6 +3335,9 @@ function Install-FileWithRollback {
             $verifiedBackup.Dispose()
             Set-InstallLedgerEntryState -Entry $backupEntry -State 'backup_verified' -ExpectedPresence Present -Active $true -Reason 'backup reopened through parent lease and matched immutable original identity'
         } else {
+            if (-not [string]::IsNullOrWhiteSpace($ExpectedDestinationHash)) {
+                throw "Install destination required by the receipt is missing: $fullDestination"
+            }
             $record.DestinationVacancyEntry = Add-InstallLedgerEntry -Ledger $ledger -ParentLease $parentLease -Leaf $destinationLeaf -Role 'destination_vacancy' -State 'verified_initially_absent' -Reason 'first installation destination was absent' -ExpectedPresence Absent -Active $true
         }
 
@@ -5529,6 +5572,405 @@ function Invoke-InstallPathSelfTest {
     Write-Host 'Install self-test passed: native ABI, relative handle CAS, rollback/cleanup races, metadata binding, retained-evidence reporting, doctor isolation, manifest, PATH compare-exchange logic, Hook reports, and reparse rejection.'
 }
 
+function Get-RaymanUpdateFileHashOrNull {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return $null
+    }
+    $item = Get-Item -LiteralPath $Path -Force
+    if ($item.PSIsContainer -or
+        $item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw "Update transaction path is not an ordinary file: $Path"
+    }
+    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Write-RaymanUpdateJournal {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)]$Value
+    )
+
+    $parent = Resolve-ExistingRealDirectory -Path ([IO.Path]::GetDirectoryName($Path)) -Label 'Update journal directory'
+    $target = [IO.Path]::GetFullPath($Path)
+    if (-not $target.StartsWith(
+        $parent.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar,
+        [StringComparison]::OrdinalIgnoreCase
+    )) {
+        throw "Update journal escaped its verified directory: $target"
+    }
+    $text = $Value | ConvertTo-Json -Depth 12 -Compress
+    $bytes = [Text.UTF8Encoding]::new($false).GetBytes($text)
+    $temporary = "$target.write-$PID-$([Guid]::NewGuid().ToString('N'))"
+    $stream = $null
+    try {
+        $stream = [IO.FileStream]::new(
+            $temporary,
+            [IO.FileMode]::CreateNew,
+            [IO.FileAccess]::Write,
+            [IO.FileShare]::None
+        )
+        $stream.Write($bytes, 0, $bytes.Length)
+        $stream.Flush($true)
+        $stream.Dispose()
+        $stream = $null
+        [IO.File]::Move($temporary, $target, $true)
+    } finally {
+        if ($null -ne $stream) {
+            $stream.Dispose()
+        }
+        if (Test-Path -LiteralPath $temporary -PathType Leaf) {
+            Remove-Item -LiteralPath $temporary -Force
+        }
+    }
+}
+
+function Assert-RaymanUpdatePlan {
+    param(
+        [Parameter(Mandatory = $true)]$Plan,
+        [Parameter(Mandatory = $true)][string]$PlanPath
+    )
+
+    $top = @($Plan.PSObject.Properties.Name | Sort-Object)
+    $expectedTop = @(
+        'bundle_root', 'candidate_version', 'cli_contract', 'files',
+        'installation_id', 'journal_path', 'manifest_sha256', 'result_path',
+        'schema_version', 'transaction_id'
+    )
+    if (($top -join ',') -ne (($expectedTop | Sort-Object) -join ',')) {
+        throw 'Verified update plan has unknown or missing top-level fields.'
+    }
+    if ($Plan.schema_version -ne 1 -or
+        [string]$Plan.transaction_id -notmatch '^[0-9a-f]{32}$' -or
+        [string]$Plan.installation_id -notmatch '^[0-9a-f]{32}$' -or
+        [string]$Plan.manifest_sha256 -notmatch '^[0-9a-f]{64}$' -or
+        [string]$Plan.candidate_version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' -or
+        [string]$Plan.cli_contract -notmatch '^rayman-cli-contract-v[1-9][0-9]*$') {
+        throw 'Verified update plan identity fields are invalid.'
+    }
+    $bundleRoot = Resolve-ExistingRealDirectory -Path ([string]$Plan.bundle_root) -Label 'Verified update bundle root'
+    $planFull = [IO.Path]::GetFullPath($PlanPath)
+    $prefix = $bundleRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    if (-not $planFull.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) -or
+        [IO.Path]::GetFullPath([string]$Plan.journal_path) -ne (Join-Path $bundleRoot 'journal.json') -or
+        [IO.Path]::GetFullPath([string]$Plan.result_path) -ne (Join-Path $bundleRoot 'result.json')) {
+        throw 'Verified update plan paths escaped the transaction root.'
+    }
+    $files = @($Plan.files)
+    $expectedRoles = @(
+        'skill', 'agent_contract', 'workflow_contract',
+        'update_worker', 'cli', 'install_receipt'
+    )
+    if ($files.Count -ne $expectedRoles.Count) {
+        throw 'Verified update plan must contain exactly six fixed publication roles.'
+    }
+    for ($index = 0; $index -lt $files.Count; $index++) {
+        $file = $files[$index]
+        $fields = @($file.PSObject.Properties.Name | Sort-Object)
+        $expectedFields = @(
+            'allow_existing_new', 'destination', 'expect_absent',
+            'expected_current_sha256', 'new_sha256', 'role', 'source'
+        )
+        if (($fields -join ',') -ne (($expectedFields | Sort-Object) -join ',') -or
+            [string]$file.role -ne $expectedRoles[$index] -or
+            [string]$file.new_sha256 -notmatch '^[0-9a-f]{64}$') {
+            throw "Verified update plan file entry $index is invalid."
+        }
+        if ($null -ne $file.expected_current_sha256 -and
+            [string]$file.expected_current_sha256 -notmatch '^[0-9a-f]{64}$') {
+            throw "Verified update plan current hash is invalid for role $($file.role)."
+        }
+        $source = [IO.Path]::GetFullPath([string]$file.source)
+        if (-not $source.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Verified update source escaped the transaction root: $source"
+        }
+        $sourceHash = Get-RaymanUpdateFileHashOrNull -Path $source
+        if ($sourceHash -ne [string]$file.new_sha256) {
+            throw "Verified update source hash mismatch for role $($file.role)."
+        }
+        if (-not [IO.Path]::IsPathRooted([string]$file.destination)) {
+            throw "Verified update destination is not absolute for role $($file.role)."
+        }
+    }
+
+    $cli = $files[4]
+    $worker = $files[3]
+    $cliParent = [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath([string]$cli.destination))
+    if ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath([string]$worker.destination)) -ne $cliParent -or
+        [IO.Path]::GetFileName([string]$cli.destination) -ne 'rayman.exe' -or
+        [IO.Path]::GetFileName([string]$worker.destination) -ne "rayman-update-worker-$($Plan.candidate_version).exe") {
+        throw 'Verified update CLI/worker destinations are not the fixed managed tuple.'
+    }
+    $skillRoot = [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath([string]$files[0].destination))
+    if ([IO.Path]::GetFullPath([string]$files[0].destination) -ne (Join-Path $skillRoot 'SKILL.md') -or
+        [IO.Path]::GetFullPath([string]$files[1].destination) -ne (Join-Path $skillRoot 'AGENTS.md') -or
+        [IO.Path]::GetFullPath([string]$files[2].destination) -ne (Join-Path $skillRoot 'references/workflow-contract.md') -or
+        [IO.Path]::GetFileName([string]$files[5].destination) -ne 'receipt.json') {
+        throw 'Verified update skill/receipt destinations are not the fixed managed tuple.'
+    }
+}
+
+function New-RaymanUpdateJournal {
+    param(
+        [Parameter(Mandatory = $true)]$Plan,
+        [Parameter(Mandatory = $true)][string]$PlanSha256
+    )
+
+    $entries = @()
+    foreach ($file in @($Plan.files)) {
+        $destination = [IO.Path]::GetFullPath([string]$file.destination)
+        $leaf = [IO.Path]::GetFileName($destination)
+        $backup = Join-Path ([IO.Path]::GetDirectoryName($destination)) "$leaf.backup-$($Plan.transaction_id)"
+        $entries += [ordered]@{
+            role = [string]$file.role
+            destination = $destination
+            backup = $backup
+            old_sha256 = $(if ($null -eq $file.expected_current_sha256) { $null } else { [string]$file.expected_current_sha256 })
+            new_sha256 = [string]$file.new_sha256
+            expect_absent = [bool]$file.expect_absent
+            completed = $false
+        }
+    }
+    return [ordered]@{
+        schema_version = 1
+        transaction_id = [string]$Plan.transaction_id
+        plan_sha256 = $PlanSha256
+        phase = 'preparing'
+        next_role = $null
+        committed = $false
+        entries = $entries
+        updated_at = [DateTime]::UtcNow.ToString('O')
+    }
+}
+
+function Repair-RaymanUpdateJournal {
+    param(
+        [Parameter(Mandatory = $true)]$Journal,
+        [Parameter(Mandatory = $true)][string]$JournalPath
+    )
+
+    if ($Journal.committed -or $Journal.phase -eq 'committed') {
+        foreach ($entry in @($Journal.entries)) {
+            if ((Get-RaymanUpdateFileHashOrNull -Path ([string]$entry.destination)) -ne [string]$entry.new_sha256) {
+                throw "Committed update journal destination drifted: $($entry.destination)"
+            }
+        }
+        return 'committed'
+    }
+    $entries = @($Journal.entries)
+    [array]::Reverse($entries)
+    foreach ($entry in $entries) {
+        $destination = [string]$entry.destination
+        $backup = [string]$entry.backup
+        $current = Get-RaymanUpdateFileHashOrNull -Path $destination
+        $backupHash = Get-RaymanUpdateFileHashOrNull -Path $backup
+        if ($null -eq $entry.old_sha256) {
+            # A versioned worker was absent in the old generation. Leaving an
+            # exact unreferenced new worker is safer than path-based deletion;
+            # the old receipt cannot execute it and an exact retry may reuse it.
+            if ($null -ne $current -and $current -ne [string]$entry.new_sha256) {
+                throw "Crash recovery found an unexpected initially-absent destination: $destination"
+            }
+            continue
+        }
+        if ($current -eq [string]$entry.old_sha256) {
+            continue
+        }
+        if ($backupHash -ne [string]$entry.old_sha256) {
+            throw "Crash recovery lacks the receipt-bound backup for $destination"
+        }
+        if ($null -ne $current -and $current -ne [string]$entry.new_sha256) {
+            throw "Crash recovery refuses a concurrent destination replacement: $destination"
+        }
+        $recovery = Install-FileWithRollback `
+            -Source $backup `
+            -Destination $destination `
+            -Nonce ("recover-" + [Guid]::NewGuid().ToString('N')) `
+            -ExpectedHash ([string]$entry.old_sha256) `
+            -ExpectedDestinationHash $current `
+            -ExpectDestinationAbsent:($null -eq $current)
+        $warning = Remove-CommittedBackup -InstallRecord $recovery
+        if ($warning) {
+            throw "Crash recovery restored the old generation but retained uncertain cleanup: $warning"
+        }
+    }
+    $Journal.phase = 'rolled_back'
+    $Journal.next_role = $null
+    $Journal.updated_at = [DateTime]::UtcNow.ToString('O')
+    Write-RaymanUpdateJournal -Path $JournalPath -Value $Journal
+    return 'rolled_back'
+}
+
+function Invoke-RaymanVerifiedUpdateWorker {
+    param(
+        [Parameter(Mandatory = $true)][string]$PlanPath,
+        [Parameter(Mandatory = $true)][string]$ExpectedPlanSha256,
+        [Parameter(Mandatory = $true)][string]$PlanJson
+    )
+
+    if ($ExpectedPlanSha256 -notmatch '^[0-9a-f]{64}$') {
+        throw 'Verified update plan hash is invalid.'
+    }
+    $planItem = Get-Item -LiteralPath $PlanPath -Force
+    if ($planItem.PSIsContainer -or
+        $planItem.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw "Verified update plan is not an ordinary file: $PlanPath"
+    }
+    $actualPlanHash = (Get-FileHash -LiteralPath $PlanPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $capturedPlanHash = [Convert]::ToHexString(
+        [Security.Cryptography.SHA256]::HashData(
+            [Text.UTF8Encoding]::new($false).GetBytes($PlanJson)
+        )
+    ).ToLowerInvariant()
+    if ($actualPlanHash -ne $ExpectedPlanSha256 -or
+        $capturedPlanHash -ne $ExpectedPlanSha256) {
+        throw 'Verified update plan path or captured bytes changed before the installer consumed it.'
+    }
+    $plan = $PlanJson | ConvertFrom-Json -ErrorAction Stop
+    Assert-RaymanUpdatePlan -Plan $plan -PlanPath $PlanPath
+    $journalPath = [IO.Path]::GetFullPath([string]$plan.journal_path)
+
+    if (Test-Path -LiteralPath $journalPath -PathType Leaf) {
+        $journal = Get-Content -LiteralPath $journalPath -Raw -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop
+        if ([string]$journal.plan_sha256 -ne $ExpectedPlanSha256 -or
+            [string]$journal.transaction_id -ne [string]$plan.transaction_id) {
+            throw 'Existing update journal does not match the verified plan.'
+        }
+        $recovery = Repair-RaymanUpdateJournal -Journal $journal -JournalPath $journalPath
+        if ($recovery -eq 'committed') {
+            return
+        }
+        throw 'A previously interrupted update was rolled back safely; rerun the verified worker request.'
+    }
+
+    $journal = New-RaymanUpdateJournal -Plan $plan -PlanSha256 $ExpectedPlanSha256
+    Write-RaymanUpdateJournal -Path $journalPath -Value $journal
+    $installed = @()
+    $doctor = $null
+    try {
+        for ($index = 0; $index -lt @($plan.files).Count; $index++) {
+            $file = @($plan.files)[$index]
+            $journal.phase = 'publishing'
+            $journal.next_role = [string]$file.role
+            $journal.updated_at = [DateTime]::UtcNow.ToString('O')
+            Write-RaymanUpdateJournal -Path $journalPath -Value $journal
+
+            $current = Get-RaymanUpdateFileHashOrNull -Path ([string]$file.destination)
+            if ([bool]$file.allow_existing_new -and $current -eq [string]$file.new_sha256) {
+                $journal.entries[$index].completed = $true
+                continue
+            }
+            $record = Install-FileWithRollback `
+                -Source ([string]$file.source) `
+                -Destination ([string]$file.destination) `
+                -Nonce ([string]$plan.transaction_id) `
+                -ExpectedHash ([string]$file.new_sha256) `
+                -ExpectedDestinationHash $(if ($null -eq $file.expected_current_sha256) { $null } else { [string]$file.expected_current_sha256 }) `
+                -ExpectDestinationAbsent:([bool]$file.expect_absent)
+            $installed += $record
+            $journal.entries[$index].completed = $true
+            $journal.updated_at = [DateTime]::UtcNow.ToString('O')
+            Write-RaymanUpdateJournal -Path $journalPath -Value $journal
+        }
+
+        $journal.phase = 'verifying'
+        $journal.next_role = $null
+        $journal.updated_at = [DateTime]::UtcNow.ToString('O')
+        Write-RaymanUpdateJournal -Path $journalPath -Value $journal
+        foreach ($file in @($plan.files)) {
+            Assert-ExpectedFileHash `
+                -Path ([string]$file.destination) `
+                -ExpectedHash ([string]$file.new_sha256) `
+                -Label "Verified update destination '$($file.role)'"
+        }
+
+        $cliPath = [string]@($plan.files)[4].destination
+        $skillPath = [string]@($plan.files)[0].destination
+        $doctor = New-TemporaryDoctorWorkspace
+        $updateDoctorPath = $env:PATH
+        try {
+            $env:PATH = "$(Split-Path -Parent $cliPath)$([IO.Path]::PathSeparator)$updateDoctorPath"
+            Invoke-NativeCheckedInDirectory -Directory $doctor.Root -FilePath $cliPath -Arguments @(
+                'workspace', 'activate', '--skill-file', $skillPath, '--yes'
+            )
+            Invoke-NativeCheckedInDirectory -Directory $doctor.Root -FilePath $cliPath -Arguments @(
+                'doctor', '--check'
+            )
+        } finally {
+            $env:PATH = $updateDoctorPath
+        }
+
+        $journal.phase = 'committed'
+        $journal.committed = $true
+        $journal.updated_at = [DateTime]::UtcNow.ToString('O')
+        Write-RaymanUpdateJournal -Path $journalPath -Value $journal
+    } catch {
+        $failure = $_.Exception.Message
+        $rollbackErrors = @(Invoke-InstallRollback -InstallRecords $installed)
+        $journal.phase = $(if ($rollbackErrors.Count -eq 0) { 'rolled_back' } else { 'blocked' })
+        $journal.next_role = $null
+        $journal.updated_at = [DateTime]::UtcNow.ToString('O')
+        try {
+            Write-RaymanUpdateJournal -Path $journalPath -Value $journal
+        } catch {
+            $rollbackErrors += "unable to persist failure journal: $($_.Exception.Message)"
+        }
+        if ($rollbackErrors.Count -gt 0) {
+            throw "Verified update failed and rollback is incomplete: $failure | $($rollbackErrors -join ' | ')"
+        }
+        throw "Verified update failed and the old generation was restored: $failure"
+    } finally {
+        if ($null -ne $doctor) {
+            $doctorWarning = Remove-TemporaryDoctorWorkspace -Record $doctor
+            if ($doctorWarning) {
+                Write-Warning $doctorWarning
+            }
+        }
+    }
+
+    $cleanupWarnings = @()
+    foreach ($record in $installed) {
+        $warning = Remove-CommittedBackup -InstallRecord $record
+        if ($warning) {
+            $cleanupWarnings += $warning
+        }
+    }
+    $result = [ordered]@{
+        schema_version = 1
+        status = 'installed'
+        version = [string]$plan.candidate_version
+        manifest_sha256 = [string]$plan.manifest_sha256
+        cleanup_warnings = $cleanupWarnings
+    }
+    Write-RaymanUpdateJournal -Path ([string]$plan.result_path) -Value $result
+    $result | ConvertTo-Json -Depth 6 -Compress
+}
+
+
+if ($env:RAYMAN_UPDATE_WORKER -eq '1') {
+    if ([string]::IsNullOrWhiteSpace($env:RAYMAN_UPDATE_WORKER_PLAN) -or
+        [string]::IsNullOrWhiteSpace($env:RAYMAN_UPDATE_WORKER_PLAN_SHA256) -or
+        [string]::IsNullOrWhiteSpace($env:RAYMAN_UPDATE_WORKER_PLAN_JSON)) {
+        Write-Error 'Verified update worker environment is incomplete.'
+        exit 1
+    }
+    try {
+        Invoke-RaymanVerifiedUpdateWorker `
+            -PlanPath $env:RAYMAN_UPDATE_WORKER_PLAN `
+            -ExpectedPlanSha256 $env:RAYMAN_UPDATE_WORKER_PLAN_SHA256 `
+            -PlanJson $env:RAYMAN_UPDATE_WORKER_PLAN_JSON
+    } catch {
+        Write-Error $_
+        exit 1
+    }
+    exit 0
+} elseif ($env:RAYMAN_UPDATE_WORKER_PLAN -or
+    $env:RAYMAN_UPDATE_WORKER_PLAN_SHA256 -or
+    $env:RAYMAN_UPDATE_WORKER_PLAN_JSON) {
+    Write-Error 'Partial Rayman update worker environment is not accepted.'
+    exit 1
+}
 
 if ($SelfTest) {
     Invoke-InstallPathSelfTest
@@ -5536,7 +5978,11 @@ if ($SelfTest) {
 }
 
 if (-not $Yes) {
-    $declared = @('the managed rayman executable') + (
+    $declared = @(
+        'the managed rayman executable',
+        'the versioned verified update worker',
+        'the user-level Rayman install receipt'
+    ) + (
         @(Get-CodexSkillResourcePlan -DestinationRoot ([IO.Path]::GetFullPath($repoRoot))) |
             ForEach-Object { "Codex skill resource '$($_.DestinationRelative)'" }
     )
@@ -5561,12 +6007,24 @@ $cargoApplicationHash = (Get-FileHash -LiteralPath $cargoApplication -Algorithm 
 
 $resolvedBinDirectory = Resolve-ManagedDirectory -Path $BinDirectory -Label 'CLI directory'
 $resolvedSkillDirectory = Resolve-ManagedDirectory -Path $SkillDirectory -Label 'Skill directory'
+$userDataRoot = if ($IsWindows) {
+    [IO.Path]::GetFullPath($localAppData)
+} elseif (-not [string]::IsNullOrWhiteSpace($env:XDG_DATA_HOME)) {
+    [IO.Path]::GetFullPath($env:XDG_DATA_HOME)
+} else {
+    [IO.Path]::GetFullPath((Join-Path $HOME '.local/share'))
+}
+$installReceiptDirectory = Resolve-ManagedDirectory `
+    -Path (Join-Path $userDataRoot 'Rayman/install') `
+    -Label 'Rayman install receipt directory'
+$destinationInstallReceipt = Join-Path $installReceiptDirectory 'receipt.json'
 $skillResources = @(Get-CodexSkillResourcePlan -DestinationRoot $resolvedSkillDirectory)
 $destinationCli = Join-Path $resolvedBinDirectory $artifactName
 $canonicalSkillResource = Get-CanonicalSkillResource -ResourcePlan $skillResources
 $canonicalSkill = $canonicalSkillResource.Source
 $destinationSkill = $canonicalSkillResource.Destination
 Assert-ReplaceableFile -Path $destinationCli -Label 'CLI'
+Assert-ReplaceableFile -Path $destinationInstallReceipt -Label 'Rayman install receipt'
 foreach ($resource in $skillResources) {
     Assert-ReplaceableFile -Path $resource.Destination -Label "Codex skill resource '$($resource.DestinationRelative)'"
 }
@@ -5588,8 +6046,25 @@ try {
             Join-Path $repoRoot 'target'
         }
         $artifact = (Resolve-Path -LiteralPath (Join-Path $releaseRoot "release/$artifactName")).ProviderPath
+        $workerArtifact = (Resolve-Path -LiteralPath (Join-Path $releaseRoot "release/$workerArtifactName")).ProviderPath
+
+        $versionOutput = @(& $artifact --version 2>&1)
+        if ($LASTEXITCODE -ne 0 -or
+            ($versionOutput | Out-String).Trim() -notmatch '^rayman ((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))$') {
+            throw "Built Rayman artifact returned an invalid stable version: $($versionOutput | Out-String)"
+        }
+        $installedVersion = $Matches[1]
+        $destinationWorker = Join-Path $resolvedBinDirectory $(
+            if ($IsWindows) {
+                "rayman-update-worker-$installedVersion.exe"
+            } else {
+                "rayman-update-worker-$installedVersion"
+            }
+        )
+        Assert-ReplaceableFile -Path $destinationWorker -Label 'Versioned update worker'
 
         $artifactHashBeforeVerification = (Get-FileHash -LiteralPath $artifact -Algorithm SHA256).Hash.ToLowerInvariant()
+        $workerHashBeforeVerification = (Get-FileHash -LiteralPath $workerArtifact -Algorithm SHA256).Hash.ToLowerInvariant()
         $resourceHashes = @{}
         foreach ($resource in $skillResources) {
             $resourceHashes[$resource.DestinationRelative] = (Get-FileHash -LiteralPath $resource.Source -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -5603,6 +6078,8 @@ try {
         $preVerification = @{
             CliPath = $artifact
             ReferenceCliPath = $artifact
+            WorkerPath = $workerArtifact
+            ReferenceWorkerPath = $workerArtifact
             SkillPath = $canonicalSkill
             WorkspaceSkillPath = $canonicalSkill
             SkillResourceMode = 'Source'
@@ -5611,10 +6088,72 @@ try {
         }
         & (Join-Path $repoRoot 'scripts/verify-release-contract.ps1') @preVerification
         Assert-ExpectedFileHash -Path $artifact -ExpectedHash $artifactHashBeforeVerification -Label 'Source-fresh verified artifact'
+        Assert-ExpectedFileHash -Path $workerArtifact -ExpectedHash $workerHashBeforeVerification -Label 'Source-fresh verified update worker'
         foreach ($resource in $skillResources) {
             Assert-ExpectedFileHash -Path $resource.Source -ExpectedHash $resourceHashes[$resource.DestinationRelative] -Label "Verified canonical resource '$($resource.SourceRelative)'"
         }
         $verifiedArtifactHash = $artifactHashBeforeVerification
+        $verifiedWorkerHash = $workerHashBeforeVerification
+
+        Push-Location $doctorWorkspaceRecord.Root
+        try {
+            $candidateDoctor = Invoke-NativeJsonChecked -FilePath $artifact -Arguments @(
+                '--format', 'json', 'doctor'
+            )
+        } finally {
+            Pop-Location
+        }
+        if ([string]$candidateDoctor.version -ne $installedVersion -or
+            [string]$candidateDoctor.contract -notmatch '^rayman-cli-contract-v[1-9][0-9]*$') {
+            throw 'Candidate doctor did not report the built version and a strict CLI contract.'
+        }
+
+        $installManifestHash = (Get-FileHash -LiteralPath (Join-Path $repoRoot 'install-manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+        $installationId = [Guid]::NewGuid().ToString('N')
+        $receiptResources = @(
+            [ordered]@{
+                role = 'skill'
+                relative_path = 'SKILL.md'
+                sha256 = [string]$resourceHashes['SKILL.md']
+            },
+            [ordered]@{
+                role = 'agent_contract'
+                relative_path = 'AGENTS.md'
+                sha256 = [string]$resourceHashes['AGENTS.md']
+            },
+            [ordered]@{
+                role = 'workflow_contract'
+                relative_path = 'references/workflow-contract.md'
+                sha256 = [string]$resourceHashes['references/workflow-contract.md']
+            }
+        )
+        if ($receiptResources.Where({ [string]::IsNullOrWhiteSpace([string]$_.sha256) }).Count -ne 0) {
+            throw 'Install manifest resource roles cannot be mapped to the fixed update receipt tuple.'
+        }
+        $installReceipt = [ordered]@{
+            schema_version = 1
+            installation_id = $installationId
+            version = $installedVersion
+            cli_contract = [string]$candidateDoctor.contract
+            cli_path = [IO.Path]::GetFullPath($destinationCli)
+            cli_sha256 = $verifiedArtifactHash
+            worker_path = [IO.Path]::GetFullPath($destinationWorker)
+            worker_sha256 = $verifiedWorkerHash
+            skill_root = [IO.Path]::GetFullPath($resolvedSkillDirectory)
+            resources = $receiptResources
+            install_manifest_sha256 = $installManifestHash
+            installed_at = [DateTime]::UtcNow.ToString('O')
+            source = 'source_fresh_installer'
+            signed_release = $null
+        }
+        $installReceiptSource = Join-Path $doctorWorkspaceRecord.Root 'rayman-install-receipt.json'
+        $installReceiptText = $installReceipt | ConvertTo-Json -Depth 8
+        [IO.File]::WriteAllText(
+            $installReceiptSource,
+            $installReceiptText,
+            [Text.UTF8Encoding]::new($false)
+        )
+        $installReceiptHash = (Get-FileHash -LiteralPath $installReceiptSource -Algorithm SHA256).Hash.ToLowerInvariant()
 
         if ($AddToUserPath) {
             Assert-PersistentUserEnvironmentCasCapability
@@ -5630,17 +6169,23 @@ try {
         $coreCommitted = $false
         try {
             $installed += Install-FileWithRollback -Source $artifact -Destination $destinationCli -Nonce $nonce -ExpectedHash $verifiedArtifactHash
+            $installed += Install-FileWithRollback -Source $workerArtifact -Destination $destinationWorker -Nonce $nonce -ExpectedHash $verifiedWorkerHash
             foreach ($resource in $skillResources) {
                 $installed += Install-FileWithRollback -Source $resource.Source -Destination $resource.Destination -Nonce $nonce -ExpectedHash $resourceHashes[$resource.DestinationRelative]
             }
+            $installed += Install-FileWithRollback -Source $installReceiptSource -Destination $destinationInstallReceipt -Nonce $nonce -ExpectedHash $installReceiptHash
 
             Assert-ExpectedFileHash -Path $artifact -ExpectedHash $verifiedArtifactHash -Label 'Verified artifact before post-install check'
             Assert-ExpectedFileHash -Path $destinationCli -ExpectedHash $verifiedArtifactHash -Label 'Installed CLI'
+            Assert-ExpectedFileHash -Path $workerArtifact -ExpectedHash $verifiedWorkerHash -Label 'Verified update worker before post-install check'
+            Assert-ExpectedFileHash -Path $destinationWorker -ExpectedHash $verifiedWorkerHash -Label 'Installed update worker'
             foreach ($resource in $skillResources) {
                 $expectedHash = $resourceHashes[$resource.DestinationRelative]
                 Assert-ExpectedFileHash -Path $resource.Source -ExpectedHash $expectedHash -Label "Verified resource before post-install check '$($resource.SourceRelative)'"
                 Assert-ExpectedFileHash -Path $resource.Destination -ExpectedHash $expectedHash -Label "Installed resource '$($resource.DestinationRelative)'"
             }
+            Assert-ExpectedFileHash -Path $installReceiptSource -ExpectedHash $installReceiptHash -Label 'Verified install receipt before post-install check'
+            Assert-ExpectedFileHash -Path $destinationInstallReceipt -ExpectedHash $installReceiptHash -Label 'Installed Rayman receipt'
 
             if ($AddToUserPath) {
                 $oldUserPathRecord = Get-PersistentUserEnvironmentRecord -Name 'Path'
@@ -5680,6 +6225,8 @@ try {
             $postVerification = @{
                 CliPath = $destinationCli
                 ReferenceCliPath = $artifact
+                WorkerPath = $destinationWorker
+                ReferenceWorkerPath = $workerArtifact
                 SkillPath = $destinationSkill
                 WorkspaceSkillPath = $destinationSkill
                 DoctorWorkspace = $doctorWorkspaceRecord.Root
@@ -5689,11 +6236,15 @@ try {
 
             Assert-ExpectedFileHash -Path $artifact -ExpectedHash $verifiedArtifactHash -Label 'Verified artifact after post-install check'
             Assert-ExpectedFileHash -Path $destinationCli -ExpectedHash $verifiedArtifactHash -Label 'Installed CLI after post-install check'
+            Assert-ExpectedFileHash -Path $workerArtifact -ExpectedHash $verifiedWorkerHash -Label 'Verified update worker after post-install check'
+            Assert-ExpectedFileHash -Path $destinationWorker -ExpectedHash $verifiedWorkerHash -Label 'Installed update worker after post-install check'
             foreach ($resource in $skillResources) {
                 $expectedHash = $resourceHashes[$resource.DestinationRelative]
                 Assert-ExpectedFileHash -Path $resource.Source -ExpectedHash $expectedHash -Label "Verified resource after post-install check '$($resource.SourceRelative)'"
                 Assert-ExpectedFileHash -Path $resource.Destination -ExpectedHash $expectedHash -Label "Installed resource after post-install check '$($resource.DestinationRelative)'"
             }
+            Assert-ExpectedFileHash -Path $installReceiptSource -ExpectedHash $installReceiptHash -Label 'Verified install receipt after post-install check'
+            Assert-ExpectedFileHash -Path $destinationInstallReceipt -ExpectedHash $installReceiptHash -Label 'Installed Rayman receipt after post-install check'
             if ((Get-FileHash -LiteralPath $cargoApplication -Algorithm SHA256).Hash.ToLowerInvariant() -ne $cargoApplicationHash) {
                 throw 'Cargo executable identity changed during installation.'
             }
@@ -5794,6 +6345,8 @@ try {
 
 Write-Host 'RaymanCodingSkill core installation verified and committed.'
 Write-Host "  CLI: $destinationCli"
+Write-Host "  Update worker: $destinationWorker"
+Write-Host "  Install receipt: $destinationInstallReceipt"
 foreach ($resource in $skillResources) {
     Write-Host "  Codex resource ($($resource.DestinationRelative)): $($resource.Destination)"
 }
