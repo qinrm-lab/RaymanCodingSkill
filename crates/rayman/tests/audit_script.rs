@@ -67,6 +67,72 @@ fn powershell_function(source: &str, name: &str) -> String {
 }
 
 #[test]
+fn public_architecture_and_ci_coverage_contracts_avoid_drift_prone_counts() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("repository root must resolve");
+    let readme =
+        fs::read_to_string(repo_root.join("README.md")).expect("README must be readable UTF-8");
+    let quality = fs::read_to_string(repo_root.join(".RaymanCodingSkill/quality.json"))
+        .expect("quality policy must be readable UTF-8");
+    let workflow = fs::read_to_string(repo_root.join(".github/workflows/ci.yml"))
+        .expect("CI workflow must be readable UTF-8");
+    let cli_tests = fs::read_to_string(repo_root.join("crates/rayman/tests/cli.rs"))
+        .expect("CLI tests must be readable UTF-8");
+
+    assert!(readme.contains("`rayman` CLI"));
+    assert!(readme.contains("`rayman-update-worker` binary is confined"));
+    assert!(!readme.contains("One small Rust binary"));
+
+    for forbidden in [
+        "four activation-exempt CLI tests",
+        "four cross-process CLI tests",
+        "80 isolated behavioral cases",
+    ] {
+        assert!(
+            !quality.contains(forbidden),
+            "quality policy reintroduced drift-prone count: {forbidden}"
+        );
+    }
+    for required in [
+        "platform-gated activation-exempt CLI tests",
+        "cross-process CLI tests cover offline status",
+        "complete platform-specific behavioral suite",
+    ] {
+        assert!(
+            quality.contains(required),
+            "quality policy lost capability-based evidence wording: {required}"
+        );
+    }
+
+    assert!(workflow.contains(
+        "cargo check --locked -p rayman --target aarch64-unknown-linux-gnu --all-targets"
+    ));
+
+    let due_poll_start = cli_tests
+        .find("fn non_windows_due_poll_stays_unsupported_even_with_install_consent()")
+        .expect("non-Windows due-poll consent regression must exist");
+    let due_poll_tail = &cli_tests[due_poll_start..];
+    let due_poll_end = due_poll_tail
+        .find("fn update_configure_requires_an_exact_selector_and_yes_without_workspace_writes()")
+        .expect("following update test must delimit due-poll regression");
+    let due_poll_test = &due_poll_tail[..due_poll_end];
+    for required in [
+        "--auto-install",
+        "report[\"install_authorized\"], true",
+        "report[\"install_ready\"], false",
+        "report.get(\"worker_launch\").is_none()",
+        "persisted[\"auto_install\"], true",
+    ] {
+        assert!(
+            due_poll_test.contains(required),
+            "non-Windows due-poll consent regression lost assertion: {required}"
+        );
+    }
+}
+
+#[test]
 fn audit_self_test_exercises_only_the_audit_contract() {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")

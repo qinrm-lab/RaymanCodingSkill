@@ -50,12 +50,12 @@
     {
       "path": "crates/rayman/src/update.rs",
       "kind": "high_fan_in",
-      "reason": "Release-version parsing and the untrusted notification boundary intentionally form the shared parent for separately tested trust, transport, state, and install modules. Focused update unit tests, four activation-exempt CLI tests, the independent worker transaction integration test, and the full repository gate cover every consumer."
+      "reason": "Release-version parsing and the untrusted notification boundary intentionally form the shared parent for separately tested trust, transport, state, and install modules. Focused update unit tests, platform-gated activation-exempt CLI tests, the independent worker transaction integration test, and the full repository gate cover every consumer."
     },
     {
       "path": "crates/rayman/src/update_cli.rs",
       "kind": "public_api_without_test_evidence",
-      "reason": "This binary-only adapter exposes one parent-visible dispatch function; four cross-process CLI tests cover offline status, explicit confirmation, disabled zero-network poll, corrupt-state preservation, activation exemption, and workspace zero-write behavior."
+      "reason": "This binary-only adapter exposes one parent-visible dispatch function; cross-process CLI tests cover offline status, explicit preferences and install consent, disabled zero-network polling, corrupt-state preservation, non-Windows structural refusal, activation exemption, and workspace zero-write behavior."
     },
     {
       "path": "crates/rayman/src/codex_host.rs",
@@ -80,7 +80,7 @@
     {
       "path": "crates/rayman/tests/cli.rs",
       "kind": "large_file",
-      "reason": "This is the single cross-process CLI contract suite; its 80 isolated behavioral cases are run in full by check-repo and audit-repository, while production logic remains split into focused modules."
+      "reason": "This is the single cross-process CLI contract suite; its complete platform-specific behavioral suite is run by check-repo and audit-repository, while production logic remains split into focused modules."
     },
     {
       "path": "crates/rayman/src/context.rs",

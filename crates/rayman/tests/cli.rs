@@ -8283,9 +8283,16 @@ fn non_windows_update_check_reports_unsupported_without_cache_or_workspace_write
 
 #[cfg(not(windows))]
 #[test]
-fn non_windows_due_poll_reports_unsupported_without_notification_or_worker() {
+fn non_windows_due_poll_stays_unsupported_even_with_install_consent() {
     let workspace = tempfile::tempdir().unwrap();
     let user = tempfile::tempdir().unwrap();
+
+    let configured = run_update_with_user_root(
+        workspace.path(),
+        user.path(),
+        &["update", "configure", "--auto-install", "--yes"],
+    );
+    assert_eq!(configured.status, 0, "stderr={}", configured.stderr);
 
     let output = run_update_with_user_root(
         workspace.path(),
@@ -8301,7 +8308,7 @@ fn non_windows_due_poll_reports_unsupported_without_notification_or_worker() {
         report["observation"]["status"]["status"],
         "unsupported_platform"
     );
-    assert_eq!(report["install_authorized"], false);
+    assert_eq!(report["install_authorized"], true);
     assert_eq!(report["install_ready"], false);
     assert!(report.get("worker_launch").is_none());
     assert!(report.get("install_error").is_none());
@@ -8310,7 +8317,7 @@ fn non_windows_due_poll_reports_unsupported_without_notification_or_worker() {
     let state_path = user.path().join("Rayman/update/update.json");
     let persisted: Value = serde_json::from_slice(&std::fs::read(&state_path).unwrap()).unwrap();
     assert_eq!(persisted["auto_check"], true);
-    assert_eq!(persisted["auto_install"], false);
+    assert_eq!(persisted["auto_install"], true);
     assert!(persisted["last_attempted_at"].as_str().is_some());
     assert_eq!(persisted["last_successful_observation"], Value::Null);
 }

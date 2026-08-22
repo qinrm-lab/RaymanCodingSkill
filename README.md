@@ -1,6 +1,10 @@
 # RaymanCodingSkill
 
-A lean, owner-minded and evidence-first coding-agent helper. One small Rust binary, `rayman`, gives an agent (or you) the load-bearing basics for driving safe local work to a stable finish:
+A lean, owner-minded and evidence-first coding-agent helper. The small Rust
+`rayman` CLI gives an agent (or you) the load-bearing basics for driving safe
+local work to a stable finish. A separate, receipt-bound
+`rayman-update-worker` binary is confined to the signed update transaction.
+Together, the load-bearing surface is:
 
 - **Context index** — a content-proven map of the workspace (files, kinds, symbols). `context refresh` hashes indexed content and preserves read failures as blockers; the cheap `context status` command remains a stat-only UI probe, while map and readiness conclusions re-check content hashes.
 - **Explicit activation** — `.RaymanCodingSkill/` by itself is only runtime state. `workspace activate` writes a canonical-skill path/SHA256 plus the exact CLI contract/version; orphan state, skill drift, and stale CLIs are inactive. The six-field activation schema rejects duplicates, unknown fields, nesting, and malformed scalars.
