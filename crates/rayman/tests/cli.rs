@@ -8258,6 +8258,63 @@ fn update_status_is_activation_exempt_and_read_only_outside_a_workspace() {
     assert!(!user.path().join("Rayman/update").exists());
 }
 
+#[cfg(not(windows))]
+#[test]
+fn non_windows_update_check_reports_unsupported_without_cache_or_workspace_writes() {
+    let workspace = tempfile::tempdir().unwrap();
+    let user = tempfile::tempdir().unwrap();
+
+    let output = run_update_with_user_root(
+        workspace.path(),
+        user.path(),
+        &["--format", "json", "update", "check"],
+    );
+    assert_eq!(output.status, 0, "stderr={}", output.stderr);
+    let report: Value = serde_json::from_str(&output.stdout).unwrap();
+    assert_eq!(
+        report["observation"]["status"]["status"],
+        "unsupported_platform"
+    );
+    assert_eq!(report["state_written"], false);
+    assert_eq!(report["install_ready"], false);
+    assert!(!workspace.path().join(".RaymanCodingSkill").exists());
+    assert!(!user.path().join("Rayman/update").exists());
+}
+
+#[cfg(not(windows))]
+#[test]
+fn non_windows_due_poll_reports_unsupported_without_notification_or_worker() {
+    let workspace = tempfile::tempdir().unwrap();
+    let user = tempfile::tempdir().unwrap();
+
+    let output = run_update_with_user_root(
+        workspace.path(),
+        user.path(),
+        &["--format", "json", "update", "poll"],
+    );
+    assert_eq!(output.status, 0, "stderr={}", output.stderr);
+    let report: Value = serde_json::from_str(&output.stdout).unwrap();
+    assert_eq!(report["status"], "polled");
+    assert_eq!(report["checked"], true);
+    assert_eq!(report["state_written"], true);
+    assert_eq!(
+        report["observation"]["status"]["status"],
+        "unsupported_platform"
+    );
+    assert_eq!(report["install_authorized"], false);
+    assert_eq!(report["install_ready"], false);
+    assert!(report.get("worker_launch").is_none());
+    assert!(report.get("install_error").is_none());
+    assert!(!workspace.path().join(".RaymanCodingSkill").exists());
+
+    let state_path = user.path().join("Rayman/update/update.json");
+    let persisted: Value = serde_json::from_slice(&std::fs::read(&state_path).unwrap()).unwrap();
+    assert_eq!(persisted["auto_check"], true);
+    assert_eq!(persisted["auto_install"], false);
+    assert!(persisted["last_attempted_at"].as_str().is_some());
+    assert_eq!(persisted["last_successful_observation"], Value::Null);
+}
+
 #[test]
 fn update_configure_requires_an_exact_selector_and_yes_without_workspace_writes() {
     let workspace = tempfile::tempdir().unwrap();

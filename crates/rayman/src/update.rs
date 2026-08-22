@@ -251,6 +251,8 @@ pub trait UpdateProvider {
 /// generic arbitrary URL or install instruction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UpdateProviderError {
+    /// The running platform has no reviewed built-in discovery transport.
+    UnsupportedPlatform,
     /// Transport, TLS, DNS, timeout, or other unavailable network condition.
     Unavailable,
     /// The fixed endpoint returned data that could not be safely parsed.
@@ -261,8 +263,9 @@ pub enum UpdateProviderError {
 ///
 /// On Windows it uses synchronous WinHTTP with HTTPS on port 443, no proxy,
 /// redirects disabled, short timeouts, and a bounded response.  On other
-/// targets it deliberately returns [`UpdateProviderError::Unavailable`] rather
-/// than silently substituting another networking stack or invoking `git`.
+/// targets it deliberately returns [`UpdateProviderError::UnsupportedPlatform`]
+/// rather than misclassifying a structural capability boundary as a transient
+/// network failure, silently substituting another stack, or invoking `git`.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct OfficialReleaseProvider;
 
@@ -557,14 +560,17 @@ mod platform {
     }
 }
 
-#[cfg(not(windows))]
-mod platform {
+#[cfg(any(not(windows), test))]
+mod unsupported_platform {
     use super::UpdateProviderError;
 
     pub(super) fn fetch_official_release_tags() -> Result<Vec<String>, UpdateProviderError> {
-        Err(UpdateProviderError::Unavailable)
+        Err(UpdateProviderError::UnsupportedPlatform)
     }
 }
+
+#[cfg(not(windows))]
+use unsupported_platform as platform;
 
 /// The outcome of release discovery.  An available version is a prompt
 /// candidate, not a verified install bundle.
@@ -574,6 +580,7 @@ pub enum UpdateStatus {
     Current,
     UpdateAvailable { latest: ReleaseVersion },
     NoMatchingRelease,
+    UnsupportedPlatform,
     Unavailable,
     MalformedResponse,
 }
@@ -584,6 +591,7 @@ impl UpdateStatus {
             Self::Current => "current",
             Self::UpdateAvailable { .. } => "update_available",
             Self::NoMatchingRelease => "no_matching_release",
+            Self::UnsupportedPlatform => "unsupported_platform",
             Self::Unavailable => "unavailable",
             Self::MalformedResponse => "malformed_response",
         }
@@ -650,6 +658,13 @@ pub fn check_for_update<P: UpdateProvider>(
 ) -> UpdateObservation {
     let tags = match provider.fetch_release_tags(OfficialUpdateSource::official()) {
         Ok(tags) => tags,
+        Err(UpdateProviderError::UnsupportedPlatform) => {
+            return UpdateObservation {
+                current,
+                status: UpdateStatus::UnsupportedPlatform,
+                rejected_tag_count: 0,
+            };
+        }
         Err(UpdateProviderError::Unavailable) => {
             return UpdateObservation {
                 current,
@@ -1081,11 +1096,23 @@ mod tests {
 
     #[cfg(not(windows))]
     #[test]
-    fn built_in_provider_fails_closed_without_winhttp() {
+    fn built_in_provider_reports_the_structural_platform_boundary_without_winhttp() {
         let provider = OfficialReleaseProvider;
         assert_eq!(
             provider.fetch_release_tags(OfficialUpdateSource::official()),
-            Err(UpdateProviderError::Unavailable)
+            Err(UpdateProviderError::UnsupportedPlatform)
+        );
+        let observation = check_for_update(&provider, version("2.10.0"));
+        assert_eq!(observation.status, UpdateStatus::UnsupportedPlatform);
+        assert!(!observation.is_successful_discovery());
+        assert!(observation.prompt().is_none());
+    }
+
+    #[test]
+    fn unsupported_platform_adapter_is_a_zero_input_structural_refusal() {
+        assert_eq!(
+            unsupported_platform::fetch_official_release_tags(),
+            Err(UpdateProviderError::UnsupportedPlatform)
         );
     }
 
@@ -1112,6 +1139,19 @@ mod tests {
 
     #[test]
     fn provider_and_bound_failures_are_observable_but_noninstalling() {
+        let unsupported = check_for_update(
+            &FakeProvider::failure(UpdateProviderError::UnsupportedPlatform),
+            version("2.10.0"),
+        );
+        assert_eq!(unsupported.status, UpdateStatus::UnsupportedPlatform);
+        assert_eq!(unsupported.status.as_str(), "unsupported_platform");
+        assert_eq!(
+            serde_json::to_value(&unsupported).unwrap()["status"]["status"],
+            "unsupported_platform"
+        );
+        assert!(!unsupported.is_successful_discovery());
+        assert!(unsupported.prompt().is_none());
+
         let unavailable = check_for_update(
             &FakeProvider::failure(UpdateProviderError::Unavailable),
             version("2.10.0"),
@@ -1153,6 +1193,25 @@ mod tests {
         assert!(observation.prompt().is_some());
         assert_eq!(state.last_attempted_at, Some(time(0)));
         assert!(state.last_successful_observation.is_some());
+        assert!(!state.auto_install);
+    }
+
+    #[test]
+    fn unsupported_poll_records_only_the_attempt_and_never_caches_a_notification() {
+        let mut state = UpdateState::default();
+        let provider = FakeProvider::failure(UpdateProviderError::UnsupportedPlatform);
+
+        let observation = state
+            .poll_if_due(time(0), &provider, version("2.10.0"))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(provider.calls.get(), 1);
+        assert_eq!(observation.status, UpdateStatus::UnsupportedPlatform);
+        assert!(!observation.is_successful_discovery());
+        assert!(observation.prompt().is_none());
+        assert_eq!(state.last_attempted_at, Some(time(0)));
+        assert!(state.last_successful_observation.is_none());
         assert!(!state.auto_install);
     }
 

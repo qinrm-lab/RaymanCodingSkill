@@ -28,10 +28,13 @@ this adapter does not redefine their identity or permission contract.
 ## Installed-version currency
 
 At the start of an explicit non-read-only Rayman task, run `rayman --format
-json update poll` before activation repair. Notification checks are enabled by
-default, use only the compiled official release source, and may update only
-the user-level update cache. A network, metadata, or cache failure never grants
-installation authority and must not block the original coding task.
+json update poll` before activation repair. The polling preference is enabled
+by default. On Windows, discovery uses only the compiled official release
+source; on non-Windows, a due poll returns the zero-network
+`unsupported_platform` boundary and claims no notification capability. Polling
+may update only the user-level update cache. A network, metadata, or cache
+failure never grants installation authority and must not block the original
+coding task.
 
 `auto_install` is a separate consent bit that defaults to false and can be set
 only by `rayman update configure --auto-install --yes`. When poll returns a

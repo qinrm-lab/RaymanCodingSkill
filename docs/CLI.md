@@ -16,11 +16,18 @@ rayman update configure --no-auto-install --yes
 ```
 
 All update commands are activation-exempt and can run outside a Rayman
-workspace. `status` is offline and read-only. `check` performs one explicit
-fixed-source network read but does not write state. `poll` is intended for a
-non-read-only skill invocation: it honors the configured interval, updates only
-the user-level cache, and reports a stable-version notification. Checking is
-enabled by default; installation is a separate consent bit and defaults false.
+workspace. `status` is offline and read-only. On Windows, `check` performs one
+explicit fixed-source network read without writing state; a due `poll` performs
+the same discovery, updates only the user-level cache, and can report a
+stable-version notification. The polling preference is enabled by default on
+every platform, but that scheduling bit is not evidence that a discovery
+transport exists. Non-Windows builds expose the same stable JSON schema:
+`check` returns `unsupported_platform` without a write, while a due `poll`
+records only its attempt timestamp and returns `unsupported_platform`. Neither
+path makes a network request, reports a notification, or produces a worker,
+because no reviewed discovery transport or signed automatic-install asset set
+exists there. Installation consent is a separate bit and defaults false. Linux
+source-checkout installation remains supported.
 
 A poll can return `worker_launch` only when the running program is the exact
 supported installed CLI, the receipt-bound versioned worker and all deployed

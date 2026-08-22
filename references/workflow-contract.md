@@ -98,11 +98,13 @@ overwriting user-managed state still require user authority.
   binding invalid until that workspace explicitly runs `workspace rebind
   --yes`.
 - A non-read-only explicit Rayman invocation begins with activation-exempt
-  `rayman --format json update poll`. Stable-version notification is enabled
-  by default and writes only the user-level update cache; read-only work uses
-  `update status` and performs no poll/cache write. A tag, release API result,
-  prompt, or cached observation is untrusted notification data and can never
-  authorize a download, worker, or installation.
+  `rayman --format json update poll`. The polling preference is enabled by
+  default and writes only the user-level update cache. Windows has the reviewed
+  stable-version discovery transport; non-Windows due polls return the
+  zero-network `unsupported_platform` boundary and claim no notification
+  capability. Read-only work uses `update status` and performs no poll/cache
+  write. A tag, release API result, prompt, or cached observation is untrusted
+  notification data and can never authorize a download, worker, or installation.
 - Automatic installation has an independent `auto_install=false` default and
   requires `update configure --auto-install --yes`. Legacy auto-check state is
   always migrated with install consent false. Trusted apply additionally

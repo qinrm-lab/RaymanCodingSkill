@@ -12,12 +12,19 @@ An explicit non-read-only skill invocation runs:
 rayman --format json update poll
 ```
 
-Notification checks are enabled by default and throttled to 24 hours. They use
-the compiled `qinrm-lab/RaymanCodingSkill` GitHub Releases endpoint and update
-only `%LOCALAPPDATA%\Rayman\update\update.json` on Windows (the XDG user-data
+The polling preference is enabled by default and throttled to 24 hours on every
+platform; that scheduling state is not evidence that a discovery transport
+exists. On Windows, a due poll uses the reviewed built-in transport and the
+compiled `qinrm-lab/RaymanCodingSkill` GitHub Releases endpoint. Non-Windows
+builds have no reviewed discovery transport: `check` returns the explicit
+zero-network `unsupported_platform` status without a write, and a due `poll`
+records only its attempt timestamp before returning the same status. Neither
+path reports a notification, creates a worker, disguises the structural
+boundary as `unavailable`, invokes `git`, or substitutes an ambient HTTP client.
+Update preferences and poll timestamps live only in
+`%LOCALAPPDATA%\Rayman\update\update.json` on Windows (the XDG user-data
 equivalent elsewhere). `update status` is offline and read-only; `update check`
-is an explicit network read that does not write cache. A read-only coding
-request does not run poll.
+does not write cache. A read-only coding request does not run poll.
 
 Automatic installation is disabled independently:
 
@@ -31,12 +38,17 @@ rayman update configure --auto-check --interval-hours 24 --yes
 Legacy check preferences always migrate with `auto_install=false`. Disabling
 checks does not silently grant or revoke installation consent.
 
-When a due poll finds a newer stable version, it normally emits only a release
-notification. With explicit installation consent and a valid supported-install
-receipt, it may return one structured `worker_launch` containing a fixed local
-program and argv. The skill executes those values directly, never as a shell
-string. A successful worker returns `restart_required=true`; restart Codex
-before claiming the new global skill is loaded. The next invocation may run
+The signed automatic installer currently publishes only the fixed Windows
+x86_64 asset set below. Linux remains supported by the source-checkout
+installer, but neither notification nor automatic apply is claimed there.
+
+On Windows, when a due poll finds a newer stable version, it normally emits only
+a release notification. With explicit installation consent and a valid
+supported-install receipt, it may return one structured `worker_launch`
+containing a fixed local program and argv. The skill executes those values
+directly, never as a shell string. A successful worker returns
+`restart_required=true`; restart Codex before claiming the new global skill is
+loaded. The next invocation may run
 `workspace ensure-current --yes`, which reuses the existing identity-only
 rebind transaction and cannot activate an orphan, disabled, wrong-skill,
 path-changed, malformed, missing, or untrusted workspace.
