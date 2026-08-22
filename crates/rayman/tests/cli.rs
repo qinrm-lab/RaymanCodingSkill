@@ -4844,7 +4844,13 @@ fn goal_lifecycle_preserves_history_without_hiding_unfinished_work() {
 
     let standard = run(root, &["check", "--profile", "standard"]);
     assert_eq!(standard.status, 0, "stdout={}", standard.stdout);
-    assert!(standard.stdout.contains("lifecycle=superseded"));
+    assert!(
+        !standard.stdout.contains(old_id) && !standard.stdout.contains("lifecycle=superseded"),
+        "retired history must not feed readiness diagnostics: {}",
+        standard.stdout
+    );
+    let retained = run_json(root, &["goal", "show", old_id]);
+    assert_eq!(retained["lifecycle"], "superseded");
 
     let restored = run_json(root, &["goal", "current", old_id]);
     assert_eq!(restored["lifecycle"], "current");

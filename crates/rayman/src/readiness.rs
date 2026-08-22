@@ -41,6 +41,18 @@ fn task_proof_blockers(
     blockers
 }
 
+fn goal_lifecycle_participates_in_readiness(lifecycle: goal::GoalLifecycle) -> bool {
+    lifecycle == goal::GoalLifecycle::Current
+}
+
+fn goal_diagnostics_are_visible(
+    unbound_workspace_check: bool,
+    task_goal_id: Option<&str>,
+    checked_goal_id: &str,
+) -> bool {
+    unbound_workspace_check || task_goal_id == Some(checked_goal_id)
+}
+
 /// 一次性就绪检查：聚合激活状态、源码状态、上下文新鲜度、资产扫描、待完成项、
 /// 项目地图、质量档位与（绑定 `--goal` 时）任务门禁。任一硬阻塞都以非零码退出，
 /// 便于脚本/agent 门禁。
@@ -351,23 +363,35 @@ fn evaluate_readiness_from_capture(
         }
         current_fingerprint = Some(capture.baseline().workspace_fingerprint.clone());
         let goal_decision = capture.goal_decision_context();
-        for checked_goal in &goals {
+        let unbound_workspace_check = cmd.goal.is_none() && !cmd.require_current_goal;
+        for checked_goal in goals
+            .iter()
+            .filter(|goal| goal_lifecycle_participates_in_readiness(goal.lifecycle))
+        {
             // 门禁判定只有这一份实现，autosave 的"工作是否已完成"共用它。
             let verdict =
                 goal::goal_gate_verdict_with_context(checked_goal, &goals, &goal_decision);
             goal_blockers.insert(checked_goal.id.clone(), verdict.blockers.clone());
-            // Unbound `check` is a workspace-health claim. Goal lifecycle and
-            // completion evidence belong only to an explicitly bound task
-            // check/finish; otherwise an active goal makes the repository's
-            // own authority gate circular and impossible to record.
-            if !verdict.blockers.is_empty() {
-                standard_warnings.push(format!(
-                    "goal {} is not task-ready (bind with --goal to enforce): {}",
-                    checked_goal.id,
-                    verdict.blockers.join("; ")
-                ));
+            if goal_diagnostics_are_visible(
+                unbound_workspace_check,
+                task_goal_id.as_deref(),
+                &checked_goal.id,
+            ) {
+                // Unbound `check` is a workspace-health claim. Goal lifecycle
+                // and completion evidence belong only to an explicitly bound
+                // task check/finish; otherwise an active goal makes the
+                // repository's own authority gate circular and impossible to
+                // record. A bound task receives the same hard failures through
+                // `task_blockers`, without unrelated current-goal noise.
+                if unbound_workspace_check && !verdict.blockers.is_empty() {
+                    standard_warnings.push(format!(
+                        "goal {} is not task-ready (bind with --goal to enforce): {}",
+                        checked_goal.id,
+                        verdict.blockers.join("; ")
+                    ));
+                }
+                standard_warnings.extend(verdict.warnings.clone());
             }
-            standard_warnings.extend(verdict.warnings.clone());
             goal_verdicts.insert(
                 checked_goal.id.clone(),
                 GoalVerdictSnapshot {
@@ -748,6 +772,110 @@ fn check_readiness_scope(profile: CheckProfile) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn readiness_goal_scope_excludes_retired_lifecycles() {
+        assert!(goal_lifecycle_participates_in_readiness(
+            goal::GoalLifecycle::Current
+        ));
+        assert!(!goal_lifecycle_participates_in_readiness(
+            goal::GoalLifecycle::Archived
+        ));
+        assert!(!goal_lifecycle_participates_in_readiness(
+            goal::GoalLifecycle::Superseded
+        ));
+    }
+
+    #[test]
+    fn bound_readiness_publishes_only_the_selected_current_goal() {
+        let workspace = tempfile::tempdir().unwrap();
+        let root = workspace.path();
+        let skill = root.join("SKILL.md");
+        std::fs::write(&skill, include_bytes!("../../../SKILL.md")).unwrap();
+        workspace::activate(root, &skill).unwrap();
+        context::refresh(root).unwrap();
+
+        let store = goal::GoalStore::new(root);
+        let archived = store
+            .start("retired history", &[("historical work".into(), true)])
+            .unwrap();
+        store.close(&archived.id, "partial").unwrap();
+        store
+            .archive(&archived.id, "retained audit history", false)
+            .unwrap();
+        let selected = store
+            .start("selected current goal", &[("selected work".into(), true)])
+            .unwrap();
+        let unrelated = store
+            .start("unrelated current goal", &[("unrelated work".into(), true)])
+            .unwrap();
+
+        let bound = evaluate_readiness(
+            root,
+            &CheckCmd {
+                profile: CheckProfile::Standard,
+                goal: Some(selected.id.clone()),
+                require_current_goal: false,
+                refresh_context: false,
+            },
+        )
+        .unwrap();
+        assert_eq!(bound.goals.len(), 3, "history remains in the finish seal");
+        assert!(bound.goal_verdicts.contains_key(&selected.id));
+        assert!(bound.goal_verdicts.contains_key(&unrelated.id));
+        assert!(!bound.goal_verdicts.contains_key(&archived.id));
+        assert!(
+            bound
+                .task_blockers
+                .iter()
+                .any(|blocker| blocker.contains(&selected.id)),
+            "{:?}",
+            bound.task_blockers
+        );
+        assert!(
+            bound
+                .standard_warnings
+                .iter()
+                .all(|warning| !warning.contains(&archived.id) && !warning.contains(&unrelated.id)),
+            "{:?}",
+            bound.standard_warnings
+        );
+
+        let unbound = evaluate_readiness(
+            root,
+            &CheckCmd {
+                profile: CheckProfile::Standard,
+                goal: None,
+                require_current_goal: false,
+                refresh_context: false,
+            },
+        )
+        .unwrap();
+        assert!(
+            unbound
+                .standard_warnings
+                .iter()
+                .any(|warning| warning.contains(&selected.id)),
+            "{:?}",
+            unbound.standard_warnings
+        );
+        assert!(
+            unbound
+                .standard_warnings
+                .iter()
+                .any(|warning| warning.contains(&unrelated.id)),
+            "{:?}",
+            unbound.standard_warnings
+        );
+        assert!(
+            unbound
+                .standard_warnings
+                .iter()
+                .all(|warning| !warning.contains(&archived.id)),
+            "{:?}",
+            unbound.standard_warnings
+        );
+    }
 
     #[test]
     fn workspace_fingerprint_refuses_an_incomplete_workspace_walk() {
