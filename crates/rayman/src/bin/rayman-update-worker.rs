@@ -50,6 +50,10 @@ enum WorkerCommand {
         manifest: PathBuf,
         #[arg(long)]
         signature: PathBuf,
+        /// Release-monitor only: verify a specific stable version with this
+        /// worker's compiled production root. Apply never accepts this input.
+        #[arg(long)]
+        expected_version: Option<rayman::update::ReleaseVersion>,
     },
 }
 
@@ -82,7 +86,8 @@ fn main() {
         WorkerCommand::VerifyManifest {
             manifest,
             signature,
-        } => verify_manifest(&manifest, &signature),
+            expected_version,
+        } => verify_manifest(&manifest, &signature, expected_version),
     };
     match result {
         Ok(outcome) => match serde_json::to_string_pretty(&outcome) {
@@ -93,7 +98,11 @@ fn main() {
     }
 }
 
-fn verify_manifest(manifest_path: &Path, signature_path: &Path) -> Result<serde_json::Value> {
+fn verify_manifest(
+    manifest_path: &Path,
+    signature_path: &Path,
+    expected_version: Option<rayman::update::ReleaseVersion>,
+) -> Result<serde_json::Value> {
     use rayman::update::trust::{MAX_MANIFEST_BYTES, verify_production_manifest};
 
     let manifest = read_ordinary_file(manifest_path, MAX_MANIFEST_BYTES as u64)?;
@@ -101,13 +110,12 @@ fn verify_manifest(manifest_path: &Path, signature_path: &Path) -> Result<serde_
     if signature.len() != 64 {
         bail!("Ed25519 detached signature is not exactly 64 bytes");
     }
-    let verified = verify_production_manifest(
-        &manifest,
-        &signature,
-        Utc::now(),
-        &rayman::update::compiled_release_version(),
-    )
-    .context("manifest signature does not match the compiled production update root")?;
+    let expected_version =
+        expected_version.unwrap_or_else(rayman::update::compiled_release_version);
+    let verified = verify_production_manifest(&manifest, &signature, Utc::now(), &expected_version)
+        .context(
+            "manifest failed production-root signature or expected release identity validation",
+        )?;
     Ok(serde_json::json!({
         "status": "manifest_verified",
         "manifest_sha256": verified.sha256(),
@@ -115,6 +123,10 @@ fn verify_manifest(manifest_path: &Path, signature_path: &Path) -> Result<serde_
         "sequence": verified.manifest().sequence,
         "key_id": verified.manifest().key_id,
         "key_epoch": verified.manifest().key_epoch,
+        "release_tag": verified.manifest().release_tag,
+        "commit_sha": verified.manifest().commit_sha,
+        "issued_at": verified.manifest().issued_at,
+        "expires_at": verified.manifest().expires_at,
     }))
 }
 
@@ -253,4 +265,65 @@ fn fail(error: anyhow::Error) -> ! {
         serde_json::to_string_pretty(&payload).unwrap_or_else(|_| "{\"status\":\"failed\"}".into())
     );
     std::process::exit(1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn verify_manifest_accepts_only_a_strict_optional_expected_version() {
+        let parsed = WorkerCli::try_parse_from([
+            "rayman-update-worker",
+            "verify-manifest",
+            "--manifest",
+            "manifest.json",
+            "--signature",
+            "manifest.sig",
+            "--expected-version",
+            "7.6.5",
+        ])
+        .unwrap();
+        let WorkerCommand::VerifyManifest {
+            expected_version, ..
+        } = parsed.command
+        else {
+            panic!("wrong worker command")
+        };
+        assert_eq!(expected_version.unwrap().to_string(), "7.6.5");
+
+        assert!(
+            WorkerCli::try_parse_from([
+                "rayman-update-worker",
+                "verify-manifest",
+                "--manifest",
+                "manifest.json",
+                "--signature",
+                "manifest.sig",
+                "--expected-version",
+                "7.06.5",
+            ])
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn verify_manifest_keeps_compiled_version_as_the_default() {
+        let parsed = WorkerCli::try_parse_from([
+            "rayman-update-worker",
+            "verify-manifest",
+            "--manifest",
+            "manifest.json",
+            "--signature",
+            "manifest.sig",
+        ])
+        .unwrap();
+        let WorkerCommand::VerifyManifest {
+            expected_version, ..
+        } = parsed.command
+        else {
+            panic!("wrong worker command")
+        };
+        assert!(expected_version.is_none());
+    }
 }

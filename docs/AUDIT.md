@@ -64,6 +64,10 @@ the `pwsh` resolved on PATH), cargo-deny, the pinned coverage Application, exact
 MSRV Cargo/rustc and matching LLVM tools, the advisory tree, and offline state.
 Closeout recomputes that full binding before announcing reuse and again after
 the authority/optional finish steps; any drift fails closed.
+`scripts/check-update-freshness.ps1 -SelfTest` is also mandatory in both
+`check-repo.ps1` and the complete audit. The freshness script itself is part of
+the closeout script hash binding, so cached release evidence cannot survive a
+changed renewal policy.
 The focused dependency-policy regression lane exercises the same isolated root/evals advisory state without claiming a complete audit:
 
 ```powershell

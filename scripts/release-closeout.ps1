@@ -357,6 +357,7 @@ function Get-ReleaseBinding {
     $scripts = [ordered]@{}
     foreach ($name in @(
         'audit-repository.ps1',
+        'check-update-freshness.ps1',
         'check-repo.ps1',
         'install-rayman.ps1',
         'repository-quality.ps1',

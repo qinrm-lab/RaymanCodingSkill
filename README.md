@@ -52,6 +52,11 @@ cargo run -p rayman -- context status
 
 `2.11.1` binds the notification, signed-update, independent worker, install-receipt, and safe `ensure-current` surfaces to `rayman-cli-contract-v17` and the exact running CLI version. It retains the v2.10 goal/Stop/profile behavior and the identity-only rebind boundary. Keep these claims separate: `check --profile release` proves workspace strict-quality only; `doctor --check` proves installed binary/PATH/SKILL/activation identity and any explicitly required execution-context match; the versioned update worker is separately receipt- and signature-bound; release handoff additionally requires locked fresh-source rebuilds of both binaries. The exact release and update procedures live in [docs/RELEASE_CONTRACT.md](docs/RELEASE_CONTRACT.md) and [docs/UPDATE_CONTRACT.md](docs/UPDATE_CONTRACT.md).
 
+Signed update metadata has a 30-day fail-closed validity window. Tag CI requires
+a nearly full window before publication, and the weekly freshness guard fails
+with an actionable new-patch release instruction when fewer than 14 days
+remain. It never refreshes an existing tag or weakens expiry automatically.
+
 The only supported source-checkout install/upgrade entry point is below. The installer supports Windows and Linux; macOS and other Unix hosts fail closed before any installation write because they do not expose the required handle-bound publication primitive. Building and `verify-release-contract.ps1` remain cross-platform. Open a PowerShell 7 (`pwsh`) session first—never Windows PowerShell. A historical profile shim that searches for `.Rayman\rayman.ps1` can loop forever at a drive root; inspect and migrate only that exact known shim before installation:
 
 ```powershell

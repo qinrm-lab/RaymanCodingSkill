@@ -1726,6 +1726,7 @@ if ($PSCmdlet.ParameterSetName -eq 'Audit') {
     Write-AuditPhase -Name 'release_script_self_tests' -Status 'start'
     try {
         foreach ($scriptName in @(
+            'check-update-freshness.ps1',
             'release-closeout.ps1',
             'install-rayman.ps1',
             'verify-release-contract.ps1',

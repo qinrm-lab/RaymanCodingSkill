@@ -108,6 +108,13 @@ An intentionally different bootstrap wrapper is not the canonical skill and must
 
 After every source-fresh local smoke test and the normal test suite pass, create an exact tag matching the manifest, for example `v2.11.1`. CI always runs the source-fresh verifier; tag-triggered builds additionally run `-VerifyGitTag`, read the exact tag from Git, and cross-check GitHub's ref type, ref name, full ref, and SHA against that checked-out `HEAD`. Only the protected `rayman-release` job receives `contents: write`; it emits and signs the canonical fixed-role update manifest, verifies that signature with the production public key compiled into the worker, then publishes the exact asset set. An absent or mismatched production public key, protected signing secret, or environment approval fails instead of publishing unsigned or client-unusable assets. Forged or inconsistent `GITHUB_REF_*` values never substitute for repository evidence. Existing historical non-semver tags are not retroactively claimed as releases under this contract.
 
+Signed metadata remains valid for 30 days. The release job requires at least 29
+days after signature verification, while the weekly freshness guard uses the
+current protected-source verifier—never code from the release being
+inspected—and fails below 14 remaining days. That alert requires a new signed
+patch release; it never authorizes rewriting assets for the existing tag or
+relaxing manifest expiry.
+
 ## One complete audit
 
 The verifier above is one release primitive, not the test suite. The single full repository handoff lane is:

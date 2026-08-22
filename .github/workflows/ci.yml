@@ -13,7 +13,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # A branch push must not cancel the weekly freshness monitor before its
+  # expiry alert can run. Keep cancellation only within the same event/ref.
+  group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -430,6 +432,15 @@ jobs:
           }
           Remove-Item -LiteralPath dist/rayman-update-manifest-v1.payload -Force
 
+      - name: Verify signed metadata has a full release window
+        shell: pwsh
+        run: |
+          ./scripts/check-update-freshness.ps1 `
+            -ManifestPath dist/rayman-update-manifest-v1.json `
+            -SignaturePath dist/rayman-update-manifest-v1.sig `
+            -WorkerPath target/release/rayman-update-worker.exe `
+            -MinimumRemainingDays 29
+
       - name: Publish immutable asset set for the exact tag
         shell: pwsh
         env:
@@ -454,6 +465,77 @@ jobs:
             --verify-tag `
             --title "RaymanCodingSkill $env:GITHUB_REF_NAME" `
             --notes "Signed Windows x86_64 update bundle for $env:GITHUB_SHA"
+
+  signed-release-freshness:
+    name: signed release expiry guard
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable, pinned 2026-07-14
+
+      - name: Verify latest signed release remains installable
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $releaseText = gh release view --json tagName,isDraft,isPrerelease
+          if ($LASTEXITCODE -ne 0) {
+            throw "Unable to resolve the latest GitHub Release: $LASTEXITCODE"
+          }
+          $release = $releaseText | ConvertFrom-Json -ErrorAction Stop
+          $tag = [string]$release.tagName
+          if ($release.isDraft -or $release.isPrerelease -or
+              $tag -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$') {
+            throw "Latest release is not a canonical stable tag: $tag"
+          }
+          git show-ref --verify --quiet "refs/tags/$tag"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Latest release tag is absent from the checked-out repository: $tag"
+          }
+          $tagCommit = (git rev-list -n 1 $tag).Trim()
+          if ($LASTEXITCODE -ne 0 -or $tagCommit -notmatch '^[0-9a-f]{40}$') {
+            throw "Unable to resolve the exact release commit for $tag"
+          }
+
+          $nonce = [Guid]::NewGuid().ToString('N')
+          $assetRoot = Join-Path $env:RUNNER_TEMP "rayman-release-assets-$nonce"
+          try {
+            # The verifier comes from current protected main, never from the
+            # release being inspected. A malicious tag cannot substitute its
+            # own trust root and certify itself.
+            cargo build --locked --release --bin rayman-update-worker
+            if ($LASTEXITCODE -ne 0) { throw 'Unable to build the current update verifier.' }
+
+            $null = New-Item -ItemType Directory -Path $assetRoot
+            gh release download $tag `
+              --pattern rayman-update-manifest-v1.json `
+              --pattern rayman-update-manifest-v1.sig `
+              --dir $assetRoot
+            if ($LASTEXITCODE -ne 0) { throw "Unable to download signed metadata for $tag." }
+
+            $worker = Join-Path $PWD 'target/release/rayman-update-worker'
+            $freshnessText = ./scripts/check-update-freshness.ps1 `
+              -ManifestPath (Join-Path $assetRoot 'rayman-update-manifest-v1.json') `
+              -SignaturePath (Join-Path $assetRoot 'rayman-update-manifest-v1.sig') `
+              -WorkerPath $worker `
+              -ExpectedVersion $tag.Substring(1) `
+              -MinimumRemainingDays 14
+            $freshness = $freshnessText | ConvertFrom-Json -ErrorAction Stop
+            if ($freshness.release_tag -cne $tag -or
+                $freshness.commit_sha -cne $tagCommit) {
+              throw "Signed metadata is not bound to $tag at $tagCommit."
+            }
+          } finally {
+            if (Test-Path -LiteralPath $assetRoot -PathType Container) {
+              Remove-Item -LiteralPath $assetRoot -Recurse -Force
+            }
+          }
 
   scheduled-advisories:
     name: scheduled dependency advisory refresh

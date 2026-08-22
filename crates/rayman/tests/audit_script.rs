@@ -302,6 +302,8 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
         .expect("audit script must be readable UTF-8");
     let check_repo = fs::read_to_string(repo_root.join("scripts/check-repo.ps1"))
         .expect("check-repo script must be readable UTF-8");
+    let update_freshness = fs::read_to_string(repo_root.join("scripts/check-update-freshness.ps1"))
+        .expect("update freshness script must be readable UTF-8");
     let codex_temp_config =
         fs::read_to_string(repo_root.join("scripts/configure-codex-validation-temp.ps1"))
             .expect("Codex validation temp configurator must be readable UTF-8");
@@ -312,6 +314,8 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
     let release_verifier =
         fs::read_to_string(repo_root.join("scripts/verify-release-contract.ps1"))
             .expect("release verifier must be readable UTF-8");
+    let workflow = fs::read_to_string(repo_root.join(".github/workflows/ci.yml"))
+        .expect("CI workflow must be readable UTF-8");
 
     assert!(!source.contains("RAYMAN_AUDIT_SELF_TEST"));
     assert!(codex_temp_config.contains("RAYMAN_VALIDATION_TEMP_ROOT"));
@@ -322,6 +326,18 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
     assert!(!codex_temp_config.contains(r"E:\codex-cache\cargo\codex-sandbox"));
     assert!(codex_temp_config.contains("does not cover managed root"));
     assert!(check_repo.contains("'configure-codex-validation-temp.ps1') -SelfTest"));
+    assert!(check_repo.contains("'check-update-freshness.ps1') -SelfTest"));
+    assert!(source.contains("'check-update-freshness.ps1'"));
+    assert!(release_closeout.contains("'check-update-freshness.ps1'"));
+    assert!(update_freshness.contains("manifest_verified"));
+    assert!(update_freshness.contains("MinimumRemainingDays = 14"));
+    assert!(update_freshness.contains("Do not replace the existing release assets"));
+    assert!(workflow.contains("signed-release-freshness:"));
+    assert!(workflow.contains("ci-${{ github.event_name }}-${{ github.ref }}"));
+    assert!(workflow.contains("-MinimumRemainingDays 14"));
+    assert!(workflow.contains("-MinimumRemainingDays 29"));
+    assert!(workflow.contains("-ExpectedVersion $tag.Substring(1)"));
+    assert!(!workflow.contains("rayman-release-source-$nonce"));
     assert!(source.contains("switch ($PSCmdlet.ParameterSetName)"));
     assert!(source.contains("-PrepareAuditTools:$false grants no provisioning authority"));
     assert!(source.contains("-IncludeCompleteAuditTools ($PSCmdlet.ParameterSetName -eq 'Audit')"));

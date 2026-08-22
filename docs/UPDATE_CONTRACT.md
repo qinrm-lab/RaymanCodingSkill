@@ -79,6 +79,25 @@ Release path, permits at most one HTTPS redirect, checks the final host against
 the compiled GitHub release-CDN allowlist, and still requires the signed size
 and hash.
 
+### Expiry and renewal
+
+The 30-day validity window is a deliberate freshness boundary, not a license to
+extend or replace metadata for an existing tag. A supported stable release must
+therefore be followed by a newer signed patch release before its manifest
+expires. The tag workflow runs `scripts/check-update-freshness.ps1` after
+signature verification and requires at least 29 days to remain before it can
+publish. The weekly `signed-release-freshness` job builds the verifier from
+current protected source rather than from the release under inspection, passes
+the stable tag as an explicit expected version, verifies the detached
+signature, rechecks the tag/commit binding, and fails when fewer than 14 days
+remain.
+
+That failure is an operator release boundary, never automatic publication
+authority. Recover by producing a new semantic patch from a clean HEAD through
+the protected `rayman-release` environment. Do not replace an existing
+release's payload, manifest, or signature, and do not weaken the client expiry
+check to make the monitor green.
+
 The production public key is compiled into both binaries. An unprovisioned,
 malformed, unknown, test, or all-zero key disables trusted apply; there is no
 unsigned fallback. Key rotation requires a new client released under the
@@ -144,7 +163,8 @@ bytes through `rayman-update-worker create-manifest`, signs with OpenSSL using
 the environment secret `RAYMAN_UPDATE_SIGNING_KEY_PEM_B64`, verifies the
 signature both with the key derived from the secret and with the production
 public key compiled into the release worker, deletes the temporary private key
-and signing payload, and publishes only the fixed assets for the exact Git tag.
+and signing payload, verifies that a full release validity window remains, and
+publishes only the fixed assets for the exact Git tag.
 
 Repository code cannot prove GitHub environment reviewers, tag/release
 protection, or private-key custody. Those are external release prerequisites.
