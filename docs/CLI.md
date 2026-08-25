@@ -54,6 +54,11 @@ activation lock. It cannot activate orphan state, enable a disabled contract,
 change `skill_file`, migrate a canonical path, or repair malformed/wrong-skill
 state. After an installed upgrade, a non-read-only invocation uses
 `update poll` first and `ensure-current --yes` only after no restart is pending.
+Its JSON report fixes
+`migration_scope=current_workspace_activation_identity_only`,
+`project_files_changed=false`, and `other_workspaces_scanned=false`. It never
+installs Rayman's own `xtask` or rewrites a consumer project's Python or other
+automation; that broader migration requires an explicit project-local goal.
 
 ## Evidence boundaries
 

@@ -5881,6 +5881,13 @@ fn workspace_ensure_current_reports_current_activation_without_writing() {
     assert_eq!(report["status"], "active");
     assert_eq!(report["activation"]["active"], true);
     assert_eq!(report["changed"], false);
+    assert_eq!(
+        report["migration_scope"],
+        "current_workspace_activation_identity_only"
+    );
+    assert_eq!(report["activation_identity_changed"], false);
+    assert_eq!(report["project_files_changed"], false);
+    assert_eq!(report["other_workspaces_scanned"], false);
     assert_eq!(std::fs::read(&activation_path).unwrap(), activation_before);
     assert_eq!(state_snapshot(root), state_before);
 
@@ -5896,6 +5903,9 @@ fn workspace_ensure_current_reports_current_activation_without_writing() {
     let applied: Value = serde_json::from_str(&applied.stdout).unwrap();
     assert_eq!(applied["status"], "active");
     assert_eq!(applied["changed"], false);
+    assert_eq!(applied["activation_identity_changed"], false);
+    assert_eq!(applied["project_files_changed"], false);
+    assert_eq!(applied["other_workspaces_scanned"], false);
     assert_eq!(std::fs::read(&activation_path).unwrap(), activation_before);
     assert_eq!(state_snapshot(root), state_before);
 }
@@ -5957,6 +5967,9 @@ fn workspace_ensure_current_only_rebinds_eligible_identity_drift_with_yes() {
     assert_eq!(applied["status"], "active");
     assert_eq!(applied["activation"]["active"], true);
     assert_eq!(applied["changed"], true);
+    assert_eq!(applied["activation_identity_changed"], true);
+    assert_eq!(applied["project_files_changed"], false);
+    assert_eq!(applied["other_workspaces_scanned"], false);
     let config_after = std::fs::read_to_string(&activation_path).unwrap();
     assert_eq!(
         config_after
@@ -5978,6 +5991,50 @@ fn workspace_ensure_current_only_rebinds_eligible_identity_drift_with_yes() {
         state_after, expected_state,
         "ensure-current must not modify unrelated managed state"
     );
+}
+
+#[test]
+fn workspace_ensure_current_never_scans_or_rewrites_a_sibling_workspace() {
+    let parent = tempfile::tempdir().unwrap();
+    let current = parent.path().join("current");
+    let sibling = parent.path().join("sibling");
+    std::fs::create_dir_all(&current).unwrap();
+    std::fs::create_dir_all(&sibling).unwrap();
+    make_rebind_eligible_identity_drift(&current);
+    write(&sibling, "SKILL.md", "sibling-owned skill bytes\n");
+    write(
+        &sibling,
+        ".RaymanCodingSkill/workspace_skill.yaml",
+        "sibling-owned activation bytes\n",
+    );
+    write(
+        &sibling,
+        ".RaymanCodingSkill/goals/sentinel.json",
+        "sibling-owned state\n",
+    );
+    let sibling_skill_before = std::fs::read(sibling.join("SKILL.md")).unwrap();
+    let sibling_state_before = state_snapshot(&sibling);
+
+    let applied = run_raw(
+        &current,
+        &["--format", "json", "workspace", "ensure-current", "--yes"],
+    );
+
+    assert_eq!(
+        applied.status, 0,
+        "stdout={} stderr={}",
+        applied.stdout, applied.stderr
+    );
+    let applied: Value = serde_json::from_str(&applied.stdout).unwrap();
+    assert_eq!(applied["status"], "active");
+    assert_eq!(applied["activation_identity_changed"], true);
+    assert_eq!(applied["project_files_changed"], false);
+    assert_eq!(applied["other_workspaces_scanned"], false);
+    assert_eq!(
+        std::fs::read(sibling.join("SKILL.md")).unwrap(),
+        sibling_skill_before
+    );
+    assert_eq!(state_snapshot(&sibling), sibling_state_before);
 }
 
 #[test]

@@ -114,7 +114,11 @@ impl WorkspaceEnsureCurrentStatus {
 pub struct WorkspaceEnsureCurrentReport {
     pub status: WorkspaceEnsureCurrentStatus,
     pub activation: WorkspaceActivationReport,
+    pub migration_scope: &'static str,
     pub changed: bool,
+    pub activation_identity_changed: bool,
+    pub project_files_changed: bool,
+    pub other_workspaces_scanned: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -4695,7 +4699,11 @@ pub fn ensure_current(root: &Path, apply: bool) -> Result<WorkspaceEnsureCurrent
         return Ok(WorkspaceEnsureCurrentReport {
             status,
             activation,
+            migration_scope: "current_workspace_activation_identity_only",
             changed: false,
+            activation_identity_changed: false,
+            project_files_changed: false,
+            other_workspaces_scanned: false,
         });
     }
     if status == WorkspaceEnsureCurrentStatus::ManualRepairRequired {
@@ -4712,7 +4720,11 @@ pub fn ensure_current(root: &Path, apply: bool) -> Result<WorkspaceEnsureCurrent
     Ok(WorkspaceEnsureCurrentReport {
         status: WorkspaceEnsureCurrentStatus::Active,
         activation: rebound.activation,
+        migration_scope: "current_workspace_activation_identity_only",
         changed: rebound.changed,
+        activation_identity_changed: rebound.changed,
+        project_files_changed: false,
+        other_workspaces_scanned: false,
     })
 }
 

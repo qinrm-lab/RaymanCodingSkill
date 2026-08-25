@@ -47,7 +47,13 @@ successful worker result reports `restart_required=true`, stop and request a
 Codex restart; the old loaded adapter must not claim the new skill/runtime is
 active. On the next invocation run `rayman workspace ensure-current --yes` and
 continue only if its existing activation is eligible for identity-only rebind.
-Never scan or rewrite another workspace.
+That next-use migration is deliberately limited to this workspace's
+`workspace_skill.yaml` identity scalars. It reports
+`migration_scope=current_workspace_activation_identity_only`, never injects
+Rayman's repository `xtask` into a consumer project, never rewrites the
+project's Python or other automation, and never scans or rewrites another
+workspace. Migrating a consumer project's own automation requires its own
+explicit project-scoped goal and validation.
 
 A read-only request does not run poll, a worker, or `ensure-current --yes`.
 It may use `rayman update status` and `rayman workspace ensure-current` only to

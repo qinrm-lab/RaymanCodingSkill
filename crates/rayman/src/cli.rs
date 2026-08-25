@@ -143,9 +143,9 @@ pub enum WorkspaceAction {
         #[arg(long)]
         yes: bool,
     },
-    /// Report activation currency and optionally apply an eligible identity-only rebind.
+    /// Report current-workspace activation currency and optionally apply only an eligible identity rebind.
     EnsureCurrent {
-        /// Apply the existing rebind transaction when identity drift is safely repairable.
+        /// Rebind only this workspace's activation identity; never rewrite project automation or scan siblings.
         #[arg(long)]
         yes: bool,
     },

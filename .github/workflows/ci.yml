@@ -83,6 +83,10 @@ jobs:
       - name: Test
         run: cargo test --locked --workspace --all-targets
 
+      - name: Source-bound Rust repository gate
+        shell: pwsh
+        run: cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate
+
   msrv:
     name: MSRV (Rust 1.97.1)
     runs-on: ubuntu-latest

@@ -386,6 +386,65 @@ pub(super) fn trusted_workspace_gate_script_with_context(
 }
 
 const AUTHORITY_GATE_BINDING_POLICY_V1: &str = "powershell_repository_gate_closure_v1";
+pub(super) const XTASK_AUTHORITY_GATE_BINDING_POLICY_V1: &str =
+    "rust_xtask_repository_gate_closure_v1";
+pub(super) const XTASK_AUTHORITY_ENTRYPOINT: &str = "xtask/Cargo.toml";
+const XTASK_FIXED_DEPENDENCIES: &[&str] = &[
+    ".cargo/config.toml",
+    "Cargo.lock",
+    "Cargo.toml",
+    XTASK_AUTHORITY_ENTRYPOINT,
+    "scripts/check-repo.ps1",
+    "xtask/src/main.rs",
+];
+
+/// Bind the complete xtask source tree and every repository PowerShell helper
+/// the transition gate can delegate to. The baseline/current union makes an
+/// added or deleted module just as visible as an in-place edit.
+fn xtask_authority_dependency_keys(
+    baseline: &WorkspaceBaseline,
+    current: &WorkspaceBaseline,
+) -> Result<BTreeSet<String>> {
+    for key in XTASK_FIXED_DEPENDENCIES {
+        if !current.files.contains_key(*key) {
+            bail!("xtask authority requires the exact current dependency key: {key}");
+        }
+    }
+    let mut dependencies = XTASK_FIXED_DEPENDENCIES
+        .iter()
+        .map(|path| (*path).to_string())
+        .collect::<BTreeSet<_>>();
+    let mut case_keys = BTreeMap::<String, String>::new();
+    for path in baseline.files.keys().chain(current.files.keys()) {
+        let normalized = path.replace('\\', "/");
+        let lowered = normalized.to_ascii_lowercase();
+        if !lowered.starts_with("xtask/") && !lowered.starts_with("scripts/") {
+            continue;
+        }
+        if normalized != *path
+            || !path.starts_with("xtask/") && !path.starts_with("scripts/")
+            || strict_authority_key(path, false).is_err()
+        {
+            bail!("xtask authority dependency key is not canonical: {path}");
+        }
+        if let Some(existing) = case_keys.insert(lowered, path.clone())
+            && existing != *path
+        {
+            bail!(
+                "xtask authority dependency is ambiguous under Windows case rules: {existing} vs {path}"
+            );
+        }
+        dependencies.insert(path.clone());
+    }
+    Ok(dependencies)
+}
+
+fn xtask_authority_dependency_key(key: &str) -> bool {
+    strict_authority_key(key, false).is_ok()
+        && (XTASK_FIXED_DEPENDENCIES.contains(&key)
+            || key.starts_with("xtask/")
+            || key.starts_with("scripts/"))
+}
 
 fn dependency_key(parent: &str, literal: &str) -> Result<String> {
     if literal.is_empty()
@@ -446,6 +505,22 @@ fn trusted_workspace_gate_dependency_keys_with_context(
     command: &ParsedValidationCommand,
     receipt_baseline: Option<&WorkspaceBaseline>,
 ) -> Result<Option<BTreeSet<String>>> {
+    if xtask_repository_gate_invocation(command) {
+        let current = decision.current().ok_or_else(|| {
+            anyhow::anyhow!("xtask authority requires a captured workspace baseline")
+        })?;
+        let baseline = receipt_baseline.unwrap_or(current);
+        let dependencies = xtask_authority_dependency_keys(baseline, current)?;
+        for key in &dependencies {
+            let captured = decision.captured_workspace_file(key)?.ok_or_else(|| {
+                anyhow::anyhow!("xtask authority dependency is absent from capture: {key}")
+            })?;
+            if captured.key != *key {
+                bail!("xtask authority dependency key is ambiguous: {key}");
+            }
+        }
+        return Ok(Some(dependencies));
+    }
     let Some(gate) = trusted_gate_script_identity_with_context(decision, command)? else {
         return Ok(None);
     };
@@ -505,6 +580,15 @@ fn trusted_workspace_gate_dependency_paths(
     command: &ParsedValidationCommand,
     receipt_baseline: Option<&WorkspaceBaseline>,
 ) -> Result<Option<BTreeSet<String>>> {
+    if xtask_repository_gate_invocation(command) {
+        let current = workspace_baseline(root)?;
+        let baseline = receipt_baseline.unwrap_or(&current);
+        let dependencies = xtask_authority_dependency_keys(baseline, &current)?;
+        for key in &dependencies {
+            crate::context::ensure_source_file(root, &root.join(key))?;
+        }
+        return Ok(Some(dependencies));
+    }
     let Some(kind) = strict_gate_kind(command)? else {
         return Ok(None);
     };
@@ -597,9 +681,14 @@ pub(super) fn authority_gate_binding_for_goal_with_context(
     else {
         return Ok(None);
     };
-    let entrypoint = trusted_gate_script_identity_with_context(decision, &parsed)?
-        .ok_or_else(|| anyhow::anyhow!("trusted PowerShell gate identity disappeared"))?
-        .entrypoint;
+    let xtask_gate = xtask_repository_gate_invocation(&parsed);
+    let entrypoint = if xtask_gate {
+        XTASK_AUTHORITY_ENTRYPOINT.to_string()
+    } else {
+        trusted_gate_script_identity_with_context(decision, &parsed)?
+            .ok_or_else(|| anyhow::anyhow!("trusted PowerShell gate identity disappeared"))?
+            .entrypoint
+    };
     let mut dependency_sha256 = BTreeMap::new();
     for key in dependencies {
         let hash = baseline_hash_for_path(baseline, &key)?
@@ -624,13 +713,14 @@ pub(super) fn authority_gate_binding_for_goal_with_context(
     if !dependency_sha256.contains_key(&entrypoint) {
         bail!("authority gate binding does not contain its entrypoint: {entrypoint}");
     }
-    let binding_sha256 = authority_gate_binding_sha256(
-        AUTHORITY_GATE_BINDING_POLICY_V1,
-        &entrypoint,
-        &dependency_sha256,
-    );
+    let policy = if xtask_gate {
+        XTASK_AUTHORITY_GATE_BINDING_POLICY_V1
+    } else {
+        AUTHORITY_GATE_BINDING_POLICY_V1
+    };
+    let binding_sha256 = authority_gate_binding_sha256(policy, &entrypoint, &dependency_sha256);
     Ok(Some(AuthorityGateBinding {
-        policy: AUTHORITY_GATE_BINDING_POLICY_V1.into(),
+        policy: policy.into(),
         entrypoint,
         dependency_sha256,
         binding_sha256,
@@ -654,10 +744,15 @@ pub(super) fn authority_gate_binding_for_goal(
     else {
         return Ok(None);
     };
-    let entrypoint = strict_gate_kind(&parsed)?
-        .ok_or_else(|| anyhow::anyhow!("trusted PowerShell gate identity disappeared"))?
-        .key()
-        .to_string();
+    let xtask_gate = xtask_repository_gate_invocation(&parsed);
+    let entrypoint = if xtask_gate {
+        XTASK_AUTHORITY_ENTRYPOINT.to_string()
+    } else {
+        strict_gate_kind(&parsed)?
+            .ok_or_else(|| anyhow::anyhow!("trusted PowerShell gate identity disappeared"))?
+            .key()
+            .to_string()
+    };
     let mut dependency_sha256 = BTreeMap::new();
     for key in dependencies {
         let hash = baseline_hash_for_path(baseline, &key)?
@@ -681,13 +776,14 @@ pub(super) fn authority_gate_binding_for_goal(
     if !dependency_sha256.contains_key(&entrypoint) {
         bail!("authority gate binding does not contain its entrypoint: {entrypoint}");
     }
-    let binding_sha256 = authority_gate_binding_sha256(
-        AUTHORITY_GATE_BINDING_POLICY_V1,
-        &entrypoint,
-        &dependency_sha256,
-    );
+    let policy = if xtask_gate {
+        XTASK_AUTHORITY_GATE_BINDING_POLICY_V1
+    } else {
+        AUTHORITY_GATE_BINDING_POLICY_V1
+    };
+    let binding_sha256 = authority_gate_binding_sha256(policy, &entrypoint, &dependency_sha256);
     Ok(Some(AuthorityGateBinding {
-        policy: AUTHORITY_GATE_BINDING_POLICY_V1.into(),
+        policy: policy.into(),
         entrypoint,
         dependency_sha256,
         binding_sha256,
@@ -699,30 +795,54 @@ pub(super) fn authority_gate_binding_error(
     command: &str,
     binding: Option<&AuthorityGateBinding>,
 ) -> Option<String> {
-    let powershell_gate = parse_validation_command(command)
-        .ok()
-        .is_some_and(|parsed| powershell_script(&parsed).is_some());
+    let parsed = parse_validation_command(command).ok();
+    let powershell_gate = parsed
+        .as_ref()
+        .is_some_and(|parsed| powershell_script(parsed).is_some());
+    let xtask_gate = parsed
+        .as_ref()
+        .is_some_and(xtask_repository_gate_invocation);
     let Some(binding) = binding else {
-        return powershell_gate.then(|| {
-            "PowerShell replacement authority 缺少 receipt-era dependency binding".into()
+        return (powershell_gate || xtask_gate).then(|| {
+            "repository replacement authority 缺少 receipt-era dependency binding".into()
         });
     };
-    if !powershell_gate {
-        return Some("non-PowerShell authority 不得携带 PowerShell gate binding".into());
-    }
-    let entrypoint_matches_command = parse_validation_command(command)
-        .ok()
-        .and_then(|parsed| strict_gate_kind(&parsed).ok().flatten())
-        .is_some_and(|kind| binding.entrypoint == kind.key());
-    if binding.policy != AUTHORITY_GATE_BINDING_POLICY_V1
-        || GateKind::from_exact_key(&binding.entrypoint).is_none()
-        || !entrypoint_matches_command
+    let Some(baseline) = authority.baseline.as_ref() else {
+        return Some("repository authority goal 缺少 receipt-era baseline".into());
+    };
+    let policy_valid = if binding.policy == AUTHORITY_GATE_BINDING_POLICY_V1 {
+        let entrypoint_matches_command = parsed
+            .as_ref()
+            .and_then(|parsed| strict_gate_kind(parsed).ok().flatten())
+            .is_some_and(|kind| binding.entrypoint == kind.key());
+        powershell_gate
+            && GateKind::from_exact_key(&binding.entrypoint).is_some()
+            && entrypoint_matches_command
+            && binding.dependency_sha256.iter().all(|(path, hash)| {
+                (GateKind::from_exact_key(path).is_some() || ordinary_dependency_key(path))
+                    && is_sha256(hash)
+            })
+    } else if binding.policy == XTASK_AUTHORITY_GATE_BINDING_POLICY_V1 {
+        let expected = xtask_authority_dependency_keys(baseline, baseline).ok();
+        xtask_gate
+            && binding.entrypoint == XTASK_AUTHORITY_ENTRYPOINT
+            && Some(
+                binding
+                    .dependency_sha256
+                    .keys()
+                    .cloned()
+                    .collect::<BTreeSet<_>>(),
+            ) == expected
+            && binding
+                .dependency_sha256
+                .iter()
+                .all(|(path, hash)| xtask_authority_dependency_key(path) && is_sha256(hash))
+    } else {
+        false
+    };
+    if !policy_valid
         || binding.dependency_sha256.is_empty()
         || !binding.dependency_sha256.contains_key(&binding.entrypoint)
-        || binding.dependency_sha256.iter().any(|(path, hash)| {
-            GateKind::from_exact_key(path).is_none() && !ordinary_dependency_key(path)
-                || !is_sha256(hash)
-        })
         || binding.binding_sha256
             != authority_gate_binding_sha256(
                 &binding.policy,
@@ -730,11 +850,8 @@ pub(super) fn authority_gate_binding_error(
                 &binding.dependency_sha256,
             )
     {
-        return Some("PowerShell replacement authority dependency binding 无效".into());
+        return Some("repository replacement authority dependency binding 无效".into());
     }
-    let Some(baseline) = authority.baseline.as_ref() else {
-        return Some("PowerShell authority goal 缺少 receipt-era baseline".into());
-    };
     if binding.dependency_sha256.iter().any(|(path, hash)| {
         baseline_hash_for_path(baseline, path)
             .ok()
@@ -742,13 +859,48 @@ pub(super) fn authority_gate_binding_error(
             .map(String::as_str)
             != Some(hash.as_str())
     }) {
-        return Some("PowerShell authority binding 与 authority goal baseline 不一致".into());
+        return Some("repository authority binding 与 authority goal baseline 不一致".into());
     }
     None
 }
 
 fn ordinary_dependency_key(key: &str) -> bool {
     strict_authority_key(key, true).is_ok()
+}
+
+/// Canonical source-side repository gate. `cargo xtask` remains a convenience
+/// alias only: user, parent, or environment Cargo configuration can replace an
+/// alias, so authority accepts one exact built-in `cargo run` argv instead.
+pub(super) fn xtask_repository_gate_invocation(command: &ParsedValidationCommand) -> bool {
+    super::validation::executable_name(command) == "cargo"
+        && command.args.iter().map(String::as_str).eq([
+            "run",
+            "--locked",
+            "--manifest-path",
+            "xtask/Cargo.toml",
+            "--",
+            "repository-gate",
+        ])
+}
+
+pub(super) fn trusted_xtask_repository_gate(
+    root: &Path,
+    command: &ParsedValidationCommand,
+) -> Result<bool> {
+    if !xtask_repository_gate_invocation(command) {
+        return Ok(false);
+    }
+    Ok(trusted_workspace_gate_dependency_paths(root, command, None)?.is_some())
+}
+
+pub(super) fn trusted_xtask_repository_gate_with_context(
+    decision: &GoalDecisionContext<'_>,
+    command: &ParsedValidationCommand,
+) -> Result<bool> {
+    if !xtask_repository_gate_invocation(command) {
+        return Ok(false);
+    }
+    Ok(trusted_workspace_gate_dependency_keys_with_context(decision, command, None)?.is_some())
 }
 
 fn powershell_quoted_literals(line: &str) -> Vec<String> {
@@ -812,17 +964,18 @@ fn authority_command_goal_delta_conflicts_with_context(
     command: &str,
 ) -> Result<Vec<String>> {
     let parsed = parse_validation_command(command)?;
-    let Some(dependencies) =
-        trusted_workspace_gate_dependency_keys_with_context(decision, &parsed, None)?
-    else {
-        return Ok(Vec::new());
-    };
     let baseline = goal.baseline.as_ref().ok_or_else(|| {
         anyhow::anyhow!(
             "goal {} has no start baseline, so authority-gate independence cannot be proven",
             goal.id
         )
     })?;
+    let closure_baseline = xtask_repository_gate_invocation(&parsed).then_some(baseline);
+    let Some(dependencies) =
+        trusted_workspace_gate_dependency_keys_with_context(decision, &parsed, closure_baseline)?
+    else {
+        return Ok(Vec::new());
+    };
     let mut conflicts = Vec::new();
     for key in dependencies {
         let baseline_hash = baseline_hash_for_path(baseline, &key)?;
@@ -842,15 +995,18 @@ fn authority_command_goal_delta_conflicts(
     command: &str,
 ) -> Result<Vec<String>> {
     let parsed = parse_validation_command(command)?;
-    let Some(dependencies) = trusted_workspace_gate_dependency_paths(root, &parsed, None)? else {
-        return Ok(Vec::new());
-    };
     let baseline = goal.baseline.as_ref().ok_or_else(|| {
         anyhow::anyhow!(
             "goal {} has no start baseline, so authority-gate independence cannot be proven",
             goal.id
         )
     })?;
+    let closure_baseline = xtask_repository_gate_invocation(&parsed).then_some(baseline);
+    let Some(dependencies) =
+        trusted_workspace_gate_dependency_paths(root, &parsed, closure_baseline)?
+    else {
+        return Ok(Vec::new());
+    };
     let mut conflicts = Vec::new();
     for key in dependencies {
         let baseline_hash = baseline_hash_for_path(baseline, &key)?;

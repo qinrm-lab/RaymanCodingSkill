@@ -372,6 +372,16 @@ fn run_workspace(root: &Path, json: bool, cmd: WorkspaceCmd) -> Result<()> {
                 );
                 print_workspace_activation(&report.activation);
                 println!("  changed: {}", report.changed);
+                println!("  migration_scope: {}", report.migration_scope);
+                println!(
+                    "  activation_identity_changed: {}",
+                    report.activation_identity_changed
+                );
+                println!("  project_files_changed: {}", report.project_files_changed);
+                println!(
+                    "  other_workspaces_scanned: {}",
+                    report.other_workspaces_scanned
+                );
             }
             return Ok(());
         }

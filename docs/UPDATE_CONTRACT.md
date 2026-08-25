@@ -53,6 +53,21 @@ loaded. The next invocation may run
 rebind transaction and cannot activate an orphan, disabled, wrong-skill,
 path-changed, malformed, missing, or untrusted workspace.
 
+The next-use scope is machine-visible and fixed to
+`current_workspace_activation_identity_only`: only the current
+`workspace_skill.yaml` identity scalars may change. The command reports that
+project files were not changed and no other workspace was scanned. Installing a
+new Rayman release therefore never injects Rayman's own `xtask` or rewrites a
+consumer project's Python/other automation; that broader project work requires
+an explicit project-local goal and its own tests.
+
+That consumer goal cannot close from a sandbox clone or a partial green run.
+The implementation must exist in the consumer's authoritative checkout, its
+source-bound Rust/Python interoperability gate must pass in full, and any
+transition bridge must remain until bidirectional protocol compatibility is
+proved. The caller records that external test execution against this boundary;
+Rayman's own `xtask` still owns none of the consumer skill's files or lifecycle.
+
 ## Discovery is not authority
 
 The Releases tag list accepts only public, non-draft, non-prerelease

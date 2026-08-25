@@ -156,7 +156,7 @@ pub fn parse_validation_command(command: &str) -> Result<ParsedValidationCommand
     })
 }
 
-fn executable_name(command: &ParsedValidationCommand) -> String {
+pub(super) fn executable_name(command: &ParsedValidationCommand) -> String {
     let executable = Path::new(&command.program)
         .file_name()
         .and_then(|name| name.to_str())
@@ -184,6 +184,7 @@ fn cargo_test_invocation(command: &ParsedValidationCommand) -> bool {
     matches!(cargo_subcommand(command), Some(("test", _)))
         || matches!(cargo_subcommand(command), Some(("nextest", Some("run"))))
 }
+
 /// 不带值的 Python 解释器短标志字母（可组合，如 `-Es`、`-OO`）。
 const PYTHON_VALUELESS_FLAGS: &str = "bBdEiIOPqsSuvx";
 
@@ -320,6 +321,9 @@ pub fn validation_proof_kind(root: &Path, command: &str) -> Result<ProofKind> {
             .any(|argument| argument.eq_ignore_ascii_case(needle))
     };
 
+    if trusted_xtask_repository_gate(root, &parsed)? {
+        return Ok(ProofKind::RepositoryGate);
+    }
     if script == "verify-release-contract.ps1" && has_arg("-RequireSourceFresh") {
         return Ok(ProofKind::SourceFresh);
     }
@@ -385,6 +389,9 @@ pub(crate) fn validation_proof_kind_with_context(
             .iter()
             .any(|argument| argument.eq_ignore_ascii_case(needle))
     };
+    if trusted_xtask_repository_gate_with_context(decision, &parsed)? {
+        return Ok(ProofKind::RepositoryGate);
+    }
     if script == "verify-release-contract.ps1" && has_arg("-RequireSourceFresh") {
         return Ok(ProofKind::SourceFresh);
     }
@@ -926,6 +933,12 @@ fn validation_matches_expectation_with_context(
     if ordinary_workspace_powershell_validation_with_context(decision, command) {
         return true;
     }
+    if trusted_xtask_repository_gate_with_context(decision, command).unwrap_or(false) {
+        return matches!(
+            expectation,
+            ValidationExpectation::RustBuildOrTest | ValidationExpectation::CargoManifestValidation
+        );
+    }
     let rustc_build = executable_name(command) == "rustc"
         && command.args.iter().any(|arg| arg.ends_with(".rs"))
         && !command.args.iter().any(|arg| {
@@ -976,6 +989,12 @@ fn validation_matches_expectation(
     }
     if ordinary_workspace_powershell_validation(root, command) {
         return true;
+    }
+    if trusted_xtask_repository_gate(root, command).unwrap_or(false) {
+        return matches!(
+            expectation,
+            ValidationExpectation::RustBuildOrTest | ValidationExpectation::CargoManifestValidation
+        );
     }
     let rustc_build = executable_name(command) == "rustc"
         && command.args.iter().any(|arg| arg.ends_with(".rs"))
@@ -1297,6 +1316,7 @@ fn command_is_workspace_wide_with_context(
 ) -> bool {
     release_installer_invocation_with_context(decision, command).unwrap_or(false)
         || trusted_workspace_gate_script_with_context(decision, command).unwrap_or(false)
+        || trusted_xtask_repository_gate_with_context(decision, command).unwrap_or(false)
         || (cargo_subcommand(command).is_some()
             && command
                 .args
@@ -1309,6 +1329,7 @@ fn command_is_workspace_wide_with_context(
 pub(super) fn command_is_workspace_wide(root: &Path, command: &ParsedValidationCommand) -> bool {
     release_installer_invocation(root, command)
         || trusted_workspace_gate_script(root, command)
+        || trusted_xtask_repository_gate(root, command).unwrap_or(false)
         || (cargo_subcommand(command).is_some()
             && command
                 .args
@@ -1327,7 +1348,8 @@ pub fn validate_authority_command(root: &Path, command: &str) -> Result<()> {
     validate_command_security(root, &parsed)?;
     validate_authority_command_syntax_with_gate(
         &parsed,
-        trusted_workspace_gate_script(root, &parsed),
+        trusted_workspace_gate_script(root, &parsed)
+            || trusted_xtask_repository_gate(root, &parsed)?,
     )
 }
 
@@ -1347,7 +1369,7 @@ pub(super) fn validate_authority_command_syntax_with_gate(
 
     if !trusted_script && !workspace_cargo_test && !workspace_pytest {
         bail!(
-            "authority gate 必须是受检的 check-repo/audit-repository/verify-release-contract 脚本、`cargo test --workspace|--all`，或无路径选择器的全工作区 pytest；且不得使用缩小运行范围的选择器"
+            "authority gate 必须是受检的 check-repo/audit-repository/verify-release-contract 脚本、精确 `cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate`、`cargo test --workspace|--all`，或无路径选择器的全工作区 pytest；且不得使用缩小运行范围的选择器"
         );
     }
     Ok(())
@@ -1361,7 +1383,8 @@ pub(crate) fn validate_authority_command_with_context(
     validate_command_security_with_context(decision, &parsed)?;
     validate_authority_command_syntax_with_gate(
         &parsed,
-        trusted_workspace_gate_script_with_context(decision, &parsed)?,
+        trusted_workspace_gate_script_with_context(decision, &parsed)?
+            || trusted_xtask_repository_gate_with_context(decision, &parsed)?,
     )
 }
 

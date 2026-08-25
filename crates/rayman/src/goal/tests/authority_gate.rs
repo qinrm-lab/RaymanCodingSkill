@@ -66,6 +66,120 @@ fn write(root: &Path, relative: &str, body: &str) {
     fs::write(path, body).unwrap();
 }
 
+fn write_xtask_gate_fixture(root: &Path) {
+    for (path, body) in [
+        ("Cargo.toml", "[workspace]\nmembers = [\"xtask\"]\n"),
+        ("Cargo.lock", "version = 4\n"),
+        (".cargo/config.toml", "[alias]\nxtask = \"metadata\"\n"),
+        (
+            "xtask/Cargo.toml",
+            "[package]\nname = \"xtask\"\nversion = \"0.1.0\"\n",
+        ),
+        ("xtask/src/main.rs", "mod helper;\nfn main() {}\n"),
+        ("xtask/src/helper.rs", "pub fn helper() {}\n"),
+        ("scripts/check-repo.ps1", "& './scripts/helper.ps1'\n"),
+        ("scripts/helper.ps1", "exit 0\n"),
+    ] {
+        write(root, path, body);
+    }
+}
+
+#[test]
+fn xtask_authority_binding_covers_the_complete_gate_and_script_trees() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write_xtask_gate_fixture(root);
+    let store = GoalStore::new(root);
+    let goal = store
+        .start("xtask authority", &[("gate".into(), true)])
+        .unwrap();
+    let current = workspace_baseline(root).unwrap();
+    let captured_files = current
+        .files
+        .keys()
+        .map(|key| (key.clone(), fs::read(root.join(key)).unwrap()))
+        .collect::<BTreeMap<_, _>>();
+    let decision = GoalDecisionContext::captured(root, Some(&current), &captured_files);
+    let command = "cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate";
+
+    validate_authority_command_for_goal_with_context(&decision, &goal, command).unwrap();
+    let binding = authority_gate_binding_for_goal_with_context(&goal, &decision, command)
+        .unwrap()
+        .unwrap();
+    assert_eq!(binding.policy, XTASK_AUTHORITY_GATE_BINDING_POLICY_V1);
+    assert_eq!(binding.entrypoint, XTASK_AUTHORITY_ENTRYPOINT);
+    for dependency in [
+        ".cargo/config.toml",
+        "Cargo.lock",
+        "Cargo.toml",
+        "xtask/Cargo.toml",
+        "xtask/src/main.rs",
+        "xtask/src/helper.rs",
+        "scripts/check-repo.ps1",
+        "scripts/helper.ps1",
+    ] {
+        assert!(
+            binding.dependency_sha256.contains_key(dependency),
+            "missing xtask authority dependency: {dependency}"
+        );
+    }
+    assert_eq!(
+        authority_gate_binding_error(&goal, command, Some(&binding)),
+        None
+    );
+}
+
+#[test]
+fn xtask_authority_rejects_added_and_deleted_gate_sources() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write_xtask_gate_fixture(root);
+    let store = GoalStore::new(root);
+    let goal = store
+        .start("xtask authority", &[("gate".into(), true)])
+        .unwrap();
+    let command = "cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate";
+
+    write(root, "xtask/src/added.rs", "pub fn added() {}\n");
+    let current = workspace_baseline(root).unwrap();
+    let captured_files = current
+        .files
+        .keys()
+        .map(|key| (key.clone(), fs::read(root.join(key)).unwrap()))
+        .collect::<BTreeMap<_, _>>();
+    let decision = GoalDecisionContext::captured(root, Some(&current), &captured_files);
+    let added = validate_authority_command_for_goal_with_context(&decision, &goal, command)
+        .unwrap_err()
+        .to_string();
+    assert!(added.contains("xtask/src/added.rs"), "{added}");
+
+    fs::remove_file(root.join("xtask/src/added.rs")).unwrap();
+    fs::remove_file(root.join("xtask/src/helper.rs")).unwrap();
+    let current = workspace_baseline(root).unwrap();
+    let captured_files = current
+        .files
+        .keys()
+        .map(|key| (key.clone(), fs::read(root.join(key)).unwrap()))
+        .collect::<BTreeMap<_, _>>();
+    let decision = GoalDecisionContext::captured(root, Some(&current), &captured_files);
+    let deleted = validate_authority_command_for_goal_with_context(&decision, &goal, command)
+        .unwrap_err()
+        .to_string();
+    assert!(deleted.contains("xtask/src/helper.rs"), "{deleted}");
+}
+
+#[test]
+fn xtask_authority_rejects_noncanonical_dependency_case() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write_xtask_gate_fixture(root);
+    fs::remove_dir_all(root.join("scripts")).unwrap();
+    write(root, "Scripts/check-repo.ps1", "exit 0\n");
+    let command = "cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate";
+    assert!(validate_authority_command(root, command).is_err());
+    assert!(validation_proof_kind(root, command).is_err());
+}
+
 #[test]
 fn non_success_supersession_requires_all_must_text_in_the_replacement() {
     let dir = tempfile::tempdir().unwrap();
@@ -1034,6 +1148,97 @@ fn captured_replacement_recomputes_the_complete_powershell_gate_binding() {
         replacement_authority_error_with_context(&forged, &decision, &goals)
             .is_some_and(|error| error.contains("captured authority gate closure")),
         "a well-formed incomplete binding must not survive a captured readiness decision"
+    );
+}
+
+#[test]
+fn captured_replacement_recomputes_the_complete_xtask_gate_binding() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write_xtask_gate_fixture(root);
+    let store = GoalStore::new(root);
+    let command = "cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate";
+    let authority = archived_direct_authority_success_for_command(&store, root, command);
+    let predecessor = store
+        .start(
+            "unfinished predecessor",
+            &[("preserve exact authority".into(), true)],
+        )
+        .unwrap();
+    let replacement = store
+        .start("replacement", &[("preserve exact authority".into(), true)])
+        .unwrap();
+    let predecessor_ids = vec![predecessor.id.clone()];
+    let fingerprint = workspace_fingerprint(root).unwrap();
+    let live = ReplacementAuthorityReceipt {
+        command: command.into(),
+        command_rebind: None,
+        recorded_at: now_iso(),
+        workspace_fingerprint: fingerprint.clone(),
+        repeat: 2,
+        invocation_sha256: replacement_authority_invocation_sha256(
+            command,
+            &replacement.id,
+            &authority.id,
+            &predecessor_ids,
+            2,
+        ),
+        runs: (0..2)
+            .map(|_| AuthorityRunReceipt {
+                exit_code: 0,
+                workspace_fingerprint_before: fingerprint.clone(),
+                workspace_fingerprint_after: fingerprint.clone(),
+                stdout_sha256: "a".repeat(64),
+                stderr_sha256: "b".repeat(64),
+            })
+            .collect(),
+    };
+    let authorized = store
+        .authorize_replacement(&replacement.id, &predecessor_ids, &authority.id, live)
+        .unwrap();
+    let current = workspace_baseline(root).unwrap();
+    let captured_files = current
+        .files
+        .keys()
+        .map(|key| (key.clone(), fs::read(root.join(key)).unwrap()))
+        .collect::<BTreeMap<_, _>>();
+    let source = crate::source_state::inspect(root);
+    let maintenance_artifact_hashes = BTreeMap::new();
+    let workspace_identity = workspace_identity(root);
+    let decision = GoalDecisionContext::captured_with_readiness_state(
+        root,
+        Some(&current),
+        &captured_files,
+        &source,
+        &maintenance_artifact_hashes,
+        &workspace_identity,
+    );
+    let goals = store.list().unwrap();
+    assert_eq!(
+        replacement_authority_error_with_context(&authorized, &decision, &goals),
+        None
+    );
+
+    let mut forged = authorized.clone();
+    let binding = forged
+        .replacement_authority
+        .as_mut()
+        .unwrap()
+        .authority_gate_binding
+        .as_mut()
+        .unwrap();
+    binding.dependency_sha256.remove("scripts/helper.ps1");
+    binding.binding_sha256 = forged_authority_gate_binding_sha256(
+        &binding.policy,
+        &binding.entrypoint,
+        &binding.dependency_sha256,
+    );
+    forged.replacement_authority.as_mut().unwrap().proof_sha256 =
+        replacement_authority_proof_sha256(forged.replacement_authority.as_ref().unwrap());
+    assert!(
+        replacement_authority_error_with_context(&forged, &decision, &goals)
+            .is_some_and(|error| error.contains("dependency binding")),
+        "an incomplete xtask binding must not survive replacement validation"
     );
 }
 

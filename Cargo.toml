@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/rayman"]
+members = ["crates/rayman", "xtask"]
 # evals/ is a separate dev/research project (agent A/B outcome eval). It is
 # intentionally excluded from the shipped tool's dependency tree and the main
 # Cargo workspace; it has its own explicit CI job and dependency policy check.

@@ -11,3 +11,9 @@ rustflags = ["-C", "link-arg=/Brepro"]
 
 [target.aarch64-pc-windows-msvc]
 rustflags = ["-C", "link-arg=/Brepro"]
+
+# Convenience only. Repository authority deliberately accepts the explicit
+# `cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate`
+# argv instead of trusting a Cargo alias that user or parent config can shadow.
+[alias]
+xtask = "run --locked --manifest-path xtask/Cargo.toml --"

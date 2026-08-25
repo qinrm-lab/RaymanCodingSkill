@@ -125,7 +125,12 @@ The verifier above is one release primitive, not the test suite. The single full
   -SkillPath <deployed-canonical-SKILL.md>
 ```
 
-It includes root and evals fmt/Clippy/tests/dependency policy, `cargo package` and `cargo install` smoke, context refresh, strict quality, release readiness, the `state audit --check` gate plus a report-only `assets` scan, and this installed release contract. See [AUDIT.md](AUDIT.md).
+It includes root and evals fmt/Clippy/tests/dependency policy, the exact
+source-bound Rust gate `cargo run --locked --manifest-path xtask/Cargo.toml --
+repository-gate`, `cargo package` and `cargo install` smoke, context refresh,
+strict quality, release readiness, the `state audit --check` gate plus a
+report-only `assets` scan, and this installed release contract. The convenient
+`cargo xtask` alias is never release authority. See [AUDIT.md](AUDIT.md).
 
 The default audit validates already installed host tooling and does not run `rustup component add` or `cargo install cargo-llvm-cov`. A missing fixed MSRV LLVM component or fixed `cargo-llvm-cov` Application fails closed during preflight. `audit-repository.ps1 -PrepareAuditTools` is a separate explicit provisioning command: it requires no CLI/SKILL paths, persists and verifies only those two pinned tools, then exits without running an audit lane. `release-closeout.ps1` never forwards or implicitly grants provisioning authority; prepare first, then invoke the normal audit or closeout separately.
 
@@ -144,5 +149,8 @@ when offline mode is effective; an online advisory run always reruns. The full
 binding is recomputed immediately before a reused result is announced and
 again after authority and optional finish. Missing, malformed, dirty, or drifted
 bindings fail closed. Even an exact reusable binding never replaces the
-current goal validation: `pwsh -NoProfile -File scripts/check-repo.ps1` is still
-executed with `--authority --repeat 2` on one unchanged fingerprint.
+current goal validation: the canonical
+`cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate` is
+still executed with `--authority --repeat 2` on one unchanged fingerprint. The
+gate delegates the reviewed transition script while binding the complete
+baseline/current `xtask/` and `scripts/` dependency union.

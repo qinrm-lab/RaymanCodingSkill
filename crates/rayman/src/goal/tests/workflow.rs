@@ -644,6 +644,57 @@ fn authority_classification_rejects_a_focused_command_promoted_by_flag() {
 }
 
 #[test]
+fn xtask_authority_accepts_only_the_canonical_explicit_cargo_run() {
+    let dir = tempfile::tempdir().unwrap();
+    for (path, body) in [
+        ("Cargo.toml", "[workspace]\nmembers = [\"xtask\"]\n"),
+        ("Cargo.lock", "version = 4\n"),
+        (".cargo/config.toml", "[alias]\nxtask = \"metadata\"\n"),
+        (
+            "xtask/Cargo.toml",
+            "[package]\nname = \"xtask\"\nversion = \"0.1.0\"\n",
+        ),
+        ("xtask/src/main.rs", "fn main() {}\n"),
+        ("scripts/check-repo.ps1", "exit 0\n"),
+    ] {
+        let target = dir.path().join(path);
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        fs::write(target, body).unwrap();
+    }
+    let exact = "cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate";
+    assert!(validate_authority_command(dir.path(), exact).is_ok());
+    assert_eq!(
+        validation_proof_kind(dir.path(), exact).unwrap(),
+        ProofKind::RepositoryGate
+    );
+    for rejected in [
+        "cargo xtask repository-gate",
+        "cargo run --manifest-path xtask/Cargo.toml --locked -- repository-gate",
+        "cargo run --locked --manifest-path ./xtask/Cargo.toml -- repository-gate",
+        "cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate extra",
+        "cargo +stable run --locked --manifest-path xtask/Cargo.toml -- repository-gate",
+    ] {
+        assert!(
+            validate_authority_command(dir.path(), rejected).is_err(),
+            "non-canonical xtask authority must fail: {rejected}"
+        );
+        assert_ne!(
+            validation_proof_kind(dir.path(), rejected).unwrap(),
+            ProofKind::RepositoryGate,
+            "non-canonical xtask command acquired typed authority: {rejected}"
+        );
+    }
+}
+
+#[test]
+fn xtask_syntax_without_the_bound_repository_tree_has_no_authority() {
+    let dir = tempfile::tempdir().unwrap();
+    let exact = "cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate";
+    assert!(validate_authority_command(dir.path(), exact).is_err());
+    assert!(validation_proof_kind(dir.path(), exact).is_err());
+}
+
+#[test]
 fn pytest_authority_rejects_attached_and_clustered_selectors() {
     let dir = tempfile::tempdir().unwrap();
     for command in [

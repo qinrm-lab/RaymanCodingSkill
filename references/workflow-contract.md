@@ -131,6 +131,12 @@ overwriting user-managed state still require user authority.
   It refuses orphan, deactivated, malformed, wrong-skill, untrusted/missing-file,
   unsafe-path, and path-change cases. New activation or a canonical-path change
   uses `workspace activate --skill-file ... --yes`.
+- Post-install `workspace ensure-current --yes` reuses only that rebind
+  transaction for the current workspace. Its machine report fixes
+  `migration_scope=current_workspace_activation_identity_only`,
+  `project_files_changed=false`, and `other_workspaces_scanned=false`. It never
+  installs this repository's `xtask` or rewrites Python/other automation in a
+  consumer project; such a project migration needs a separate explicit goal.
 - When the user explicitly invokes Rayman for a non-read-only task, perform an
   eligible rebind and continue the original task. A read-only request does not
   authorize the state write and receives the recovery command instead.
@@ -375,11 +381,16 @@ irregular entry, malformed enumeration, or concurrent refill leaves a
 fail-closed orphan and prevents evidence instead of widening the deletion
 target.
 
-Authority accepts only a reviewed repository gate, selector-free workspace
-Cargo tests, or selector-free workspace pytest, repeated on one unchanged
-fingerprint. Current must receipts must collectively declare the real baseline
-delta. Evidence-only text, progress receipts, and advisory review cannot
-substitute for authority.
+Authority accepts only a reviewed repository gate, the exact source-bound Rust
+entrypoint `cargo run --locked --manifest-path xtask/Cargo.toml --
+repository-gate`, selector-free workspace Cargo tests, or selector-free
+workspace pytest, repeated on one unchanged fingerprint. The convenient
+`cargo xtask` alias is never authority: aliases are configuration-overridable.
+The exact xtask gate binds root Cargo configuration plus the baseline/current
+union of its complete source tree and every delegated repository script, so an
+added, deleted, or changed gate dependency cannot validate itself. Current must
+receipts must collectively declare the real baseline delta. Evidence-only text,
+progress receipts, and advisory review cannot substitute for authority.
 
 If the CLI is missing, prefer PATH, then a built release binary, then
 `cargo run -p rayman --`. If none is available, work manually and report the

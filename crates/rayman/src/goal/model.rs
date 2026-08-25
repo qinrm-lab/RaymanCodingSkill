@@ -462,9 +462,10 @@ pub struct ReplacementAuthorityProof {
     pub predecessor_contracts: BTreeMap<String, String>,
     #[serde(default)]
     pub source_delta_paths: Vec<String>,
-    /// Immutable receipt-era binding for a workspace-owned PowerShell
-    /// authority gate.  Cargo/pytest authority has no repository script
-    /// dependency closure and therefore leaves this unset.
+    /// Immutable receipt-era binding for a workspace-owned repository gate.
+    /// Reviewed PowerShell gates and the canonical Rust xtask gate carry a
+    /// dependency closure; selector-free Cargo/pytest authority leaves this
+    /// unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authority_gate_binding: Option<AuthorityGateBinding>,
     #[serde(default)]

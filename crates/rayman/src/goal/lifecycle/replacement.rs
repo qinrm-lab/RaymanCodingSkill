@@ -493,13 +493,13 @@ pub(crate) fn replacement_authority_error_with_context(
         Ok(binding) => binding,
         Err(error) => {
             return Some(format!(
-                "无法从 captured workspace 重算 PowerShell replacement authority gate binding: {error:#}"
+                "无法从 captured workspace 重算 repository replacement authority gate binding: {error:#}"
             ));
         }
     };
     if captured_binding != proof.authority_gate_binding {
         return Some(
-            "PowerShell replacement authority binding 与 captured authority gate closure 不一致"
+            "repository replacement authority binding 与 captured authority gate closure 不一致"
                 .into(),
         );
     }
