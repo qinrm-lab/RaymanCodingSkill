@@ -324,10 +324,10 @@ function Get-ManagedBlock {
         [Parameter(Mandatory = $true)][string]$Name,
         [Parameter(Mandatory = $true)][string]$Text
     )
-    $pattern = '(?ms)^<!-- save-work-status:managed-begin v5 -->\r?\n.*?^<!-- save-work-status:managed-end v5 -->'
+    $pattern = '(?ms)^<!-- save-work-status:managed-begin v6 -->\r?\n.*?^<!-- save-work-status:managed-end v6 -->'
     $matches = [regex]::Matches($Text, $pattern)
     if ($matches.Count -ne 1) {
-        throw "Client entrypoint must contain exactly one v5 managed block: $Name"
+        throw "Client entrypoint must contain exactly one v6 managed block: $Name"
     }
     return $matches[0].Value
 }
@@ -339,6 +339,19 @@ function Assert-ManagedBlockIsolation {
     )
     $codexBlock = Get-ManagedBlock -Name 'AGENTS.md' -Text $CodexText
     $claudeBlock = Get-ManagedBlock -Name 'CLAUDE.md' -Text $ClaudeText
+    $legacyRuntimePattern = '(?i)(?:\bpython(?:\.exe)?\b|\bpy(?:\.exe)?\b|workspace_activation\.py|status_checkpoint\.py)'
+    $rustRuntimePattern = '(?i)save-work-status(?:-[0-9a-f]{8,64})?\.exe'
+    foreach ($entry in @(
+            @{ Name = 'AGENTS.md'; Block = $codexBlock },
+            @{ Name = 'CLAUDE.md'; Block = $claudeBlock }
+        )) {
+        if ($entry.Block -match $legacyRuntimePattern) {
+            throw "v6 managed block must not invoke the Python compatibility bridge: $($entry.Name)"
+        }
+        if ($entry.Block -notmatch $rustRuntimePattern) {
+            throw "v6 managed block must invoke the compiled save-work-status runtime: $($entry.Name)"
+        }
+    }
     $normalizeAgent = {
         param([string]$Text)
         return [regex]::Replace($Text, '--agent\s+(?:codex|claude-code)', '--agent <client>')
@@ -514,7 +527,7 @@ if ($SelfTest) {
             -Source $auditSource
     }
     Assert-Throws -Label 'published managed block' -Action {
-        Assert-PublishedContractSafe -Text ($contract + "`n<!-- save-work-status:managed-begin v5 -->")
+        Assert-PublishedContractSafe -Text ($contract + "`n<!-- save-work-status:managed-begin v6 -->")
     }
     Assert-Throws -Label 'published absolute checkout path' -Action {
         Assert-PublishedContractSafe -Text ($contract + "`nC:\private\checkout")
@@ -522,6 +535,15 @@ if ($SelfTest) {
     Assert-Throws -Label 'Claude block running as Codex' -Action {
         $wrongClaude = $claude.Replace('--agent claude-code', '--agent codex')
         Assert-ManagedBlockIsolation -CodexText $agents -ClaudeText $wrongClaude
+    }
+    Assert-Throws -Label 'legacy v5 managed block' -Action {
+        $legacyCodex = $agents.Replace('managed-begin v6', 'managed-begin v5').Replace('managed-end v6', 'managed-end v5')
+        Assert-ManagedBlockIsolation -CodexText $legacyCodex -ClaudeText $claude
+    }
+    Assert-Throws -Label 'v6 managed block invokes Python bridge' -Action {
+        $pythonCodex = $agents.Replace('save-work-status.exe', 'workspace_activation.py')
+        $pythonClaude = $claude.Replace('save-work-status.exe', 'workspace_activation.py')
+        Assert-ManagedBlockIsolation -CodexText $pythonCodex -ClaudeText $pythonClaude
     }
     Assert-Throws -Label 'missing client ownership exclusion' -Action {
         $ambiguousCodex = $agents.Replace('Claude Code must not execute it', 'Another client may execute it')
