@@ -15,6 +15,7 @@ use std::process::Command as ProcessCommand;
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
+use serde::Serialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
@@ -313,11 +314,19 @@ fn run(cli: Cli) -> Result<()> {
 fn run_workspace(root: &Path, json: bool, cmd: WorkspaceCmd) -> Result<()> {
     let report = match cmd.action {
         WorkspaceAction::Status => workspace::activation_status(root)?,
-        WorkspaceAction::Inspect => {
+        WorkspaceAction::Inspect { probe_writes } => {
             let activation = workspace::activation_status(root)?;
             let source = source_state::inspect(root);
-            let state_write = rayman::state_paths::state_write_probe(root);
-            let activation_metadata = workspace::activation_metadata_capability_probe(root);
+            let state_write = if probe_writes {
+                rayman::state_paths::state_write_probe(root)
+            } else {
+                rayman::state_paths::state_write_probe_not_requested(root)
+            };
+            let activation_metadata = if probe_writes {
+                workspace::activation_metadata_capability_probe(root)
+            } else {
+                workspace::activation_metadata_probe_not_requested(root)
+            };
             let host_patch = rayman::codex_host::patch_probe(None);
             let execution_context = rayman::execution_context::execution_context_probe();
             if json {
@@ -692,6 +701,56 @@ fn run_autosave(root: &std::path::Path, json: bool, cmd: AutosaveCmd) -> Result<
     Ok(())
 }
 
+#[derive(Serialize)]
+struct CompactGoalRecord<'a> {
+    schema: &'static str,
+    id: &'a str,
+    title: &'a str,
+    status: goal::GoalStatus,
+    lifecycle: goal::GoalLifecycle,
+    created_at: &'a str,
+    updated_at: &'a str,
+    requirements: usize,
+    baseline_files: usize,
+    planned_paths: usize,
+    work_packages: usize,
+    open_lanes: usize,
+}
+
+fn compact_goal_record(goal: &goal::Goal) -> CompactGoalRecord<'_> {
+    CompactGoalRecord {
+        schema: "rayman.goal-compact.v1",
+        id: &goal.id,
+        title: &goal.title,
+        status: goal.status,
+        lifecycle: goal.lifecycle,
+        created_at: &goal.created_at,
+        updated_at: &goal.updated_at,
+        requirements: goal.requirements.len(),
+        baseline_files: goal
+            .baseline
+            .as_ref()
+            .map(|baseline| baseline.files.len())
+            .unwrap_or(0),
+        planned_paths: goal
+            .plan_receipts
+            .first()
+            .map(|receipt| receipt.effective_changed_paths().len())
+            .unwrap_or(0),
+        work_packages: goal.work_packages.len(),
+        open_lanes: goal
+            .lanes
+            .iter()
+            .filter(|lane| lane.status == goal::LaneStatus::Open)
+            .count(),
+    }
+}
+
+fn compact_goal_list(goals: &[goal::Goal]) -> serde_json::Value {
+    serde_json::to_value(goals.iter().map(compact_goal_record).collect::<Vec<_>>())
+        .expect("compact goal projection is serializable")
+}
+
 fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()> {
     let store = goal::GoalStore::new(root);
     let pending = goal::PendingStore::new(root);
@@ -744,7 +803,7 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
         GoalAction::List => {
             let goals = store.list()?;
             if json {
-                print(&serde_json::to_value(&goals)?);
+                print(&compact_goal_list(&goals));
             } else if goals.is_empty() {
                 println!("暂无目标。");
             } else {
@@ -1234,7 +1293,7 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
             if let Some(id) = id {
                 let goal = store.mark_current(&id)?;
                 if json {
-                    print(&serde_json::to_value(&goal)?);
+                    print(&serde_json::to_value(compact_goal_record(&goal))?);
                 } else {
                     println!("目标 {} 已恢复为 current", goal.id);
                 }
@@ -1245,7 +1304,7 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                     .filter(|goal| goal.lifecycle == goal::GoalLifecycle::Current)
                     .collect::<Vec<_>>();
                 if json {
-                    print(&serde_json::to_value(&goals)?);
+                    print(&compact_goal_list(&goals));
                 } else if goals.is_empty() {
                     println!("暂无 current 目标。");
                 } else {

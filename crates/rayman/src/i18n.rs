@@ -2,6 +2,9 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use clap::ValueEnum;
 pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
+    "无法读取 agent contract 路径: {}",
+    "bundle_sha256 与 skill 委托的 contract bundle 当前内容不一致",
+    "缺少 bundle_sha256（运行 workspace rebind --yes 迁移）",
     "workspace ensure-current 无法安全自动修复当前激活合同: {}",
     "已存最后一次快照并停止自动保存（状态：{status}）。计划任务 '{}' 未注册。",
     "workspace 未激活：已停止自动保存；计划任务 '{}' 未注册。最终快照已跳过；如需抢救快照，运行 `rayman checkpoint salvage-save`。",
@@ -342,7 +345,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "finish 要求当前稳定 authority receipt；先运行 `rayman goal validate {goal_id} --req <req> --message <evidence> --command <project-gate> --changed <path> --authority --repeat 2`",
     "`rayman audit` 已退役；工作区门禁使用 `rayman check --profile standard`，任务交付使用 `rayman finish --goal <id>`，状态卫生使用 `rayman state audit --check`",
     "legacy goal {} 仍为 current（status={}）；legacy 记录不能生成当前 receipt，请显式 archive 历史 success，或新建 current-schema replacement 后 supersede",
-    "authority gate 必须是受检的 check-repo/audit-repository/verify-release-contract 脚本、精确 `cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate`、`cargo test --workspace|--all`，或无路径选择器的全工作区 pytest；且不得使用缩小运行范围的选择器",
+    "authority gate 必须是完整参数集的受检 check-repo/audit-repository/verify-release-contract 脚本、精确 `cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate`、无 target/feature 缩窄选择器的 `cargo test --workspace|--all`，或无路径选择器的全工作区 pytest",
     "后台继续必须绑定 immediate human consultation，并同时记录非空 background-mechanism、background-authority-evidence 与 background-isolation-evidence",
     "human/external blocker 必须包含 attempts、evidence-path、minimum-input、recommended、alternative、risk、resume-command 与 auto-resume-condition",
     "current success 仍可生成可信 archive proof；拒绝降级为 quarantine，请使用普通 archive 或显式历史 receipt migration",
@@ -362,7 +365,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "项目地图: files={} source={} tests={} modules={} symbols={} deps={} packages={} package_deps={} entrypoints={} risks={}",
     "`rayman subagent` 已退役且 v2 不维护 agent ledger；需要保留未完成工作时使用 `rayman goal pending add`",
     "计划任务已注销，但停止状态写入失败且重新注册失败：state={state_error}; register={register_error}",
-    "checkpoint 保存不完整（{} 个错误）；已保留 partial 快照 {} 供取证，不会替代最近完整快照{}",
+    "checkpoint 保存不完整（{} 个错误）；已保留 partial 快照 {} 供取证，不会替代最近完整快照，也不会自动删除任何旧取证快照",
     "验证命令第 {run_index}/{repeat} 次失败（exit={}）；不会写入 receipt。stdout_sha256={} stderr_sha256={}",
     "自动计划任务目前仅支持 Windows；其它平台请用系统定时器周期调用 `rayman checkpoint save`。",
     "计划任务已注册，但 active 状态写入失败且回滚失败：state={state_error}; rollback={rollback_error}",
@@ -511,6 +514,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "goal plan receipt 无效、未规范化或未绑定 baseline",
     "lifecycle-only replacement 未显式绑定被替代目标 {}",
     "required work package {} 未完成或缺少 progress receipt",
+    "required work package 至少需要绑定一个 requirement",
     "无法执行 cargo metadata（cargo 是否在 PATH 中？）",
     "无自动保存状态，也没有已注册的计划任务。",
     "未证明完成的 goal，其 must 未完整转移到 replacement: {}",
@@ -556,7 +560,6 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "只有 current-schema active/current 目标可以完成 work package",
     "目标目录含不可安全读取的记录: {details}",
     "被转移目标 {id} 的合约或 lifecycle 已失效",
-    "；已轮换掉 {rotated} 份更旧的 partial 快照",
     "Cargo manifest 不在已验证上下文索引中: {}",
     "lane ledger id、baseline 或 authority 标记无效",
     "lifecycle-only authority goal 缺少 lifecycle proof",
@@ -670,7 +673,6 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "无法读取目标状态目录条目: {}",
     "未知 lifecycle receipt policy: {other}",
     "状态锁被替换为非普通文件: {}",
-    "；partial 快照轮换失败: {error:#}",
     "  {}  {:?}/{:?}  {} 个文件  {:.1} MB",
     "`--validated <command>` 不能为空。",
     "goal {} lifecycle proof 无效: {error}",
@@ -748,7 +750,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "  依赖: outgoing={} incoming={}",
     "closed lane {} 关闭证明无效",
     "writer lane {} 越出允许路径",
-    "受管状态审计: clean={clean}",
+    "受管状态审计: clean={clean} operationally_healthy={operationally_healthy}",
     "无托管临时目录可清理。",
     "无法取得 checkpoint 独占锁",
     "无法提交 checkpoint: {} -> {}",
@@ -955,7 +957,8 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "RaymanCodingSkill 工作区激活身份已漂移（status={}）：运行 `{command}`",
     "skill_file 不可安全读取 {}: {error}",
     "skill_file 不是普通文件: {}",
-    "skill_file 当前内容与此 CLI 内嵌的 canonical SKILL.md 不一致",
+    "skill_file 或委托 contract 与此 CLI 内嵌 canonical bundle 不一致",
+    "skill_file 或其委托 contract bundle 与此 CLI 内嵌 canonical bundle 不一致",
     "skill_file 在 rebind 写后验证期间发生并发变化",
     "skill_file 在 rebind 发布前发生并发变化",
     "skill_file 在校验期间发生变化: {}",
@@ -965,7 +968,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "skill_file 路径组件不是目录: {}",
     "workspace rebind 只接受 enabled: true",
     "workspace rebind 只接受 skill: {SKILL_NAME}",
-    "workspace rebind 只接受完整六字段激活合同",
+    "workspace rebind 只接受完整 bundle 合同或可迁移的旧六字段激活合同",
     "workspace rebind 已无需更新，但激活状态仍无效",
     "workspace rebind 拒绝无法原样安全写回的 skill_file",
     "workspace rebind 拒绝格式无效的旧身份字段",
@@ -1712,6 +1715,46 @@ fn contains_han_text(text: &str) -> bool {
 // replace_fragment_outside_han_words), so goal titles, requirement text, and Unicode
 // paths are preserved rather than partially translated.
 const MESSAGE_PREFIX_CATALOG: &[(&str, &str)] = &[
+    (
+        "authority gate 必须是完整参数集的受检 check-repo/audit-repository/verify-release-contract 脚本、精确 `cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate`、无 target/feature 缩窄选择器的 `cargo test --workspace|--all`，或无路径选择器的全工作区 pytest",
+        "authority gate must be a reviewed check-repo/audit-repository/verify-release-contract script invocation with its complete parameter set, the exact `cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate`, selector-free `cargo test --workspace|--all` without target/feature narrowing, or full-workspace pytest without path selectors",
+    ),
+    (
+        "checkpoint 保存不完整（{} 个错误）；已保留 partial 快照 {} 供取证，不会替代最近完整快照，也不会自动删除任何旧取证快照",
+        "checkpoint save is incomplete ({} errors); partial checkpoint {} was retained for forensics, will not replace the latest complete checkpoint, and no older forensic checkpoint was deleted automatically",
+    ),
+    (
+        "skill_file 或其委托 contract bundle 与此 CLI 内嵌 canonical bundle 不一致",
+        "skill_file or its delegated contract bundle does not match the canonical bundle embedded in this CLI",
+    ),
+    (
+        "workspace rebind 只接受完整 bundle 合同或可迁移的旧六字段激活合同",
+        "workspace rebind accepts only a complete bundle contract or a migratable legacy six-field activation contract",
+    ),
+    (
+        "skill_file 或委托 contract 与此 CLI 内嵌 canonical bundle 不一致",
+        "skill_file or its delegated contract does not match the canonical bundle embedded in this CLI",
+    ),
+    (
+        "bundle_sha256 与 skill 委托的 contract bundle 当前内容不一致",
+        "bundle_sha256 does not match the skill's current delegated contract bundle",
+    ),
+    (
+        "受管状态审计: clean={clean} operationally_healthy={operationally_healthy}",
+        "Managed state audit: clean={clean} operationally_healthy={operationally_healthy}",
+    ),
+    (
+        "required work package 至少需要绑定一个 requirement",
+        "required work package must bind at least one requirement",
+    ),
+    (
+        "缺少 bundle_sha256（运行 workspace rebind --yes 迁移）",
+        "missing bundle_sha256 (run workspace rebind --yes to migrate)",
+    ),
+    (
+        "无法读取 agent contract 路径: {}",
+        "unable to read agent contract path: {}",
+    ),
     ("已安装身份契约:", "Installed identity contract:"),
     ("当前二进制:", "Running binary:"),
     ("PATH 命令一致:", "PATH command matches:"),
@@ -1867,10 +1910,6 @@ const MESSAGE_PREFIX_CATALOG: &[(&str, &str)] = &[
     (
         "无法确定用户数据目录（未设置 LOCALAPPDATA/XDG_DATA_HOME/HOME/USERPROFILE），请用 --dir 指定",
         "unable to determine the user data directory (LOCALAPPDATA/XDG_DATA_HOME/HOME/USERPROFILE are unset); specify it with --dir",
-    ),
-    (
-        "checkpoint 保存不完整（{} 个错误）；已保留 partial 快照 {} 供取证，不会替代最近完整快照{}",
-        "checkpoint save is incomplete ({} errors); partial checkpoint {} was retained for forensics and will not replace the latest complete checkpoint{}",
     ),
     (
         "实际变更 {} 个文件但缺少首次修改前的 goal plan receipt",
@@ -3614,10 +3653,6 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "skill_file is not an ordinary file: {}",
     ),
     (
-        "skill_file 当前内容与此 CLI 内嵌的 canonical SKILL.md 不一致",
-        "skill_file contents do not match the canonical SKILL.md embedded in this CLI",
-    ),
-    (
         "skill_file 在 rebind 写后验证期间发生并发变化",
         "skill_file was concurrently modified during post-write rebind verification",
     ),
@@ -3649,10 +3684,6 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     (
         "workspace rebind 只接受 skill: {SKILL_NAME}",
         "workspace rebind accepts only skill: {SKILL_NAME}",
-    ),
-    (
-        "workspace rebind 只接受完整六字段激活合同",
-        "workspace rebind accepts only a complete six-field activation contract",
     ),
     (
         "workspace rebind 已无需更新，但激活状态仍无效",
@@ -3773,10 +3804,6 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     (
         "authority goal 缺少 lifecycle proof",
         "the authority goal has no lifecycle proof",
-    ),
-    (
-        "authority gate 必须是受检的 check-repo/audit-repository/verify-release-contract 脚本、精确 `cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate`、`cargo test --workspace|--all`，或无路径选择器的全工作区 pytest；且不得使用缩小运行范围的选择器",
-        "authority gate must be an inspected check-repo/audit-repository/verify-release-contract script, the exact `cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate`, `cargo test --workspace|--all`, or full-workspace pytest without path selectors; it must not narrow the run with any selector",
     ),
     (
         "repository authority binding 与 authority goal baseline 不一致",
@@ -4869,10 +4896,6 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "must be a valid archived success from the same workspace and current policy with direct authority for the same command",
     ),
     (
-        "authority gate 必须是受检的",
-        "authority gate must be an inspected",
-    ),
-    (
         "或无路径选择器的全工作区 pytest",
         "or full-workspace pytest without path selectors",
     ),
@@ -5046,8 +5069,6 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "post-save integrity validation failed",
     ),
     ("保存不完整", "save is incomplete"),
-    ("已轮换掉", "rotated out"),
-    ("快照轮换失败", "checkpoint rotation failed"),
     (
         "发现不属于工作区根的候选文件",
         "found a candidate file outside the workspace root",

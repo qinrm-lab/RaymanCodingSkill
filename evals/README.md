@@ -1,6 +1,6 @@
 # rayman-evals — agent A/B outcome eval
 
-`rayman-evals` measures objective task outcomes for the RaymanCodingSkill under two conditions:
+`rayman-evals` records objective task outcomes for the RaymanCodingSkill under two conditions for descriptive analysis; the current protocol does not estimate a causal effect:
 
 - `with_skill`: the agent receives `SKILL.md` and can find the selected `rayman` binary on `PATH`.
 - `control`: neither; PATH entries exposing a `rayman` command (including Windows `.cmd`/`.bat` wrappers) are removed from the tool child process. On Windows, `cmd` rewrites a command line before tokenizing it, so the evaluator normalizes the same way — it removes caret escapes and resolves `%VAR%` against the exact environment the child would receive — and refuses the command if a resulting spelling names a `rayman` executable. A reference that names rayman (`%RAYMAN%`) and substring/replace syntax that could synthesize one (`%VAR:~i,j%`, `%VAR:a=b%`) are refused as unresolvable. Tokenization uses the delimiter set measured character-by-character against a real `cmd` rather than an assumed one, so `,rayman`, `@rayman`, and `rayman/x` are all recognized. Delayed expansion (`!VAR!`) is **refused, not modeled**: it is off by default, and the only form that works from a command line is an explicit `/V` opt-in on a nested `cmd`. Rather than model which `cmd` a switch belongs to, the guard boundary-scans the whole command text for any `/v` token that is not `/v:off` (and for a literal `enabledelayedexpansion`), and refuses only when such a token and a `!` both appear. That is deliberately over-broad: an unrelated tool's own `/v` flag next to a `!` is refused too, which is the safe direction for an integrity guard. Ordinary `cmd` syntax such as `echo %CD%`, `if %ERRORLEVEL% neq 0 …`, `for /f %i in (…)`, or `echo Done!` is not by itself evidence of anything and runs normally.
@@ -124,7 +124,9 @@ The report shows both:
 - **ITT rate**: `pass / planned`, where infrastructure errors remain in the denominator.
 - **Evaluable rate**: `pass / (pass + fail)`, with errors reported separately.
 
-It also reports both observed deltas. A run with fewer than two attempts per cell, missing observations, insufficient evaluable attempts, unequal error counts, or input drift is marked **INCONCLUSIVE** or **NON-COMPARATIVE** and explicitly forbids a causal claim. Even a balanced mock run is only eligible for descriptive comparison, not proof of causality; a real unsandboxed-host run is always non-comparative.
+It also reports both observed deltas. A run with fewer than two attempts per cell, missing observations, insufficient evaluable attempts, any infrastructure error, or input drift is marked **INCONCLUSIVE** or **NON-COMPARATIVE** and explicitly forbids a causal claim. Even a balanced Windows mock run is only eligible for descriptive comparison, not proof of causality; a real unsandboxed-host run is always non-comparative.
+
+`report.json.interpretation.causal_claim_eligible` is the machine-readable claim boundary. It is a Boolean and remains `false` for every currently supported execution mode; CI requires the field to be present with exactly that type and value. A balanced Windows mock run may set `descriptive_comparison_eligible=true`, which permits only a descriptive comparison. The compatibility field `overall.delta` is an observed arithmetic difference, not an effect estimate, and consumers must inspect `interpretation` before displaying or comparing it.
 
 Condition order is counterbalanced deterministically: each task alternates which arm runs first; the seed chooses the task's initial arm. This and the order of each trial are stored in the report.
 

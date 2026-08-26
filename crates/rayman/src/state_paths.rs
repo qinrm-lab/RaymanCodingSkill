@@ -2187,6 +2187,34 @@ pub struct StateWriteProbe {
     pub error: Option<String>,
 }
 
+/// Read-only status used unless the caller explicitly requests the transient
+/// write/remove probe.
+pub fn state_write_probe_not_requested(root: &Path) -> StateWriteProbe {
+    match managed_state_root(root, false) {
+        Ok(Some(_)) => StateWriteProbe {
+            state_dir_present: true,
+            probed: false,
+            writable: false,
+            path: None,
+            error: None,
+        },
+        Ok(None) => StateWriteProbe {
+            state_dir_present: false,
+            probed: false,
+            writable: false,
+            path: None,
+            error: None,
+        },
+        Err(error) => StateWriteProbe {
+            state_dir_present: true,
+            probed: false,
+            writable: false,
+            path: None,
+            error: Some(format!("{error:#}")),
+        },
+    }
+}
+
 /// Probe whether this process can write workspace state right now.
 ///
 /// Restricted host sandboxes deny `.RaymanCodingSkill/` lock and state writes

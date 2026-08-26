@@ -431,7 +431,7 @@ mod tests {
             version: ReleaseVersion::parse("2.11.0").unwrap(),
             commit_sha: "1".repeat(40),
             platform: "windows-x86_64-msvc".into(),
-            cli_contract: "rayman-cli-contract-v17".into(),
+            cli_contract: "rayman-cli-contract-v18".into(),
             install_manifest_sha256: "2".repeat(64),
             assets: AssetRole::ALL
                 .into_iter()

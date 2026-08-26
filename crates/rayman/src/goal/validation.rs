@@ -282,16 +282,68 @@ fn ordinary_workspace_powershell_validation_with_context(
             .is_some()
 }
 
-pub fn validation_proof_kind(root: &Path, command: &str) -> Result<ProofKind> {
-    let parsed = parse_validation_command(command)?;
-    let executable = executable_name(&parsed);
-    let script = trusted_gate_script(root, &parsed).unwrap_or_default();
-    let has_arg = |needle: &str| {
-        parsed
+fn python_quick_validate_invocation(command: &ParsedValidationCommand) -> bool {
+    let executable = executable_name(command);
+    if Path::new(&executable)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.eq_ignore_ascii_case("quick_validate.py"))
+    {
+        return !command_is_inert_probe(command);
+    }
+    if executable != "py" && !executable.starts_with("python") {
+        return false;
+    }
+    let mut index = 0;
+    if executable == "py"
+        && command.args.first().is_some_and(|argument| {
+            argument.starts_with('-')
+                && argument
+                    .get(1..)
+                    .is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_digit()))
+        })
+    {
+        index = 1;
+    }
+    let Some(script) = command.args.get(index) else {
+        return false;
+    };
+    !script.starts_with('-')
+        && Path::new(script)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.eq_ignore_ascii_case("quick_validate.py"))
+        && !command_is_inert_probe(command)
+}
+
+fn markdownlint_documentation_invocation(command: &ParsedValidationCommand) -> bool {
+    executable_name(command) == "markdownlint"
+        && !command_is_inert_probe(command)
+        && command
             .args
             .iter()
-            .any(|argument| argument.eq_ignore_ascii_case(needle))
-    };
+            .any(|argument| !argument.starts_with('-') && !argument.trim().is_empty())
+}
+
+fn documentation_invocation(script: &str, command: &ParsedValidationCommand) -> bool {
+    (script == "check-agent-instructions.ps1" && !command_is_inert_probe(command))
+        || markdownlint_documentation_invocation(command)
+        || python_quick_validate_invocation(command)
+}
+
+fn git_clean_head_invocation(command: &ParsedValidationCommand) -> bool {
+    executable_name(command) == "git"
+        && command.args
+            == [
+                "status".to_string(),
+                "--porcelain=v1".to_string(),
+                "--untracked-files=all".to_string(),
+            ]
+}
+
+pub fn validation_proof_kind(root: &Path, command: &str) -> Result<ProofKind> {
+    let parsed = parse_validation_command(command)?;
+    let script = trusted_gate_script(root, &parsed).unwrap_or_default();
 
     if broker_install_invocation(root, &parsed)? {
         return Ok(ProofKind::Installation);
@@ -300,36 +352,19 @@ pub fn validation_proof_kind(root: &Path, command: &str) -> Result<ProofKind> {
     if trusted_xtask_repository_gate(root, &parsed)? {
         return Ok(ProofKind::RepositoryGate);
     }
-    if script == "verify-release-contract.ps1" && has_arg("-RequireSourceFresh") {
+    if trusted_source_fresh_gate_script(root, &parsed) {
         return Ok(ProofKind::SourceFresh);
     }
-    if matches!(
-        script,
-        "check-repo.ps1" | "audit-repository.ps1" | "release-closeout.ps1"
-    ) {
+    if trusted_workspace_gate_script(root, &parsed) {
         return Ok(ProofKind::RepositoryGate);
     }
     if release_installer_invocation(root, &parsed) {
         return Ok(ProofKind::Installation);
     }
-    if script == "check-agent-instructions.ps1"
-        || executable == "markdownlint"
-        || parsed.args.iter().any(|argument| {
-            argument
-                .replace('\\', "/")
-                .to_ascii_lowercase()
-                .ends_with("quick_validate.py")
-        })
-    {
+    if documentation_invocation(script, &parsed) {
         return Ok(ProofKind::Documentation);
     }
-    if executable == "git"
-        && parsed
-            .args
-            .first()
-            .is_some_and(|argument| argument == "rev-parse")
-        && parsed.args.iter().any(|argument| argument == "--verify")
-    {
+    if git_clean_head_invocation(&parsed) {
         return Ok(ProofKind::GitCommit);
     }
     if test_invocation(&parsed) {
@@ -345,50 +380,26 @@ pub(crate) fn validation_proof_kind_with_context(
     command: &str,
 ) -> Result<ProofKind> {
     let parsed = parse_validation_command(command)?;
-    let executable = executable_name(&parsed);
     let script = trusted_gate_script_with_context(decision, &parsed)?.unwrap_or_default();
-    let has_arg = |needle: &str| {
-        parsed
-            .args
-            .iter()
-            .any(|argument| argument.eq_ignore_ascii_case(needle))
-    };
     if broker_install_invocation_with_context(decision, &parsed)? {
         return Ok(ProofKind::Installation);
     }
     if trusted_xtask_repository_gate_with_context(decision, &parsed)? {
         return Ok(ProofKind::RepositoryGate);
     }
-    if script == "verify-release-contract.ps1" && has_arg("-RequireSourceFresh") {
+    if trusted_source_fresh_gate_script_with_context(decision, &parsed)? {
         return Ok(ProofKind::SourceFresh);
     }
-    if matches!(
-        script,
-        "check-repo.ps1" | "audit-repository.ps1" | "release-closeout.ps1"
-    ) {
+    if trusted_workspace_gate_script_with_context(decision, &parsed)? {
         return Ok(ProofKind::RepositoryGate);
     }
     if release_installer_invocation_with_context(decision, &parsed)? {
         return Ok(ProofKind::Installation);
     }
-    if script == "check-agent-instructions.ps1"
-        || executable == "markdownlint"
-        || parsed.args.iter().any(|argument| {
-            argument
-                .replace('\\', "/")
-                .to_ascii_lowercase()
-                .ends_with("quick_validate.py")
-        })
-    {
+    if documentation_invocation(script, &parsed) {
         return Ok(ProofKind::Documentation);
     }
-    if executable == "git"
-        && parsed
-            .args
-            .first()
-            .is_some_and(|argument| argument == "rev-parse")
-        && parsed.args.iter().any(|argument| argument == "--verify")
-    {
+    if git_clean_head_invocation(&parsed) {
         return Ok(ProofKind::GitCommit);
     }
     if test_invocation(&parsed) {
@@ -702,6 +713,12 @@ pub fn validation_execution_proof(
     listed_tests: Option<u64>,
 ) -> Result<Option<TestExecutionProof>> {
     validate_test_execution_mode(command)?;
+    if git_clean_head_invocation(command) {
+        if !stdout.is_empty() || !stderr.is_empty() {
+            bail!("git_commit proof requires a clean HEAD: canonical git status produced output");
+        }
+        return Ok(None);
+    }
     if !test_invocation(command) {
         return Ok(None);
     }
@@ -1187,11 +1204,16 @@ fn cargo_command_is_narrowed(command: &ParsedValidationCommand) -> bool {
             .strip_prefix("-p")
             .is_some_and(|value| !value.is_empty())
     });
+    let compact_features = cargo_arguments.iter().any(|argument| {
+        argument
+            .strip_prefix("-F")
+            .is_some_and(|value| !value.is_empty())
+    });
     let named_selector = cargo_arguments.iter().any(|argument| {
         let name = argument.split('=').next().unwrap_or(argument);
         matches!(name, "-p" | "--package" | "--exclude")
     });
-    if compact_package || named_selector {
+    if compact_package || compact_features || named_selector {
         return true;
     }
     let mut after_separator = false;
@@ -1211,7 +1233,22 @@ fn cargo_command_is_narrowed(command: &ParsedValidationCommand) -> bool {
             if !after_separator
                 && matches!(
                     name,
-                    "-p" | "--package" | "--exclude" | "--bench" | "--example"
+                    "-p" | "--package"
+                        | "--exclude"
+                        | "--lib"
+                        | "--bin"
+                        | "--bins"
+                        | "--test"
+                        | "--tests"
+                        | "--bench"
+                        | "--benches"
+                        | "--example"
+                        | "--examples"
+                        | "--doc"
+                        | "--features"
+                        | "-F"
+                        | "--no-default-features"
+                        | "--no-run"
                 )
             {
                 return true; // selects a subset of the workspace
@@ -1326,7 +1363,7 @@ pub(super) fn validate_authority_command_syntax_with_gate(
 
     if !trusted_script && !workspace_cargo_test && !workspace_pytest {
         bail!(
-            "authority gate 必须是受检的 check-repo/audit-repository/verify-release-contract 脚本、精确 `cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate`、`cargo test --workspace|--all`，或无路径选择器的全工作区 pytest；且不得使用缩小运行范围的选择器"
+            "authority gate 必须是完整参数集的受检 check-repo/audit-repository/verify-release-contract 脚本、精确 `cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate`、无 target/feature 缩窄选择器的 `cargo test --workspace|--all`，或无路径选择器的全工作区 pytest"
         );
     }
     Ok(())

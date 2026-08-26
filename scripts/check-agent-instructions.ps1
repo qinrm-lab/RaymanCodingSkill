@@ -215,6 +215,18 @@ if ($skillBytes.Length -ne $canonicalSkillBytes.Length -or
     [Convert]::ToBase64String($skillBytes) -cne [Convert]::ToBase64String($canonicalSkillBytes)) {
     throw "Packaged canonical skill bytes differ from repository SKILL.md: $canonicalSkillAsset"
 }
+foreach ($bundleResource in @(
+    @{ Source = 'AGENT_CONTRACT.md'; Asset = 'crates/rayman/assets/canonical-agent-contract.md' }
+    @{ Source = 'references/workflow-contract.md'; Asset = 'crates/rayman/assets/canonical-workflow-contract.md' }
+)) {
+    $null = Read-StrictUtf8 $bundleResource.Asset
+    $sourceBytes = [IO.File]::ReadAllBytes((Join-Path $repoRoot $bundleResource.Source))
+    $assetBytes = [IO.File]::ReadAllBytes((Join-Path $repoRoot $bundleResource.Asset))
+    if ($sourceBytes.Length -ne $assetBytes.Length -or
+        [Convert]::ToBase64String($sourceBytes) -cne [Convert]::ToBase64String($assetBytes)) {
+        throw "Packaged canonical bundle bytes differ: $($bundleResource.Source) -> $($bundleResource.Asset)"
+    }
+}
 
 $marker = 'AGENT_CONTRACT: rayman-shared-v1'
 foreach ($entry in @{

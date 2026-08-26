@@ -659,7 +659,7 @@ mod tests {
             schema_version: INSTALL_RECEIPT_SCHEMA_VERSION,
             installation_id: "1".repeat(32),
             version: ReleaseVersion::parse("2.11.0").unwrap(),
-            cli_contract: "rayman-cli-contract-v17".into(),
+            cli_contract: "rayman-cli-contract-v18".into(),
             cli_path,
             cli_sha256: "2".repeat(64),
             worker_path,

@@ -468,7 +468,14 @@ fn close_success_rejects_incomplete_required_work_package() {
     let goal = store.start("task", &[("do it".into(), true)]).unwrap();
     record_non_code_must_receipt(&store, dir.path(), &goal);
     store
-        .add_work_package(&goal.id, "wp1", "stage one", None, Vec::new(), true)
+        .add_work_package(
+            &goal.id,
+            "wp1",
+            "stage one",
+            None,
+            vec!["req_1".into()],
+            true,
+        )
         .unwrap();
 
     let error = store.close(&goal.id, "success").unwrap_err().to_string();

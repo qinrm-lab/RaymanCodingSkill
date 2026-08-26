@@ -354,6 +354,86 @@ fn structured_frontier_never_asks_while_agent_work_remains() {
 }
 
 #[test]
+fn explicit_operator_pause_can_stop_without_becoming_completion_or_a_fake_blocker() {
+    let dir = tempfile::tempdir().unwrap();
+    let goals = GoalStore::new(dir.path());
+    let goal = goals
+        .start("long owner task", &[("finish later".into(), true)])
+        .unwrap();
+    let pending = PendingStore::new(dir.path());
+    pending
+        .add("remaining implementation", "agent work remains unfinished")
+        .unwrap();
+    let pause = pending
+        .add_capability_bound(
+            PendingSubmission {
+                title: "operator requested pause".into(),
+                detail: "stop now without claiming completion".into(),
+                goal_id: Some(goal.id.clone()),
+                owner: PendingOwner::Human,
+                kind: PendingKind::HumanInput,
+                attempts: vec!["user explicitly requested pause/shutdown".into()],
+                evidence_paths: vec!["host://current-user-request".into()],
+                minimum_input: Some("resume".into()),
+                recommended_action: Some("preserve the unfinished frontier and stop".into()),
+                alternatives: vec!["resume later from the live workspace".into()],
+                risk: Some("work remains incomplete; no success claim is made".into()),
+                resume_command: Some(format!("rayman prepare --goal {}", goal.id)),
+                auto_resume_condition: Some("the user explicitly says resume".into()),
+                consultation_timing: ConsultationTiming::Immediate,
+                background_mechanism: None,
+                background_authority_evidence: None,
+                background_isolation_evidence: None,
+            },
+            Some("operator/pause".into()),
+            Some("operator_pause".into()),
+        )
+        .unwrap();
+
+    let frontier = pending.frontier(&goal).unwrap();
+    assert_eq!(frontier.execution, FrontierExecution::PausedForUser);
+    assert_eq!(frontier.consultation, FrontierConsultation::Ready);
+    assert!(frontier.ask_user_allowed);
+    let rendered = pending
+        .render_for_goals(std::slice::from_ref(&goal))
+        .unwrap();
+    assert!(rendered.text.contains(&pause.id));
+    assert_eq!(
+        goals.get(&goal.id).unwrap().unwrap().status,
+        GoalStatus::Active
+    );
+    assert!(goals.close(&goal.id, "success").is_err());
+}
+
+#[test]
+fn frontier_reuses_the_goal_gate_and_retired_history_cannot_render() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = GoalStore::new(dir.path());
+    let pending = PendingStore::new(dir.path());
+    let mut forged = store
+        .start("forged success", &[("must validate".into(), true)])
+        .unwrap();
+    forged.status = GoalStatus::Success;
+    write_json(&store.goal_path(&forged.id).unwrap(), &forged).unwrap();
+
+    let frontier = pending.frontier(&forged).unwrap();
+    assert_eq!(frontier.execution, FrontierExecution::ContinueForeground);
+    assert!(frontier.reason.contains("not current gate-ready"));
+
+    let valid = store
+        .start("valid history", &[("archive later".into(), true)])
+        .unwrap();
+    let valid = close_non_code_success(&store, dir.path(), &valid);
+    let archived = store.archive(&valid.id, "historical only", false).unwrap();
+    assert!(pending.frontier(&archived).is_err());
+    assert!(
+        pending
+            .render_for_goals(std::slice::from_ref(&archived))
+            .is_err()
+    );
+}
+
+#[test]
 fn structured_frontier_renders_current_candidates_without_persisting_presentation() {
     let dir = tempfile::tempdir().unwrap();
     let goals = GoalStore::new(dir.path());
@@ -1300,6 +1380,111 @@ fn goal_plan_is_one_immutable_aggregate_receipt() {
                 },
             )
             .is_err()
+    );
+}
+
+#[test]
+fn broad_goal_required_packages_cover_every_must_requirement() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    fs::create_dir_all(root.join("src")).unwrap();
+    let paths = (0..12)
+        .map(|index| format!("src/{index}.rs"))
+        .collect::<Vec<_>>();
+    for path in &paths {
+        fs::write(root.join(path), "pub fn value() {}\n").unwrap();
+    }
+    let store = GoalStore::new(root);
+    let goal = store
+        .start(
+            "broad goal",
+            &[
+                ("ship broad work".into(), true),
+                ("document broad work".into(), true),
+            ],
+        )
+        .unwrap();
+    let goal = store
+        .record_plan(
+            &goal.id,
+            PlanReceiptSubmission {
+                changed_paths: paths,
+                review_priority: "broad".into(),
+                impacted_paths: Vec::new(),
+                recommended_checks: vec!["cargo test --workspace".into()],
+            },
+        )
+        .unwrap();
+    let fingerprint = workspace_fingerprint(root).unwrap();
+    let mut success = goal.clone();
+    success.status = GoalStatus::Success;
+    let verdict = goal_gate_verdict(
+        &success,
+        std::slice::from_ref(&success),
+        root,
+        Some(&fingerprint),
+    );
+    assert!(
+        verdict
+            .blockers
+            .iter()
+            .any(|blocker| blocker.contains("no required work package")),
+        "blockers={:?}",
+        verdict.blockers
+    );
+
+    let packaged = store
+        .add_work_package(
+            &goal.id,
+            "broad",
+            "broad implementation",
+            None,
+            vec!["req_1".into()],
+            true,
+        )
+        .unwrap();
+    let mut packaged_success = packaged.clone();
+    packaged_success.status = GoalStatus::Success;
+    let verdict = goal_gate_verdict(
+        &packaged_success,
+        std::slice::from_ref(&packaged_success),
+        root,
+        Some(&fingerprint),
+    );
+    assert!(
+        verdict
+            .blockers
+            .iter()
+            .any(|blocker| blocker.contains("do not cover must requirements: req_2")),
+        "blockers={:?}",
+        verdict.blockers
+    );
+
+    let fully_packaged = store
+        .add_work_package(
+            &goal.id,
+            "docs",
+            "broad documentation",
+            None,
+            vec!["req_2".into()],
+            true,
+        )
+        .unwrap();
+    let mut fully_packaged_success = fully_packaged.clone();
+    fully_packaged_success.status = GoalStatus::Success;
+    let verdict = goal_gate_verdict(
+        &fully_packaged_success,
+        std::slice::from_ref(&fully_packaged_success),
+        root,
+        Some(&fingerprint),
+    );
+    assert!(
+        verdict.blockers.iter().all(|blocker| {
+            !blocker.contains("no required work package")
+                && !blocker.contains("do not cover must requirements")
+        }),
+        "blockers={:?}",
+        verdict.blockers
     );
 }
 

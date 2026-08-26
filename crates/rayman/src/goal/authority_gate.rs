@@ -69,6 +69,114 @@ impl GateKind {
             Self::CheckRepo | Self::AuditRepository | Self::VerifyReleaseContract
         )
     }
+
+    fn full_workspace_invocation(self, command: &ParsedValidationCommand) -> bool {
+        let Some(arguments) = powershell_script_arguments(command) else {
+            return false;
+        };
+        match self {
+            Self::CheckRepo => check_repo_full_invocation(arguments),
+            Self::AuditRepository => {
+                exact_named_value(arguments, "-CliPath")
+                    && exact_named_value(arguments, "-SkillPath")
+                    && !contains_parameter_prefix(
+                        arguments,
+                        &["-PrepareAuditTools", "-DependencyPolicyOnly", "-SelfTest"],
+                    )
+            }
+            Self::VerifyReleaseContract => {
+                exact_named_value(arguments, "-CliPath")
+                    && exact_named_value(arguments, "-SkillPath")
+                    && !contains_parameter_prefix(
+                        arguments,
+                        &["-InspectSourceFreshInputs", "-SelfTest"],
+                    )
+            }
+            _ => false,
+        }
+    }
+
+    fn source_fresh_invocation(self, command: &ParsedValidationCommand) -> bool {
+        self == Self::VerifyReleaseContract
+            && self.full_workspace_invocation(command)
+            && powershell_script_arguments(command).is_some_and(|arguments| {
+                arguments
+                    .iter()
+                    .filter(|argument| argument.eq_ignore_ascii_case("-RequireSourceFresh"))
+                    .count()
+                    == 1
+            })
+    }
+}
+
+fn check_repo_full_invocation(arguments: &[String]) -> bool {
+    if arguments.is_empty() {
+        return true;
+    }
+    let mut index = 0;
+    let mut quick_parallel = false;
+    let mut maintenance_cycle = false;
+    while let Some(argument) = arguments.get(index) {
+        if argument.eq_ignore_ascii_case("-QuickParallel") && !quick_parallel {
+            quick_parallel = true;
+            index += 1;
+            continue;
+        }
+        if argument.eq_ignore_ascii_case("-MaintenanceOrchestrationCycle") && !maintenance_cycle {
+            let Some(value) = arguments.get(index + 1) else {
+                return false;
+            };
+            if value.starts_with('-') || !value.ends_with("-maintenance-review-cycle.json") {
+                return false;
+            }
+            maintenance_cycle = true;
+            index += 2;
+            continue;
+        }
+        return false;
+    }
+    maintenance_cycle
+}
+
+fn powershell_script_arguments(command: &ParsedValidationCommand) -> Option<&[String]> {
+    powershell_script(command)?;
+    command.args.get(3..)
+}
+
+fn exact_named_value(arguments: &[String], name: &str) -> bool {
+    let matching = arguments
+        .iter()
+        .enumerate()
+        .filter(|(_, argument)| argument.eq_ignore_ascii_case(name))
+        .collect::<Vec<_>>();
+    matching.len() == 1
+        && arguments
+            .get(matching[0].0 + 1)
+            .is_some_and(|value| !value.trim().is_empty() && !value.starts_with('-'))
+}
+
+fn powershell_parameter_name(argument: &str) -> Option<String> {
+    let lowered = argument.to_ascii_lowercase();
+    lowered.starts_with('-').then(|| {
+        lowered
+            .split([':', '='])
+            .next()
+            .unwrap_or(&lowered)
+            .to_string()
+    })
+}
+
+fn contains_parameter_prefix(arguments: &[String], forbidden: &[&str]) -> bool {
+    arguments.iter().any(|argument| {
+        let Some(name) = powershell_parameter_name(argument) else {
+            return false;
+        };
+        name.len() >= 2
+            && forbidden
+                .iter()
+                .map(|value| value.to_ascii_lowercase())
+                .any(|value| value.starts_with(&name))
+    })
 }
 
 /// A repository gate basename is reserved even outside its reviewed logical
@@ -367,12 +475,12 @@ pub(super) fn trusted_workspace_gate_script(
     root: &Path,
     command: &ParsedValidationCommand,
 ) -> bool {
-    trusted_gate_script(root, command).is_some_and(|name| {
-        matches!(
-            name,
-            "check-repo.ps1" | "audit-repository.ps1" | "verify-release-contract.ps1"
-        )
-    })
+    let Some(kind) = strict_gate_kind(command).ok().flatten() else {
+        return false;
+    };
+    kind.workspace_wide()
+        && kind.full_workspace_invocation(command)
+        && trusted_gate_script_identity(root, command).is_some()
 }
 
 pub(super) fn trusted_workspace_gate_script_with_context(
@@ -380,15 +488,43 @@ pub(super) fn trusted_workspace_gate_script_with_context(
     command: &ParsedValidationCommand,
 ) -> Result<bool> {
     Ok(
+        trusted_gate_script_identity_with_context(decision, command)?.is_some_and(|gate| {
+            gate.kind.workspace_wide() && gate.kind.full_workspace_invocation(command)
+        }),
+    )
+}
+
+pub(super) fn trusted_source_fresh_gate_script(
+    root: &Path,
+    command: &ParsedValidationCommand,
+) -> bool {
+    let Some(kind) = strict_gate_kind(command).ok().flatten() else {
+        return false;
+    };
+    kind.source_fresh_invocation(command) && trusted_gate_script_identity(root, command).is_some()
+}
+
+pub(super) fn trusted_source_fresh_gate_script_with_context(
+    decision: &GoalDecisionContext<'_>,
+    command: &ParsedValidationCommand,
+) -> Result<bool> {
+    Ok(
         trusted_gate_script_identity_with_context(decision, command)?
-            .is_some_and(|gate| gate.kind.workspace_wide()),
+            .is_some_and(|gate| gate.kind.source_fresh_invocation(command)),
     )
 }
 
 const AUTHORITY_GATE_BINDING_POLICY_V1: &str = "powershell_repository_gate_closure_v1";
+const AUTHORITY_GATE_BINDING_POLICY_V2: &str = "powershell_repository_gate_manifest_v2";
 pub(super) const XTASK_AUTHORITY_GATE_BINDING_POLICY_V1: &str =
     "rust_xtask_repository_gate_closure_v1";
+pub(super) const XTASK_AUTHORITY_GATE_BINDING_POLICY_V2: &str =
+    "rust_xtask_repository_gate_manifest_v2";
 pub(super) const XTASK_AUTHORITY_ENTRYPOINT: &str = "xtask/Cargo.toml";
+pub(super) const REPOSITORY_GATE_INPUT_MANIFEST_PATH: &str =
+    "crates/rayman/assets/repository-gate-inputs.json";
+pub(super) const REPOSITORY_GATE_INPUT_MANIFEST_BYTES: &[u8] =
+    include_bytes!("../../assets/repository-gate-inputs.json");
 const XTASK_FIXED_DEPENDENCIES: &[&str] = &[
     ".cargo/config.toml",
     "Cargo.lock",
@@ -398,10 +534,80 @@ const XTASK_FIXED_DEPENDENCIES: &[&str] = &[
     "xtask/src/main.rs",
 ];
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RepositoryGateInputManifest {
+    schema: String,
+    required_paths: Vec<String>,
+    required_prefixes: Vec<String>,
+}
+
+fn repository_gate_input_manifest() -> Result<RepositoryGateInputManifest> {
+    let manifest =
+        serde_json::from_slice::<RepositoryGateInputManifest>(REPOSITORY_GATE_INPUT_MANIFEST_BYTES)
+            .context("embedded repository gate input manifest must be valid JSON")?;
+    if manifest.schema != "rayman.repository-gate-inputs.v1" {
+        bail!("repository gate input manifest schema is unsupported");
+    }
+    if manifest.required_paths.is_empty() || manifest.required_prefixes.is_empty() {
+        bail!("repository gate input manifest must declare paths and prefixes");
+    }
+    let mut paths = manifest.required_paths.clone();
+    paths.sort();
+    paths.dedup();
+    if paths != manifest.required_paths
+        || !paths
+            .iter()
+            .any(|path| path == REPOSITORY_GATE_INPUT_MANIFEST_PATH)
+        || paths
+            .iter()
+            .any(|path| strict_authority_key(path, false).is_err())
+    {
+        bail!("repository gate input manifest paths are not canonical sorted unique keys");
+    }
+    let mut prefixes = manifest.required_prefixes.clone();
+    prefixes.sort();
+    prefixes.dedup();
+    if prefixes != manifest.required_prefixes
+        || prefixes.iter().any(|prefix| {
+            !prefix.ends_with('/')
+                || prefix.starts_with('/')
+                || prefix.contains('\\')
+                || prefix.contains("..")
+        })
+    {
+        bail!("repository gate input manifest prefixes are not canonical sorted unique prefixes");
+    }
+    Ok(manifest)
+}
+
+fn repository_gate_manifest_dependency_keys(
+    baseline: &WorkspaceBaseline,
+    current: &WorkspaceBaseline,
+) -> Result<BTreeSet<String>> {
+    let manifest = repository_gate_input_manifest()?;
+    let mut dependencies = BTreeSet::new();
+    for path in baseline.files.keys().chain(current.files.keys()) {
+        let normalized = path.replace('\\', "/");
+        if normalized != *path || strict_authority_key(path, false).is_err() {
+            continue;
+        }
+        if manifest.required_paths.contains(path)
+            || manifest
+                .required_prefixes
+                .iter()
+                .any(|prefix| path.starts_with(prefix))
+        {
+            dependencies.insert(path.clone());
+        }
+    }
+    Ok(dependencies)
+}
+
 /// Bind the complete xtask source tree and every repository PowerShell helper
 /// the transition gate can delegate to. The baseline/current union makes an
 /// added or deleted module just as visible as an in-place edit.
-fn xtask_authority_dependency_keys(
+fn xtask_authority_dependency_keys_v1(
     baseline: &WorkspaceBaseline,
     current: &WorkspaceBaseline,
 ) -> Result<BTreeSet<String>> {
@@ -436,6 +642,15 @@ fn xtask_authority_dependency_keys(
         }
         dependencies.insert(path.clone());
     }
+    Ok(dependencies)
+}
+
+fn xtask_authority_dependency_keys(
+    baseline: &WorkspaceBaseline,
+    current: &WorkspaceBaseline,
+) -> Result<BTreeSet<String>> {
+    let mut dependencies = xtask_authority_dependency_keys_v1(baseline, current)?;
+    dependencies.extend(repository_gate_manifest_dependency_keys(baseline, current)?);
     Ok(dependencies)
 }
 
@@ -505,11 +720,11 @@ fn trusted_workspace_gate_dependency_keys_with_context(
     command: &ParsedValidationCommand,
     receipt_baseline: Option<&WorkspaceBaseline>,
 ) -> Result<Option<BTreeSet<String>>> {
+    let current = decision.current().ok_or_else(|| {
+        anyhow::anyhow!("repository authority requires a captured workspace baseline")
+    })?;
+    let baseline = receipt_baseline.unwrap_or(current);
     if xtask_repository_gate_invocation(command) {
-        let current = decision.current().ok_or_else(|| {
-            anyhow::anyhow!("xtask authority requires a captured workspace baseline")
-        })?;
-        let baseline = receipt_baseline.unwrap_or(current);
         let dependencies = xtask_authority_dependency_keys(baseline, current)?;
         for key in &dependencies {
             let captured = decision.captured_workspace_file(key)?.ok_or_else(|| {
@@ -570,6 +785,15 @@ fn trusted_workspace_gate_dependency_keys_with_context(
             }
         }
     }
+    for key in repository_gate_manifest_dependency_keys(baseline, current)? {
+        let captured = decision.captured_workspace_file(&key)?.ok_or_else(|| {
+            anyhow::anyhow!("repository gate manifest dependency is absent from capture: {key}")
+        })?;
+        if captured.key != key {
+            bail!("repository gate manifest dependency key is ambiguous: {key}");
+        }
+        dependencies.insert(key);
+    }
     Ok(Some(dependencies))
 }
 
@@ -580,9 +804,9 @@ fn trusted_workspace_gate_dependency_paths(
     command: &ParsedValidationCommand,
     receipt_baseline: Option<&WorkspaceBaseline>,
 ) -> Result<Option<BTreeSet<String>>> {
+    let current = workspace_baseline(root)?;
+    let baseline = receipt_baseline.unwrap_or(&current);
     if xtask_repository_gate_invocation(command) {
-        let current = workspace_baseline(root)?;
-        let baseline = receipt_baseline.unwrap_or(&current);
         let dependencies = xtask_authority_dependency_keys(baseline, &current)?;
         for key in &dependencies {
             crate::context::ensure_source_file(root, &root.join(key))?;
@@ -631,6 +855,10 @@ fn trusted_workspace_gate_dependency_paths(
                 Err(error) => return Err(error),
             }
         }
+    }
+    for key in repository_gate_manifest_dependency_keys(baseline, &current)? {
+        crate::context::ensure_source_file(root, &root.join(&key))?;
+        dependencies.insert(key);
     }
     Ok(Some(dependencies))
 }
@@ -714,9 +942,9 @@ pub(super) fn authority_gate_binding_for_goal_with_context(
         bail!("authority gate binding does not contain its entrypoint: {entrypoint}");
     }
     let policy = if xtask_gate {
-        XTASK_AUTHORITY_GATE_BINDING_POLICY_V1
+        XTASK_AUTHORITY_GATE_BINDING_POLICY_V2
     } else {
-        AUTHORITY_GATE_BINDING_POLICY_V1
+        AUTHORITY_GATE_BINDING_POLICY_V2
     };
     let binding_sha256 = authority_gate_binding_sha256(policy, &entrypoint, &dependency_sha256);
     Ok(Some(AuthorityGateBinding {
@@ -777,9 +1005,9 @@ pub(super) fn authority_gate_binding_for_goal(
         bail!("authority gate binding does not contain its entrypoint: {entrypoint}");
     }
     let policy = if xtask_gate {
-        XTASK_AUTHORITY_GATE_BINDING_POLICY_V1
+        XTASK_AUTHORITY_GATE_BINDING_POLICY_V2
     } else {
-        AUTHORITY_GATE_BINDING_POLICY_V1
+        AUTHORITY_GATE_BINDING_POLICY_V2
     };
     let binding_sha256 = authority_gate_binding_sha256(policy, &entrypoint, &dependency_sha256);
     Ok(Some(AuthorityGateBinding {
@@ -822,8 +1050,31 @@ pub(super) fn authority_gate_binding_error(
                 (GateKind::from_exact_key(path).is_some() || ordinary_dependency_key(path))
                     && is_sha256(hash)
             })
+    } else if binding.policy == AUTHORITY_GATE_BINDING_POLICY_V2 {
+        let entrypoint_matches_command = parsed
+            .as_ref()
+            .and_then(|parsed| strict_gate_kind(parsed).ok().flatten())
+            .is_some_and(|kind| binding.entrypoint == kind.key());
+        let mut expected = repository_gate_manifest_dependency_keys(baseline, baseline).ok();
+        if let Some(expected) = expected.as_mut() {
+            expected.insert(binding.entrypoint.clone());
+        }
+        powershell_gate
+            && GateKind::from_exact_key(&binding.entrypoint).is_some()
+            && entrypoint_matches_command
+            && Some(
+                binding
+                    .dependency_sha256
+                    .keys()
+                    .cloned()
+                    .collect::<BTreeSet<_>>(),
+            ) == expected
+            && binding
+                .dependency_sha256
+                .iter()
+                .all(|(path, hash)| manifest_dependency_key(path) && is_sha256(hash))
     } else if binding.policy == XTASK_AUTHORITY_GATE_BINDING_POLICY_V1 {
-        let expected = xtask_authority_dependency_keys(baseline, baseline).ok();
+        let expected = xtask_authority_dependency_keys_v1(baseline, baseline).ok();
         xtask_gate
             && binding.entrypoint == XTASK_AUTHORITY_ENTRYPOINT
             && Some(
@@ -837,6 +1088,21 @@ pub(super) fn authority_gate_binding_error(
                 .dependency_sha256
                 .iter()
                 .all(|(path, hash)| xtask_authority_dependency_key(path) && is_sha256(hash))
+    } else if binding.policy == XTASK_AUTHORITY_GATE_BINDING_POLICY_V2 {
+        let expected = xtask_authority_dependency_keys(baseline, baseline).ok();
+        xtask_gate
+            && binding.entrypoint == XTASK_AUTHORITY_ENTRYPOINT
+            && Some(
+                binding
+                    .dependency_sha256
+                    .keys()
+                    .cloned()
+                    .collect::<BTreeSet<_>>(),
+            ) == expected
+            && binding
+                .dependency_sha256
+                .iter()
+                .all(|(path, hash)| manifest_dependency_key(path) && is_sha256(hash))
     } else {
         false
     };
@@ -866,6 +1132,10 @@ pub(super) fn authority_gate_binding_error(
 
 fn ordinary_dependency_key(key: &str) -> bool {
     strict_authority_key(key, true).is_ok()
+}
+
+fn manifest_dependency_key(key: &str) -> bool {
+    strict_authority_key(key, false).is_ok()
 }
 
 /// Canonical source-side repository gate. `cargo xtask` remains a convenience

@@ -1604,7 +1604,18 @@ mod tests {
     /// 的本意（如 partial 快照上限）会被激活门禁静默架空。
     fn activate(root: &Path) {
         let skill = root.join("SKILL.md");
-        fs::write(&skill, "test skill\n").unwrap();
+        fs::write(&skill, include_bytes!("../assets/canonical-skill.md")).unwrap();
+        fs::write(
+            root.join("AGENT_CONTRACT.md"),
+            include_bytes!("../assets/canonical-agent-contract.md"),
+        )
+        .unwrap();
+        fs::create_dir_all(root.join("references")).unwrap();
+        fs::write(
+            root.join("references/workflow-contract.md"),
+            include_bytes!("../assets/canonical-workflow-contract.md"),
+        )
+        .unwrap();
         crate::workspace::activate(root, &skill).unwrap();
     }
 
@@ -1626,11 +1637,9 @@ mod tests {
         }
     }
 
-    /// 一个反复失败的 autosave 曾经完全静默：tick 的输出无人可见，partial 快照又
-    /// 无上限累积（约 48 份/天），而 `status` 依旧显示"运行中"。失败必须计数、
-    /// 必须出现在 status 里，partial 也必须有上限。
+    /// 反复失败必须在 status 中可见，但可见性不能变成未经授权删除取证快照的理由。
     #[test]
-    fn repeated_tick_failures_are_counted_capped_and_surfaced_in_status() {
+    fn repeated_tick_failures_are_counted_preserved_and_surfaced_in_status() {
         let ws = tempfile::tempdir().unwrap();
         let store = tempfile::tempdir().unwrap();
         let root = ws.path();
@@ -1641,7 +1650,7 @@ mod tests {
         // goals 应为目录；同名普通文件让此后每次 checkpoint::save 都失败。
         touch(&root.join(".RaymanCodingSkill/goals"), "not a directory");
 
-        let attempts = checkpoint::MAX_PARTIAL_SNAPSHOTS + 2;
+        let attempts = 7;
         for _ in 0..attempts {
             assert!(tick_with_scheduler(root, &AbsentScheduler).is_err());
         }
@@ -1656,10 +1665,7 @@ mod tests {
             .iter()
             .filter(|snapshot| snapshot.status == checkpoint::SnapshotStatus::Partial)
             .count();
-        assert!(
-            partials <= checkpoint::MAX_PARTIAL_SNAPSHOTS,
-            "失败的 autosave 循环不得无界堆积 partial 快照（{attempts} 次后实得 {partials} 份）"
-        );
+        assert_eq!(partials, attempts, "失败取证必须保持 lossless");
 
         let message = status_with_scheduler(root, &AbsentScheduler)
             .unwrap()

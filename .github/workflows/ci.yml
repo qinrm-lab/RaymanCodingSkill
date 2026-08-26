@@ -313,6 +313,11 @@ jobs:
               @($report.trials).Count -ne 4) {
             throw "Unexpected offline mock provenance or trial count in $reportPath"
           }
+          $causalClaimEligible = $report.interpretation.causal_claim_eligible
+          if ($causalClaimEligible -isnot [bool] -or
+              $causalClaimEligible -ne $false) {
+            throw "Offline mock report must contain boolean causal_claim_eligible=false: $reportPath"
+          }
 
   installer-selftest:
     name: installer CAS self-test (${{ matrix.os }})
@@ -349,10 +354,38 @@ jobs:
       - run: ./.install-smoke/bin/rayman --version
 
   coverage:
-    name: shipped CLI line coverage threshold
-    runs-on: ubuntu-latest
+    name: shipped CLI line coverage threshold (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      CARGO_TARGET_DIR: ${{ runner.temp }}/rayman-coverage-target
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install ACL test dependency
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends acl
+
+      - name: Prepare Windows validation host root
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'rayman-validation'
+          $null = New-Item -ItemType Directory -Path $root -Force
+          $item = Get-Item -LiteralPath $root -Force
+          if (-not $item.PSIsContainer -or
+              ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw "Windows validation host root must be a real directory: $root"
+          }
+          Add-Content -LiteralPath $env:GITHUB_ENV `
+            -Value "RAYMAN_VALIDATION_TEMP_ROOT=$root" `
+            -Encoding utf8
+
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable action, exact toolchain below
         with:
           toolchain: 1.97.1
@@ -387,11 +420,45 @@ jobs:
       - name: Build fixed Windows release assets
         shell: pwsh
         run: |
+          if (-not [string]::IsNullOrWhiteSpace($env:CARGO_INCREMENTAL) -and
+              $env:CARGO_INCREMENTAL -ne '0') {
+            throw "Unexpected CARGO_INCREMENTAL before signed release build: $env:CARGO_INCREMENTAL"
+          }
+          Remove-Item Env:CARGO_INCREMENTAL -ErrorAction SilentlyContinue
           cargo build --locked --release -p rayman
           if ($LASTEXITCODE -ne 0) { throw "release build failed: $LASTEXITCODE" }
+
+      - name: Verify exact release binaries source-fresh before staging
+        shell: pwsh
+        run: |
+          Remove-Item Env:CARGO_INCREMENTAL -ErrorAction SilentlyContinue
+          $finalCli = (Resolve-Path -LiteralPath 'target/release/rayman.exe').ProviderPath
+          $finalWorker = (Resolve-Path -LiteralPath 'target/release/rayman-update-worker.exe').ProviderPath
+          ./scripts/verify-release-contract.ps1 `
+            -CliPath $finalCli `
+            -ReferenceCliPath $finalCli `
+            -WorkerPath $finalWorker `
+            -ReferenceWorkerPath $finalWorker `
+            -SkillPath (Join-Path $PWD 'SKILL.md') `
+            -WorkspaceSkillPath (Join-Path $PWD 'SKILL.md') `
+            -SkillResourceMode Source `
+            -RequireSourceFresh `
+            -VerifyGitTag
+
+      - name: Stage only the verified release bytes
+        shell: pwsh
+        run: |
           New-Item -ItemType Directory -Path dist | Out-Null
           Copy-Item target/release/rayman.exe dist/rayman-windows-x86_64.exe
           Copy-Item target/release/rayman-update-worker.exe dist/rayman-update-worker-windows-x86_64.exe
+          if ((Get-FileHash target/release/rayman.exe -Algorithm SHA256).Hash -cne
+              (Get-FileHash dist/rayman-windows-x86_64.exe -Algorithm SHA256).Hash) {
+            throw 'Staged CLI differs from the source-fresh verified binary.'
+          }
+          if ((Get-FileHash target/release/rayman-update-worker.exe -Algorithm SHA256).Hash -cne
+              (Get-FileHash dist/rayman-update-worker-windows-x86_64.exe -Algorithm SHA256).Hash) {
+            throw 'Staged worker differs from the source-fresh verified binary.'
+          }
           Copy-Item SKILL.md dist/raymancodingskill-SKILL.md
           Copy-Item AGENT_CONTRACT.md dist/raymancodingskill-AGENTS.md
           Copy-Item references/workflow-contract.md dist/raymancodingskill-workflow-contract.md

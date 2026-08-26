@@ -773,6 +773,23 @@ fn check_readiness_scope(profile: CheckProfile) -> &'static str {
 mod tests {
     use super::*;
 
+    fn activate_running_bundle(root: &Path) {
+        let skill = root.join("SKILL.md");
+        std::fs::write(&skill, include_bytes!("../assets/canonical-skill.md")).unwrap();
+        std::fs::write(
+            root.join("AGENT_CONTRACT.md"),
+            include_bytes!("../assets/canonical-agent-contract.md"),
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("references")).unwrap();
+        std::fs::write(
+            root.join("references/workflow-contract.md"),
+            include_bytes!("../assets/canonical-workflow-contract.md"),
+        )
+        .unwrap();
+        workspace::activate(root, &skill).unwrap();
+    }
+
     #[test]
     fn readiness_goal_scope_excludes_retired_lifecycles() {
         assert!(goal_lifecycle_participates_in_readiness(
@@ -790,9 +807,7 @@ mod tests {
     fn bound_readiness_publishes_only_the_selected_current_goal() {
         let workspace = tempfile::tempdir().unwrap();
         let root = workspace.path();
-        let skill = root.join("SKILL.md");
-        std::fs::write(&skill, include_bytes!("../../../SKILL.md")).unwrap();
-        workspace::activate(root, &skill).unwrap();
+        activate_running_bundle(root);
         context::refresh(root).unwrap();
 
         let store = goal::GoalStore::new(root);
@@ -1127,9 +1142,7 @@ mod tests {
     fn finish_between_hook_forces_a_complete_second_evaluation() {
         let workspace = tempfile::tempdir().unwrap();
         let root = workspace.path();
-        let skill = root.join("SKILL.md");
-        std::fs::write(&skill, include_bytes!("../../../SKILL.md")).unwrap();
-        workspace::activate(root, &skill).unwrap();
+        activate_running_bundle(root);
         context::refresh(root).unwrap();
 
         let activation_path = root.join(".RaymanCodingSkill/workspace_skill.yaml");
@@ -1187,9 +1200,7 @@ mod tests {
     fn finish_terminal_observations_come_from_second_evaluation() {
         let workspace = tempfile::tempdir().unwrap();
         let root = workspace.path();
-        let skill = root.join("SKILL.md");
-        std::fs::write(&skill, include_bytes!("../../../SKILL.md")).unwrap();
-        workspace::activate(root, &skill).unwrap();
+        activate_running_bundle(root);
         context::refresh(root).unwrap();
 
         let (_, evaluation) = evaluate_finish_with_gate_hook(

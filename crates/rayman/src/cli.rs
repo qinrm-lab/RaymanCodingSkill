@@ -126,8 +126,12 @@ pub struct WorkspaceCmd {
 pub enum WorkspaceAction {
     /// Inspect activation only; use `workspace inspect` for Git/source state.
     Status,
-    /// Inspect activation together with current Git/source state.
-    Inspect,
+    /// Inspect activation together with current Git/source state; write probes are opt-in.
+    Inspect {
+        /// Create/remove transient capability probes under managed state.
+        #[arg(long)]
+        probe_writes: bool,
+    },
     /// Write a hash-bound workspace_skill.yaml activation contract.
     Activate {
         /// Canonical RaymanCodingSkill SKILL.md; defaults to root/SKILL.md.
@@ -215,6 +219,9 @@ pub struct DoctorCmd {
     /// 已安装身份不一致时以非零退出；源码新鲜度须用 verify-release-contract.ps1 -RequireSourceFresh
     #[arg(long)]
     pub check: bool,
+    /// Create/remove transient state and activation-metadata capability probes.
+    #[arg(long)]
+    pub probe_writes: bool,
 }
 
 #[derive(Args)]
@@ -948,7 +955,7 @@ mod tests {
         let cli = Cli::try_parse_from(["rayman", "doctor", "--check"]).unwrap();
         assert!(matches!(
             cli.command,
-            Command::Doctor(DoctorCmd { check: true })
+            Command::Doctor(DoctorCmd { check: true, .. })
         ));
     }
 

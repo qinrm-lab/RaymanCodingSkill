@@ -18,8 +18,10 @@ handling, checkpoints, concurrency, or evidence claims, also read
 
 Use this skill when the user explicitly invokes Rayman or when
 `.RaymanCodingSkill/workspace_skill.yaml` is valid and hash-bound to this
-canonical file. A leftover state directory without that activation contract
-is orphan state and does not authorize automatic use.
+canonical skill plus its delegated agent/workflow contract bundle. A leftover
+state directory without that complete activation contract is orphan state and
+does not authorize automatic use. A legacy six-field binding is inactive but
+eligible for `workspace rebind --yes` only when the current bundle matches.
 
 For explicit non-read-only use, apply the eligible rebind and continuation
 rules in the shared workflow reference. Activation writes remain fail closed;

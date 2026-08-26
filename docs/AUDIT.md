@@ -20,6 +20,13 @@ it cannot be used to avoid declaring changed-path coverage.
 
 An authority command is still a single direct executable plus argv. Inline/nested shells remain rejected. Authority is limited to a reviewed conventional repository gate (`check-repo`, `audit-repository`, or `verify-release-contract`), the exact `cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate` Rust entrypoint, workspace-wide Cargo tests, or selector-free workspace pytest; an agent cannot promote an arbitrary focused command merely by adding `--authority`. `cargo xtask` is convenience only and never authority because Cargo aliases are configuration-overridable. The exact xtask authority binds the root Cargo manifest/lock/config, the baseline/current union of the complete `xtask/` source tree, and the full repository `scripts/` helper tree delegated by the transition gate. Both runs must exit zero on the same workspace fingerprint; a normalizer, formatter, generator, or gate that changes indexed bytes writes no receipt. `finish` refuses a merely momentary PASS without that fixed-point proof.
 
+The complete audit and the goal authority are deliberately separate
+executions: `audit-repository.ps1` produces the installed/source-fresh audit
+evidence, then `release-closeout.ps1` invokes the exact xtask command with
+`--authority --repeat 2`. The audit does not claim that it already ran the
+later goal-bound authority command, and closeout cannot replace it with
+`check-repo.ps1`.
+
 For broad audits, use `goal package` plus `goal progress` to leave compact stage receipts and `goal lane` to prove read-only/final-reviewer lanes did not write or scoped writers stayed inside their allowlists. These are recovery and coordination records only: they never satisfy the authority line above. Python lanes should obtain a manifest-owned `temp pytest-lease`, apply its emitted basetemp/cache/environment values, probe it before reuse, and release that exact lease afterward; concurrent runs must not share pytest cache, basetemp, TMP, or pycache roots.
 
 Run the complete audit from a PowerShell 7 (`pwsh`) session only, from a clean checkout after installing/upgrading through `scripts/install-rayman.ps1`:

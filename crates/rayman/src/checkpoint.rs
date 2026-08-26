@@ -3,7 +3,8 @@
 //!
 //! 快照不是尽力而为的日志：复制、遍历或校验失败会产生标记为 `partial` 的取证快照并
 //! 返回错误，绝不会把它当作可恢复的最新快照；只有完整 manifest 能恢复或参与 `keep` 轮换。
-//! partial 快照按 [`MAX_PARTIAL_SNAPSHOTS`] 单独轮换——保留取证证据，但不许无界增长。
+//! partial 快照是取证证据，默认和普通 save/失败重试都不删除；清理需要独立、显式
+//! 且能命名 exact target 的维护授权。
 
 use std::collections::HashSet;
 use std::fs;
@@ -23,12 +24,6 @@ use crate::{hash, walk};
 
 /// 默认保留的完整快照数（滚动，多留几个以防某次保存中途损坏）。
 pub const DEFAULT_KEEP: usize = 3;
-/// partial 快照是故障取证证据，所以不参与 `keep` 轮换——但它不能无界增长。
-///
-/// autosave 的计划任务每 N 分钟重跑一次 `save`，而一个持续失败的工作区每次都会
-/// 提交一份新的 partial；30 分钟一次即约 48 份/天，且计划任务的输出无人可见。
-/// 保留最近这么多份足够诊断反复出现的同一个故障，再旧的按时间轮换掉。
-pub const MAX_PARTIAL_SNAPSHOTS: usize = 5;
 pub const MANIFEST_SCHEMA: &str = "rayman.checkpoint.v3";
 pub const MANIFEST_VERSION: u32 = 3;
 const LEGACY_MANIFEST_SCHEMA: &str = "rayman.checkpoint.v2";
@@ -703,7 +698,7 @@ fn partial_manifest(
 }
 
 fn finish_partial(
-    ws_dir: &Path,
+    _ws_dir: &Path,
     staging: &Path,
     final_dir: &Path,
     manifest: Manifest,
@@ -714,19 +709,10 @@ fn finish_partial(
         .unwrap_or_else(|| "unknown".to_string());
     let failure_count = manifest.errors.len();
     commit_snapshot(staging, final_dir, &manifest)?;
-    // The freshly committed partial sorts last, so rotation only ever discards
-    // strictly older forensic copies of what is almost always the same repeated
-    // failure.  No complete snapshot is touched on this path.
-    let rotation = match prune_partial_only(ws_dir) {
-        Ok(0) => String::new(),
-        Ok(rotated) => format!("；已轮换掉 {rotated} 份更旧的 partial 快照"),
-        Err(error) => format!("；partial 快照轮换失败: {error:#}"),
-    };
     bail!(
-        "checkpoint 保存不完整（{} 个错误）；已保留 partial 快照 {} 供取证，不会替代最近完整快照{}",
+        "checkpoint 保存不完整（{} 个错误）；已保留 partial 快照 {} 供取证，不会替代最近完整快照，也不会自动删除任何旧取证快照",
         failure_count,
         id,
-        rotation
     )
 }
 
@@ -809,8 +795,8 @@ pub fn prune_standard_snapshots(
     prune_standard(&ws_dir, keep.max(1))
 }
 
-/// 轮换完整快照（按 `keep`）并把 partial 快照压到 [`MAX_PARTIAL_SNAPSHOTS`] 以内。
-/// corrupt 快照仍然永不自动删除：它们的 manifest 不可信，无从判断该保留哪一份。
+/// 只轮换调用方通过 `keep` 明确授权的完整 standard 快照。Partial、recovery-only
+/// 与 corrupt 都是取证状态，不在这个保留策略的删除范围内。
 #[cfg(test)]
 fn prune(ws_dir: &Path, keep: usize) -> Result<usize> {
     prune_standard(ws_dir, keep)
@@ -820,17 +806,9 @@ fn prune_standard(ws_dir: &Path, keep: usize) -> Result<usize> {
     prune_inner(ws_dir, Some(keep))
 }
 
-/// 只轮换 partial 快照。保存失败路径专用：一次失败的保存绝不能连带删掉任何完整
-/// 恢复点，否则失败本身就会吃掉用户最后的安全网。
-fn prune_partial_only(ws_dir: &Path) -> Result<usize> {
-    prune_inner(ws_dir, None)
-}
-
 fn prune_inner(ws_dir: &Path, keep_standard: Option<usize>) -> Result<usize> {
     ensure_real_directory(ws_dir)?;
     let mut standard = Vec::new();
-    let mut partial = Vec::new();
-    let mut partial_recovery = Vec::new();
     let entries = fs::read_dir(ws_dir)
         .with_context(|| format!("无法列出 checkpoint 目录: {}", display_path(ws_dir)))?;
     for entry in entries {
@@ -869,30 +847,15 @@ fn prune_inner(ws_dir: &Path, keep_standard: Option<usize>) -> Result<usize> {
                 // test locks this in.
                 CheckpointPurpose::RecoveryOnly => {}
             },
-            // Partials rotate per purpose. Pooling them let ordinary
-            // standard-save failures (an autosave tick produces one per
-            // failure) rotate away an emergency salvage capture — the one
-            // artifact a human could still hand-recover files from. Two
-            // buckets keep the "partials must not grow without bound"
-            // guarantee that MAX_PARTIAL_SNAPSHOTS exists for; exempting
-            // recovery-only partials outright would remove it, and a
-            // repeatedly failing salvage-save would accumulate forever.
-            SnapshotStatus::Partial => match purpose {
-                CheckpointPurpose::Standard => partial.push(path),
-                CheckpointPurpose::RecoveryOnly => partial_recovery.push(path),
-            },
+            SnapshotStatus::Partial => {}
             SnapshotStatus::Corrupt => {}
         }
     }
     standard.sort(); // 时间戳目录名字典序 = 时间序
-    partial.sort();
-    partial_recovery.sort();
     let mut pruned = 0;
     if let Some(keep) = keep_standard {
         pruned += rotate_oldest(&standard, keep)?;
     }
-    pruned += rotate_oldest(&partial, MAX_PARTIAL_SNAPSHOTS)?;
-    pruned += rotate_oldest(&partial_recovery, MAX_PARTIAL_SNAPSHOTS)?;
     Ok(pruned)
 }
 
@@ -1105,7 +1068,22 @@ mod recovery_only_tests {
         let workspace = tempfile::tempdir().unwrap();
         let store = tempfile::tempdir().unwrap();
         let root = workspace.path();
-        fs::write(root.join("SKILL.md"), "# canonical\n").unwrap();
+        fs::write(
+            root.join("SKILL.md"),
+            include_bytes!("../assets/canonical-skill.md"),
+        )
+        .unwrap();
+        fs::write(
+            root.join("AGENT_CONTRACT.md"),
+            include_bytes!("../assets/canonical-agent-contract.md"),
+        )
+        .unwrap();
+        fs::create_dir_all(root.join("references")).unwrap();
+        fs::write(
+            root.join("references/workflow-contract.md"),
+            include_bytes!("../assets/canonical-workflow-contract.md"),
+        )
+        .unwrap();
         fs::write(root.join("payload.txt"), "saved\n").unwrap();
 
         let saved = salvage_save(root, Some(store.path())).unwrap();
@@ -1151,6 +1129,40 @@ mod recovery_only_tests {
                 )
                 .count(),
             RECOVERY_SAVES
+        );
+        assert!(standard.path.exists());
+        assert_eq!(
+            latest(root, Some(store.path())).unwrap().unwrap().id,
+            standard.id
+        );
+    }
+
+    #[test]
+    fn failed_recovery_only_saves_preserve_every_partial_snapshot() {
+        let workspace = tempfile::tempdir().unwrap();
+        let store = tempfile::tempdir().unwrap();
+        let root = workspace.path();
+        fs::write(root.join("payload.txt"), "standard\n").unwrap();
+        let standard = save(root, Some(store.path()), 1).unwrap();
+        fs::create_dir_all(root.join(".RaymanCodingSkill")).unwrap();
+        fs::write(root.join(".RaymanCodingSkill/goals"), "not a directory").unwrap();
+
+        const FAILED_SALVAGE_SAVES: usize = 7;
+        for _ in 0..FAILED_SALVAGE_SAVES {
+            assert!(salvage_save(root, Some(store.path())).is_err());
+        }
+        let checkpoints = list(root, Some(store.path())).unwrap();
+        assert_eq!(
+            checkpoints
+                .iter()
+                .filter(|checkpoint| {
+                    checkpoint.status == SnapshotStatus::Partial
+                        && checkpoint.manifest.as_ref().is_some_and(|manifest| {
+                            manifest.purpose == CheckpointPurpose::RecoveryOnly
+                        })
+                })
+                .count(),
+            FAILED_SALVAGE_SAVES
         );
         assert!(standard.path.exists());
         assert_eq!(

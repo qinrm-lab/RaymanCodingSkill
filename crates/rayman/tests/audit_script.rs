@@ -487,6 +487,26 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
     assert!(workflow.contains("-MinimumRemainingDays 14"));
     assert!(workflow.contains("-MinimumRemainingDays 29"));
     assert!(workflow.contains("-ExpectedVersion $tag.Substring(1)"));
+    assert!(workflow.contains("Verify exact release binaries source-fresh before staging"));
+    assert!(workflow.contains("Stage only the verified release bytes"));
+    assert!(workflow.contains("-CliPath $finalCli"));
+    assert!(workflow.contains("-WorkerPath $finalWorker"));
+    assert!(workflow.contains("-SkillResourceMode Source"));
+    assert!(workflow.contains("-RequireSourceFresh"));
+    assert!(workflow.contains("-VerifyGitTag"));
+    let final_asset_verification = workflow
+        .find("Verify exact release binaries source-fresh before staging")
+        .expect("signed release must verify the release binaries");
+    let final_asset_copy = workflow
+        .find("Copy-Item target/release/rayman.exe dist/rayman-windows-x86_64.exe")
+        .expect("signed release must stage the verified CLI asset");
+    let manifest_signing = workflow
+        .find("Create and sign canonical update manifest")
+        .expect("signed release must sign a canonical manifest");
+    assert!(final_asset_verification < final_asset_copy);
+    assert!(final_asset_copy < manifest_signing);
+    assert!(workflow.contains("Staged CLI differs from the source-fresh verified binary."));
+    assert!(workflow.contains("Staged worker differs from the source-fresh verified binary."));
     assert!(!workflow.contains("rayman-release-source-$nonce"));
     assert!(source.contains("switch ($PSCmdlet.ParameterSetName)"));
     assert!(source.contains("-PrepareAuditTools:$false grants no provisioning authority"));
@@ -515,6 +535,12 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
             "tool preparation unexpectedly owns audit concern {forbidden}"
         );
     }
+    assert!(release_closeout.contains(
+        "'--command', 'cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate'"
+    ));
+    assert!(
+        !release_closeout.contains("'--command', 'pwsh -NoProfile -File scripts/check-repo.ps1'")
+    );
     for required in [
         "Resolve-PersistentCargoInstallRoot",
         "Get-MsrvLlvmPreparationArguments",

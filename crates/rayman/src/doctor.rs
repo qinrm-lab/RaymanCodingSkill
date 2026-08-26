@@ -35,8 +35,16 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
     let path_matches_running = path_hash.as_deref() == Some(running_hash.as_str());
 
     let activation = rayman::workspace::activation_status(root)?;
-    let state_write = rayman::state_paths::state_write_probe(root);
-    let activation_metadata = rayman::workspace::activation_metadata_capability_probe(root);
+    let state_write = if cmd.probe_writes {
+        rayman::state_paths::state_write_probe(root)
+    } else {
+        rayman::state_paths::state_write_probe_not_requested(root)
+    };
+    let activation_metadata = if cmd.probe_writes {
+        rayman::workspace::activation_metadata_capability_probe(root)
+    } else {
+        rayman::workspace::activation_metadata_probe_not_requested(root)
+    };
     let host_patch = rayman::codex_host::patch_probe(None);
     let execution_context = rayman::execution_context::execution_context_probe();
     let toolchain = rayman::toolchain::toolchain_probe(root);
@@ -112,10 +120,13 @@ pub(crate) fn run(root: &Path, json_output: bool, cmd: DoctorCmd) -> Result<()> 
             "sha256": skill_hash,
             "recorded_sha256": metadata_hash,
             "matches_recorded": metadata_matches,
+            "bundle_sha256": &activation.actual_bundle_sha256,
+            "recorded_bundle_sha256": &activation.expected_bundle_sha256,
+            "running_bundle_sha256": &activation.running_bundle_sha256,
         },
         "release_identity": {
             "ready": identity_ready,
-            "scope": "running_binary_path_command_and_workspace_skill_identity",
+            "scope": "running_binary_path_command_workspace_skill_and_delegated_contract_bundle_identity",
         },
         "doctor_check": {
             "ready": doctor_check_ready,

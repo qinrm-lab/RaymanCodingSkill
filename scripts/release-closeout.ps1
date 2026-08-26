@@ -458,7 +458,7 @@ function Get-AuthorityArguments {
         'goal', 'validate', $Goal,
         '--req', $Requirement,
         '--message', 'release closeout authority gate passed twice on one exact source binding',
-        '--command', 'pwsh -NoProfile -File scripts/check-repo.ps1',
+        '--command', 'cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate',
         '--authority', '--repeat', '2'
     )
     foreach ($path in $Changed) {
@@ -678,8 +678,10 @@ if ($PSCmdlet.ParameterSetName -eq 'SelfTest') {
     }
     $authority = @(Get-AuthorityArguments 'goal_test' 'req_8' @('a.rs'))
     if ($authority -notcontains '--authority' -or
-        $authority[([Array]::IndexOf($authority, '--repeat') + 1)] -ne '2') {
-        throw 'release closeout self-test lost mandatory authority repeat 2.'
+        $authority[([Array]::IndexOf($authority, '--repeat') + 1)] -ne '2' -or
+        $authority[([Array]::IndexOf($authority, '--command') + 1)] -cne
+            'cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate') {
+        throw 'release closeout self-test lost the exact xtask authority repeated twice.'
     }
     $snapshotAuthority = @(Get-AuthorityArguments 'goal_test' 'req_8' @())
     if ($snapshotAuthority -notcontains '--workspace-snapshot' -or

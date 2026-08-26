@@ -22,6 +22,24 @@ fn is_managed_state_lock(name: &str) -> bool {
 /// separately allowlisted `autosave.lock`, so allowing its generated-looking
 /// lock name would describe a file no code path creates and widen the audit.
 const STATE_LOCK_TARGETS: &[&str] = &["pending.json", "workspace_skill.yaml"];
+const TEMP_WARNING_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+const TEMP_WARNING_ENTRIES: usize = 10_000;
+
+fn capacity_warnings(total_bytes: u64, file_count: usize, directory_count: usize) -> Vec<String> {
+    let mut warnings = Vec::new();
+    if total_bytes >= TEMP_WARNING_BYTES {
+        warnings.push(format!(
+            "managed temp uses {total_bytes} bytes (warning threshold {TEMP_WARNING_BYTES})"
+        ));
+    }
+    let entries = file_count.saturating_add(directory_count);
+    if entries >= TEMP_WARNING_ENTRIES {
+        warnings.push(format!(
+            "managed temp has {entries} files/directories (warning threshold {TEMP_WARNING_ENTRIES})"
+        ));
+    }
+    warnings
+}
 
 /// `.<allowed-state-file>.rayman-<pid>-<counter>.tmp` — the scratch file
 /// `file_io` writes and renames for every atomic state write.
@@ -67,6 +85,7 @@ pub(crate) fn run_state_audit(root: &Path, json: bool, check: bool) -> Result<()
     let state = root.join(".RaymanCodingSkill");
     let mut retired = Vec::new();
     let mut errors = Vec::new();
+    let mut recovery_warnings = Vec::new();
     match rayman::state_paths::managed_state_root(root, false) {
         Ok(None) => {}
         Ok(Some(verified_state)) => match std::fs::read_dir(&verified_state) {
@@ -83,10 +102,13 @@ pub(crate) fn run_state_audit(root: &Path, json: bool, check: bool) -> Result<()
                                 // pass the gate as clean simply by wearing the
                                 // name shape. Validate it exactly like every
                                 // other accepted entry does.
-                                if let Err(error) = audit_leaked_atomic_temp(root, &name) {
-                                    errors.push(format!(
+                                match audit_leaked_atomic_temp(root, &name) {
+                                    Ok(true) => recovery_warnings
+                                        .push(format!("crash-leaked atomic write remains: {name}")),
+                                    Ok(false) => {}
+                                    Err(error) => errors.push(format!(
                                         "遗留的原子写临时项 `{name}` 不安全或无效: {error:#}"
-                                    ));
+                                    )),
                                 }
                                 continue;
                             }
@@ -107,8 +129,16 @@ pub(crate) fn run_state_audit(root: &Path, json: bool, check: bool) -> Result<()
         Err(error) => errors.push(format!("无法安全读取受管状态: {error:#}")),
     }
     retired.sort();
+    recovery_warnings.sort();
     let temp_status = temp::audit(root);
     let clean = retired.is_empty() && errors.is_empty() && temp_status.traversal_error_count == 0;
+    let capacity_warnings = capacity_warnings(
+        temp_status.total_bytes,
+        temp_status.file_count,
+        temp_status.directory_count,
+    );
+    let operationally_healthy =
+        clean && capacity_warnings.is_empty() && recovery_warnings.is_empty();
     if json {
         crate::print(&json!({
             "state_root": state,
@@ -123,10 +153,13 @@ pub(crate) fn run_state_audit(root: &Path, json: bool, check: bool) -> Result<()
                 "traversal_errors": temp_status.traversal_errors,
             },
             "clean": clean,
+            "operationally_healthy": operationally_healthy,
+            "capacity_warnings": capacity_warnings,
+            "recovery_warnings": recovery_warnings,
             "destructive_action": "none; inspect and migrate or remove retired state only after explicit user approval",
         }));
     } else {
-        println!("受管状态审计: clean={clean}");
+        println!("受管状态审计: clean={clean} operationally_healthy={operationally_healthy}");
         println!(
             "  temp: files={} dirs={} {:.1} MB",
             temp_status.file_count,
@@ -138,6 +171,12 @@ pub(crate) fn run_state_audit(root: &Path, json: bool, check: bool) -> Result<()
         }
         for error in errors.iter().chain(temp_status.traversal_errors.iter()) {
             println!("  error: {error}");
+        }
+        for warning in &capacity_warnings {
+            println!("  capacity warning: {warning}");
+        }
+        for warning in &recovery_warnings {
+            println!("  recovery warning: {warning}");
         }
         println!("  no files were deleted");
     }
@@ -154,10 +193,10 @@ pub(crate) fn run_state_audit(root: &Path, json: bool, check: bool) -> Result<()
 /// A leaked atomic-write scratch file is tolerated, but only as an ordinary
 /// file. `managed_state_file` refuses a link/reparse target, which is what stops
 /// a junction escaping the workspace from wearing the name shape.
-fn audit_leaked_atomic_temp(root: &Path, name: &str) -> Result<()> {
+fn audit_leaked_atomic_temp(root: &Path, name: &str) -> Result<bool> {
     let path = rayman::state_paths::managed_state_file(root, Path::new(name), false)?;
     match std::fs::symlink_metadata(&path) {
-        Ok(metadata) if metadata.file_type().is_file() => Ok(()),
+        Ok(metadata) if metadata.file_type().is_file() => Ok(true),
         Ok(_) => bail!("不是普通文件: {}", path.display()),
         // Vanishing between `read_dir` and this stat is the *successful* end of
         // an atomic write: the scratch file was renamed over its target. Copying
@@ -165,7 +204,7 @@ fn audit_leaked_atomic_temp(root: &Path, name: &str) -> Result<()> {
         // sanctioned concurrent write into a hard gate failure — measured at
         // ~1% of audits against a concurrent writer — on the very gate this
         // batch set out to make harder to red-line.
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
         Err(error) => Err(error).with_context(|| format!("无法检查: {}", path.display())),
     }
 }
@@ -235,6 +274,17 @@ fn audit_allowed_state_entry(root: &Path, name: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn capacity_warning_thresholds_are_non_blocking_operational_boundaries() {
+        assert!(capacity_warnings(TEMP_WARNING_BYTES - 1, 9_998, 1).is_empty());
+        let bytes = capacity_warnings(TEMP_WARNING_BYTES, 0, 0);
+        assert_eq!(bytes.len(), 1);
+        assert!(bytes[0].contains("managed temp uses"));
+        let entries = capacity_warnings(0, 9_999, 1);
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0].contains("files/directories"));
+    }
 
     #[test]
     fn state_audit_check_refuses_an_unreadable_or_invalid_state_root() {

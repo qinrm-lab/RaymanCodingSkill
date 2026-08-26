@@ -5,7 +5,10 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
-use super::{Goal, GoalLifecycle, GoalStatus, acquire_state_lock, short_id};
+use super::{
+    Goal, GoalLifecycle, GoalStatus, GoalStore, acquire_state_lock, goal_gate_verdict, short_id,
+    workspace_fingerprint,
+};
 use crate::file_io::{read_json, write_json};
 use crate::hash::sha256_bytes;
 use crate::state_paths;
@@ -617,7 +620,8 @@ impl PendingStore {
         let mut selected = Vec::<PendingItem>::new();
         let mut goal_ids = Vec::<String>::new();
         for goal in &sorted_goals {
-            let frontier = frontier_report(goal, relevant_items(&list.items, &goal.id));
+            let frontier =
+                checked_frontier_report(&self.root, goal, relevant_items(&list.items, &goal.id))?;
             if frontier.decision != FrontierDecision::AskUser
                 || !frontier.ask_user_allowed
                 || frontier.consultation != FrontierConsultation::Ready
@@ -731,7 +735,7 @@ impl PendingStore {
 
     pub fn frontier(&self, goal: &Goal) -> Result<FrontierReport> {
         let list = self.load()?;
-        Ok(frontier_report(goal, relevant_items(&list.items, &goal.id)))
+        checked_frontier_report(&self.root, goal, relevant_items(&list.items, &goal.id))
     }
 
     pub(super) fn proven_non_agent_boundary(&self, goal_id: &str) -> Result<bool> {
@@ -944,6 +948,55 @@ fn frontier_report(goal: &Goal, blockers: Vec<PendingItem>) -> FrontierReport {
         reason,
         blockers,
     }
+}
+
+fn checked_frontier_report(
+    root: &Path,
+    goal: &Goal,
+    blockers: Vec<PendingItem>,
+) -> Result<FrontierReport> {
+    if goal.lifecycle != GoalLifecycle::Current {
+        bail!(
+            "goal {} lifecycle={} is history and cannot enter current frontier readiness",
+            goal.id,
+            goal.lifecycle
+        );
+    }
+    if let Some(error) = goal.current_schema_error() {
+        bail!("goal {} contract is invalid: {error}", goal.id);
+    }
+    let mut report = frontier_report(goal, blockers);
+    if report.execution != FrontierExecution::Complete {
+        return Ok(report);
+    }
+    let (goals, issues) = GoalStore::new(root).list_with_issues()?;
+    if !issues.is_empty() {
+        bail!("frontier cannot validate corrupt goal state");
+    }
+    let persisted = goals
+        .iter()
+        .find(|candidate| candidate.id == goal.id)
+        .ok_or_else(|| anyhow::anyhow!("frontier goal {} is not persisted", goal.id))?;
+    if persisted.updated_at != goal.updated_at
+        || persisted.status != goal.status
+        || persisted.lifecycle != goal.lifecycle
+    {
+        bail!(
+            "frontier goal {} changed after the caller loaded it",
+            goal.id
+        );
+    }
+    let fingerprint = workspace_fingerprint(root)?;
+    let verdict = goal_gate_verdict(persisted, &goals, root, Some(&fingerprint));
+    if persisted.status != GoalStatus::Success || !verdict.blockers.is_empty() {
+        report.decision = FrontierDecision::Continue;
+        report.execution = FrontierExecution::ContinueForeground;
+        report.reason = format!(
+            "goal success is not current gate-ready: {}",
+            verdict.blockers.join("; ")
+        );
+    }
+    Ok(report)
 }
 
 #[derive(Serialize)]

@@ -41,7 +41,7 @@ loaded. See [UPDATE_CONTRACT.md](UPDATE_CONTRACT.md).
 
 ```text
 rayman workspace status
-rayman workspace inspect
+rayman workspace inspect [--probe-writes]
 rayman workspace ensure-current
 rayman workspace ensure-current --yes
 rayman workspace activate --skill-file <canonical-SKILL.md> --yes
@@ -59,12 +59,23 @@ Its JSON report fixes
 `project_files_changed=false`, and `other_workspaces_scanned=false`. It never
 installs Rayman's own `xtask` or rewrites a consumer project's Python or other
 automation; that broader migration requires an explicit project-local goal.
+Activation binds seven fields: the skill path/hash, delegated agent/workflow
+bundle hash, and CLI contract/version. A legacy six-field contract is inactive;
+`ensure-current --yes` may add only the missing bundle identity when all three
+current resources exactly match the bundle embedded in the running CLI.
+`workspace inspect` and `doctor` are read-only by default; workspace source
+inspection fixes `GIT_OPTIONAL_LOCKS=0` and passes `--no-optional-locks` to
+every Git child. Add
+`--probe-writes` only when you need the transient managed-state and
+activation-metadata staging capability probes before a write-capable task.
 
 ## Evidence boundaries
 
 `check --profile release` is workspace strict quality, not an install or source
-freshness claim. `doctor --check` proves the running CLI/PATH/workspace-skill
-identity. `verify-release-contract.ps1 -RequireSourceFresh` additionally binds
+freshness claim. `doctor --check` proves the running CLI/PATH/workspace skill
+and delegated contract-bundle identity. Goal requirements and review names are
+caller-authored records; no CLI hash upgrades them to a host-transcript or
+independent-reviewer attestation. `verify-release-contract.ps1 -RequireSourceFresh` additionally binds
 the CLI and update worker to one locked isolated rebuild. A signed-release
 worker receipt proves authenticated published bytes; it does not pretend those
 bytes were rebuilt locally from the checkout.

@@ -71,7 +71,7 @@ $crateManifest = Join-Path $repoRoot 'crates/rayman/Cargo.toml'
 $lockfile = Join-Path $repoRoot 'Cargo.lock'
 $canonicalSkill = Join-Path $repoRoot 'SKILL.md'
 $packagedCanonicalSkill = Join-Path $repoRoot 'crates/rayman/assets/canonical-skill.md'
-$expectedContract = 'rayman-cli-contract-v17'
+$expectedContract = 'rayman-cli-contract-v18'
 $requiredMsrv = '1.97.1'
 
 switch ($PSCmdlet.ParameterSetName) {

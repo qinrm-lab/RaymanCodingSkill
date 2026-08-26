@@ -777,11 +777,10 @@ fn restore_refuses_legacy_snapshot_whose_manifest_folded_path_case() {
     );
 }
 
-/// partial 快照是取证证据，但不能无界增长：autosave 的计划任务每 N 分钟重试一次
-/// 失败的保存，无上限时一天就能堆出约 48 份，而 prune 从不删它们、失败路径也从不
-/// 调 prune。轮换只针对 partial，最近的完整恢复点绝不受影响。
+/// 默认 lossless 必须覆盖失败取证。即使同一个错误反复发生，失败保存和 ordinary
+/// `--keep` 都不得把旧 partial 当作缓存自动删除。
 #[test]
-fn partial_snapshots_are_capped_without_touching_the_last_complete_snapshot() {
+fn partial_snapshots_are_preserved_without_touching_the_last_complete_snapshot() {
     let ws = tempfile::tempdir().unwrap();
     let store = tempfile::tempdir().unwrap();
     let root = ws.path();
@@ -790,7 +789,7 @@ fn partial_snapshots_are_capped_without_touching_the_last_complete_snapshot() {
 
     // goals 应为目录；同名普通文件让此后每次保存都失败并提交一份 partial。
     write(&root.join(".RaymanCodingSkill/goals"), "not a directory");
-    let attempts = MAX_PARTIAL_SNAPSHOTS + 3;
+    let attempts = 8;
     for _ in 0..attempts {
         assert!(save(root, Some(store.path()), 1).is_err());
     }
@@ -800,14 +799,10 @@ fn partial_snapshots_are_capped_without_touching_the_last_complete_snapshot() {
         .iter()
         .filter(|checkpoint| checkpoint.status == SnapshotStatus::Partial)
         .count();
-    assert!(
-        partials <= MAX_PARTIAL_SNAPSHOTS,
-        "partial 快照必须有上限（{attempts} 次失败后实得 {partials} 份）"
-    );
-    assert!(partials > 0, "仍必须保留最近的 partial 快照供取证");
+    assert_eq!(partials, attempts, "每一份失败取证都必须保留");
     assert!(
         complete.path.exists(),
-        "轮换 partial 绝不能删掉最近的完整恢复点"
+        "保留 partial 也绝不能删掉最近的完整恢复点"
     );
     assert_eq!(
         latest(root, Some(store.path())).unwrap().unwrap().id,

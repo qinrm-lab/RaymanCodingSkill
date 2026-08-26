@@ -122,10 +122,7 @@ fn parse_porcelain_z(status: &[u8]) -> Result<ParsedStatus, String> {
 }
 
 fn git_bytes(root: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(root)
-        .args(args)
+    let output = read_only_git_command(root, args)
         .output()
         .map_err(|error| format!("cannot execute git: {error}"))?;
     if output.status.success() {
@@ -137,6 +134,17 @@ fn git_bytes(root: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
     } else {
         stderr
     })
+}
+
+fn read_only_git_command(root: &Path, args: &[&str]) -> Command {
+    let mut command = Command::new("git");
+    command
+        .env("GIT_OPTIONAL_LOCKS", "0")
+        .arg("--no-optional-locks")
+        .arg("-C")
+        .arg(root)
+        .args(args);
+    command
 }
 
 fn git_text(root: &Path, args: &[&str]) -> Result<String, String> {
@@ -179,6 +187,22 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn inspect_git_commands_disable_optional_index_locks() {
+        let command = read_only_git_command(Path::new("repo"), &["status"]);
+        let optional_locks = command
+            .get_envs()
+            .find(|(key, _)| key.to_str() == Some("GIT_OPTIONAL_LOCKS"))
+            .and_then(|(_, value)| value)
+            .and_then(|value| value.to_str());
+        assert_eq!(optional_locks, Some("0"));
+        let args = command
+            .get_args()
+            .filter_map(|value| value.to_str())
+            .collect::<Vec<_>>();
+        assert_eq!(args.first().copied(), Some("--no-optional-locks"));
+    }
+
     fn git_ok(root: &Path, args: &[&str]) {
         let output = Command::new("git")
             .arg("-C")
@@ -191,6 +215,39 @@ mod tests {
             "git {} failed: {}",
             args.join(" "),
             String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn inspect_leaves_a_real_git_index_byte_identical() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        git_ok(root, &["init", "--quiet"]);
+        fs::write(root.join("tracked.txt"), "baseline\n").unwrap();
+        git_ok(root, &["add", "tracked.txt"]);
+        git_ok(
+            root,
+            &[
+                "-c",
+                "user.name=Rayman Tests",
+                "-c",
+                "user.email=rayman-tests@example.invalid",
+                "commit",
+                "--quiet",
+                "-m",
+                "baseline",
+            ],
+        );
+        let index = root.join(".git/index");
+        let index_before = fs::read(&index).unwrap();
+        fs::write(root.join("tracked.txt"), "baseline\n").unwrap();
+
+        let state = inspect(root);
+        assert_eq!(state.clean, Some(true), "state={state:?}");
+        assert_eq!(
+            fs::read(index).unwrap(),
+            index_before,
+            "read-only inspection must not refresh or rewrite the Git index"
         );
     }
 

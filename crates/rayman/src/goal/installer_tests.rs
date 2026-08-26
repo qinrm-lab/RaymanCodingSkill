@@ -153,8 +153,8 @@ fn decoy_gate_scripts_outside_the_reviewed_paths_mint_no_typed_proof() {
             ProofKind::RepositoryGate,
         ),
         (
-            "pwsh -NoProfile -File tools/verify-release-contract.ps1 -RequireSourceFresh",
-            "pwsh -NoProfile -File scripts/verify-release-contract.ps1 -RequireSourceFresh",
+            "pwsh -NoProfile -File tools/verify-release-contract.ps1 -CliPath cli -SkillPath skill -RequireSourceFresh",
+            "pwsh -NoProfile -File scripts/verify-release-contract.ps1 -CliPath cli -SkillPath skill -RequireSourceFresh",
             ProofKind::SourceFresh,
         ),
     ] {
@@ -203,6 +203,112 @@ fn authority_still_separates_reviewed_gate_scripts_from_decoys() {
     );
 }
 
+#[test]
+fn repository_authority_requires_the_full_script_parameter_set() {
+    let root = fixture();
+    for full in [
+        "pwsh -NoProfile -File scripts/check-repo.ps1",
+        "pwsh -NoProfile -File scripts/audit-repository.ps1 -CliPath cli -SkillPath skill",
+        "pwsh -NoProfile -File scripts/verify-release-contract.ps1 -CliPath cli -SkillPath skill",
+    ] {
+        assert!(
+            validate_authority_command(root.path(), full).is_ok(),
+            "full repository gate must remain authority: {full}"
+        );
+        assert_eq!(
+            validation_proof_kind(root.path(), full).unwrap(),
+            ProofKind::RepositoryGate,
+            "full repository gate must retain its typed proof: {full}"
+        );
+    }
+
+    let source_fresh = "pwsh -NoProfile -File scripts/verify-release-contract.ps1 -CliPath cli -SkillPath skill -RequireSourceFresh";
+    assert!(validate_authority_command(root.path(), source_fresh).is_ok());
+    assert_eq!(
+        validation_proof_kind(root.path(), source_fresh).unwrap(),
+        ProofKind::SourceFresh
+    );
+
+    for short_mode in [
+        "pwsh -NoProfile -File scripts/check-repo.ps1 unexpected",
+        "pwsh -NoProfile -File scripts/audit-repository.ps1",
+        "pwsh -NoProfile -File scripts/audit-repository.ps1 -SelfTest",
+        "pwsh -NoProfile -File scripts/audit-repository.ps1 -Self",
+        "pwsh -NoProfile -File scripts/audit-repository.ps1 -DependencyPolicyOnly",
+        "pwsh -NoProfile -File scripts/audit-repository.ps1 -PrepareAuditTools",
+        "pwsh -NoProfile -File scripts/verify-release-contract.ps1 -RequireSourceFresh",
+        "pwsh -NoProfile -File scripts/verify-release-contract.ps1 -SelfTest",
+        "pwsh -NoProfile -File scripts/verify-release-contract.ps1 -InspectSourceFreshInputs",
+    ] {
+        assert!(
+            validate_authority_command(root.path(), short_mode).is_err(),
+            "short/focused mode must not be authority: {short_mode}"
+        );
+        assert_eq!(
+            validation_proof_kind(root.path(), short_mode).unwrap(),
+            ProofKind::Generic,
+            "short/focused mode must not mint a typed proof: {short_mode}"
+        );
+        let parsed = parse_validation_command(short_mode).unwrap();
+        assert!(
+            !command_is_workspace_wide(root.path(), &parsed),
+            "short/focused mode must not claim workspace coverage: {short_mode}"
+        );
+    }
+}
+
+#[test]
+fn documentation_and_git_commit_proofs_require_canonical_semantics() {
+    let root = fixture();
+    for documentation in [
+        "python quick_validate.py",
+        "py -3 quick_validate.py --strict",
+        "markdownlint README.md",
+    ] {
+        assert_eq!(
+            validation_proof_kind(root.path(), documentation).unwrap(),
+            ProofKind::Documentation,
+            "canonical documentation command lost its typed proof: {documentation}"
+        );
+    }
+    for decoy in [
+        "python -c pass quick_validate.py",
+        "python -m fake quick_validate.py",
+        "markdownlint --version",
+        "markdownlint --help README.md",
+    ] {
+        assert_eq!(
+            validation_proof_kind(root.path(), decoy).unwrap(),
+            ProofKind::Generic,
+            "documentation decoy acquired a typed proof: {decoy}"
+        );
+    }
+
+    let clean =
+        parse_validation_command("git status --porcelain=v1 --untracked-files=all").unwrap();
+    assert_eq!(
+        validation_proof_kind(
+            root.path(),
+            "git status --porcelain=v1 --untracked-files=all"
+        )
+        .unwrap(),
+        ProofKind::GitCommit
+    );
+    assert_eq!(
+        validation_proof_kind(root.path(), "git rev-parse --verify HEAD").unwrap(),
+        ProofKind::Generic
+    );
+    assert!(validation_execution_proof(&clean, b"", b"", None).is_ok());
+    assert!(
+        validation_execution_proof(&clean, b" M src/lib.rs\n", b"", None).is_err(),
+        "dirty git status must not mint git_commit proof"
+    );
+    assert!(
+        validation_execution_proof(&clean, b"", b"warning\n", None).is_err(),
+        "ambiguous git diagnostics must fail closed"
+    );
+}
+
 /// The contract calls the authority gate "selector-free". Matching only on the
 /// presence of `--workspace` let a filtered run — which exits 0 while the rest
 /// of the suite is red — stand in for the whole suite.
@@ -224,6 +330,14 @@ fn narrowed_workspace_runs_are_not_whole_workspace_evidence() {
         "cargo build --workspace --exclude app",
         "cargo test --workspace -p app",
         "cargo test --workspace --package app",
+        "cargo test --workspace --lib",
+        "cargo test --workspace --bins",
+        "cargo test --workspace --tests",
+        "cargo test --workspace --doc",
+        "cargo test --workspace --no-run",
+        "cargo test --workspace --no-default-features",
+        "cargo test --workspace --features narrow",
+        "cargo test --workspace -Fnarrow",
         "cargo test --workspace -- --skip slow",
         "cargo test --workspace -- --ignored",
         "cargo test --workspace -- --exact my::test",

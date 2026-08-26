@@ -733,9 +733,25 @@ mod tests {
     use super::*;
     use crate::goal::{ConsultationTiming, PendingKind, PendingOwner, PendingSubmission};
 
-    fn activate(root: &Path) {
+    fn write_running_canonical_bundle(root: &Path) -> PathBuf {
         let skill = root.join("SKILL.md");
-        fs::write(&skill, "test skill\n").unwrap();
+        fs::write(&skill, include_bytes!("../assets/canonical-skill.md")).unwrap();
+        fs::write(
+            root.join("AGENT_CONTRACT.md"),
+            include_bytes!("../assets/canonical-agent-contract.md"),
+        )
+        .unwrap();
+        fs::create_dir_all(root.join("references")).unwrap();
+        fs::write(
+            root.join("references/workflow-contract.md"),
+            include_bytes!("../assets/canonical-workflow-contract.md"),
+        )
+        .unwrap();
+        skill
+    }
+
+    fn activate(root: &Path) {
+        let skill = write_running_canonical_bundle(root);
         crate::workspace::activate(root, &skill).unwrap();
     }
 
@@ -773,9 +789,7 @@ mod tests {
     }
 
     fn activate_running_canonical(root: &Path) {
-        let skill = root.join("SKILL.md");
-        fs::write(&skill, include_bytes!("../assets/canonical-skill.md")).unwrap();
-        crate::workspace::activate(root, &skill).unwrap();
+        activate(root);
     }
 
     fn drift_activation_identity(root: &Path) -> PathBuf {

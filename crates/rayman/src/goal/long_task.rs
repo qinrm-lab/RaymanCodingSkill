@@ -421,6 +421,9 @@ impl GoalStore {
         requirement_ids.retain(|value| !value.is_empty());
         requirement_ids.sort();
         requirement_ids.dedup();
+        if required && requirement_ids.is_empty() {
+            bail!("required work package 至少需要绑定一个 requirement");
+        }
         let path = self.goal_path(id)?;
         let _lock = acquire_state_lock(&path)?;
         let Some(mut goal) = Self::load_goal_file_for_update(&path)? else {
@@ -727,6 +730,26 @@ impl GoalStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn required_work_packages_cannot_be_empty_requirement_shells() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("README.md"), "base\n").unwrap();
+        let store = GoalStore::new(dir.path());
+        let goal = store
+            .start("packages", &[("deliver".into(), true)])
+            .unwrap();
+        assert!(
+            store
+                .add_work_package(&goal.id, "empty", "empty", None, Vec::new(), true)
+                .is_err()
+        );
+        assert!(
+            store
+                .add_work_package(&goal.id, "optional", "optional", None, Vec::new(), false)
+                .is_ok()
+        );
+    }
 
     #[test]
     fn work_packages_reject_cycles_and_progress_never_substitutes_validation() {

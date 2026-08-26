@@ -616,6 +616,48 @@ pub fn goal_gate_verdict_with_context(
     )
 }
 
+fn broad_required_package_error(goal: &Goal, broad_path_count: usize) -> Option<String> {
+    if broad_path_count < 12 {
+        return None;
+    }
+    let required = goal
+        .work_packages
+        .iter()
+        .filter(|package| package.required)
+        .collect::<Vec<_>>();
+    if required.is_empty() {
+        return Some(format!(
+            "broad goal covers {broad_path_count} paths but has no required work package"
+        ));
+    }
+    if let Some(package) = required
+        .iter()
+        .find(|package| package.requirement_ids.is_empty())
+    {
+        return Some(format!(
+            "required work package {} is not bound to any requirement",
+            package.id
+        ));
+    }
+    let covered = required
+        .iter()
+        .flat_map(|package| package.requirement_ids.iter().map(String::as_str))
+        .collect::<BTreeSet<_>>();
+    let missing = goal
+        .requirements
+        .iter()
+        .filter(|requirement| requirement.kind == RequirementKind::Must)
+        .filter(|requirement| !covered.contains(requirement.id.as_str()))
+        .map(|requirement| requirement.id.clone())
+        .collect::<Vec<_>>();
+    (!missing.is_empty()).then(|| {
+        format!(
+            "broad goal required packages do not cover must requirements: {}",
+            missing.join(", ")
+        )
+    })
+}
+
 fn goal_planning_gaps_with_context(goal: &Goal, decision: &GoalDecisionContext<'_>) -> Vec<String> {
     let Some(current) = decision.current() else {
         return vec!["当前 captured workspace snapshot 缺失".into()];
@@ -644,6 +686,13 @@ fn goal_planning_gaps_with_context(goal: &Goal, decision: &GoalDecisionContext<'
             "实际变更超出 plan: {}",
             delta.unplanned_changed_paths.join(", ")
         ));
+    }
+    let broad_path_count = delta
+        .actual_changed_paths
+        .len()
+        .max(delta.planned_changed_paths.len());
+    if let Some(error) = broad_required_package_error(goal, broad_path_count) {
+        gaps.push(error);
     }
     let mut validated = BTreeSet::new();
     for requirement in &goal.requirements {
@@ -1017,6 +1066,14 @@ impl Goal {
             return Some(error);
         }
         if let Some(error) = lane_ledger_error(self) {
+            return Some(error);
+        }
+        if self.status == GoalStatus::Success
+            && self.lifecycle == GoalLifecycle::Current
+            && let Some(error) = self.plan_receipts.first().and_then(|receipt| {
+                broad_required_package_error(self, receipt.effective_changed_paths().len())
+            })
+        {
             return Some(error);
         }
         if self.status == GoalStatus::Success

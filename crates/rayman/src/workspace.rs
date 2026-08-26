@@ -26,7 +26,20 @@ const ACTIVATION_RELATIVE: &str = "workspace_skill.yaml";
 const SKILL_NAME: &str = "raymancodingskill";
 const REBIND_COMMAND: &str = "rayman workspace rebind --yes";
 const CANONICAL_SKILL_BYTES: &[u8] = include_bytes!("../assets/canonical-skill.md");
+const CANONICAL_AGENT_CONTRACT_BYTES: &[u8] =
+    include_bytes!("../assets/canonical-agent-contract.md");
+const CANONICAL_WORKFLOW_CONTRACT_BYTES: &[u8] =
+    include_bytes!("../assets/canonical-workflow-contract.md");
 const ACTIVATION_FIELDS: &[&str] = &[
+    "skill",
+    "enabled",
+    "skill_file",
+    "skill_sha256",
+    "bundle_sha256",
+    "cli_contract",
+    "cli_version",
+];
+const LEGACY_ACTIVATION_FIELDS: &[&str] = &[
     "skill",
     "enabled",
     "skill_file",
@@ -55,6 +68,9 @@ pub struct WorkspaceActivationReport {
     pub running_cli_version: String,
     pub expected_sha256: Option<String>,
     pub actual_sha256: Option<String>,
+    pub expected_bundle_sha256: Option<String>,
+    pub actual_bundle_sha256: Option<String>,
+    pub running_bundle_sha256: String,
     pub issues: Vec<String>,
     pub rebind_eligible: bool,
     pub recovery_command: Option<String>,
@@ -70,6 +86,7 @@ pub struct CapturedActivationSkill {
     pub recorded_path: String,
     pub resolved_path: PathBuf,
     pub bytes: Option<Vec<u8>>,
+    pub bundle_sha256: Option<String>,
     pub error: Option<String>,
 }
 
@@ -232,6 +249,7 @@ struct SkillSnapshot {
     canonical: PathBuf,
     identity: FileIdentity,
     sha256: String,
+    bundle_sha256: String,
 }
 
 #[derive(Debug, Clone)]
@@ -1811,6 +1829,30 @@ fn empty_activation_metadata_probe() -> ActivationMetadataCapabilityProbe {
     }
 }
 
+/// Read-only activation metadata status. The action-specific staging probe is
+/// performed only when the CLI caller explicitly opts in.
+pub fn activation_metadata_probe_not_requested(root: &Path) -> ActivationMetadataCapabilityProbe {
+    let mut probe = empty_activation_metadata_probe();
+    let target = match state_paths::managed_state_file(root, Path::new(ACTIVATION_RELATIVE), false)
+    {
+        Ok(target) => target,
+        Err(error) => {
+            probe.error = Some(format!("{error:#}"));
+            return probe;
+        }
+    };
+    match fs::symlink_metadata(&target) {
+        Ok(metadata) if metadata.file_type().is_file() && !is_link_or_reparse(&metadata) => {
+            probe.applicable = activation_metadata_platform_supported();
+            probe.target = Some(display_path(&target));
+        }
+        Ok(_) => probe.error = Some("activation target is not an ordinary file".into()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => probe.error = Some(error.to_string()),
+    }
+    probe
+}
+
 fn activation_probe_os_error(error: &anyhow::Error) -> Option<i32> {
     error.chain().find_map(|cause| {
         cause
@@ -3349,13 +3391,13 @@ fn ensure_ordinary_skill_path(path: &Path) -> Result<fs::Metadata> {
     final_metadata.ok_or_else(|| anyhow::anyhow!("skill_file 路径为空"))
 }
 
-fn read_skill_path_bytes(path: &Path) -> Result<(PathBuf, Vec<u8>, FileIdentity)> {
+fn read_ordinary_path_bytes(path: &Path, label: &str) -> Result<(PathBuf, Vec<u8>, FileIdentity)> {
     ensure_ordinary_skill_path(path)?;
     let before_canonical = path
         .canonicalize()
         .with_context(|| format!("无法规范化 skill_file: {}", display_path(path)))?;
     ensure_ordinary_skill_path(&before_canonical)?;
-    let (bytes, identity) = read_handle_bound_file(path, "skill_file")?;
+    let (bytes, identity) = read_handle_bound_file(path, label)?;
     let after_canonical = path
         .canonicalize()
         .with_context(|| format!("无法复查 skill_file: {}", display_path(path)))?;
@@ -3365,13 +3407,84 @@ fn read_skill_path_bytes(path: &Path) -> Result<(PathBuf, Vec<u8>, FileIdentity)
     Ok((before_canonical, bytes, identity))
 }
 
+fn read_skill_path_bytes(path: &Path) -> Result<(PathBuf, Vec<u8>, FileIdentity)> {
+    read_ordinary_path_bytes(path, "skill_file")
+}
+
+fn bundle_sha256(skill: &[u8], agent_contract: &[u8], workflow_contract: &[u8]) -> String {
+    let mut input = b"rayman.skill-bundle.v1\0".to_vec();
+    for (role, bytes) in [
+        ("skill", skill),
+        ("agent_contract", agent_contract),
+        ("workflow_contract", workflow_contract),
+    ] {
+        input.extend_from_slice(role.as_bytes());
+        input.push(0);
+        input.extend_from_slice(&(bytes.len() as u64).to_le_bytes());
+        input.extend_from_slice(bytes);
+    }
+    sha256_bytes(&input)
+}
+
+pub fn running_canonical_skill_bundle_sha256() -> String {
+    bundle_sha256(
+        CANONICAL_SKILL_BYTES,
+        CANONICAL_AGENT_CONTRACT_BYTES,
+        CANONICAL_WORKFLOW_CONTRACT_BYTES,
+    )
+}
+
+fn bundle_resource_paths(skill_canonical: &Path) -> Result<(PathBuf, PathBuf)> {
+    let root = skill_canonical
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("canonical SKILL.md has no parent directory"))?;
+    let source_contract = root.join("AGENT_CONTRACT.md");
+    let deployed_contract = root.join("AGENTS.md");
+    let agent_contract = match fs::symlink_metadata(&source_contract) {
+        Ok(_) => source_contract,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => deployed_contract,
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!(
+                    "无法读取 agent contract 路径: {}",
+                    display_path(&source_contract)
+                )
+            });
+        }
+    };
+    Ok((agent_contract, root.join("references/workflow-contract.md")))
+}
+
+fn inspect_bundle_bytes(skill_canonical: &Path, skill_bytes: &[u8]) -> Result<String> {
+    let (agent_path, workflow_path) = bundle_resource_paths(skill_canonical)?;
+    let (agent_canonical, agent_bytes, agent_identity) =
+        read_ordinary_path_bytes(&agent_path, "agent contract")?;
+    let (workflow_canonical, workflow_bytes, workflow_identity) =
+        read_ordinary_path_bytes(&workflow_path, "workflow contract")?;
+    let agent_recheck = read_ordinary_path_bytes(&agent_path, "agent contract recheck")?;
+    let workflow_recheck = read_ordinary_path_bytes(&workflow_path, "workflow contract recheck")?;
+    if agent_recheck != (agent_canonical, agent_bytes.clone(), agent_identity)
+        || workflow_recheck
+            != (
+                workflow_canonical,
+                workflow_bytes.clone(),
+                workflow_identity,
+            )
+    {
+        bail!("skill bundle resource changed during identity capture");
+    }
+    Ok(bundle_sha256(skill_bytes, &agent_bytes, &workflow_bytes))
+}
+
 fn inspect_skill_path(path: &Path) -> Result<SkillSnapshot> {
     let (canonical, bytes, identity) = read_skill_path_bytes(path)?;
+    let bundle_sha256 = inspect_bundle_bytes(&canonical, &bytes)?;
     Ok(SkillSnapshot {
         path: path.to_path_buf(),
         canonical,
         identity,
         sha256: sha256_bytes(&bytes),
+        bundle_sha256,
     })
 }
 fn inspect_skill_file(root: &Path, recorded: &str) -> Result<SkillSnapshot> {
@@ -3380,6 +3493,13 @@ fn inspect_skill_file(root: &Path, recorded: &str) -> Result<SkillSnapshot> {
 fn complete_activation(fields: &BTreeMap<String, String>) -> bool {
     fields.len() == ACTIVATION_FIELDS.len()
         && ACTIVATION_FIELDS
+            .iter()
+            .all(|field| fields.contains_key(*field))
+}
+
+fn complete_legacy_activation(fields: &BTreeMap<String, String>) -> bool {
+    fields.len() == LEGACY_ACTIVATION_FIELDS.len()
+        && LEGACY_ACTIVATION_FIELDS
             .iter()
             .all(|field| fields.contains_key(*field))
 }
@@ -3544,6 +3664,13 @@ fn is_valid_cli_version(value: &str) -> bool {
 }
 
 fn has_valid_recorded_identity(fields: &BTreeMap<String, String>) -> bool {
+    has_valid_legacy_recorded_identity(fields)
+        && fields
+            .get("bundle_sha256")
+            .is_some_and(|value| is_valid_sha256(value))
+}
+
+fn has_valid_legacy_recorded_identity(fields: &BTreeMap<String, String>) -> bool {
     fields
         .get("skill_sha256")
         .is_some_and(|value| is_valid_sha256(value))
@@ -3555,10 +3682,17 @@ fn has_valid_recorded_identity(fields: &BTreeMap<String, String>) -> bool {
             .is_some_and(|value| is_valid_cli_version(value))
 }
 
-fn identity_drifted(fields: &BTreeMap<String, String>, actual_sha256: &str) -> bool {
+fn identity_drifted(
+    fields: &BTreeMap<String, String>,
+    actual_sha256: &str,
+    actual_bundle_sha256: &str,
+) -> bool {
     fields
         .get("skill_sha256")
         .is_none_or(|expected| !expected.eq_ignore_ascii_case(actual_sha256))
+        || fields
+            .get("bundle_sha256")
+            .is_none_or(|expected| !expected.eq_ignore_ascii_case(actual_bundle_sha256))
         || fields
             .get("cli_contract")
             .is_none_or(|value| value != crate::CLI_CONTRACT)
@@ -3582,20 +3716,34 @@ pub(crate) fn capture_activation_skill(
     }
     let resolved_path = resolve_skill_file(root, &recorded_path);
     match read_skill_path_bytes(&resolved_path) {
-        Ok((_canonical, bytes, identity)) => Ok(Some((
-            CapturedActivationSkill {
-                recorded_path,
-                resolved_path,
-                bytes: Some(bytes),
-                error: None,
-            },
-            Some(identity),
-        ))),
+        Ok((canonical, bytes, identity)) => match inspect_bundle_bytes(&canonical, &bytes) {
+            Ok(bundle_sha256) => Ok(Some((
+                CapturedActivationSkill {
+                    recorded_path,
+                    resolved_path,
+                    bytes: Some(bytes),
+                    bundle_sha256: Some(bundle_sha256),
+                    error: None,
+                },
+                Some(identity),
+            ))),
+            Err(error) => Ok(Some((
+                CapturedActivationSkill {
+                    recorded_path,
+                    resolved_path,
+                    bytes: None,
+                    bundle_sha256: None,
+                    error: Some(format!("skill bundle: {error:#}")),
+                },
+                None,
+            ))),
+        },
         Err(error) => Ok(Some((
             CapturedActivationSkill {
                 recorded_path,
                 resolved_path,
                 bytes: None,
+                bundle_sha256: None,
                 error: Some(format!("{error:#}")),
             },
             None,
@@ -3644,6 +3792,9 @@ pub fn activation_status_from_capture(
             skill: None,
             skill_file: None,
             expected_sha256: None,
+            expected_bundle_sha256: None,
+            actual_bundle_sha256: None,
+            running_bundle_sha256: running_canonical_skill_bundle_sha256(),
             cli_contract: None,
             cli_version: None,
             running_cli_contract: crate::CLI_CONTRACT.into(),
@@ -3668,6 +3819,7 @@ pub fn activation_status_from_capture(
     let enabled = enabled_value == Some("true");
     let skill_file = fields.get("skill_file").cloned();
     let expected_sha256 = fields.get("skill_sha256").cloned();
+    let expected_bundle_sha256 = fields.get("bundle_sha256").cloned();
     let mut issues = Vec::new();
     let cli_contract = fields.get("cli_contract").cloned();
     let cli_version = fields.get("cli_version").cloned();
@@ -3727,6 +3879,17 @@ pub fn activation_status_from_capture(
         issues.push("缺少 skill_file".into());
         None
     };
+    let actual_bundle_sha256 = skill_file.as_deref().and_then(|value| {
+        let expected_path = resolve_skill_file(&root, value);
+        captured_skill
+            .filter(|observation| {
+                observation.recorded_path == value
+                    && observation.resolved_path == expected_path
+                    && observation.bytes.is_some()
+                    && observation.error.is_none()
+            })
+            .and_then(|observation| observation.bundle_sha256.clone())
+    });
     match (expected_sha256.as_deref(), actual_sha256.as_deref()) {
         (Some(expected), Some(actual))
             if expected.len() == 64
@@ -3738,20 +3901,40 @@ pub fn activation_status_from_capture(
         (None, _) => issues.push("缺少 skill_sha256".into()),
         _ => {}
     }
-    let structurally_rebindable = complete_activation(&fields)
+    match (
+        expected_bundle_sha256.as_deref(),
+        actual_bundle_sha256.as_deref(),
+    ) {
+        (Some(expected), Some(actual))
+            if is_valid_sha256(expected) && expected.eq_ignore_ascii_case(actual) => {}
+        (Some(_), Some(_)) => {
+            issues.push("bundle_sha256 与 skill 委托的 contract bundle 当前内容不一致".into())
+        }
+        (None, _) => issues.push("缺少 bundle_sha256（运行 workspace rebind --yes 迁移）".into()),
+        _ => {}
+    }
+    let identity_shape_valid = (complete_activation(&fields)
+        && has_valid_recorded_identity(&fields))
+        || (complete_legacy_activation(&fields) && has_valid_legacy_recorded_identity(&fields));
+    let structurally_rebindable = identity_shape_valid
         && fields.get("skill").is_some_and(|value| value == SKILL_NAME)
         && fields.get("enabled").is_some_and(|value| value == "true")
         && skill_file.as_deref().is_some_and(safe_recorded_skill_file)
-        && has_valid_recorded_identity(&fields)
-        && actual_sha256.is_some();
-    let identity_drift = actual_sha256
-        .as_deref()
-        .is_some_and(|sha256| identity_drifted(&fields, sha256));
-    let matches_running_canonical = actual_sha256
-        .as_deref()
-        .is_some_and(|sha256| sha256 == running_canonical_skill_sha256());
-    if structurally_rebindable && identity_drift && !matches_running_canonical {
-        issues.push("skill_file 当前内容与此 CLI 内嵌的 canonical SKILL.md 不一致".into());
+        && actual_sha256.is_some()
+        && actual_bundle_sha256.is_some();
+    let identity_drift = actual_sha256.as_deref().is_some_and(|sha256| {
+        actual_bundle_sha256
+            .as_deref()
+            .is_some_and(|bundle| identity_drifted(&fields, sha256, bundle))
+    });
+    let matches_running_canonical = actual_sha256.as_deref().is_some_and(|sha256| {
+        sha256 == running_canonical_skill_sha256()
+            && actual_bundle_sha256
+                .as_deref()
+                .is_some_and(|bundle| bundle == running_canonical_skill_bundle_sha256())
+    });
+    if structurally_rebindable && !matches_running_canonical {
+        issues.push("skill_file 或委托 contract 与此 CLI 内嵌 canonical bundle 不一致".into());
     }
     let active = enabled && issues.is_empty();
     let status = if active {
@@ -3776,6 +3959,9 @@ pub fn activation_status_from_capture(
         skill_file,
         expected_sha256,
         actual_sha256,
+        expected_bundle_sha256,
+        actual_bundle_sha256,
+        running_bundle_sha256: running_canonical_skill_bundle_sha256(),
         cli_contract,
         cli_version,
         running_cli_contract: crate::CLI_CONTRACT.into(),
@@ -3829,8 +4015,9 @@ fn prepare_activation(root: &Path, skill_file: &Path) -> Result<PreparedActivati
         bail!("skill_file 路径不是 activate 可生成的安全规范形式");
     }
     let config = format!(
-        "skill: {SKILL_NAME}\nenabled: true\nskill_file: {recorded_path}\nskill_sha256: {}\ncli_contract: {}\ncli_version: {}\n",
+        "skill: {SKILL_NAME}\nenabled: true\nskill_file: {recorded_path}\nskill_sha256: {}\nbundle_sha256: {}\ncli_contract: {}\ncli_version: {}\n",
         skill.sha256,
+        skill.bundle_sha256,
         crate::CLI_CONTRACT,
         crate::CLI_VERSION
     );
@@ -3851,6 +4038,7 @@ fn verify_prepared_activation(
         || report.skill.as_deref() != Some(SKILL_NAME)
         || report.skill_file.as_deref() != Some(prepared.recorded_path.as_str())
         || report.expected_sha256.as_deref() != Some(prepared.skill.sha256.as_str())
+        || report.expected_bundle_sha256.as_deref() != Some(prepared.skill.bundle_sha256.as_str())
         || report.cli_contract.as_deref() != Some(crate::CLI_CONTRACT)
         || report.cli_version.as_deref() != Some(crate::CLI_VERSION)
     {
@@ -4112,8 +4300,8 @@ fn load_rebind(root: &Path) -> Result<LoadedRebind> {
     let text =
         std::str::from_utf8(&original_bytes).context("workspace_skill.yaml 必须是有效 UTF-8")?;
     let fields = parse_activation(text)?;
-    if !complete_activation(&fields) {
-        bail!("workspace rebind 只接受完整六字段激活合同");
+    if !complete_activation(&fields) && !complete_legacy_activation(&fields) {
+        bail!("workspace rebind 只接受完整 bundle 合同或可迁移的旧六字段激活合同");
     }
     if fields.get("skill").is_none_or(|value| value != SKILL_NAME) {
         bail!("workspace rebind 只接受 skill: {SKILL_NAME}");
@@ -4121,7 +4309,12 @@ fn load_rebind(root: &Path) -> Result<LoadedRebind> {
     if fields.get("enabled").is_none_or(|value| value != "true") {
         bail!("workspace rebind 只接受 enabled: true");
     }
-    if !has_valid_recorded_identity(&fields) {
+    let recorded_identity_valid = if complete_activation(&fields) {
+        has_valid_recorded_identity(&fields)
+    } else {
+        has_valid_legacy_recorded_identity(&fields)
+    };
+    if !recorded_identity_valid {
         bail!("workspace rebind 拒绝格式无效的旧身份字段");
     }
     let skill_file = fields
@@ -4132,10 +4325,12 @@ fn load_rebind(root: &Path) -> Result<LoadedRebind> {
         bail!("workspace rebind 拒绝无法原样安全写回的 skill_file");
     }
     let skill = inspect_skill_file(root, &skill_file)?;
-    if skill.sha256 != running_canonical_skill_sha256() {
-        bail!("skill_file 当前内容与此 CLI 内嵌的 canonical SKILL.md 不一致");
+    if skill.sha256 != running_canonical_skill_sha256()
+        || skill.bundle_sha256 != running_canonical_skill_bundle_sha256()
+    {
+        bail!("skill_file 或其委托 contract bundle 与此 CLI 内嵌 canonical bundle 不一致");
     }
-    let changed = identity_drifted(&fields, &skill.sha256);
+    let changed = identity_drifted(&fields, &skill.sha256, &skill.bundle_sha256);
     Ok(LoadedRebind {
         config_path,
         original_bytes,
@@ -4162,12 +4357,13 @@ fn ensure_rebind_inputs_unchanged(root: &Path, loaded: &LoadedRebind) -> Result<
     Ok(())
 }
 
-fn replace_identity_scalar(line: &str, skill_sha256: &str) -> String {
+fn replace_identity_scalar(line: &str, skill_sha256: &str, bundle_sha256: &str) -> String {
     let Some((key, raw_value)) = line.split_once(':') else {
         return line.to_string();
     };
     let replacement = match key.trim() {
         "skill_sha256" => skill_sha256,
+        "bundle_sha256" => bundle_sha256,
         "cli_contract" => crate::CLI_CONTRACT,
         "cli_version" => crate::CLI_VERSION,
         _ => return line.to_string(),
@@ -4187,8 +4383,21 @@ fn replace_identity_scalar(line: &str, skill_sha256: &str) -> String {
     format!("{key}:{leading}{replacement}{trailing}")
 }
 
-fn rewrite_rebind_contract(original: &str, skill_sha256: &str) -> String {
-    let mut rewritten = String::with_capacity(original.len());
+fn rewrite_rebind_contract(original: &str, skill_sha256: &str, bundle_sha256: &str) -> String {
+    let mut rewritten = String::with_capacity(original.len() + 80);
+    let bundle_present = original.lines().any(|line| {
+        line.split_once(':')
+            .is_some_and(|(key, _)| key.trim() == "bundle_sha256")
+    });
+    let skill_hash_present = original.lines().any(|line| {
+        line.split_once(':')
+            .is_some_and(|(key, _)| key.trim() == "skill_sha256")
+    });
+    let preferred_ending = if original.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
     for segment in original.split_inclusive('\n') {
         let (line, ending) = if let Some(line) = segment.strip_suffix("\r\n") {
             (line, "\r\n")
@@ -4197,8 +4406,29 @@ fn rewrite_rebind_contract(original: &str, skill_sha256: &str) -> String {
         } else {
             (segment, "")
         };
-        rewritten.push_str(&replace_identity_scalar(line, skill_sha256));
+        let key = line.split_once(':').map(|(key, _)| key.trim());
+        rewritten.push_str(&replace_identity_scalar(line, skill_sha256, bundle_sha256));
         rewritten.push_str(ending);
+        if !bundle_present && key == Some("skill_sha256") {
+            if ending.is_empty() {
+                rewritten.push_str(preferred_ending);
+            }
+            rewritten.push_str("bundle_sha256: ");
+            rewritten.push_str(bundle_sha256);
+            rewritten.push_str(if ending.is_empty() {
+                preferred_ending
+            } else {
+                ending
+            });
+        }
+    }
+    if !bundle_present && !skill_hash_present {
+        if !rewritten.is_empty() && !rewritten.ends_with(['\r', '\n']) {
+            rewritten.push_str(preferred_ending);
+        }
+        rewritten.push_str("bundle_sha256: ");
+        rewritten.push_str(bundle_sha256);
+        rewritten.push_str(preferred_ending);
     }
     rewritten
 }
@@ -4214,6 +4444,7 @@ fn verify_rebind_publication(
         || report.skill.as_deref() != Some(SKILL_NAME)
         || report.skill_file.as_deref() != Some(loaded.skill_file.as_str())
         || report.expected_sha256.as_deref() != Some(loaded.skill.sha256.as_str())
+        || report.expected_bundle_sha256.as_deref() != Some(loaded.skill.bundle_sha256.as_str())
         || report.cli_contract.as_deref() != Some(crate::CLI_CONTRACT)
         || report.cli_version.as_deref() != Some(crate::CLI_VERSION)
     {
@@ -4444,7 +4675,11 @@ where
     ensure_rebind_inputs_unchanged(&root, &loaded)?;
     let original_text =
         std::str::from_utf8(&loaded.original_bytes).context("原激活合同不是有效 UTF-8")?;
-    let published = rewrite_rebind_contract(original_text, &loaded.skill.sha256);
+    let published = rewrite_rebind_contract(
+        original_text,
+        &loaded.skill.sha256,
+        &loaded.skill.bundle_sha256,
+    );
     let transaction = ActivationTransaction::open(&loaded.config_path)?;
     let stage_result = create_owned_activation_temp(
         &transaction,
@@ -5020,6 +5255,18 @@ mod tests {
 
     fn write_running_canonical_skill(path: &Path) {
         fs::write(path, CANONICAL_SKILL_BYTES).unwrap();
+        let root = path.parent().unwrap();
+        fs::write(
+            root.join("AGENT_CONTRACT.md"),
+            CANONICAL_AGENT_CONTRACT_BYTES,
+        )
+        .unwrap();
+        fs::create_dir_all(root.join("references")).unwrap();
+        fs::write(
+            root.join("references/workflow-contract.md"),
+            CANONICAL_WORKFLOW_CONTRACT_BYTES,
+        )
+        .unwrap();
     }
 
     fn no_transaction_hook(_: ActivationTransactionPhase, _: &Path, _: &Path) -> Result<()> {
@@ -5252,7 +5499,7 @@ mod tests {
     fn activation_is_hash_bound_and_deactivation_is_explicit() {
         let root = tempfile::tempdir().unwrap();
         let skill = root.path().join("SKILL.md");
-        fs::write(&skill, "canonical skill\n").unwrap();
+        write_running_canonical_skill(&skill);
         assert!(activate(root.path(), &skill).unwrap().active);
 
         fs::write(&skill, "changed skill\n").unwrap();
@@ -5266,10 +5513,55 @@ mod tests {
     }
 
     #[test]
+    fn activation_bundle_binds_delegated_contracts_and_migrates_legacy_six_fields() {
+        let root = tempfile::tempdir().unwrap();
+        let skill = root.path().join("SKILL.md");
+        write_running_canonical_skill(&skill);
+        let active = activate(root.path(), &skill).unwrap();
+        assert!(active.active);
+        let running_bundle = running_canonical_skill_bundle_sha256();
+        assert_eq!(
+            active.actual_bundle_sha256.as_deref(),
+            Some(running_bundle.as_str())
+        );
+
+        let agent_contract = root.path().join("AGENT_CONTRACT.md");
+        fs::write(&agent_contract, "weakened contract\n").unwrap();
+        let drifted = activation_status(root.path()).unwrap();
+        assert!(!drifted.active);
+        assert!(
+            drifted
+                .issues
+                .iter()
+                .any(|issue| issue.contains("bundle_sha256"))
+        );
+        fs::write(&agent_contract, CANONICAL_AGENT_CONTRACT_BYTES).unwrap();
+
+        let binding = root.path().join(".RaymanCodingSkill/workspace_skill.yaml");
+        let legacy = fs::read_to_string(&binding)
+            .unwrap()
+            .lines()
+            .filter(|line| !line.starts_with("bundle_sha256:"))
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n";
+        fs::write(&binding, legacy).unwrap();
+        let legacy_status = activation_status(root.path()).unwrap();
+        assert!(!legacy_status.active);
+        assert!(legacy_status.rebind_eligible);
+        assert!(rebind(root.path()).unwrap().activation.active);
+        assert!(
+            fs::read_to_string(&binding)
+                .unwrap()
+                .contains("bundle_sha256:")
+        );
+    }
+
+    #[test]
     fn activation_enabled_value_is_exact_and_false_is_inactive() {
         let root = tempfile::tempdir().unwrap();
         let skill = root.path().join("SKILL.md");
-        fs::write(&skill, "canonical skill\n").unwrap();
+        write_running_canonical_skill(&skill);
         assert!(activate(root.path(), &skill).unwrap().active);
 
         let activation = root.path().join(".RaymanCodingSkill/workspace_skill.yaml");
@@ -5497,8 +5789,9 @@ mod tests {
         assert!(rebound.changed);
         assert!(rebound.activation.active);
         let expected = format!(
-            "# preserve this comment\r\ncli_version : '{}'\r\nskill_file: \"SKILL.md\"\r\nskill: raymancodingskill\r\nenabled: true\r\nskill_sha256 :  {current_hash}  \r\ncli_contract: \"{}\"\r\n# preserve final comment",
+            "# preserve this comment\r\ncli_version : '{}'\r\nskill_file: \"SKILL.md\"\r\nskill: raymancodingskill\r\nenabled: true\r\nskill_sha256 :  {current_hash}  \r\nbundle_sha256: {}\r\ncli_contract: \"{}\"\r\n# preserve final comment",
             crate::CLI_VERSION,
+            running_canonical_skill_bundle_sha256(),
             crate::CLI_CONTRACT,
         );
         assert_eq!(fs::read_to_string(&binding).unwrap(), expected);
@@ -5508,6 +5801,7 @@ mod tests {
     fn rebind_refuses_untrusted_same_path_skill_content() {
         let root = tempfile::tempdir().unwrap();
         let skill = root.path().join("SKILL.md");
+        write_running_canonical_skill(&skill);
         fs::write(&skill, "not the skill embedded in this CLI\n").unwrap();
         let binding = write_test_binding(
             root.path(),
@@ -6361,6 +6655,7 @@ mod tests {
     fn install_bind_rejects_noncanonical_skill_without_creating_a_binding() {
         let root = tempfile::tempdir().unwrap();
         let skill = root.path().join("SKILL.md");
+        write_running_canonical_skill(&skill);
         fs::write(&skill, "not the embedded canonical skill\n").unwrap();
 
         let error = install_bind(root.path(), &skill).unwrap_err().to_string();

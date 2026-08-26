@@ -26,10 +26,29 @@ struct Output {
 
 fn current_activation_contract(skill_hash: &str) -> String {
     format!(
-        "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\ncli_contract: {}\ncli_version: {}\n",
+        "skill: raymancodingskill\nenabled: true\nskill_file: SKILL.md\nskill_sha256: {skill_hash}\nbundle_sha256: {}\ncli_contract: {}\ncli_version: {}\n",
+        rayman::workspace::running_canonical_skill_bundle_sha256(),
         rayman::CLI_CONTRACT,
         rayman::CLI_VERSION,
     )
+}
+
+fn write_canonical_bundle(root: &Path) {
+    write(
+        root,
+        "SKILL.md",
+        std::str::from_utf8(include_bytes!("../assets/canonical-skill.md")).unwrap(),
+    );
+    write(
+        root,
+        "AGENT_CONTRACT.md",
+        std::str::from_utf8(include_bytes!("../assets/canonical-agent-contract.md")).unwrap(),
+    );
+    write(
+        root,
+        "references/workflow-contract.md",
+        std::str::from_utf8(include_bytes!("../assets/canonical-workflow-contract.md")).unwrap(),
+    );
 }
 
 /// 在 `dir` 下运行 `rayman <args...>`，返回退出码与输出。
@@ -922,7 +941,17 @@ fn activate_rebind_fixture(root: &Path) -> std::path::PathBuf {
     write(
         root,
         "skill-fixtures/canonical SKILL.md",
-        "canonical skill before upgrade\n",
+        std::str::from_utf8(include_bytes!("../assets/canonical-skill.md")).unwrap(),
+    );
+    write(
+        root,
+        "skill-fixtures/AGENT_CONTRACT.md",
+        std::str::from_utf8(include_bytes!("../assets/canonical-agent-contract.md")).unwrap(),
+    );
+    write(
+        root,
+        "skill-fixtures/references/workflow-contract.md",
+        std::str::from_utf8(include_bytes!("../assets/canonical-workflow-contract.md")).unwrap(),
     );
     let activated = run_raw(
         root,
@@ -1709,7 +1738,7 @@ fn release_check_reports_workspace_scope_not_installed_release_contract() {
 fn doctor_verifies_installed_identity_in_an_ordinary_managed_workspace() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    write(root, "SKILL.md", "ordinary workspace canonical skill\n");
+    write_canonical_bundle(root);
     let skill_hash = rayman::hash::sha256_file(&root.join("SKILL.md")).unwrap();
     write(
         root,
@@ -1759,7 +1788,7 @@ fn doctor_verifies_installed_identity_in_an_ordinary_managed_workspace() {
 fn doctor_rejects_an_earlier_windows_path_wrapper() {
     let workspace = tempfile::tempdir().unwrap();
     let root = workspace.path();
-    write(root, "SKILL.md", "ordinary workspace canonical skill\n");
+    write_canonical_bundle(root);
     let skill_hash = rayman::hash::sha256_file(&root.join("SKILL.md")).unwrap();
     write(
         root,
@@ -1790,7 +1819,7 @@ fn doctor_rejects_an_earlier_windows_path_wrapper() {
 fn doctor_and_workspace_inspect_report_distinct_write_probes() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    write(root, "SKILL.md", "ordinary workspace canonical skill\n");
+    write_canonical_bundle(root);
     let skill_hash = rayman::hash::sha256_file(&root.join("SKILL.md")).unwrap();
     let activation_path = root.join(".RaymanCodingSkill/workspace_skill.yaml");
     write(
@@ -1810,9 +1839,22 @@ fn doctor_and_workspace_inspect_report_distinct_write_probes() {
     );
     let report: Value = serde_json::from_str(&doctor.stdout).unwrap();
     assert_eq!(report["state_write"]["state_dir_present"], true);
+    assert_eq!(report["state_write"]["probed"], false);
+    assert_eq!(report["state_write"]["writable"], false);
+    assert_eq!(report["activation_metadata"]["applicable"], true);
+    assert_eq!(report["activation_metadata"]["probed"], false);
+    assert_eq!(report["activation_metadata"]["ready"], false);
+
+    let doctor_probe = run_with_path(
+        root,
+        &["--format", "json", "doctor", "--probe-writes"],
+        &[binary_dir],
+        None,
+    );
+    assert_eq!(doctor_probe.status, 0, "{}", doctor_probe.stderr);
+    let report: Value = serde_json::from_str(&doctor_probe.stdout).unwrap();
     assert_eq!(report["state_write"]["probed"], true);
     assert_eq!(report["state_write"]["writable"], true);
-    assert_eq!(report["activation_metadata"]["applicable"], true);
     assert_eq!(report["activation_metadata"]["probed"], true);
     assert_eq!(report["activation_metadata"]["ready"], true);
     assert_eq!(
@@ -1823,6 +1865,15 @@ fn doctor_and_workspace_inspect_report_distinct_write_probes() {
     assert_eq!(report["activation_metadata"]["cleanup_complete"], true);
 
     let inspect = run_raw(root, &["--format", "json", "workspace", "inspect"]);
+    assert_eq!(inspect.status, 0, "{}", inspect.stderr);
+    let inspect: Value = serde_json::from_str(&inspect.stdout).unwrap();
+    assert_eq!(inspect["state_write"]["probed"], false);
+    assert_eq!(inspect["activation_metadata"]["probed"], false);
+
+    let inspect = run_raw(
+        root,
+        &["--format", "json", "workspace", "inspect", "--probe-writes"],
+    );
     assert_eq!(inspect.status, 0, "{}", inspect.stderr);
     let inspect: Value = serde_json::from_str(&inspect.stdout).unwrap();
     assert_eq!(inspect["state_write"]["probed"], true);
@@ -1840,7 +1891,10 @@ fn doctor_and_workspace_inspect_report_distinct_write_probes() {
         "workspace status must remain the activation report only"
     );
 
-    let inspect_en = run_raw(root, &["--language", "en", "workspace", "inspect"]);
+    let inspect_en = run_raw(
+        root,
+        &["--language", "en", "workspace", "inspect", "--probe-writes"],
+    );
     assert_eq!(inspect_en.status, 0, "{}", inspect_en.stderr);
     assert!(
         inspect_en.stdout.contains("state-write probe: writable"),
@@ -1885,7 +1939,7 @@ fn doctor_and_workspace_inspect_report_distinct_write_probes() {
 fn doctor_check_rejects_an_unsatisfied_untrusted_context_requirement_without_changing_identity() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    write(root, "SKILL.md", "ordinary workspace canonical skill\n");
+    write_canonical_bundle(root);
     let skill_hash = rayman::hash::sha256_file(&root.join("SKILL.md")).unwrap();
     write(
         root,
@@ -1930,7 +1984,7 @@ fn doctor_check_rejects_an_unsatisfied_untrusted_context_requirement_without_cha
 fn doctor_profile_requirement_uses_the_token_profile_not_userprofile() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    write(root, "SKILL.md", "ordinary workspace canonical skill\n");
+    write_canonical_bundle(root);
     let skill_hash = rayman::hash::sha256_file(&root.join("SKILL.md")).unwrap();
     write(
         root,
@@ -2099,6 +2153,10 @@ fn standard_check_does_not_change_state_tree() {
         &["goal", "start", "docs update", "--must", "record evidence"],
     );
     let goals = run_json(root, &["goal", "list"]);
+    assert!(goals[0].get("baseline").is_none());
+    assert_eq!(goals[0]["schema"], "rayman.goal-compact.v1");
+    assert!(goals[0]["baseline_files"].as_u64().is_some());
+    assert!(goals[0]["requirements"].as_u64().is_some());
     let id = goals[0]["id"].as_str().unwrap();
     run(
         root,
@@ -4854,6 +4912,10 @@ fn goal_lifecycle_preserves_history_without_hiding_unfinished_work() {
 
     let restored = run_json(root, &["goal", "current", old_id]);
     assert_eq!(restored["lifecycle"], "current");
+    assert_eq!(restored["schema"], "rayman.goal-compact.v1");
+    assert!(restored.get("baseline").is_none());
+    assert!(restored.get("validation_receipts").is_none());
+    assert!(restored["baseline_files"].as_u64().is_some());
     assert_eq!(
         run(root, &["check", "--profile", "standard", "--goal", old_id]).status,
         1
@@ -5155,6 +5217,21 @@ fn checkpoint_verify_state_audit_and_recursive_temp_status_are_exposed_by_cli() 
 
     let clean_audit = run_json(root, &["state", "audit", "--check"]);
     assert_eq!(clean_audit["clean"], true);
+    assert_eq!(clean_audit["operationally_healthy"], true);
+    write(
+        root,
+        ".RaymanCodingSkill/.pending.json.rayman-1234-7.tmp",
+        "",
+    );
+    let recovery_warning = run_json(root, &["state", "audit", "--check"]);
+    assert_eq!(recovery_warning["clean"], true);
+    assert_eq!(recovery_warning["operationally_healthy"], false);
+    assert!(
+        recovery_warning["recovery_warnings"]
+            .as_array()
+            .is_some_and(|warnings| !warnings.is_empty())
+    );
+    std::fs::remove_file(root.join(".RaymanCodingSkill/.pending.json.rayman-1234-7.tmp")).unwrap();
     write(root, ".RaymanCodingSkill/research/retired.json", "{}");
     let blocked_audit = run(root, &["state", "audit", "--check"]);
     assert_eq!(blocked_audit.status, 1);
@@ -5496,6 +5573,21 @@ fn workspace_activation_is_explicit_and_orphan_state_fails_closed() {
         ],
     );
     assert_eq!(activated.status, 0, "{}", activated.stderr);
+    let active = run_json(root, &["workspace", "status"]);
+    assert_eq!(active["active"], true);
+    assert_eq!(
+        active["actual_bundle_sha256"],
+        active["expected_bundle_sha256"]
+    );
+    assert_eq!(
+        active["actual_bundle_sha256"],
+        active["running_bundle_sha256"]
+    );
+    assert!(
+        std::fs::read_to_string(root.join(".RaymanCodingSkill/workspace_skill.yaml"))
+            .unwrap()
+            .contains("bundle_sha256:")
+    );
     assert_eq!(run_raw(root, &["context", "refresh"]).status, 0);
 }
 #[test]
@@ -5651,6 +5743,16 @@ fn workspace_install_bind_is_hidden_confirmed_and_path_stable() {
 
     let alternate = root.join("alternate-SKILL.md");
     std::fs::write(&alternate, include_bytes!("../assets/canonical-skill.md")).unwrap();
+    write(
+        root,
+        "AGENTS.md",
+        include_str!("../assets/canonical-agent-contract.md"),
+    );
+    write(
+        root,
+        "references/workflow-contract.md",
+        include_str!("../assets/canonical-workflow-contract.md"),
+    );
     let binding_before_path_change = std::fs::read(&binding).unwrap();
     let path_change = run_raw(
         root,

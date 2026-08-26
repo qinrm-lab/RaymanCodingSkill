@@ -1,0 +1,30 @@
+{
+  "schema": "rayman.repository-gate-inputs.v1",
+  "required_paths": [
+    ".RaymanCodingSkill/quality.json",
+    ".cargo/config.toml",
+    ".gitattributes",
+    ".github/workflows/ci.yml",
+    ".gitignore",
+    "AGENTS.md",
+    "AGENT_CONTRACT.md",
+    "CLAUDE.md",
+    "Cargo.lock",
+    "Cargo.toml",
+    "SKILL.md",
+    "crates/rayman/assets/canonical-agent-contract.md",
+    "crates/rayman/assets/canonical-skill.md",
+    "crates/rayman/assets/canonical-workflow-contract.md",
+    "crates/rayman/assets/repository-gate-inputs.json",
+    "deny.toml",
+    "evals/Cargo.lock",
+    "evals/Cargo.toml",
+    "evals/deny.toml",
+    "install-manifest.json",
+    "references/workflow-contract.md"
+  ],
+  "required_prefixes": [
+    "scripts/",
+    "xtask/"
+  ]
+}

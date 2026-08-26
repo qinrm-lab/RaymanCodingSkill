@@ -89,6 +89,13 @@ fn xtask_authority_binding_covers_the_complete_gate_and_script_trees() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     write_xtask_gate_fixture(root);
+    write(
+        root,
+        REPOSITORY_GATE_INPUT_MANIFEST_PATH,
+        std::str::from_utf8(REPOSITORY_GATE_INPUT_MANIFEST_BYTES).unwrap(),
+    );
+    write(root, "deny.toml", "[advisories]\n");
+    write(root, ".RaymanCodingSkill/quality.json", "{}\n");
     let store = GoalStore::new(root);
     let goal = store
         .start("xtask authority", &[("gate".into(), true)])
@@ -106,7 +113,7 @@ fn xtask_authority_binding_covers_the_complete_gate_and_script_trees() {
     let binding = authority_gate_binding_for_goal_with_context(&goal, &decision, command)
         .unwrap()
         .unwrap();
-    assert_eq!(binding.policy, XTASK_AUTHORITY_GATE_BINDING_POLICY_V1);
+    assert_eq!(binding.policy, XTASK_AUTHORITY_GATE_BINDING_POLICY_V2);
     assert_eq!(binding.entrypoint, XTASK_AUTHORITY_ENTRYPOINT);
     for dependency in [
         ".cargo/config.toml",
@@ -117,6 +124,9 @@ fn xtask_authority_binding_covers_the_complete_gate_and_script_trees() {
         "xtask/src/helper.rs",
         "scripts/check-repo.ps1",
         "scripts/helper.ps1",
+        "deny.toml",
+        ".RaymanCodingSkill/quality.json",
+        REPOSITORY_GATE_INPUT_MANIFEST_PATH,
     ] {
         assert!(
             binding.dependency_sha256.contains_key(dependency),
@@ -126,6 +136,18 @@ fn xtask_authority_binding_covers_the_complete_gate_and_script_trees() {
     assert_eq!(
         authority_gate_binding_error(&goal, command, Some(&binding)),
         None
+    );
+
+    let mut incomplete = binding.clone();
+    incomplete.dependency_sha256.remove("deny.toml");
+    incomplete.binding_sha256 = forged_authority_gate_binding_sha256(
+        &incomplete.policy,
+        &incomplete.entrypoint,
+        &incomplete.dependency_sha256,
+    );
+    assert!(
+        authority_gate_binding_error(&goal, command, Some(&incomplete)).is_some(),
+        "v2 binding must reject a well-hashed manifest input omission"
     );
 }
 
@@ -1145,8 +1167,10 @@ fn captured_replacement_recomputes_the_complete_powershell_gate_binding() {
         replacement_authority_proof_sha256(forged.replacement_authority.as_ref().unwrap());
     forged.replacement_authority.as_mut().unwrap().proof_sha256 = proof_sha256;
     assert!(
-        replacement_authority_error_with_context(&forged, &decision, &goals)
-            .is_some_and(|error| error.contains("captured authority gate closure")),
+        replacement_authority_error_with_context(&forged, &decision, &goals).is_some_and(|error| {
+            error.contains("dependency binding")
+                || error.contains("captured authority gate closure")
+        }),
         "a well-formed incomplete binding must not survive a captured readiness decision"
     );
 }
@@ -1296,7 +1320,7 @@ fn weakening_a_literal_gate_dependency_invalidates_the_gate_authority() {
 }
 
 #[test]
-fn receipt_binding_tracks_real_dynamic_helpers_without_freezing_fixtures() {
+fn manifest_binding_rejects_a_gate_script_added_after_the_goal_baseline() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path();
     write(
@@ -1312,32 +1336,7 @@ fn receipt_binding_tracks_real_dynamic_helpers_without_freezing_fixtures() {
 
     write(root, "scripts/late-helper.ps1", "Write-Output 'late'\n");
     let command = "pwsh -NoProfile -File scripts/check-repo.ps1";
-    let binding = authority_gate_binding_for_goal(&goal, root, command)
-        .unwrap()
-        .unwrap();
-
-    assert!(
-        binding
-            .dependency_sha256
-            .contains_key("scripts/check-repo.ps1")
-    );
-    assert!(
-        binding
-            .dependency_sha256
-            .contains_key("scripts/real-helper.ps1")
-    );
-    assert!(
-        !binding
-            .dependency_sha256
-            .contains_key("scripts/missing-fixture.ps1")
-    );
-    assert!(
-        !binding
-            .dependency_sha256
-            .contains_key("scripts/late-helper.ps1")
-    );
-
-    let error = validate_authority_command_for_goal(root, &goal, command).unwrap_err();
+    let error = authority_gate_binding_for_goal(&goal, root, command).unwrap_err();
     assert!(
         error.to_string().contains("scripts/late-helper.ps1"),
         "unexpected authority error: {error:#}"
