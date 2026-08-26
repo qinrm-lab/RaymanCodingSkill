@@ -161,6 +161,13 @@ overwriting user-managed state still require user authority.
   violation intact — the archived record never feeds readiness or authority,
   but the drift itself is not reverted by retiring it. Lane records never
   replace validation.
+- Host-level chat concurrency is stricter than goal lanes: one physical Git
+  worktree has one writer. Before mutation, inventory active tasks and current
+  worktrees when concurrent work is plausible. A second writer must use a
+  dedicated worktree on a separate branch; a task that finds another writer
+  stops without cleanup, restore, pruning, tests, staging, or commit. A task
+  may not delete another task's worktree merely because it is uncommitted or
+  absent from its own goal state.
 - Give concurrent pytest runs independent managed leases and traversable temp
   roots.
 
@@ -176,6 +183,14 @@ overwriting user-managed state still require user authority.
   comparisons use `RAYMAN_REQUIRED_SID`, `RAYMAN_REQUIRED_PRINCIPAL`, and
   `RAYMAN_REQUIRED_PROFILE`; their provenance is untrusted process environment
   and they never authorize a privileged action.
+
+- A logged-on-user identity broker is a narrow delegated capability, not an
+  elevation shortcut. Keep ordinary PowerShell in the `elevated` sandbox. A
+  broker may run only a protected, installed operation identifier; its request
+  schema, expiry, worker hash, executor SID, result path, and ACL must be
+  verified. It must reject arbitrary command text, script paths, dynamic argv,
+  administrator run level, secrets, and destructive actions. Installation or
+  removal needs explicit user authority and a real InteractiveToken loopback.
 
 Restricted host sandboxes (for example the Codex Windows restricted token)
 can deny writes even inside the workspace. Known boundaries: state lock files

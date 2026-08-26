@@ -1837,3 +1837,48 @@ fn a_retired_non_success_goal_is_never_accepted_as_evidence() {
         "a retired non-success record must not be usable as historical evidence"
     );
 }
+
+#[test]
+fn codex_broker_installation_proof_requires_the_exact_installer_and_write_flags() {
+    let dir = tempfile::tempdir().unwrap();
+    let scripts = dir.path().join("scripts");
+    let tools = dir.path().join("tools");
+    fs::create_dir_all(&scripts).unwrap();
+    fs::create_dir_all(&tools).unwrap();
+    fs::write(
+        scripts.join("install-codex-powershell-broker.ps1"),
+        "Write-Output installed",
+    )
+    .unwrap();
+    fs::write(
+        tools.join("install-codex-powershell-broker.ps1"),
+        "Write-Output decoy",
+    )
+    .unwrap();
+
+    let installed = "pwsh -NoProfile -File scripts/install-codex-powershell-broker.ps1 -Install -Yes -UserAccount QIN5521\\qinrm";
+    assert_eq!(
+        validation_proof_kind(dir.path(), installed).unwrap(),
+        ProofKind::Installation
+    );
+    for rejected in [
+        "pwsh -NoProfile -File scripts/install-codex-powershell-broker.ps1 -SelfTest",
+        "pwsh -NoProfile -File scripts/install-codex-powershell-broker.ps1 -Check",
+        "pwsh -NoProfile -File scripts/install-codex-powershell-broker.ps1 -Uninstall -Yes",
+        "pwsh -NoProfile -File scripts/install-codex-powershell-broker.ps1 -Install:$false -Yes",
+        "pwsh -NoProfile -File scripts/install-codex-powershell-broker.ps1 -Install -Yes -Uninstall",
+        "pwsh -NoProfile -File scripts/install-codex-powershell-broker.ps1 -Install -Yes -Self",
+        "pwsh -NoProfile -File scripts/install-codex-powershell-broker.ps1 -Install -Yes -SelfTest:$true",
+        "pwsh -NoProfile -File scripts/install-codex-powershell-broker.ps1 -Install -Yes -Ch",
+        "pwsh -NoProfile -File scripts/install-codex-powershell-broker.ps1 -Install -Yes -Uninst:$true",
+        "pwsh -NoProfile -File scripts/install-codex-powershell-broker.ps1 -Install:$true -Yes",
+        "pwsh -NoProfile -File scripts/install-codex-powershell-broker.ps1 -Install -Yes:$true",
+        "pwsh -NoProfile -File tools/install-codex-powershell-broker.ps1 -Install -Yes",
+    ] {
+        assert_eq!(
+            validation_proof_kind(dir.path(), rejected).unwrap(),
+            ProofKind::Generic,
+            "non-installing or decoy broker command minted installation proof: {rejected}"
+        );
+    }
+}

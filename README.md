@@ -17,6 +17,7 @@ Together, the load-bearing surface is:
 - **Asset scan** — read-only report of obsolete-looking files and work-in-progress markers. It never deletes anything.
 - **State audit** — a read-only inventory of allowed v2 state, retired entries, and recursive managed-temp metrics. `state audit --check` fails on retired state, audit errors, or traversal errors; it never deletes files.
 - **Managed temp** — workspace-local scratch under `.RaymanCodingSkill/tmp/`, never system temp. Pytest leases pre-create and probe isolated basetemp/cache/TMP/pycache roots, publish exact argv/environment, and release only a manifest-owned lease. `temp status` reports recursive files, directories, bytes, and traversal errors rather than only the top-level entry count.
+- **Windows identity bridge** — ordinary PowerShell remains inside Codex's preferred `elevated` sandbox. The optional broker delegates only installed operation IDs to the logged-on user through a least-privilege InteractiveToken task, with expiring requests, protected results, executor/hash binding, and no arbitrary command channel. Parallel writing chats use separate Git worktrees.
 - **Trusted update boundary** — non-read-only skill use runs the throttled update poll by default. Windows has the reviewed fixed-source stable-release notification transport; non-Windows builds return the structured, zero-network `unsupported_platform` boundary and claim neither notification nor automatic apply. Installation remains independently opt-in and requires a compiled Ed25519 root, canonical signed manifest, monotonic anti-replay state, exact install receipt, all asset hashes, a versioned worker, and a journaled handle-relative rollback transaction. Tags and cached prompts never authorize code execution.
 
 Operational runtime/task state is local under `.RaymanCodingSkill/` and normally gitignored; `.RaymanCodingSkill/quality.json` is the one exact shared-policy exception. Its bytes are indexed and included in workspace fingerprints, so changing policy makes context/validation evidence stale exactly like changing source. Checkpoint archives and update preferences are deliberately different: unless overridden, they live in a user-level data directory, not in the repository. Current files and command output are the source of truth; there is no cross-project memory or LLM call. The Windows network surface is the bounded official-release notification/download transport described in [docs/UPDATE_CONTRACT.md](docs/UPDATE_CONTRACT.md); unsupported platforms do not substitute another client.
@@ -39,6 +40,33 @@ remains repository-only. Run
 markers, adapter ownership, managed-block isolation, the manifest mapping,
 client-neutral pending semantics, deployment scopes, and fail-closed negative
 fixtures; `scripts/check-repo.ps1` runs the same self-test.
+
+## Windows PowerShell identity broker
+
+Use a Codex-managed or permanent Git worktree for every concurrent writing
+chat. Keep normal build, test, Git, and repository PowerShell commands in the
+native `elevated` sandbox. Only a command whose evidence genuinely depends on
+the logged-on Windows identity may use the optional fixed-capability broker:
+
+```powershell
+pwsh -NoProfile -File .\scripts\install-codex-powershell-broker.ps1 -SelfTest
+pwsh -NoProfile -File .\scripts\install-codex-powershell-broker.ps1 `
+  -Install -Yes -UserAccount "$env:USERDOMAIN\qinrm"
+
+pwsh -NoProfile -File .\scripts\codex-powershell-broker.ps1 `
+  -Operation identity_probe
+```
+
+The install requires one narrowly approved administrator run. It atomically
+creates a protected ProgramData tree, binds the current `pwsh.exe`, worker,
+task XML, and fresh `install_id`, and refuses unknown pre-existing state. The
+persistent task itself uses `InteractiveToken` plus `LeastPrivilege`, runs
+hidden, accepts only `identity_probe`, and writes results below a directory the
+sandbox group can read but not modify. Requests are claimed through an
+exclusive no-reparse handle and parsed from the exact hashed bytes. Adding a
+capability is a reviewed source/install change; request JSON can never provide
+command text, a script path, or argv. See
+[docs/CODEX_POWERSHELL_BROKER.md](docs/CODEX_POWERSHELL_BROKER.md).
 
 ## Build
 

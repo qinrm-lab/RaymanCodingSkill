@@ -359,6 +359,46 @@ fn repository_quality_consumers_reject_malformed_types_and_ignore_stale_native_e
 }
 
 #[test]
+fn codex_powershell_broker_self_tests_execute_the_task_xml_contract() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("repository root must resolve");
+    for (script_name, success_marker) in [
+        (
+            "install-codex-powershell-broker.ps1",
+            "install-codex-powershell-broker.ps1 self-test passed.",
+        ),
+        (
+            "codex-powershell-broker.ps1",
+            "codex-powershell-broker.ps1 self-test passed.",
+        ),
+    ] {
+        let script = repo_root.join("scripts").join(script_name);
+        let output = Command::new("pwsh")
+            .args([
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                script
+                    .to_str()
+                    .expect("broker self-test path must be UTF-8"),
+                "-SelfTest",
+            ])
+            .current_dir(&repo_root)
+            .output()
+            .expect("PowerShell 7 must run the broker self-test");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success() && stdout.contains(success_marker),
+            "{script_name} self-test failed\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        );
+    }
+}
+
+#[test]
 fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -373,6 +413,11 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
     let codex_temp_config =
         fs::read_to_string(repo_root.join("scripts/configure-codex-validation-temp.ps1"))
             .expect("Codex validation temp configurator must be readable UTF-8");
+    let codex_broker = fs::read_to_string(repo_root.join("scripts/codex-powershell-broker.ps1"))
+        .expect("Codex PowerShell broker must be readable UTF-8");
+    let codex_broker_installer =
+        fs::read_to_string(repo_root.join("scripts/install-codex-powershell-broker.ps1"))
+            .expect("Codex PowerShell broker installer must be readable UTF-8");
     let repository_quality = fs::read_to_string(repo_root.join("scripts/repository-quality.ps1"))
         .expect("repository quality provider must be readable UTF-8");
     let release_closeout = fs::read_to_string(repo_root.join("scripts/release-closeout.ps1"))
@@ -392,6 +437,45 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
     assert!(!codex_temp_config.contains(r"E:\codex-cache\cargo\codex-sandbox"));
     assert!(codex_temp_config.contains("does not cover managed root"));
     assert!(check_repo.contains("'configure-codex-validation-temp.ps1') -SelfTest"));
+    assert!(check_repo.contains("'codex-powershell-broker.ps1') -SelfTest"));
+    assert!(check_repo.contains("'install-codex-powershell-broker.ps1') -SelfTest"));
+    assert!(source.contains("'codex-powershell-broker.ps1'"));
+    assert!(source.contains("'install-codex-powershell-broker.ps1'"));
+    assert!(codex_broker.contains("[ValidateSet('identity_probe')]"));
+    assert!(codex_broker.contains("Arbitrary commands are never accepted."));
+    assert!(codex_broker.contains("Open-ExclusiveRequest"));
+    assert!(codex_broker.contains("Assert-InstalledAclContract"));
+    assert!(codex_broker.contains("Assert-InstalledTaskContract"));
+    assert!(codex_broker.contains("Assert-TaskSecurityDescriptorContract"));
+    assert!(codex_broker.contains("0x001F01FF"));
+    assert!(codex_broker.contains("0x00120089"));
+    assert!(codex_broker.contains("Get-BrokerTaskFileSnapshot"));
+    assert!(codex_broker.contains("System32\\Tasks"));
+    assert!(codex_broker.contains("GetSecurityDescriptorSddlForm"));
+    assert!(codex_broker.contains("-AllowAutoInheritedControl -RequireProtectedDacl"));
+    assert!(!codex_broker.contains("Schedule.Service"));
+    assert!(!codex_broker.contains("GetSecurityDescriptor(7)"));
+    assert!(codex_broker_installer.contains("GetSecurityDescriptor(7)"));
+    assert!(codex_broker.contains("Assert-ResultCreateDenied"));
+    assert!(codex_broker.contains("install_id"));
+    assert!(!codex_broker.contains("Invoke-Expression"));
+    assert!(!codex_broker.contains("Local\\RaymanCodexPowerShellBroker"));
+    assert!(codex_broker_installer.contains("<LogonType>InteractiveToken</LogonType>"));
+    assert!(codex_broker_installer.contains("<RunLevel>LeastPrivilege</RunLevel>"));
+    assert!(codex_broker_installer.contains("'<RunLevel>HighestAvailable</RunLevel>'"));
+    assert!(codex_broker_installer.contains("FileSystemAclExtensions]::CreateDirectory"));
+    assert!(codex_broker_installer.contains("[AllowEmptyCollection()][byte[]]$Bytes"));
+    assert!(
+        codex_broker_installer.contains("Installer zero-byte lock publication self-test failed.")
+    );
+    assert!(codex_broker_installer.contains("Assert-BrokerTaskXmlBinding"));
+    assert!(codex_broker_installer.contains("Set-And-AssertBrokerTaskSecurity"));
+    assert!(codex_broker_installer.contains("Task Scheduler materialized self-test ACL"));
+    assert!(codex_broker_installer.contains("descriptor drift"));
+    assert!(codex_broker_installer.contains("Remove-BrokerTaskStrict"));
+    assert!(!codex_broker_installer.contains("ConvertTo-CanonicalTaskSecurityDescriptor"));
+    assert!(!codex_broker_installer.contains("Get-Command pwsh.exe"));
+    assert!(!codex_broker_installer.contains("E:\\codex-sandbox\\temp\\codex-powershell-broker"));
     assert!(check_repo.contains("'check-update-freshness.ps1') -SelfTest"));
     assert!(source.contains("'check-update-freshness.ps1'"));
     assert!(release_closeout.contains("'check-update-freshness.ps1'"));

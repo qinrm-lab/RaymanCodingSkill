@@ -29,6 +29,13 @@ contract.
 - Do not install, publish, push, commit, delete, or overwrite user-managed
   state without the user's explicit authorization.
 - Preserve unrelated work in a dirty checkout. Do not reset or discard it.
+- A mutable Git worktree has exactly one writer. When another task can write
+  the same checkout, stop before mutation and use a dedicated worktree; never
+  clean, restore, prune, stage, test, or commit another task's worktree.
+- Keep normal Windows commands in the native `elevated` sandbox. A command
+  that genuinely requires the logged-on user may use only an installed,
+  fixed-capability identity broker with protected request/result paths; never
+  tunnel an arbitrary PowerShell command, script path, or argument string.
 - Do not permit direct or indirect skill-invocation cycles. When one skill
   routes work to another, refuse to invoke any skill already active in that
   invocation chain; end the handoff and return control to the original task

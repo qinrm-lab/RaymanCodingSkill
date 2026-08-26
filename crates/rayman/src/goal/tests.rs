@@ -632,6 +632,35 @@ fn captured_powershell_validation_uses_a_unique_captured_workspace_script_withou
 }
 
 #[test]
+fn captured_broker_installation_proof_binds_the_executed_script_key() {
+    let root = tempfile::tempdir().unwrap();
+    let captured_files = BTreeMap::from([
+        (
+            "scripts/install-codex-powershell-broker.ps1".to_string(),
+            b"exit 0\n".to_vec(),
+        ),
+        ("tools/decoy.ps1".to_string(), b"exit 0\n".to_vec()),
+    ]);
+    let decision = GoalDecisionContext::captured(root.path(), None, &captured_files);
+    let real = "pwsh -NoProfile -File scripts/install-codex-powershell-broker.ps1 -Install -Yes";
+    let decoy = "pwsh -NoProfile -File tools/decoy.ps1 -Install -Yes";
+    let non_powershell = "git -Install -Yes";
+
+    assert_eq!(
+        validation_proof_kind_with_context(&decision, real).unwrap(),
+        ProofKind::Installation
+    );
+    assert_eq!(
+        validation_proof_kind_with_context(&decision, decoy).unwrap(),
+        ProofKind::Generic
+    );
+    assert_eq!(
+        validation_proof_kind_with_context(&decision, non_powershell).unwrap(),
+        ProofKind::Generic
+    );
+}
+
+#[test]
 fn cargo_test_receipt_requires_actual_passed_tests() {
     let root = tempfile::tempdir().unwrap();
     for command in [

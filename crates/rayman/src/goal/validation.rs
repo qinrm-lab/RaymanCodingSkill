@@ -1,11 +1,16 @@
 use super::*;
 
 mod cargo_isolation;
+mod installation;
 mod process_temp;
 mod pytest_isolation;
 mod receipts;
 
 pub use cargo_isolation::ValidationExecutionSession;
+use installation::{
+    broker_install_invocation, broker_install_invocation_with_context,
+    release_installer_invocation, release_installer_invocation_with_context,
+};
 pub use process_temp::{
     run_with_managed_validation_temp, test_invocation_requires_pytest_isolation,
 };
@@ -248,39 +253,6 @@ fn test_invocation(command: &ParsedValidationCommand) -> bool {
     cargo_test_invocation(command) || pytest_invocation(command)
 }
 
-/// PowerShell binds any unambiguous switch **prefix**, so `-Self` runs the
-/// installer's self-test branch — which builds and installs nothing — while an
-/// exact `-SelfTest` comparison never sees it. Every prefix of `-selftest`
-/// therefore counts as the self-test switch. Over-matching is the safe
-/// direction: it only ever *denies* an installation/build claim.
-fn is_installer_self_test_switch(argument: &str) -> bool {
-    let lowered = argument.to_ascii_lowercase();
-    // `-SelfTest:$false` and friends carry the value after a colon.
-    let name = lowered.split(':').next().unwrap_or(lowered.as_str());
-    name.len() >= 2 && "-selftest".starts_with(name)
-}
-
-fn release_installer_invocation(root: &Path, command: &ParsedValidationCommand) -> bool {
-    trusted_gate_script(root, command) == Some("install-rayman.ps1")
-        && !command
-            .args
-            .iter()
-            .any(|argument| is_installer_self_test_switch(argument))
-}
-
-fn release_installer_invocation_with_context(
-    decision: &GoalDecisionContext<'_>,
-    command: &ParsedValidationCommand,
-) -> Result<bool> {
-    Ok(
-        trusted_gate_script_with_context(decision, command)? == Some("install-rayman.ps1")
-            && !command
-                .args
-                .iter()
-                .any(|argument| is_installer_self_test_switch(argument)),
-    )
-}
-
 /// Ordinary workspace-owned PowerShell scripts are permitted as local
 /// validation evidence, but the reviewed gate basenames are reserved.  This
 /// keeps an arbitrary `tools/check-repo.ps1` (or an installer's `-Self*`
@@ -321,6 +293,10 @@ pub fn validation_proof_kind(root: &Path, command: &str) -> Result<ProofKind> {
             .any(|argument| argument.eq_ignore_ascii_case(needle))
     };
 
+    if broker_install_invocation(root, &parsed)? {
+        return Ok(ProofKind::Installation);
+    }
+
     if trusted_xtask_repository_gate(root, &parsed)? {
         return Ok(ProofKind::RepositoryGate);
     }
@@ -333,20 +309,8 @@ pub fn validation_proof_kind(root: &Path, command: &str) -> Result<ProofKind> {
     ) {
         return Ok(ProofKind::RepositoryGate);
     }
-    if script == "install-rayman.ps1" {
-        // A `-SelfTest` run installs nothing, so it is not installation
-        // evidence — but it is not test-execution evidence either. Labelling it
-        // `Test` made a typed `--must-proof test::…` requirement satisfiable by
-        // a run that lists and executes zero tests: the structured test proof
-        // (listed>0, passed>0, passed+ignored==listed, plus independent list
-        // digests) is only ever demanded of `cargo test`/`pytest` invocations,
-        // which this is not. `Generic` is the truthful label: it still records
-        // real evidence, it just cannot stand in for a typed obligation.
-        return Ok(if release_installer_invocation(root, &parsed) {
-            ProofKind::Installation
-        } else {
-            ProofKind::Generic
-        });
+    if release_installer_invocation(root, &parsed) {
+        return Ok(ProofKind::Installation);
     }
     if script == "check-agent-instructions.ps1"
         || executable == "markdownlint"
@@ -389,6 +353,9 @@ pub(crate) fn validation_proof_kind_with_context(
             .iter()
             .any(|argument| argument.eq_ignore_ascii_case(needle))
     };
+    if broker_install_invocation_with_context(decision, &parsed)? {
+        return Ok(ProofKind::Installation);
+    }
     if trusted_xtask_repository_gate_with_context(decision, &parsed)? {
         return Ok(ProofKind::RepositoryGate);
     }
@@ -401,18 +368,8 @@ pub(crate) fn validation_proof_kind_with_context(
     ) {
         return Ok(ProofKind::RepositoryGate);
     }
-    if script == "install-rayman.ps1" {
-        return Ok(
-            if !parsed
-                .args
-                .iter()
-                .any(|argument| is_installer_self_test_switch(argument))
-            {
-                ProofKind::Installation
-            } else {
-                ProofKind::Generic
-            },
-        );
+    if release_installer_invocation_with_context(decision, &parsed)? {
+        return Ok(ProofKind::Installation);
     }
     if script == "check-agent-instructions.ps1"
         || executable == "markdownlint"
