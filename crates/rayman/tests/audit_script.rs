@@ -109,6 +109,9 @@ fn public_architecture_and_ci_coverage_contracts_avoid_drift_prone_counts() {
     assert!(workflow.contains(
         "cargo check --locked -p rayman --target aarch64-unknown-linux-gnu --all-targets"
     ));
+    assert!(!workflow.contains("    env:\n      CARGO_TARGET_DIR: ${{ runner.temp }}"));
+    assert!(workflow.contains("workspace activate --skill-file"));
+    assert!(!workflow.contains("Set-Content -Path \".RaymanCodingSkill/workspace_skill.yaml\""));
 
     let due_poll_start = cli_tests
         .find("fn non_windows_due_poll_stays_unsupported_even_with_install_consent()")
@@ -204,6 +207,58 @@ fn audit_self_test_exercises_only_the_audit_contract() {
             !stdout.contains(sibling),
             "audit self-test recursively launched sibling suite {sibling}\nstdout:\n{stdout}"
         );
+    }
+}
+
+#[test]
+fn test_traceability_checker_executes_mutation_self_test_and_live_graph() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("repository root must resolve");
+    let script = repo_root.join("scripts/check-test-traceability.ps1");
+    for (label, extra, marker) in [
+        (
+            "self-test",
+            Some("-SelfTest"),
+            "check-test-traceability self-test: PASS",
+        ),
+        (
+            "live graph",
+            None,
+            "\"schema\": \"rayman.test-traceability.check.v2\"",
+        ),
+    ] {
+        let mut command = Command::new("pwsh");
+        command.args([
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            script
+                .to_str()
+                .expect("traceability checker path must be UTF-8"),
+        ]);
+        if let Some(extra) = extra {
+            command.arg(extra);
+        }
+        let output = command
+            .current_dir(&repo_root)
+            .output()
+            .expect("PowerShell 7 must run the traceability checker");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success() && stdout.contains(marker),
+            "traceability {label} failed\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        );
+        if label == "live graph" {
+            assert!(
+                stdout.contains("repository_first_party_executable_tests")
+                    && stdout.contains("inventory_sha256"),
+                "live traceability output lost complete inventory binding\nstdout:\n{stdout}"
+            );
+        }
     }
 }
 
@@ -408,6 +463,8 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
         .expect("audit script must be readable UTF-8");
     let check_repo = fs::read_to_string(repo_root.join("scripts/check-repo.ps1"))
         .expect("check-repo script must be readable UTF-8");
+    let ci_checker = fs::read_to_string(repo_root.join("scripts/check-ci-workflow.ps1"))
+        .expect("CI workflow checker must be readable UTF-8");
     let update_freshness = fs::read_to_string(repo_root.join("scripts/check-update-freshness.ps1"))
         .expect("update freshness script must be readable UTF-8");
     let codex_temp_config =
@@ -437,6 +494,10 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
     assert!(!codex_temp_config.contains(r"E:\codex-cache\cargo\codex-sandbox"));
     assert!(codex_temp_config.contains("does not cover managed root"));
     assert!(check_repo.contains("'configure-codex-validation-temp.ps1') -SelfTest"));
+    assert!(check_repo.contains("'check-ci-workflow.ps1') -SelfTest"));
+    assert!(check_repo.contains("'check-ci-workflow.ps1')"));
+    assert!(ci_checker.contains("runner context in job-level env"));
+    assert!(ci_checker.contains("must not hand-write workspace_skill.yaml"));
     assert!(check_repo.contains("'codex-powershell-broker.ps1') -SelfTest"));
     assert!(check_repo.contains("'install-codex-powershell-broker.ps1') -SelfTest"));
     assert!(source.contains("'codex-powershell-broker.ps1'"));
@@ -635,11 +696,15 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
         );
     }
     for required in [
-        "schema = 'rayman.release.binding.v4'",
+        "schema = 'rayman.release.binding.v6'",
+        "test_traceability = [ordered]@{",
+        "'check-test-traceability.ps1'",
         "workspace_activation = $sourceFreshInputs.workspace_activation",
         "source_fresh_environment = $sourceFreshInputs.source_fresh_environment",
         "rayman.release.binding.v2",
         "rayman.release.binding.v3",
+        "rayman.release.binding.v4",
+        "rayman.release.binding.v5",
         "worker = [ordered]@{ path = $resolvedWorker; sha256 = Get-Sha256 $resolvedWorker }",
         "-WorkerPath $WorkerPath",
         "cargo-deny",

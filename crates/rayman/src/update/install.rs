@@ -258,7 +258,7 @@ pub fn run_worker_request(request_id: &str, now: DateTime<Utc>) -> Result<Worker
         if !recovery {
             let floor = state::load_trusted_floor()?;
             if let Some(floor) = &floor {
-                floor.classify(&bundle.manifest, &request.prior_version, now)?;
+                require_fresh_floor_advance(floor, &bundle.manifest, &request.prior_version, now)?;
             } else if bundle.manifest.manifest().version <= request.prior_version {
                 bail!("verified update bundle is not newer than the installed version");
             }
@@ -315,6 +315,20 @@ pub fn run_worker_request(request_id: &str, now: DateTime<Utc>) -> Result<Worker
     {
         let _ = (request, receipt);
         bail!("trusted automatic installation is currently supported only on Windows x86_64")
+    }
+}
+
+fn require_fresh_floor_advance(
+    floor: &state::TrustedFloor,
+    candidate: &VerifiedManifest,
+    installed: &ReleaseVersion,
+    now: DateTime<Utc>,
+) -> Result<()> {
+    match floor.classify(candidate, installed, now)? {
+        state::FloorDecision::Advance => Ok(()),
+        state::FloorDecision::ExactFloorIdentity => {
+            bail!("exact manifest replay requires the existing active update transaction")
+        }
     }
 }
 
@@ -634,5 +648,22 @@ mod tests {
                 role: AssetRole::Cli
             })
         ));
+    }
+
+    #[test]
+    fn fresh_worker_rejects_exact_floor_replay_without_active_transaction() {
+        let (version, transport) = fixture();
+        let bundle =
+            fetch_bundle_with_verifier(&transport, version, time(21), verify_manifest_for_test)
+                .unwrap();
+        let floor = state::TrustedFloor::from_verified(bundle.manifest(), time(21));
+        let installed = ReleaseVersion::parse("2.10.0").unwrap();
+        let error = require_fresh_floor_advance(&floor, bundle.manifest(), &installed, time(21))
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("exact manifest replay requires the existing active update transaction")
+        );
     }
 }

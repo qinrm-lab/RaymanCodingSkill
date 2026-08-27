@@ -53,6 +53,15 @@ status. A failure record names the current phase before the original exception
 is rethrown, so CI and host agents can report live progress without parsing
 free-form command logs.
 
+Before the expensive Cargo lanes, `release_script_self_tests` mutation-tests
+the traceability checker and the independent `test_traceability` phase validates
+the live byte-bound first-party inventory and
+source-rule-execution-gate-test graph. It runs compiled Cargo harness listing
+outside nested Cargo tests. An unregistered or ignored test, expired binding,
+unreachable/platform-incomplete gate, mismatched eval identity, incomplete
+declaration cascade, last-reference asset leak, or removed/rewritten tombstone
+therefore blocks the complete audit directly.
+
 The audit script's own negative guards can be exercised without running the expensive audit lanes or recursively launching sibling script suites:
 
 ```powershell
@@ -83,12 +92,13 @@ The focused dependency-policy regression lane exercises the same isolated root/e
 
 It covers, in order:
 
-1. Root workspace fmt, Clippy with warnings denied, tests, and cargo-deny.
-2. Declared MSRV release build and all root tests under that exact rustup toolchain.
-3. A real `cargo llvm-cov` line threshold for the shipped root CLI workspace, compiled with the exact isolated MSRV Cargo/rustc and matching `llvm-tools-preview`. This threshold does not claim coverage for the standalone eval harness.
-4. Standalone `evals` fmt, Clippy, tests, cargo-deny, real-backend host-exec rejection, third-party-grade rejection, and offline mock report/grade provenance.
-5. `cargo package` plus an isolated managed-temp `cargo install` smoke.
-6. A locked release build followed by current-artifact context refresh, strict quality, release readiness, the `state audit --check` gate plus a report-only `assets` scan, and isolated standard checkpoint save + `checkpoint verify`; recovery-only salvage is negative-tested but never accepted as release evidence.
-7. Installed CLI/reference artifact/deployed skill/effective PATH identity plus a clean isolated source-fresh rebuild and terminal identity re-hash.
+1. Traceability mutation tests plus the complete static and compiled-runtime first-party test graph.
+2. Root workspace fmt, Clippy with warnings denied, tests, and cargo-deny.
+3. Declared MSRV release build and all root tests under that exact rustup toolchain.
+4. A real `cargo llvm-cov` line threshold for the shipped root CLI workspace, compiled with the exact isolated MSRV Cargo/rustc and matching `llvm-tools-preview`. This threshold does not claim coverage for the standalone eval harness.
+5. Standalone `evals` fmt, Clippy, tests, cargo-deny, real-backend host-exec rejection, third-party-grade rejection, and offline mock report/grade provenance.
+6. `cargo package` plus an isolated managed-temp `cargo install` smoke.
+7. A locked release build followed by current-artifact context refresh, strict quality, release readiness, the `state audit --check` gate plus a report-only `assets` scan, and isolated standard checkpoint save + `checkpoint verify`; recovery-only salvage is negative-tested but never accepted as release evidence.
+8. Installed CLI/reference artifact/deployed skill/effective PATH identity plus a clean isolated source-fresh rebuild and terminal identity re-hash.
 
 Use focused Cargo/rayman commands during development; only this command supports the complete local claim. CI mirrors these mandatory lanes across platform jobs and additionally performs the scheduled weekly advisory refresh declared in `.github/workflows/ci.yml`.

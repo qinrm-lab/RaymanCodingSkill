@@ -1726,6 +1726,8 @@ if ($PSCmdlet.ParameterSetName -eq 'Audit') {
     Write-AuditPhase -Name 'release_script_self_tests' -Status 'start'
     try {
         foreach ($scriptName in @(
+            'check-ci-workflow.ps1',
+            'check-test-traceability.ps1',
             'check-update-freshness.ps1',
             'release-closeout.ps1',
             'install-rayman.ps1',
@@ -1744,6 +1746,19 @@ if ($PSCmdlet.ParameterSetName -eq 'Audit') {
     } catch {
         Write-AuditPhase `
             -Name 'release_script_self_tests' `
+            -Status 'fail' `
+            -Detail $_.Exception.Message
+        throw
+    }
+}
+if ($PSCmdlet.ParameterSetName -eq 'Audit') {
+    Write-AuditPhase -Name 'test_traceability' -Status 'start'
+    try {
+        & (Join-Path $PSScriptRoot 'check-test-traceability.ps1') -RuntimeInventory
+        Write-AuditPhase -Name 'test_traceability' -Status 'pass'
+    } catch {
+        Write-AuditPhase `
+            -Name 'test_traceability' `
             -Status 'fail' `
             -Detail $_.Exception.Message
         throw

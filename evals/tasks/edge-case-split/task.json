@@ -1,0 +1,12 @@
+{
+  "schema": "rayman.eval-task.v2",
+  "source_ids": ["SRC-EVAL-SYNTHETIC-BUILTIN", "SRC-EVAL-ORACLE-INTEGRITY"],
+  "rule_ids": ["RULE-EVAL-EDGE-CASES"],
+  "editable_paths": ["src/lib.rs"],
+  "oracle": {
+    "kind": "rust_module",
+    "source": "tests.rs",
+    "module_file": "src/lib.rs",
+    "expected_tests": ["parses_simple_pair", "trims_whitespace", "splits_on_first_equals_only", "returns_none_without_equals"]
+  }
+}

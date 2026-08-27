@@ -1,0 +1,12 @@
+{
+  "schema": "rayman.eval-task.v2",
+  "source_ids": ["SRC-EVAL-SYNTHETIC-BUILTIN", "SRC-EVAL-ORACLE-INTEGRITY"],
+  "rule_ids": ["RULE-EVAL-REPO-NAVIGATION"],
+  "editable_prefixes": ["src"],
+  "oracle": {
+    "kind": "rust_module",
+    "source": "tests.rs",
+    "module_file": "src/lib.rs",
+    "expected_tests": ["evaluates_with_precedence", "division_and_errors"]
+  }
+}

@@ -106,7 +106,7 @@ An intentionally different bootstrap wrapper is not the canonical skill and must
 
 ## Release tags
 
-After every source-fresh local smoke test and the normal test suite pass, create an exact tag matching the manifest, for example `v2.12.0`. CI always runs the source-fresh verifier; tag-triggered builds additionally run `-VerifyGitTag`, read the exact tag from Git, and cross-check GitHub's ref type, ref name, full ref, and SHA against that checked-out `HEAD`. Only the protected `rayman-release` job receives `contents: write`; it emits and signs the canonical fixed-role update manifest, verifies that signature with the production public key compiled into the worker, then publishes the exact asset set. An absent or mismatched production public key, protected signing secret, or environment approval fails instead of publishing unsigned or client-unusable assets. Forged or inconsistent `GITHUB_REF_*` values never substitute for repository evidence. Existing historical non-semver tags are not retroactively claimed as releases under this contract.
+After every source-fresh local smoke test and the normal test suite pass, create an exact tag matching the manifest, for example `v2.12.1`. CI always runs the source-fresh verifier; tag-triggered builds additionally run `-VerifyGitTag`, read the exact tag from Git, and cross-check GitHub's ref type, ref name, full ref, and SHA against that checked-out `HEAD`. Only the protected `rayman-release` job receives `contents: write`; it emits and signs the canonical fixed-role update manifest, verifies that signature with the production public key compiled into the worker, then publishes the exact asset set. An absent or mismatched production public key, protected signing secret, or environment approval fails instead of publishing unsigned or client-unusable assets. Forged or inconsistent `GITHUB_REF_*` values never substitute for repository evidence. Existing historical non-semver tags are not retroactively claimed as releases under this contract.
 
 Signed metadata remains valid for 30 days. The release job requires at least 29
 days after signature verification, while the weekly freshness guard uses the
@@ -142,6 +142,8 @@ then recomputes the exact release binding; it does not perform a second
 source-fresh rebuild. Its
 optional evidence reuse is content-addressed over the canonical workspace,
 clean Git HEAD, installed CLI and deployed skill-resource bundle hashes, every release script,
+the v2 traceability implementation, exact semantic manifest, and complete
+first-party test inventory,
 and the exact native tool paths, versions, and hashes (including cargo-deny,
 the current PowerShell host independently of PATH, the preinstalled coverage
 Application, exact MSRV Cargo/rustc, and matching LLVM tools), plus the
@@ -155,3 +157,8 @@ current goal validation: the canonical
 still executed with `--authority --repeat 2` on one unchanged fingerprint. The
 gate delegates the reviewed transition script while binding the complete
 baseline/current `xtask/` and `scripts/` dependency union.
+
+The current reusable evidence shape is `rayman.release.binding.v6`. It binds
+both `governance/test-traceability.json` and
+`governance/first-party-test-inventory.json`; v5 and earlier shapes are
+historical input only and cannot authorize reuse.

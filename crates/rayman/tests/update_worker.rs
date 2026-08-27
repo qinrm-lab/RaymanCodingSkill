@@ -178,6 +178,12 @@ fn run_plan(plan_path: &Path, script: &[u8]) -> std::process::Output {
     child.wait_with_output().unwrap()
 }
 
+fn assert_destination_hashes(plan: &Plan, expected: &[String]) {
+    for (file, expected_hash) in plan.files.iter().zip(expected) {
+        assert_eq!(&sha(&file.destination), expected_hash, "{}", file.role);
+    }
+}
+
 #[test]
 fn verified_update_script_publishes_the_complete_tuple_and_commits_journal() {
     let temp = tempfile::tempdir().unwrap();
@@ -199,6 +205,13 @@ fn verified_update_script_publishes_the_complete_tuple_and_commits_journal() {
     let result: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&plan.result_path).unwrap()).unwrap();
     assert_eq!(result["status"], "installed");
+    let journal_bytes = std::fs::read(&plan.journal_path).unwrap();
+    let result_bytes = std::fs::read(&plan.result_path).unwrap();
+    let destination_hashes: Vec<_> = plan
+        .files
+        .iter()
+        .map(|file| sha(&file.destination))
+        .collect();
 
     // The exact same request is the only recovery authority. A committed
     // journal is verified idempotently instead of republishing or rolling
@@ -210,7 +223,131 @@ fn verified_update_script_publishes_the_complete_tuple_and_commits_journal() {
         String::from_utf8_lossy(&resumed.stdout),
         String::from_utf8_lossy(&resumed.stderr)
     );
-    for file in &plan.files {
-        assert_eq!(sha(&file.destination), file.new_sha256, "{}", file.role);
+    assert_eq!(std::fs::read(&plan.journal_path).unwrap(), journal_bytes);
+    assert_eq!(std::fs::read(&plan.result_path).unwrap(), result_bytes);
+    assert_destination_hashes(&plan, &destination_hashes);
+}
+
+#[test]
+fn committed_update_journal_rejects_changed_plan_identity_without_mutation() {
+    let temp = tempfile::tempdir().unwrap();
+    let (plan_path, mut plan, script) = prepare_plan(temp.path());
+    let first = run_plan(&plan_path, &script);
+    assert!(
+        first.status.success(),
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&first.stdout),
+        String::from_utf8_lossy(&first.stderr)
+    );
+    let committed_hashes: Vec<_> = plan
+        .files
+        .iter()
+        .map(|file| sha(&file.destination))
+        .collect();
+
+    // The same paths and bytes are insufficient recovery authority. Changing
+    // the transaction identity produces a different verified plan hash, which
+    // must not reuse or rewrite the committed journal.
+    plan.transaction_id = "4".repeat(32);
+    std::fs::write(&plan_path, serde_json::to_vec_pretty(&plan).unwrap()).unwrap();
+    let replay = run_plan(&plan_path, &script);
+    assert!(!replay.status.success());
+    assert!(
+        String::from_utf8_lossy(&replay.stderr)
+            .contains("Existing update journal does not match the verified plan"),
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&replay.stdout),
+        String::from_utf8_lossy(&replay.stderr)
+    );
+    assert_destination_hashes(&plan, &committed_hashes);
+}
+
+#[test]
+fn committed_update_journal_rejects_envelope_state_and_destination_drift() {
+    let temp = tempfile::tempdir().unwrap();
+    let (plan_path, plan, script) = prepare_plan(temp.path());
+    let first = run_plan(&plan_path, &script);
+    assert!(
+        first.status.success(),
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&first.stdout),
+        String::from_utf8_lossy(&first.stderr)
+    );
+    let journal_bytes = std::fs::read(&plan.journal_path).unwrap();
+    let committed_hashes: Vec<_> = plan
+        .files
+        .iter()
+        .map(|file| sha(&file.destination))
+        .collect();
+
+    let sentinel = temp.path().join("outside-sentinel.txt");
+    std::fs::write(&sentinel, b"outside sentinel\n").unwrap();
+    let mut drifted_entry: serde_json::Value = serde_json::from_slice(&journal_bytes).unwrap();
+    drifted_entry["entries"][0]["destination"] =
+        serde_json::Value::String(sentinel.to_string_lossy().into_owned());
+    std::fs::write(
+        &plan.journal_path,
+        serde_json::to_vec_pretty(&drifted_entry).unwrap(),
+    )
+    .unwrap();
+    let envelope = run_plan(&plan_path, &script);
+    assert!(!envelope.status.success());
+    assert!(String::from_utf8_lossy(&envelope.stderr).contains("entry 0 drifted"));
+    assert_eq!(std::fs::read(&sentinel).unwrap(), b"outside sentinel\n");
+    assert_destination_hashes(&plan, &committed_hashes);
+
+    let mut unknown_field: serde_json::Value = serde_json::from_slice(&journal_bytes).unwrap();
+    unknown_field["unexpected"] = serde_json::Value::Bool(true);
+    std::fs::write(
+        &plan.journal_path,
+        serde_json::to_vec_pretty(&unknown_field).unwrap(),
+    )
+    .unwrap();
+    let schema = run_plan(&plan_path, &script);
+    assert!(!schema.status.success());
+    assert!(
+        String::from_utf8_lossy(&schema.stderr)
+            .contains("does not match the verified plan envelope")
+    );
+    assert_destination_hashes(&plan, &committed_hashes);
+
+    let mut inconsistent: serde_json::Value = serde_json::from_slice(&journal_bytes).unwrap();
+    inconsistent["entries"][0]["completed"] = serde_json::Value::Bool(false);
+    std::fs::write(
+        &plan.journal_path,
+        serde_json::to_vec_pretty(&inconsistent).unwrap(),
+    )
+    .unwrap();
+    let state = run_plan(&plan_path, &script);
+    assert!(!state.status.success());
+    assert!(
+        String::from_utf8_lossy(&state.stderr)
+            .contains("completion state is not a fixed-role prefix")
+    );
+    assert_destination_hashes(&plan, &committed_hashes);
+
+    std::fs::write(&plan.journal_path, &journal_bytes).unwrap();
+    std::fs::write(
+        &plan.files[0].destination,
+        b"concurrent destination drift\n",
+    )
+    .unwrap();
+    let destination = run_plan(&plan_path, &script);
+    assert!(!destination.status.success());
+    assert!(
+        String::from_utf8_lossy(&destination.stderr)
+            .contains("Committed update journal destination drifted")
+    );
+    assert_eq!(
+        std::fs::read(&plan.files[0].destination).unwrap(),
+        b"concurrent destination drift\n"
+    );
+    for (file, committed_hash) in plan
+        .files
+        .iter()
+        .skip(1)
+        .zip(committed_hashes.iter().skip(1))
+    {
+        assert_eq!(&sha(&file.destination), committed_hash, "{}", file.role);
     }
 }

@@ -53,6 +53,7 @@ impl TrustedFloor {
 
     pub fn validate(&self) -> Result<(), TrustedStateError> {
         if self.schema_version != TRUSTED_STATE_SCHEMA_VERSION
+            || self.key_epoch == 0
             || self.sequence == 0
             || !is_lower_hex(&self.manifest_sha256, 64)
         {
@@ -61,9 +62,10 @@ impl TrustedFloor {
         Ok(())
     }
 
-    /// Enforce monotonic release metadata. An exact manifest may resume an
-    /// interrupted transaction, but a lower sequence/key epoch/version or a
-    /// same-version different digest can never replace the floor.
+    /// Enforce monotonic release metadata. An exact manifest reports only an
+    /// exact floor identity; a separately verified active request and journal
+    /// must authorize transaction recovery. A lower sequence/key epoch/version
+    /// or same-version different digest can never replace the floor.
     pub fn classify(
         &self,
         candidate: &VerifiedManifest,
@@ -75,21 +77,24 @@ impl TrustedFloor {
         if now + Duration::minutes(5) < self.last_seen_at {
             return Err(TrustedStateError::ClockRollback);
         }
+        if manifest.version == self.highest_version {
+            if candidate.sha256() != self.manifest_sha256
+                || manifest.sequence != self.sequence
+                || manifest.key_epoch != self.key_epoch
+            {
+                return Err(TrustedStateError::Equivocation);
+            }
+            if manifest.version <= *installed {
+                return Err(TrustedStateError::ReplayOrDowngrade);
+            }
+            return Ok(FloorDecision::ExactFloorIdentity);
+        }
         if manifest.version <= *installed
             || manifest.key_epoch < self.key_epoch
             || manifest.sequence < self.sequence
             || manifest.version < self.highest_version
         {
             return Err(TrustedStateError::ReplayOrDowngrade);
-        }
-        if manifest.version == self.highest_version {
-            if candidate.sha256() != self.manifest_sha256 {
-                return Err(TrustedStateError::Equivocation);
-            }
-            if manifest.sequence != self.sequence || manifest.key_epoch != self.key_epoch {
-                return Err(TrustedStateError::Equivocation);
-            }
-            return Ok(FloorDecision::ResumeExact);
         }
         if manifest.sequence <= self.sequence {
             return Err(TrustedStateError::ReplayOrDowngrade);
@@ -100,7 +105,7 @@ impl TrustedFloor {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FloorDecision {
-    ResumeExact,
+    ExactFloorIdentity,
     Advance,
 }
 
@@ -611,11 +616,194 @@ mod tests {
     use chrono::TimeZone;
 
     use super::*;
+    use crate::update::trust::{
+        MANIFEST_PROTOCOL, MANIFEST_SCHEMA_VERSION, ManifestAsset, PRODUCTION_KEY_EPOCH,
+        PRODUCTION_KEY_ID, ReleaseManifest, sign_manifest_for_test,
+        verify_manifest_for_test_at_epoch,
+    };
 
     fn time(day: u32) -> DateTime<Utc> {
         Utc.with_ymd_and_hms(2026, 8, day, 0, 0, 0)
             .single()
             .unwrap()
+    }
+
+    fn verified_manifest_at_epoch(
+        version: &str,
+        key_epoch: u32,
+        sequence: u64,
+        commit_nibble: char,
+    ) -> VerifiedManifest {
+        let version = ReleaseVersion::parse(version).unwrap();
+        let manifest = ReleaseManifest {
+            schema_version: MANIFEST_SCHEMA_VERSION,
+            protocol: MANIFEST_PROTOCOL.into(),
+            key_id: PRODUCTION_KEY_ID.into(),
+            key_epoch,
+            sequence,
+            issued_at: time(20),
+            expires_at: time(25),
+            release_tag: version.release_tag(),
+            version: version.clone(),
+            commit_sha: commit_nibble.to_string().repeat(40),
+            platform: "windows-x86_64-msvc".into(),
+            cli_contract: "rayman-cli-contract-v18".into(),
+            install_manifest_sha256: "2".repeat(64),
+            assets: AssetRole::ALL
+                .into_iter()
+                .map(|role| ManifestAsset {
+                    role,
+                    name: role.expected_name().into(),
+                    size: 128,
+                    sha256: "3".repeat(64),
+                })
+                .collect(),
+        };
+        let (bytes, signature) = sign_manifest_for_test(&manifest);
+        verify_manifest_for_test_at_epoch(&bytes, &signature, time(21), &version, key_epoch)
+            .unwrap()
+    }
+
+    fn verified_manifest(version: &str, sequence: u64, commit_nibble: char) -> VerifiedManifest {
+        verified_manifest_at_epoch(version, PRODUCTION_KEY_EPOCH, sequence, commit_nibble)
+    }
+
+    #[test]
+    fn trusted_floor_reports_only_advance_or_exact_floor_identity() {
+        let installed = ReleaseVersion::parse("2.11.0").unwrap();
+        let current = verified_manifest("2.12.0", 12, '1');
+        let floor = TrustedFloor::from_verified(&current, time(21));
+
+        assert_eq!(
+            floor.classify(&current, &installed, time(21)),
+            Ok(FloorDecision::ExactFloorIdentity)
+        );
+
+        let next = verified_manifest("2.13.0", 13, '2');
+        assert_eq!(
+            floor.classify(&next, &installed, time(21)),
+            Ok(FloorDecision::Advance)
+        );
+    }
+
+    #[test]
+    fn trusted_floor_clock_rollback_tolerance_is_inclusive() {
+        let installed = ReleaseVersion::parse("2.11.0").unwrap();
+        let current = verified_manifest("2.12.0", 12, '1');
+        let floor = TrustedFloor::from_verified(&current, time(21));
+        let next = verified_manifest("2.13.0", 13, '2');
+
+        assert_eq!(
+            floor.classify(&next, &installed, time(21) - Duration::minutes(5)),
+            Ok(FloorDecision::Advance)
+        );
+        assert_eq!(
+            floor.classify(&next, &installed, time(21) - Duration::minutes(6)),
+            Err(TrustedStateError::ClockRollback)
+        );
+    }
+
+    #[test]
+    fn trusted_floor_rejects_every_monotonicity_replay_axis() {
+        let installed = ReleaseVersion::parse("2.11.0").unwrap();
+        let current = verified_manifest("2.12.0", 12, '1');
+        let floor = TrustedFloor::from_verified(&current, time(21));
+
+        let installed_candidate = ReleaseVersion::parse("2.12.0").unwrap();
+        assert_eq!(
+            floor.classify(&current, &installed_candidate, time(21)),
+            Err(TrustedStateError::ReplayOrDowngrade)
+        );
+
+        let older_version = verified_manifest("2.11.1", 13, '2');
+        assert_eq!(
+            floor.classify(
+                &older_version,
+                &ReleaseVersion::parse("2.10.0").unwrap(),
+                time(21)
+            ),
+            Err(TrustedStateError::ReplayOrDowngrade)
+        );
+
+        let repeated_sequence = verified_manifest("2.13.0", 12, '3');
+        assert_eq!(
+            floor.classify(&repeated_sequence, &installed, time(21)),
+            Err(TrustedStateError::ReplayOrDowngrade)
+        );
+
+        let lower_sequence = verified_manifest("2.13.0", 11, '4');
+        assert_eq!(
+            floor.classify(&lower_sequence, &installed, time(21)),
+            Err(TrustedStateError::ReplayOrDowngrade)
+        );
+
+        let mut newer_epoch_floor = floor.clone();
+        newer_epoch_floor.key_epoch += 1;
+        assert_eq!(
+            newer_epoch_floor.classify(&current, &installed, time(21)),
+            Err(TrustedStateError::Equivocation)
+        );
+    }
+
+    #[test]
+    fn trusted_floor_rejects_same_version_digest_or_sequence_equivocation() {
+        let installed = ReleaseVersion::parse("2.11.0").unwrap();
+        let current = verified_manifest("2.12.0", 12, '1');
+        let floor = TrustedFloor::from_verified(&current, time(21));
+
+        let different_manifest = verified_manifest("2.12.0", 12, '2');
+        assert_eq!(
+            floor.classify(&different_manifest, &installed, time(21)),
+            Err(TrustedStateError::Equivocation)
+        );
+        assert_eq!(
+            floor.classify(
+                &different_manifest,
+                &ReleaseVersion::parse("2.12.0").unwrap(),
+                time(21)
+            ),
+            Err(TrustedStateError::Equivocation)
+        );
+
+        let mut different_sequence = floor.clone();
+        different_sequence.sequence -= 1;
+        assert_eq!(
+            different_sequence.classify(&current, &installed, time(21)),
+            Err(TrustedStateError::Equivocation)
+        );
+
+        let mut corrupt_epoch = TrustedFloor::from_verified(&current, time(21));
+        corrupt_epoch.key_epoch = 0;
+        assert_eq!(
+            corrupt_epoch.classify(&current, &installed, time(21)),
+            Err(TrustedStateError::CorruptFloor)
+        );
+    }
+
+    #[test]
+    fn trusted_floor_key_rotation_requires_a_higher_global_sequence() {
+        let installed = ReleaseVersion::parse("2.11.0").unwrap();
+        let current = verified_manifest_at_epoch("2.12.0", 1, 12, '1');
+        let floor = TrustedFloor::from_verified(&current, time(21));
+
+        let rotated = verified_manifest_at_epoch("2.13.0", 2, 13, '2');
+        assert_eq!(
+            floor.classify(&rotated, &installed, time(21)),
+            Ok(FloorDecision::Advance)
+        );
+
+        let reused_sequence = verified_manifest_at_epoch("2.13.0", 2, 12, '3');
+        assert_eq!(
+            floor.classify(&reused_sequence, &installed, time(21)),
+            Err(TrustedStateError::ReplayOrDowngrade)
+        );
+
+        let rotated_floor = TrustedFloor::from_verified(&rotated, time(21));
+        let lower_epoch = verified_manifest_at_epoch("2.14.0", 1, 14, '4');
+        assert_eq!(
+            rotated_floor.classify(&lower_epoch, &installed, time(21)),
+            Err(TrustedStateError::ReplayOrDowngrade)
+        );
     }
 
     #[cfg(all(windows, debug_assertions))]

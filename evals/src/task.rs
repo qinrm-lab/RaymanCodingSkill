@@ -5,59 +5,64 @@
 
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::grade;
 
 const BUILTIN_TASK_MANIFEST: &str = "rayman-evals-builtins-v1";
+const TASK_CONTRACT_SCHEMA: &str = "rayman.eval-task.v2";
+const ORACLE_MODULE_PATH: &str = "src/__rayman_oracle.rs";
+const ORACLE_MODULE_MARKER: &str =
+    "\n#[cfg(test)]\n#[path = \"__rayman_oracle.rs\"]\nmod __rayman_oracle;\n";
 const BUILTIN_TASK_HASHES: &[(&str, &str)] = &[
     (
         "add-feature",
-        "f8a05b5e3ba4cccaef80986186ec8865f6ad2245dc4d994ddfb80efeeb703a77",
+        "e308acf3782167365d627e189ed4c311b2b4f678676eb601c8a3a8611fc088a9",
     ),
     (
         "adjacent-bug-escalation",
-        "54bf916baa83c8e9411414340d2205c671ebfa6798b2ec3375c71843697efebe",
+        "b491c9acac075991426ea6de0be1ab30cbc169b51ddad9d6eeb3ddf259be9ceb",
     ),
     (
         "audit-to-closure",
-        "c3ae923abfd23d3cc9663685105bf52e79dafc80147cb4e5fd152b46f1d3c6f2",
+        "e937b5a498a9b13b73a7ecbe7878f1730395525387b256d4fd7675a15b70ce1b",
     ),
     (
         "edge-case-split",
-        "45c4f17c9c6310d25ca5cd603b43ed59c9cb9d6e920e0d2487ef9da1f4fa2fa0",
+        "ebf9f6851e697e85c16afe7448934fc4aa83e130350fac58222d4dc5ce457cac",
     ),
     (
         "emergent-risk-plan-extension",
-        "7418e16e5a49c1fa135491539efd54cbf32dee3681a940bf8103bcc9a5caa5a4",
+        "d66eeb6fa30b61624eb2707946ee9e31331b0e8619e792c6969d4c3e96daed85",
     ),
     (
         "evidence-first-overflow",
-        "779ae1c4f694bec425d3a3f7577ba7d03a97e873d442951a6ed52479f2fe5c1d",
+        "96dc3cd9cf5b3f2d49f45e70e24474ff80bb995b0a2b198039091d6bcffe5a20",
     ),
     (
         "fix-failing-test",
-        "beaac5e4337ee279eeb40163c2b46f1f9e7e9562bd5ab5742a120a09f3fac58f",
+        "49c5d27a6452c57b58edd979aaa9bc535bf82c4e33011707794a43fa61e79f63",
     ),
     (
         "human-boundary-solution-pack",
-        "19cdaab1d180ccdbbd1acaeb2905d85ef5341cd26ed354e0b827ecfb31fb46a2",
+        "3821904cf0b20a190a637733cf14f5b6c701499fad02ae809f8a1be578e796fc",
     ),
     (
         "large-repo-nav",
-        "dfb278083b50b11c415bf8e852db82c57087019ec6b22878db8380622219b49d",
+        "be44614a117ead8607611153b2797b205c5c6f2dd4d4f9c6289fa4e6ff9c853c",
     ),
     (
         "remove-dead-code",
-        "a087adbdd867d39d193bc2daedad993febb88e94fa0b3cdb5c51499fbc3bb141",
+        "93f02fdf4f54c730d0b75c1509d474b73bbcf92495928d99f9e5c78320121f38",
     ),
     (
         "self-invalidating-gate",
-        "08b3a2cbb452a38770cdb7ad9d2e5552667a6a468ab5ba6ee874f8e289d70662",
+        "4a2098997be196ee796d8feed1fc1556aa5003e73fd7690b9ddf08abfea24c8e",
     ),
 ];
 
@@ -70,6 +75,39 @@ pub struct Task {
     /// 隐藏评分命令：在 agent 完成后的工作区里运行，退出 0 记为成功。agent 看不到它。
     pub grade_cmd: String,
     grade_path: PathBuf,
+    contract_path: PathBuf,
+    oracle_dir: PathBuf,
+    pub contract: TaskContract,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskContract {
+    pub schema: String,
+    pub source_ids: Vec<String>,
+    pub rule_ids: Vec<String>,
+    #[serde(default)]
+    pub activate_workspace: bool,
+    #[serde(default)]
+    pub editable_paths: Vec<String>,
+    #[serde(default)]
+    pub editable_prefixes: Vec<String>,
+    pub oracle: OracleContract,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum OracleContract {
+    RustModule {
+        source: String,
+        module_file: String,
+        expected_tests: Vec<String>,
+    },
+    PowerShell {
+        source: String,
+        destination: String,
+        success_marker: String,
+    },
 }
 
 /// 写入 run manifest 的任务输入身份。`task_sha256` 绑定任务名、提示、评分命令和 fixture tree。
@@ -79,8 +117,57 @@ pub struct TaskProvenance {
     pub prompt_sha256: String,
     pub grade_sha256: String,
     pub fixture_sha256: String,
+    pub contract_sha256: String,
+    pub oracle_sha256: String,
     pub task_sha256: String,
 }
+
+#[derive(Debug, Clone)]
+pub struct OracleSeal {
+    sealed_files: BTreeMap<String, String>,
+    expected_tests: Vec<String>,
+    success_marker: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OraclePreparationFailure {
+    PolicyViolation,
+    Infrastructure,
+}
+
+#[derive(Debug)]
+pub struct OraclePreparationError {
+    kind: OraclePreparationFailure,
+    message: String,
+}
+
+impl OraclePreparationError {
+    fn policy(message: impl Into<String>) -> Self {
+        Self {
+            kind: OraclePreparationFailure::PolicyViolation,
+            message: message.into(),
+        }
+    }
+
+    fn infrastructure(message: impl Into<String>) -> Self {
+        Self {
+            kind: OraclePreparationFailure::Infrastructure,
+            message: message.into(),
+        }
+    }
+
+    pub fn kind(&self) -> OraclePreparationFailure {
+        self.kind
+    }
+}
+
+impl std::fmt::Display for OraclePreparationError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for OraclePreparationError {}
 
 /// Why this run is allowed to execute hidden grade commands on the host.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -118,17 +205,24 @@ impl Task {
         let prompt_sha256 = sha256_bytes(self.prompt.as_bytes());
         let grade_sha256 = sha256_bytes(self.grade_cmd.as_bytes());
         let fixture_sha256 = hash_tree(&self.fixture_dir)?;
+        let contract_text = read(&self.contract_path)?;
+        let contract_sha256 = sha256_bytes(contract_text.as_bytes());
+        let oracle_sha256 = hash_tree(&self.oracle_dir)?;
         let task_sha256 = sha256_parts(&[
             self.name.as_bytes(),
             prompt_sha256.as_bytes(),
             grade_sha256.as_bytes(),
             fixture_sha256.as_bytes(),
+            contract_sha256.as_bytes(),
+            oracle_sha256.as_bytes(),
         ]);
         Ok(TaskProvenance {
             name: self.name.clone(),
             prompt_sha256,
             grade_sha256,
             fixture_sha256,
+            contract_sha256,
+            oracle_sha256,
             task_sha256,
         })
     }
@@ -170,8 +264,15 @@ pub fn load_tasks(tasks_root: &Path, filter: Option<&str>) -> Result<Vec<Task>> 
         let prompt = read(&prompt_path)?;
         let grade_path = dir.join("grade.txt");
         let grade_cmd = read(&grade_path)?.trim().to_string();
+        let contract_path = dir.join("task.json");
+        let contract_text = read(&contract_path)?;
+        let contract: TaskContract = serde_json::from_str(&contract_text)
+            .with_context(|| format!("无法解析任务 contract: {}", contract_path.display()))?;
+        validate_task_contract(&name, &contract)?;
         let fixture_dir = dir.join("fixture");
         ensure_real_dir(&fixture_dir, "任务 fixture")?;
+        let oracle_dir = dir.join("oracle");
+        ensure_real_dir(&oracle_dir, "任务 oracle")?;
         // On Windows `cmd` resolves a bare command from its CWD before PATH. A top-level
         // rayman wrapper would leak availability into control before a trial begins.
         if let Err(error) = grade::ensure_no_top_level_rayman_command(&fixture_dir) {
@@ -189,10 +290,97 @@ pub fn load_tasks(tasks_root: &Path, filter: Option<&str>) -> Result<Vec<Task>> 
             fixture_dir,
             grade_cmd,
             grade_path,
+            contract_path,
+            oracle_dir,
+            contract,
         });
     }
     tasks.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(tasks)
+}
+
+fn validate_task_contract(name: &str, contract: &TaskContract) -> Result<()> {
+    if contract.schema != TASK_CONTRACT_SCHEMA {
+        bail!(
+            "任务 {name} contract schema 必须是 {TASK_CONTRACT_SCHEMA}: {}",
+            contract.schema
+        );
+    }
+    for (label, values) in [
+        ("source_ids", &contract.source_ids),
+        ("rule_ids", &contract.rule_ids),
+    ] {
+        if values.is_empty()
+            || values
+                .iter()
+                .any(|value| value.trim().is_empty() || value.trim() != value)
+        {
+            bail!("任务 {name} contract {label} 必须包含非空规范 ID");
+        }
+        let unique = values.iter().collect::<std::collections::BTreeSet<_>>();
+        if unique.len() != values.len() {
+            bail!("任务 {name} contract {label} 包含重复 ID");
+        }
+    }
+    for path in contract
+        .editable_paths
+        .iter()
+        .chain(contract.editable_prefixes.iter())
+    {
+        validate_relative_contract_path(name, path)?;
+    }
+    match &contract.oracle {
+        OracleContract::RustModule {
+            source,
+            module_file,
+            expected_tests,
+        } => {
+            validate_relative_contract_path(name, source)?;
+            validate_relative_contract_path(name, module_file)?;
+            if !contract.editable_paths.contains(module_file)
+                && !contract
+                    .editable_prefixes
+                    .iter()
+                    .any(|prefix| module_file.starts_with(prefix))
+            {
+                bail!("任务 {name} oracle module_file 必须属于 editable scope");
+            }
+            if expected_tests.is_empty()
+                || expected_tests
+                    .iter()
+                    .any(|test| test.trim().is_empty() || test.trim() != test)
+            {
+                bail!("任务 {name} Rust oracle 必须声明 expected_tests");
+            }
+        }
+        OracleContract::PowerShell {
+            source,
+            destination,
+            success_marker,
+        } => {
+            validate_relative_contract_path(name, source)?;
+            validate_relative_contract_path(name, destination)?;
+            if success_marker.trim().is_empty() {
+                bail!("任务 {name} PowerShell oracle 必须声明 success_marker");
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_relative_contract_path(name: &str, path: &str) -> Result<()> {
+    let normalized = Path::new(path);
+    if path.is_empty()
+        || path.contains('\\')
+        || path.starts_with('/')
+        || path.ends_with('/')
+        || normalized
+            .components()
+            .any(|part| !matches!(part, std::path::Component::Normal(_)))
+    {
+        bail!("任务 {name} contract path 必须是规范相对路径: {path}");
+    }
+    Ok(())
 }
 
 /// Built-in grades execute without an acknowledgement only when both their repository
@@ -333,6 +521,315 @@ pub fn setup_workspace(task: &Task, dest: &Path, expected_fixture_sha256: &str) 
     Ok(())
 }
 
+pub fn prepare_grade_workspace(
+    task: &Task,
+    workspace: &Path,
+    authorized: &TaskProvenance,
+) -> std::result::Result<OracleSeal, OraclePreparationError> {
+    let current = task.provenance().map_err(|error| {
+        OraclePreparationError::infrastructure(format!("无法复核 grade 输入身份: {error:#}"))
+    })?;
+    if current != *authorized {
+        return Err(OraclePreparationError::infrastructure(format!(
+            "任务输入在 grade 发布前漂移，拒绝评分: {}",
+            task.name
+        )));
+    }
+    verify_agent_workspace_delta(task, workspace)?;
+
+    let mut sealed_files = BTreeMap::new();
+    let mut expected_tests = Vec::new();
+    let mut success_marker = None;
+    match &task.contract.oracle {
+        OracleContract::RustModule {
+            source,
+            module_file,
+            expected_tests: declared_tests,
+        } => {
+            let oracle_source = task.oracle_dir.join(source);
+            let oracle_bytes =
+                read_regular_bytes(&oracle_source, "Rust oracle").map_err(|error| {
+                    OraclePreparationError::infrastructure(format!(
+                        "无法读取受信任 Rust oracle: {error:#}"
+                    ))
+                })?;
+            let destination = workspace.join(ORACLE_MODULE_PATH);
+            match fs::symlink_metadata(&destination) {
+                Ok(_) => {
+                    return Err(OraclePreparationError::policy(format!(
+                        "agent 创建了保留 oracle 路径，拒绝评分: {}",
+                        destination.display()
+                    )));
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => {
+                    return Err(OraclePreparationError::infrastructure(format!(
+                        "无法检查保留 Rust oracle 路径 {}: {error}",
+                        destination.display()
+                    )));
+                }
+            }
+            fs::write(&destination, &oracle_bytes)
+                .with_context(|| format!("无法发布 Rust oracle: {}", destination.display()))
+                .map_err(|error| OraclePreparationError::infrastructure(format!("{error:#}")))?;
+
+            let module_path = workspace.join(module_file);
+            let module_metadata = match fs::symlink_metadata(&module_path) {
+                Ok(metadata) => metadata,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    return Err(OraclePreparationError::policy(format!(
+                        "oracle module_file 不存在: {}",
+                        module_path.display()
+                    )));
+                }
+                Err(error) => {
+                    return Err(OraclePreparationError::infrastructure(format!(
+                        "无法检查 oracle module_file {}: {error}",
+                        module_path.display()
+                    )));
+                }
+            };
+            if is_link_or_reparse(&module_metadata) || !module_metadata.is_file() {
+                return Err(OraclePreparationError::policy(format!(
+                    "oracle module_file 不是普通文件: {}",
+                    module_path.display()
+                )));
+            }
+            let module_before = fs::read_to_string(&module_path)
+                .with_context(|| format!("无法读取 oracle module_file: {}", module_path.display()))
+                .map_err(|error| OraclePreparationError::infrastructure(format!("{error:#}")))?;
+            if module_before.contains("__rayman_oracle") {
+                return Err(OraclePreparationError::policy(
+                    "agent 预置了保留 oracle module 名称，拒绝评分",
+                ));
+            }
+            fs::OpenOptions::new()
+                .append(true)
+                .open(&module_path)
+                .and_then(|mut file| file.write_all(ORACLE_MODULE_MARKER.as_bytes()))
+                .with_context(|| {
+                    format!("无法发布 oracle module anchor: {}", module_path.display())
+                })
+                .map_err(|error| OraclePreparationError::infrastructure(format!("{error:#}")))?;
+
+            sealed_files.insert(
+                ORACLE_MODULE_PATH.into(),
+                sha256_regular_file(&destination, "已发布 Rust oracle").map_err(|error| {
+                    OraclePreparationError::infrastructure(format!("{error:#}"))
+                })?,
+            );
+            sealed_files.insert(
+                module_file.clone(),
+                sha256_regular_file(&module_path, "oracle module anchor").map_err(|error| {
+                    OraclePreparationError::infrastructure(format!("{error:#}"))
+                })?,
+            );
+            expected_tests = declared_tests.clone();
+        }
+        OracleContract::PowerShell {
+            source,
+            destination,
+            success_marker: declared_marker,
+        } => {
+            let oracle_source = task.oracle_dir.join(source);
+            let oracle_bytes =
+                read_regular_bytes(&oracle_source, "PowerShell oracle").map_err(|error| {
+                    OraclePreparationError::infrastructure(format!(
+                        "无法读取受信任 PowerShell oracle: {error:#}"
+                    ))
+                })?;
+            let destination_path = workspace.join(destination);
+            match fs::symlink_metadata(&destination_path) {
+                Ok(_) => {
+                    return Err(OraclePreparationError::policy(format!(
+                        "agent 创建了保留 oracle 路径，拒绝评分: {}",
+                        destination_path.display()
+                    )));
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => {
+                    return Err(OraclePreparationError::infrastructure(format!(
+                        "无法检查保留 PowerShell oracle 路径 {}: {error}",
+                        destination_path.display()
+                    )));
+                }
+            }
+            let parent = destination_path.parent().ok_or_else(|| {
+                OraclePreparationError::infrastructure("oracle destination 缺少父目录")
+            })?;
+            if !parent.is_dir() {
+                fs::create_dir(parent)
+                    .with_context(|| {
+                        format!("无法创建 oracle destination 父目录: {}", parent.display())
+                    })
+                    .map_err(|error| {
+                        OraclePreparationError::infrastructure(format!("{error:#}"))
+                    })?;
+            }
+            fs::write(&destination_path, &oracle_bytes)
+                .with_context(|| {
+                    format!("无法发布 PowerShell oracle: {}", destination_path.display())
+                })
+                .map_err(|error| OraclePreparationError::infrastructure(format!("{error:#}")))?;
+            sealed_files.insert(
+                destination.clone(),
+                sha256_regular_file(&destination_path, "已发布 PowerShell oracle").map_err(
+                    |error| OraclePreparationError::infrastructure(format!("{error:#}")),
+                )?,
+            );
+            success_marker = Some(declared_marker.clone());
+        }
+    }
+    Ok(OracleSeal {
+        sealed_files,
+        expected_tests,
+        success_marker,
+    })
+}
+
+pub fn verify_grade_seal(workspace: &Path, seal: &OracleSeal) -> Result<()> {
+    for (relative, expected) in &seal.sealed_files {
+        let actual = sha256_regular_file(&workspace.join(relative), "grade oracle seal")?;
+        if &actual != expected {
+            bail!("grade 执行期间 oracle 漂移: {relative}");
+        }
+    }
+    Ok(())
+}
+
+pub fn verify_grade_observation(
+    workspace: &Path,
+    seal: &OracleSeal,
+    stdout: &str,
+    stderr: &str,
+) -> Result<()> {
+    verify_grade_seal(workspace, seal)?;
+    let combined = format!("{stdout}\n{stderr}");
+    for test in &seal.expected_tests {
+        let expected = format!("test __rayman_oracle::{test} ... ok");
+        if !combined.contains(&expected) {
+            bail!("grade 未执行并通过受保护测试: __rayman_oracle::{test}");
+        }
+    }
+    if let Some(marker) = &seal.success_marker
+        && !combined.contains(marker)
+    {
+        bail!("grade 未产生受保护 oracle 成功标记: {marker}");
+    }
+    Ok(())
+}
+
+fn verify_agent_workspace_delta(
+    task: &Task,
+    workspace: &Path,
+) -> std::result::Result<(), OraclePreparationError> {
+    let baseline = file_manifest(&task.fixture_dir).map_err(|error| {
+        OraclePreparationError::infrastructure(format!("无法读取 fixture 基线: {error:#}"))
+    })?;
+    let current = file_manifest(workspace).map_err(|error| {
+        OraclePreparationError::infrastructure(format!("无法读取 agent workspace: {error:#}"))
+    })?;
+    for (path, expected) in &baseline {
+        if editable_path(&task.contract, path) {
+            continue;
+        }
+        match current.get(path) {
+            Some(actual) if actual == expected => {}
+            Some(_) => {
+                return Err(OraclePreparationError::policy(format!(
+                    "agent 修改了非 editable fixture 文件: {path}"
+                )));
+            }
+            None => {
+                return Err(OraclePreparationError::policy(format!(
+                    "agent 删除了非 editable fixture 文件: {path}"
+                )));
+            }
+        }
+    }
+    for path in current.keys() {
+        if !baseline.contains_key(path) && !editable_path(&task.contract, path) {
+            return Err(OraclePreparationError::policy(format!(
+                "agent 创建了 editable scope 外文件: {path}"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn editable_path(contract: &TaskContract, path: &str) -> bool {
+    contract.editable_paths.iter().any(|value| value == path)
+        || contract
+            .editable_prefixes
+            .iter()
+            .any(|prefix| path == prefix || path.starts_with(&format!("{prefix}/")))
+}
+
+fn file_manifest(root: &Path) -> Result<BTreeMap<String, String>> {
+    ensure_real_dir(root, "manifest root")?;
+    let mut files = BTreeMap::new();
+    collect_file_manifest(root, root, &mut files)?;
+    Ok(files)
+}
+
+fn collect_file_manifest(
+    root: &Path,
+    path: &Path,
+    files: &mut BTreeMap<String, String>,
+) -> Result<()> {
+    let metadata = fs::symlink_metadata(path)
+        .with_context(|| format!("无法检查 workspace manifest 输入: {}", path.display()))?;
+    if is_link_or_reparse(&metadata) {
+        bail!("拒绝 workspace manifest symlink: {}", path.display());
+    }
+    if metadata.is_dir() {
+        let mut entries = fs::read_dir(path)
+            .with_context(|| format!("无法读取 workspace manifest: {}", path.display()))?
+            .collect::<std::io::Result<Vec<_>>>()?;
+        entries.sort_by_key(|entry| entry.file_name());
+        for entry in entries {
+            let name = entry.file_name();
+            let child = entry.path();
+            let child_metadata = fs::symlink_metadata(&child)?;
+            if child_metadata.is_dir()
+                && matches!(
+                    name.to_string_lossy().as_ref(),
+                    "target" | ".git" | "node_modules" | ".RaymanCodingSkill"
+                )
+            {
+                continue;
+            }
+            collect_file_manifest(root, &child, files)?;
+        }
+    } else if metadata.is_file() {
+        let relative = path
+            .strip_prefix(root)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        files.insert(
+            relative,
+            sha256_regular_file(path, "workspace manifest file")?,
+        );
+    } else {
+        bail!("拒绝 workspace manifest 非普通文件: {}", path.display());
+    }
+    Ok(())
+}
+
+fn read_regular_bytes(path: &Path, label: &str) -> Result<Vec<u8>> {
+    let metadata = fs::symlink_metadata(path)
+        .with_context(|| format!("无法检查 {label}: {}", path.display()))?;
+    if is_link_or_reparse(&metadata) || !metadata.is_file() {
+        bail!("{label} 必须是普通文件: {}", path.display());
+    }
+    fs::read(path).with_context(|| format!("无法读取 {label}: {}", path.display()))
+}
+
+fn sha256_regular_file(path: &Path, label: &str) -> Result<String> {
+    Ok(sha256_bytes(&read_regular_bytes(path, label)?))
+}
+
 fn copy_dir(src: &Path, dest: &Path) -> Result<()> {
     ensure_real_dir(src, "fixture 目录")?;
     match fs::create_dir(dest) {
@@ -469,6 +966,50 @@ mod tests {
         fs::write(path, body).unwrap();
     }
 
+    fn seed_contract(task_dir: &Path) -> TaskContract {
+        let contract = TaskContract {
+            schema: TASK_CONTRACT_SCHEMA.into(),
+            source_ids: vec!["SRC-TEST".into()],
+            rule_ids: vec!["RULE-TEST".into()],
+            activate_workspace: false,
+            editable_paths: vec!["src/lib.rs".into()],
+            editable_prefixes: Vec::new(),
+            oracle: OracleContract::RustModule {
+                source: "tests.rs".into(),
+                module_file: "src/lib.rs".into(),
+                expected_tests: vec!["oracle_smoke".into()],
+            },
+        };
+        write(
+            &task_dir.join("task.json"),
+            &serde_json::to_string_pretty(&contract).unwrap(),
+        );
+        write(
+            &task_dir.join("oracle/tests.rs"),
+            "#[test]\nfn oracle_smoke() {}\n",
+        );
+        contract
+    }
+
+    fn sample_task(task_dir: &Path, fixture: PathBuf, prompt: &str, grade: &str) -> Task {
+        let prompt_path = task_dir.join("prompt.md");
+        let grade_path = task_dir.join("grade.txt");
+        write(&prompt_path, prompt);
+        write(&grade_path, grade);
+        let contract = seed_contract(task_dir);
+        Task {
+            name: "sample".into(),
+            prompt: prompt.trim().into(),
+            prompt_path,
+            fixture_dir: fixture,
+            grade_cmd: grade.trim().into(),
+            grade_path,
+            contract_path: task_dir.join("task.json"),
+            oracle_dir: task_dir.join("oracle"),
+            contract,
+        }
+    }
+
     #[test]
     fn load_tasks_filters_and_sorts() {
         let dir = tempfile::tempdir().unwrap();
@@ -478,6 +1019,7 @@ mod tests {
             write(&task_dir.join("prompt.md"), &format!("fix {name}\n"));
             write(&task_dir.join("grade.txt"), "cargo test\n");
             write(&task_dir.join("fixture/src/lib.rs"), "pub fn ok() {}\n");
+            seed_contract(&task_dir);
         }
 
         let all = load_tasks(tasks, None).unwrap();
@@ -522,6 +1064,7 @@ mod tests {
         write(&task_dir.join("prompt.md"), "fix it\n");
         write(&task_dir.join("grade.txt"), "echo host-command\n");
         write(&task_dir.join("fixture/src/lib.rs"), "pub fn ok() {}\n");
+        seed_contract(&task_dir);
         let tasks = load_tasks(dir.path(), None).unwrap();
         let manifests = tasks
             .iter()
@@ -548,6 +1091,7 @@ mod tests {
         write(&task_dir.join("prompt.md"), "fix it\n");
         write(&task_dir.join("grade.txt"), "echo host-command\n");
         write(&task_dir.join("fixture/src/lib.rs"), "pub fn ok() {}\n");
+        seed_contract(&task_dir);
         let tasks = load_tasks(&tasks_root, None).unwrap();
         let manifests = tasks
             .iter()
@@ -588,6 +1132,8 @@ mod tests {
             prompt_sha256: String::new(),
             grade_sha256: String::new(),
             fixture_sha256: String::new(),
+            contract_sha256: String::new(),
+            oracle_sha256: String::new(),
             task_sha256: BUILTIN_TASK_HASHES[0].1.into(),
         };
         assert!(builtin_manifest_matches(
@@ -606,6 +1152,7 @@ mod tests {
         write(&task_dir.join("prompt.md"), "fix it\n");
         write(&task_dir.join("grade.txt"), "cargo test\n");
         write(&task_dir.join("fixture/src/lib.rs"), "pub fn ok() {}\n");
+        seed_contract(&task_dir);
         // 杂散目录：没有 prompt.md，应被跳过而非报错。
         write(&tasks.join("stray/junk.txt"), "not a task\n");
 
@@ -637,14 +1184,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let fixture = dir.path().join("fixture");
         write(&fixture.join("src/lib.rs"), "pub fn ok() {}\n");
-        let task = Task {
-            name: "sample".into(),
-            prompt: "fix it".into(),
-            prompt_path: dir.path().join("prompt.md"),
-            fixture_dir: fixture,
-            grade_cmd: "cargo test".into(),
-            grade_path: dir.path().join("grade.txt"),
-        };
+        let task = sample_task(dir.path(), fixture, "fix it\n", "cargo test\n");
         let dest = dir.path().join("workspace");
 
         let expected_fixture_sha256 = hash_tree(&task.fixture_dir).unwrap();
@@ -661,14 +1201,7 @@ mod tests {
         let fixture = dir.path().join("fixture");
         write(&fixture.join("src/lib.rs"), "pub fn authorized() {}\n");
         let expected_fixture_sha256 = hash_tree(&fixture).unwrap();
-        let task = Task {
-            name: "sample".into(),
-            prompt: "fix it".into(),
-            prompt_path: dir.path().join("prompt.md"),
-            fixture_dir: fixture.clone(),
-            grade_cmd: "cargo test".into(),
-            grade_path: dir.path().join("grade.txt"),
-        };
+        let task = sample_task(dir.path(), fixture.clone(), "fix it\n", "cargo test\n");
         // Simulate the exact verify->copy window: authorization hashed the first tree, then
         // the task source changed before this trial copied it.
         write(&fixture.join("src/lib.rs"), "pub fn unauthorized() {}\n");
@@ -687,18 +1220,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let fixture = dir.path().join("fixture");
         write(&fixture.join("src/lib.rs"), "pub fn ok() {}\n");
-        let prompt_path = dir.path().join("prompt.md");
-        let grade_path = dir.path().join("grade.txt");
-        write(&prompt_path, "fix it\n");
-        write(&grade_path, "cargo test\n");
-        let task = Task {
-            name: "sample".into(),
-            prompt: "fix it".into(),
-            prompt_path: prompt_path.clone(),
-            fixture_dir: fixture.clone(),
-            grade_cmd: "cargo test".into(),
-            grade_path: grade_path.clone(),
-        };
+        let task = sample_task(dir.path(), fixture.clone(), "fix it\n", "cargo test\n");
+        let prompt_path = task.prompt_path.clone();
+        let grade_path = task.grade_path.clone();
         let first = task.provenance().unwrap();
         write(&fixture.join("src/lib.rs"), "pub fn changed() {}\n");
         let second = task.provenance().unwrap();
@@ -715,6 +1239,71 @@ mod tests {
         assert!(grade_error.contains("grade changed after load"));
     }
 
+    #[test]
+    fn post_agent_oracle_rejects_noneditable_workspace_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let fixture = dir.path().join("fixture");
+        write(&fixture.join("src/lib.rs"), "pub fn value() -> u8 { 1 }\n");
+        write(
+            &fixture.join("Cargo.toml"),
+            "[package]\nname='sample'\nversion='0.1.0'\nedition='2021'\n",
+        );
+        let task = sample_task(dir.path(), fixture, "fix it\n", "cargo test\n");
+        let manifest = task.provenance().unwrap();
+        let workspace = dir.path().join("workspace");
+        setup_workspace(&task, &workspace, &manifest.fixture_sha256).unwrap();
+        write(
+            &workspace.join("Cargo.toml"),
+            "[package]\nname='forged'\nversion='0.1.0'\nedition='2021'\n",
+        );
+
+        let error = prepare_grade_workspace(&task, &workspace, &manifest)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("非 editable"), "{error}");
+        assert!(!workspace.join(ORACLE_MODULE_PATH).exists());
+    }
+
+    #[test]
+    fn post_agent_oracle_is_published_late_sealed_and_observed() {
+        let dir = tempfile::tempdir().unwrap();
+        let fixture = dir.path().join("fixture");
+        write(&fixture.join("src/lib.rs"), "pub fn value() -> u8 { 1 }\n");
+        let task = sample_task(dir.path(), fixture, "fix it\n", "cargo test\n");
+        let manifest = task.provenance().unwrap();
+        let workspace = dir.path().join("workspace");
+        setup_workspace(&task, &workspace, &manifest.fixture_sha256).unwrap();
+        assert!(!workspace.join(ORACLE_MODULE_PATH).exists());
+
+        let seal = prepare_grade_workspace(&task, &workspace, &manifest).unwrap();
+        assert!(workspace.join(ORACLE_MODULE_PATH).is_file());
+        verify_grade_observation(
+            &workspace,
+            &seal,
+            "test __rayman_oracle::oracle_smoke ... ok",
+            "",
+        )
+        .unwrap();
+        let missing = verify_grade_observation(&workspace, &seal, "test result: ok", "")
+            .unwrap_err()
+            .to_string();
+        assert!(missing.contains("未执行并通过"), "{missing}");
+
+        write(
+            &workspace.join(ORACLE_MODULE_PATH),
+            "#[test]\nfn replaced() {}\n",
+        );
+        let drift = verify_grade_observation(
+            &workspace,
+            &seal,
+            "test __rayman_oracle::oracle_smoke ... ok",
+            "",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(drift.contains("oracle 漂移"), "{drift}");
+    }
+
     #[cfg(windows)]
     #[test]
     fn load_tasks_rejects_top_level_custom_rayman_wrapper_in_fixture() {
@@ -722,6 +1311,7 @@ mod tests {
         let task_dir = dir.path().join("task");
         write(&task_dir.join("prompt.md"), "fix it\n");
         write(&task_dir.join("grade.txt"), "cargo test\n");
+        seed_contract(&task_dir);
         write(
             &task_dir.join("fixture/RAYMAN.custom.extension"),
             "@echo off",

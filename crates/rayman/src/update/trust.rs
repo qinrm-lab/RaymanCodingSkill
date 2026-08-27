@@ -384,12 +384,29 @@ pub(crate) fn verify_manifest_for_test(
     now: DateTime<Utc>,
     expected_version: &ReleaseVersion,
 ) -> Result<VerifiedManifest, TrustError> {
+    verify_manifest_for_test_at_epoch(
+        bytes,
+        signature,
+        now,
+        expected_version,
+        PRODUCTION_KEY_EPOCH,
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn verify_manifest_for_test_at_epoch(
+    bytes: &[u8],
+    signature: &[u8],
+    now: DateTime<Utc>,
+    expected_version: &ReleaseVersion,
+    epoch: u32,
+) -> Result<VerifiedManifest, TrustError> {
     use ed25519_dalek::SigningKey;
 
     let signing = SigningKey::from_bytes(&[7u8; 32]);
     let root = TrustRoot {
         key_id: PRODUCTION_KEY_ID,
-        epoch: PRODUCTION_KEY_EPOCH,
+        epoch,
         key: signing.verifying_key(),
     };
     verify_manifest_with_root(bytes, signature, now, expected_version, &root)

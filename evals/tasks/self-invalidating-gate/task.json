@@ -1,0 +1,12 @@
+{
+  "schema": "rayman.eval-task.v2",
+  "source_ids": ["SRC-EVAL-SYNTHETIC-BUILTIN", "SRC-EVAL-ORACLE-INTEGRITY"],
+  "rule_ids": ["RULE-AUTHORITY-FIXED-POINT"],
+  "editable_paths": ["normalize.ps1", "requirements.md"],
+  "oracle": {
+    "kind": "power_shell",
+    "source": "verify.ps1",
+    "destination": "tests/__rayman_oracle.ps1",
+    "success_marker": "RAYMAN_EVAL_ORACLE_PASS self-invalidating-gate-v2"
+  }
+}

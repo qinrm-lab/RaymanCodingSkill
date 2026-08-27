@@ -290,6 +290,55 @@ boundaries, not lock contention and not source defects.
 
 ## Validation integrity
 
+This repository governs the complete `repository_first_party_executable_tests`
+set through two byte-bound files:
+`governance/first-party-test-inventory.json` and
+`governance/test-traceability.json`. The first is the exact role-qualified
+Rust/PowerShell/eval inventory; the second records the semantic
+source -> rule -> execution gate -> test bindings. A path/hash proves exact
+bytes, not why an expected result is correct. Every active source-rule link and
+test binding therefore names its own review horizon, and each binding digest
+covers the current source, rule, gate, exact test selector bytes, and dedicated
+asset bytes.
+
+Discovery and registration are a bijection. Rust source scanning ignores
+comments and ordinary/raw strings, while the runtime mode cross-checks the
+platform-active root and eval Cargo harness lists and rejects ignored tests.
+Ambiguous Cargo leaf identities fail closed. PowerShell uses its parser AST,
+must prove every named case reachable from the public `-SelfTest` call graph,
+and must prove every public suite directly dispatched by `check-repo.ps1`.
+Enumeration prunes generated directories before descent and rejects governed
+reparse entries. Eval fixture and oracle identities
+remain separate even when their leaf test names match. Generated run trees,
+target output, Git state, and Rayman state never enter the inventory. An
+unknown, unregistered, missing, ambiguous, unreachable, expired, or
+platform-uncovered test fails closed.
+
+Immutable test nodes contain executable identity only. Each semantic binding
+owns exactly one mutable test/gate relation, and dedicated assets use
+path-qualified ownership. Renewing a source horizon, source-rule review,
+semantic review, gate, or asset
+therefore retires the old relation/object and creates a new reviewed successor
+without mutating an unchanged test identity. Source `cfg` is not runtime
+evidence: protected eval fixture/oracle tests currently require exactly the
+Windows `eval_runtime` route, and Unix compilation cannot claim oracle
+execution.
+
+Retirement is a reverse-closure transaction, not history cleanup. Retire a
+source and its incident links; retire a rule when it loses its last defining
+source; retire its semantic bindings; and retire/delete every test that then
+has no other active, independently reviewed binding in the same revision. A
+shared test remains only through its surviving binding. A negative test for
+removed behavior remains only when an active rule still requires rejection.
+Dedicated test assets use delete-on-last-reference ownership: the final
+retirement deletes the file while preserving the immutable asset tombstone.
+Active IDs may not disappear, be born retired, be reused, or be resurrected.
+
+Both manifests bind the exact predecessor schema, generation, and bytes. Git
+history lookup distinguishes first introduction from delete/reintroduction,
+shallow history, and read failure; uncertainty fails closed instead of
+silently restarting at generation 1.
+
 `goal validate` runs one program plus argv from the workspace root. Shell
 control operators, nested shell hosts, nonzero exits, source mutation, stale
 fingerprints, irrelevant scopes, and zero-test receipts fail closed. Pytest

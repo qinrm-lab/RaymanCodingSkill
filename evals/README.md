@@ -130,6 +130,12 @@ It also reports both observed deltas. A run with fewer than two attempts per cel
 
 Condition order is counterbalanced deterministically: each task alternates which arm runs first; the seed chooses the task's initial arm. This and the order of each trial are stored in the report.
 
+Each report also records the exact SHA-256 of
+`governance/test-traceability.json`, and the input-integrity loop rechecks it
+before and after every trial. That hash is byte provenance for the rule graph;
+the repository traceability checker remains the authority that validates its
+semantic source/rule/test links.
+
 ## Adding a task
 
 Create `tasks/<name>/` with:
@@ -137,7 +143,9 @@ Create `tasks/<name>/` with:
 - `fixture/`: a small, self-contained starting repository with no symlinks.
 - `prompt.md`: instruction shown to the agent.
 - `grade.txt`: shell command where exit 0 means success. It is not sent through the prompt/file tools, but must not be treated as secret unless an OS-level sandbox separates the agent from `tasks/`.
+- `task.json`: the v2 editable-scope, `source_ids`, `rule_ids`, and hidden-oracle contract.
+- `oracle/`: protected Rust tests or a PowerShell verifier published only after agent execution.
 
 Keep fixture builds offline and grades deterministic. A normal agent prompt does not include `grade.txt`; an unrestricted host-shell agent can still reach it, which is why real-host reports are fail-closed non-comparative.
 
-Adding or intentionally changing a built-in task also requires a reviewed update to `BUILTIN_TASK_HASHES` in `src/task.rs`. The `repository_tasks_match_the_compiled_trusted_manifest` test fails until the full prompt + grade + fixture hash is deliberately synchronized. Do not reuse that trust entry for an external `--tasks` tree; external trees always require `--unsafe-custom-grade-exec`.
+Adding or intentionally changing a built-in task also requires a reviewed update to `BUILTIN_TASK_HASHES` in `src/task.rs` and matching active nodes in `governance/test-traceability.json`. The `repository_tasks_match_the_compiled_trusted_manifest` test binds prompt, grade, fixture, task contract, and oracle; `check-test-traceability.ps1` separately requires the task's source IDs, rule IDs, and exact oracle selectors to match the governed graph. Do not reuse either trust entry for an external `--tasks` tree; external trees always require `--unsafe-custom-grade-exec`.

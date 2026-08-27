@@ -3977,6 +3977,186 @@ function Remove-TemporaryDoctorWorkspace {
     return "Temporary doctor workspace retained for review; no recursive deletion was attempted: $($reported -join ', ').$suffix"
 }
 
+function Get-RaymanObjectPropertyNames {
+    param([Parameter(Mandatory = $true)]$Value)
+
+    if ($Value -is [Collections.IDictionary]) {
+        return @($Value.Keys | ForEach-Object { [string]$_ })
+    }
+    return @($Value.PSObject.Properties.Name)
+}
+
+function ConvertTo-RaymanProtectedInstallTuple {
+    param(
+        [Parameter(Mandatory = $true)]$Receipt,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $expectedProperties = @(
+        'schema_version', 'installation_id', 'version', 'cli_contract',
+        'cli_path', 'cli_sha256', 'worker_path', 'worker_sha256', 'skill_root',
+        'resources', 'install_manifest_sha256', 'installed_at', 'source',
+        'signed_release'
+    )
+    $actualProperties = @(Get-RaymanObjectPropertyNames -Value $Receipt)
+    if ($actualProperties.Count -ne $expectedProperties.Count -or
+        @($expectedProperties | Where-Object { $_ -notin $actualProperties }).Count -ne 0) {
+        throw "$Label does not have the exact install receipt schema."
+    }
+    if ([int]$Receipt.schema_version -ne 1 -or
+        [string]$Receipt.installation_id -notmatch '^[0-9a-f]{32}$' -or
+        [string]$Receipt.version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' -or
+        [string]$Receipt.cli_contract -notmatch '^rayman-cli-contract-v[1-9][0-9]*$' -or
+        -not [IO.Path]::IsPathFullyQualified([string]$Receipt.cli_path) -or
+        -not [IO.Path]::IsPathFullyQualified([string]$Receipt.worker_path) -or
+        -not [IO.Path]::IsPathFullyQualified([string]$Receipt.skill_root) -or
+        [string]$Receipt.cli_sha256 -notmatch '^[0-9a-f]{64}$' -or
+        [string]$Receipt.worker_sha256 -notmatch '^[0-9a-f]{64}$' -or
+        [string]$Receipt.install_manifest_sha256 -notmatch '^[0-9a-f]{64}$') {
+        throw "$Label contains an invalid install identity."
+    }
+    $installedAt = [DateTimeOffset]::MinValue
+    if (-not [DateTimeOffset]::TryParse(
+            [string]$Receipt.installed_at,
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::RoundtripKind,
+            [ref]$installedAt
+        ) -or $installedAt.Offset -ne [TimeSpan]::Zero) {
+        throw "$Label installed_at must be an RFC3339 UTC timestamp."
+    }
+
+    $resources = @($Receipt.resources)
+    $expectedResources = @(
+        [pscustomobject]@{ role = 'skill'; relative_path = 'SKILL.md' },
+        [pscustomobject]@{ role = 'agent_contract'; relative_path = 'AGENTS.md' },
+        [pscustomobject]@{ role = 'workflow_contract'; relative_path = 'references/workflow-contract.md' }
+    )
+    if ($resources.Count -ne $expectedResources.Count) {
+        throw "$Label does not bind exactly three managed skill resources."
+    }
+    $normalizedResources = @()
+    for ($index = 0; $index -lt $resources.Count; $index++) {
+        $resource = $resources[$index]
+        $resourceProperties = @(Get-RaymanObjectPropertyNames -Value $resource)
+        if ($resourceProperties.Count -ne 3 -or
+            @('role', 'relative_path', 'sha256').Where({ $_ -notin $resourceProperties }).Count -ne 0 -or
+            [string]$resource.role -ne [string]$expectedResources[$index].role -or
+            [string]$resource.relative_path -ne [string]$expectedResources[$index].relative_path -or
+            [string]$resource.sha256 -notmatch '^[0-9a-f]{64}$') {
+            throw "$Label has an invalid managed resource at index $index."
+        }
+        $normalizedResources += [ordered]@{
+            role = [string]$resource.role
+            relative_path = [string]$resource.relative_path
+            sha256 = [string]$resource.sha256
+        }
+    }
+
+    $source = [string]$Receipt.source
+    $signedRelease = $null
+    if ($source -eq 'source_fresh_installer') {
+        if ($null -ne $Receipt.signed_release) {
+            throw "$Label mixes source-fresh and signed-release authority."
+        }
+    } elseif ($source -eq 'signed_release') {
+        if ($null -eq $Receipt.signed_release) {
+            throw "$Label lacks signed-release authority."
+        }
+        $signedProperties = @(Get-RaymanObjectPropertyNames -Value $Receipt.signed_release)
+        if ($signedProperties.Count -ne 3 -or
+            @('manifest_sha256', 'key_epoch', 'sequence').Where({ $_ -notin $signedProperties }).Count -ne 0 -or
+            [string]$Receipt.signed_release.manifest_sha256 -notmatch '^[0-9a-f]{64}$' -or
+            [uint64]$Receipt.signed_release.key_epoch -eq 0 -or
+            [uint64]$Receipt.signed_release.sequence -eq 0) {
+            throw "$Label has invalid signed-release authority."
+        }
+        $signedRelease = [ordered]@{
+            manifest_sha256 = [string]$Receipt.signed_release.manifest_sha256
+            key_epoch = [uint64]$Receipt.signed_release.key_epoch
+            sequence = [uint64]$Receipt.signed_release.sequence
+        }
+    } else {
+        throw "$Label has an unsupported install source."
+    }
+
+    return [ordered]@{
+        version = [string]$Receipt.version
+        cli_contract = [string]$Receipt.cli_contract
+        cli_path = Get-PathComparisonKey -Entry ([string]$Receipt.cli_path)
+        cli_sha256 = [string]$Receipt.cli_sha256
+        worker_path = Get-PathComparisonKey -Entry ([string]$Receipt.worker_path)
+        worker_sha256 = [string]$Receipt.worker_sha256
+        skill_root = Get-PathComparisonKey -Entry ([string]$Receipt.skill_root)
+        resources = $normalizedResources
+        install_manifest_sha256 = [string]$Receipt.install_manifest_sha256
+        source = $source
+        signed_release = $signedRelease
+    }
+}
+
+function Confirm-RaymanSameVersionInstallPolicy {
+    param(
+        [Parameter(Mandatory = $true)][string]$ExistingReceiptPath,
+        [Parameter(Mandatory = $true)]$CandidateReceipt,
+        [scriptblock]$AfterReceiptReadTestHook
+    )
+
+    $candidateTuple = ConvertTo-RaymanProtectedInstallTuple `
+        -Receipt $CandidateReceipt `
+        -Label 'Candidate install receipt'
+    if (-not (Test-Path -LiteralPath $ExistingReceiptPath -PathType Leaf)) {
+        return [pscustomobject]@{ Status = 'replace_allowed'; ReceiptSha256 = $null }
+    }
+    $receiptInfo = Get-Item -LiteralPath $ExistingReceiptPath -Force
+    if ($receiptInfo.PSIsContainer -or
+        $receiptInfo.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw 'Existing Rayman install receipt must be an ordinary file.'
+    }
+    if ($receiptInfo.Length -le 0 -or $receiptInfo.Length -gt (256 * 1024)) {
+        throw 'Existing Rayman install receipt has an invalid size.'
+    }
+    try {
+        $receiptBytes = [IO.File]::ReadAllBytes($ExistingReceiptPath)
+        if ($receiptBytes.Length -ne $receiptInfo.Length) {
+            throw 'receipt size changed during the identity read'
+        }
+        $receiptText = [Text.UTF8Encoding]::new($false, $true).GetString($receiptBytes)
+        $existingReceipt = $receiptText | ConvertFrom-Json -DateKind String -ErrorAction Stop
+    } catch {
+        throw "Existing Rayman install receipt is invalid JSON: $($_.Exception.Message)"
+    }
+    $receiptSha256 = [Convert]::ToHexString(
+        [Security.Cryptography.SHA256]::HashData($receiptBytes)
+    ).ToLowerInvariant()
+    $existingTuple = ConvertTo-RaymanProtectedInstallTuple `
+        -Receipt $existingReceipt `
+        -Label 'Existing Rayman install receipt'
+    if ([string]$existingTuple.version -ne [string]$candidateTuple.version) {
+        return [pscustomobject]@{ Status = 'replace_allowed'; ReceiptSha256 = $null }
+    }
+
+    $existingTupleJson = $existingTuple | ConvertTo-Json -Depth 8 -Compress
+    $candidateTupleJson = $candidateTuple | ConvertTo-Json -Depth 8 -Compress
+    if (-not [string]::Equals($existingTupleJson, $candidateTupleJson, [StringComparison]::Ordinal)) {
+        throw "Same-version Rayman install tuple differs for version $($candidateTuple.version); refusing equivocal replacement before publication."
+    }
+    if ($null -ne $AfterReceiptReadTestHook) {
+        & $AfterReceiptReadTestHook
+    }
+
+    Assert-ExpectedFileHash -Path ([string]$CandidateReceipt.cli_path) -ExpectedHash ([string]$CandidateReceipt.cli_sha256) -Label 'Existing same-version CLI'
+    Assert-ExpectedFileHash -Path ([string]$CandidateReceipt.worker_path) -ExpectedHash ([string]$CandidateReceipt.worker_sha256) -Label 'Existing same-version update worker'
+    foreach ($resource in @($CandidateReceipt.resources)) {
+        $destination = Join-Path ([string]$CandidateReceipt.skill_root) ([string]$resource.relative_path)
+        Assert-ExpectedFileHash -Path $destination -ExpectedHash ([string]$resource.sha256) -Label "Existing same-version resource '$($resource.relative_path)'"
+    }
+    Assert-ExpectedFileHash -Path $ExistingReceiptPath -ExpectedHash $receiptSha256 -Label 'Existing same-version receipt terminal identity'
+    return [pscustomobject]@{
+        Status = 'exact_current'
+        ReceiptSha256 = $receiptSha256
+    }
+}
+
 function Invoke-InstallNamedSelfTest {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
@@ -4168,6 +4348,145 @@ function Invoke-InstallPathSelfTest {
                     )) {
                     throw "canonical SKILL.md $property selection drifted"
                 }
+            }
+        }
+
+        Invoke-InstallNamedSelfTest -Name 'same_version_receipt_equivocation_rejected' -Context $context -Body {
+            param($ctx)
+            $root = Resolve-ManagedDirectory -Path (Join-Path $ctx.Inside 'same-version') -Label 'Same-version policy root'
+            $skillRoot = Resolve-ManagedDirectory -Path (Join-Path $root 'skill') -Label 'Same-version skill root'
+            $references = Resolve-ManagedDirectory -Path (Join-Path $skillRoot 'references') -Label 'Same-version references root'
+            $cli = Join-Path $root $(if ($IsWindows) { 'rayman.exe' } else { 'rayman' })
+            $worker = Join-Path $root $(if ($IsWindows) { 'rayman-update-worker-2.12.1.exe' } else { 'rayman-update-worker-2.12.1' })
+            $skill = Join-Path $skillRoot 'SKILL.md'
+            $agents = Join-Path $skillRoot 'AGENTS.md'
+            $workflow = Join-Path $references 'workflow-contract.md'
+            foreach ($entry in @(
+                    @($cli, 'cli'), @($worker, 'worker'), @($skill, 'skill'),
+                    @($agents, 'agents'), @($workflow, 'workflow')
+                )) {
+                Write-InstallSelfTestFile -Path $entry[0] -Content $entry[1]
+            }
+            $candidate = [ordered]@{
+                schema_version = 1
+                installation_id = '1' * 32
+                version = '2.12.1'
+                cli_contract = 'rayman-cli-contract-v18'
+                cli_path = [IO.Path]::GetFullPath($cli)
+                cli_sha256 = (Get-FileHash -LiteralPath $cli -Algorithm SHA256).Hash.ToLowerInvariant()
+                worker_path = [IO.Path]::GetFullPath($worker)
+                worker_sha256 = (Get-FileHash -LiteralPath $worker -Algorithm SHA256).Hash.ToLowerInvariant()
+                skill_root = [IO.Path]::GetFullPath($skillRoot)
+                resources = @(
+                    [ordered]@{ role = 'skill'; relative_path = 'SKILL.md'; sha256 = (Get-FileHash -LiteralPath $skill -Algorithm SHA256).Hash.ToLowerInvariant() },
+                    [ordered]@{ role = 'agent_contract'; relative_path = 'AGENTS.md'; sha256 = (Get-FileHash -LiteralPath $agents -Algorithm SHA256).Hash.ToLowerInvariant() },
+                    [ordered]@{ role = 'workflow_contract'; relative_path = 'references/workflow-contract.md'; sha256 = (Get-FileHash -LiteralPath $workflow -Algorithm SHA256).Hash.ToLowerInvariant() }
+                )
+                install_manifest_sha256 = '5' * 64
+                installed_at = [DateTime]::UtcNow.ToString('O')
+                source = 'source_fresh_installer'
+                signed_release = $null
+            }
+            $receiptPath = Join-Path $root 'receipt.json'
+            $existing = ($candidate | ConvertTo-Json -Depth 8 | ConvertFrom-Json -DateKind String)
+            $existing.installation_id = '2' * 32
+            $existing.installed_at = '2026-08-20T00:00:00.0000000Z'
+            [IO.File]::WriteAllText(
+                $receiptPath,
+                ($existing | ConvertTo-Json -Depth 8),
+                [Text.UTF8Encoding]::new($false)
+            )
+            $receiptHash = (Get-FileHash -LiteralPath $receiptPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            $exact = Confirm-RaymanSameVersionInstallPolicy -ExistingReceiptPath $receiptPath -CandidateReceipt $candidate
+            if ([string]$candidate.installation_id -eq [string]$existing.installation_id -or
+                [string]$candidate.installed_at -eq [string]$existing.installed_at -or
+                [string]$exact.Status -ne 'exact_current' -or
+                [string]$exact.ReceiptSha256 -ne $receiptHash) {
+                throw 'an exact same-version tuple was not recognized as idempotently current'
+            }
+
+            $originalReceiptText = [IO.File]::ReadAllText($receiptPath, [Text.Encoding]::UTF8)
+            $replacementReceipt = ($existing | ConvertTo-Json -Depth 8 | ConvertFrom-Json -Depth 8 -DateKind String)
+            $replacementReceipt.installation_id = '3' * 32
+            $receiptRaceRejected = $false
+            try {
+                $null = Confirm-RaymanSameVersionInstallPolicy `
+                    -ExistingReceiptPath $receiptPath `
+                    -CandidateReceipt $candidate `
+                    -AfterReceiptReadTestHook {
+                        [IO.File]::WriteAllText(
+                            $receiptPath,
+                            ($replacementReceipt | ConvertTo-Json -Depth 8),
+                            [Text.UTF8Encoding]::new($false)
+                        )
+                    }
+            } catch {
+                $receiptRaceRejected = $_.Exception.Message -match 'receipt terminal identity hash drifted'
+            } finally {
+                [IO.File]::WriteAllText($receiptPath, $originalReceiptText, [Text.UTF8Encoding]::new($false))
+            }
+            if (-not $receiptRaceRejected) {
+                throw 'same-version receipt replacement between parse and terminal verification was accepted'
+            }
+
+            foreach ($mutation in @('cli_hash', 'worker_hash', 'contract', 'resource_hash', 'manifest_hash', 'source')) {
+                $changed = ($candidate | ConvertTo-Json -Depth 8 | ConvertFrom-Json -DateKind String)
+                switch ($mutation) {
+                    'cli_hash' { $changed.cli_sha256 = '6' * 64 }
+                    'worker_hash' { $changed.worker_sha256 = '6' * 64 }
+                    'contract' { $changed.cli_contract = 'rayman-cli-contract-v19' }
+                    'resource_hash' { $changed.resources[0].sha256 = '6' * 64 }
+                    'manifest_hash' { $changed.install_manifest_sha256 = '6' * 64 }
+                    'source' {
+                        $changed.source = 'signed_release'
+                        $changed.signed_release = [pscustomobject]@{
+                            manifest_sha256 = '6' * 64
+                            key_epoch = 1
+                            sequence = 1
+                        }
+                    }
+                }
+                $rejected = $false
+                try {
+                    $null = Confirm-RaymanSameVersionInstallPolicy -ExistingReceiptPath $receiptPath -CandidateReceipt $changed
+                } catch {
+                    $rejected = $_.Exception.Message -match 'Same-version Rayman install tuple differs'
+                }
+                if (-not $rejected) {
+                    throw "same-version mutation '$mutation' was not rejected"
+                }
+                if ((Get-FileHash -LiteralPath $receiptPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $receiptHash) {
+                    throw "same-version rejection '$mutation' changed the existing receipt"
+                }
+            }
+
+            foreach ($driftCase in @(
+                    [pscustomobject]@{ Path = $cli; Original = 'cli'; Label = 'CLI' },
+                    [pscustomobject]@{ Path = $worker; Original = 'worker'; Label = 'update worker' },
+                    [pscustomobject]@{ Path = $skill; Original = 'skill'; Label = "resource 'SKILL.md'" },
+                    [pscustomobject]@{ Path = $agents; Original = 'agents'; Label = "resource 'AGENTS.md'" },
+                    [pscustomobject]@{ Path = $workflow; Original = 'workflow'; Label = "resource 'references/workflow-contract.md'" }
+                )) {
+                Write-InstallSelfTestFile -Path $driftCase.Path -Content "drifted-$($driftCase.Original)"
+                $destinationDriftRejected = $false
+                try {
+                    $null = Confirm-RaymanSameVersionInstallPolicy -ExistingReceiptPath $receiptPath -CandidateReceipt $candidate
+                } catch {
+                    $destinationDriftRejected = $_.Exception.Message -match "Existing same-version $([regex]::Escape($driftCase.Label)) hash drifted"
+                } finally {
+                    Write-InstallSelfTestFile -Path $driftCase.Path -Content $driftCase.Original
+                }
+                if (-not $destinationDriftRejected -or
+                    (Get-FileHash -LiteralPath $receiptPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $receiptHash) {
+                    throw "same-version $($driftCase.Label) drift did not fail closed without replacing the receipt"
+                }
+            }
+
+            $upgrade = ($candidate | ConvertTo-Json -Depth 8 | ConvertFrom-Json -DateKind String)
+            $upgrade.version = '2.13.0'
+            $allowed = Confirm-RaymanSameVersionInstallPolicy -ExistingReceiptPath $receiptPath -CandidateReceipt $upgrade
+            if ([string]$allowed.Status -ne 'replace_allowed') {
+                throw 'a distinct newer version was not left to the normal verified replacement path'
             }
         }
 
@@ -5746,6 +6065,119 @@ function New-RaymanUpdateJournal {
     }
 }
 
+function Assert-RaymanUpdateJournalMatchesPlan {
+    param(
+        [Parameter(Mandatory = $true)]$Journal,
+        [Parameter(Mandatory = $true)]$Plan,
+        [Parameter(Mandatory = $true)][string]$PlanSha256
+    )
+
+    $top = @($Journal.PSObject.Properties.Name | Sort-Object)
+    $expectedTop = @(
+        'committed', 'entries', 'next_role', 'phase', 'plan_sha256',
+        'schema_version', 'transaction_id', 'updated_at'
+    )
+    if (($top -join ',') -ne (($expectedTop | Sort-Object) -join ',') -or
+        [int]$Journal.schema_version -ne 1 -or
+        [string]$Journal.plan_sha256 -ne $PlanSha256 -or
+        [string]$Journal.transaction_id -ne [string]$Plan.transaction_id) {
+        throw 'Existing update journal does not match the verified plan envelope.'
+    }
+
+    $expected = New-RaymanUpdateJournal -Plan $Plan -PlanSha256 $PlanSha256
+    $entries = @($Journal.entries)
+    $expectedEntries = @($expected.entries)
+    if ($entries.Count -ne $expectedEntries.Count) {
+        throw 'Existing update journal does not contain the exact fixed-role entry set.'
+    }
+    $completedCount = 0
+    $sawIncomplete = $false
+    for ($index = 0; $index -lt $entries.Count; $index++) {
+        $entry = $entries[$index]
+        $expectedEntry = $expectedEntries[$index]
+        $fields = @($entry.PSObject.Properties.Name | Sort-Object)
+        $expectedFields = @(
+            'backup', 'completed', 'destination', 'expect_absent',
+            'new_sha256', 'old_sha256', 'role'
+        )
+        if (($fields -join ',') -ne (($expectedFields | Sort-Object) -join ',')) {
+            throw "Existing update journal entry $index has an invalid schema."
+        }
+        foreach ($field in @('role', 'destination', 'backup', 'old_sha256', 'new_sha256', 'expect_absent')) {
+            $actualValue = $entry.$field
+            $expectedValue = $expectedEntry.$field
+            if ($field -in @('destination', 'backup')) {
+                $actualValue = Get-PathComparisonKey -Entry ([string]$actualValue)
+                $expectedValue = Get-PathComparisonKey -Entry ([string]$expectedValue)
+            }
+            if ($actualValue -cne $expectedValue) {
+                throw "Existing update journal entry $index drifted at '$field'."
+            }
+        }
+        if ($entry.completed -isnot [bool]) {
+            throw "Existing update journal entry $index has a non-Boolean completion state."
+        }
+        if ([bool]$entry.completed) {
+            if ($sawIncomplete) {
+                throw 'Existing update journal completion state is not a fixed-role prefix.'
+            }
+            $completedCount++
+        } else {
+            $sawIncomplete = $true
+        }
+    }
+
+    $phase = [string]$Journal.phase
+    $validPhases = @('preparing', 'publishing', 'verifying', 'committed', 'rolled_back', 'blocked')
+    if ($phase -notin $validPhases -or $Journal.committed -isnot [bool]) {
+        throw 'Existing update journal has an invalid transaction state.'
+    }
+    $isCommitted = [bool]$Journal.committed
+    if (($phase -eq 'committed') -ne $isCommitted) {
+        throw 'Existing update journal committed flag and phase disagree.'
+    }
+    $nextRole = if ($null -eq $Journal.next_role) { $null } else { [string]$Journal.next_role }
+    switch ($phase) {
+        'preparing' {
+            if ($null -ne $nextRole -or $completedCount -ne 0) {
+                throw 'Existing update journal preparing state is inconsistent.'
+            }
+        }
+        'publishing' {
+            $roles = @($expectedEntries | ForEach-Object { [string]$_.role })
+            $nextIndex = [array]::IndexOf($roles, $nextRole)
+            if ($nextIndex -lt 0 -or
+                ($nextIndex -ne $completedCount -and $nextIndex -ne ($completedCount - 1))) {
+                throw 'Existing update journal publishing frontier is inconsistent.'
+            }
+        }
+        'verifying' {
+            if ($null -ne $nextRole -or $completedCount -ne $entries.Count) {
+                throw 'Existing update journal verifying state is incomplete.'
+            }
+        }
+        'committed' {
+            if ($null -ne $nextRole -or $completedCount -ne $entries.Count) {
+                throw 'Existing update journal committed state is incomplete.'
+            }
+        }
+        default {
+            if ($null -ne $nextRole) {
+                throw "Existing update journal $phase state retains an invalid next role."
+            }
+        }
+    }
+    $parsedTimestamp = [DateTimeOffset]::MinValue
+    if (-not [DateTimeOffset]::TryParse(
+            [string]$Journal.updated_at,
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::RoundtripKind,
+            [ref]$parsedTimestamp
+        )) {
+        throw 'Existing update journal has an invalid update timestamp.'
+    }
+}
+
 function Repair-RaymanUpdateJournal {
     param(
         [Parameter(Mandatory = $true)]$Journal,
@@ -5835,10 +6267,10 @@ function Invoke-RaymanVerifiedUpdateWorker {
 
     if (Test-Path -LiteralPath $journalPath -PathType Leaf) {
         $journal = Get-Content -LiteralPath $journalPath -Raw -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop
-        if ([string]$journal.plan_sha256 -ne $ExpectedPlanSha256 -or
-            [string]$journal.transaction_id -ne [string]$plan.transaction_id) {
-            throw 'Existing update journal does not match the verified plan.'
-        }
+        Assert-RaymanUpdateJournalMatchesPlan `
+            -Journal $journal `
+            -Plan $plan `
+            -PlanSha256 $ExpectedPlanSha256
         $recovery = Repair-RaymanUpdateJournal -Journal $journal -JournalPath $journalPath
         if ($recovery -eq 'committed') {
             return
@@ -6007,8 +6439,8 @@ if ($existingCommands.Count -gt 0 -and $existingCommands[0].CommandType -ne 'App
 $cargoApplication = Resolve-RequiredApplication -Name 'cargo' -Label 'Cargo executable'
 $cargoApplicationHash = (Get-FileHash -LiteralPath $cargoApplication -Algorithm SHA256).Hash.ToLowerInvariant()
 
-$resolvedBinDirectory = Resolve-ManagedDirectory -Path $BinDirectory -Label 'CLI directory'
-$resolvedSkillDirectory = Resolve-ManagedDirectory -Path $SkillDirectory -Label 'Skill directory'
+$requestedBinDirectory = [IO.Path]::GetFullPath($BinDirectory)
+$requestedSkillDirectory = [IO.Path]::GetFullPath($SkillDirectory)
 $userDataRoot = if ($IsWindows) {
     [IO.Path]::GetFullPath($localAppData)
 } elseif (-not [string]::IsNullOrWhiteSpace($env:XDG_DATA_HOME)) {
@@ -6016,19 +6448,24 @@ $userDataRoot = if ($IsWindows) {
 } else {
     [IO.Path]::GetFullPath((Join-Path $HOME '.local/share'))
 }
-$installReceiptDirectory = Resolve-ManagedDirectory `
-    -Path (Join-Path $userDataRoot 'Rayman/install') `
-    -Label 'Rayman install receipt directory'
-$destinationInstallReceipt = Join-Path $installReceiptDirectory 'receipt.json'
-$skillResources = @(Get-CodexSkillResourcePlan -DestinationRoot $resolvedSkillDirectory)
-$destinationCli = Join-Path $resolvedBinDirectory $artifactName
+$requestedInstallReceiptDirectory = [IO.Path]::GetFullPath((Join-Path $userDataRoot 'Rayman/install'))
+$destinationInstallReceipt = Join-Path $requestedInstallReceiptDirectory 'receipt.json'
+$skillResources = @(Get-CodexSkillResourcePlan -DestinationRoot $requestedSkillDirectory)
+$destinationCli = Join-Path $requestedBinDirectory $artifactName
 $canonicalSkillResource = Get-CanonicalSkillResource -ResourcePlan $skillResources
 $canonicalSkill = $canonicalSkillResource.Source
 $destinationSkill = $canonicalSkillResource.Destination
-Assert-ReplaceableFile -Path $destinationCli -Label 'CLI'
-Assert-ReplaceableFile -Path $destinationInstallReceipt -Label 'Rayman install receipt'
-foreach ($resource in $skillResources) {
-    Assert-ReplaceableFile -Path $resource.Destination -Label "Codex skill resource '$($resource.DestinationRelative)'"
+$existingReceiptPresent = Test-Path -LiteralPath $destinationInstallReceipt -PathType Leaf
+$resolvedBinDirectory = $null
+$resolvedSkillDirectory = $null
+$installReceiptDirectory = $null
+if ($existingReceiptPresent) {
+    # Existing receipt means this may be a same-version refusal/no-op. Validate
+    # every target parent read-only; do not create a missing target directory
+    # before the candidate tuple policy has decided whether publication is legal.
+    $resolvedBinDirectory = Resolve-ExistingRealDirectory -Path $requestedBinDirectory -Label 'Existing CLI directory'
+    $resolvedSkillDirectory = Resolve-ExistingRealDirectory -Path $requestedSkillDirectory -Label 'Existing skill directory'
+    $installReceiptDirectory = Resolve-ExistingRealDirectory -Path $requestedInstallReceiptDirectory -Label 'Existing install receipt directory'
 }
 
 $doctorWorkspaceRecord = $null
@@ -6056,7 +6493,7 @@ try {
             throw "Built Rayman artifact returned an invalid stable version: $($versionOutput | Out-String)"
         }
         $installedVersion = $Matches[1]
-        $destinationWorker = Join-Path $resolvedBinDirectory $(
+        $destinationWorker = Join-Path $requestedBinDirectory $(
             if ($IsWindows) {
                 "rayman-update-worker-$installedVersion.exe"
             } else {
@@ -6141,12 +6578,27 @@ try {
             cli_sha256 = $verifiedArtifactHash
             worker_path = [IO.Path]::GetFullPath($destinationWorker)
             worker_sha256 = $verifiedWorkerHash
-            skill_root = [IO.Path]::GetFullPath($resolvedSkillDirectory)
+            skill_root = [IO.Path]::GetFullPath($requestedSkillDirectory)
             resources = $receiptResources
             install_manifest_sha256 = $installManifestHash
             installed_at = [DateTime]::UtcNow.ToString('O')
             source = 'source_fresh_installer'
             signed_release = $null
+        }
+        $sameVersionPolicy = Confirm-RaymanSameVersionInstallPolicy `
+            -ExistingReceiptPath $destinationInstallReceipt `
+            -CandidateReceipt $installReceipt
+        $coreAlreadyCurrent = [string]$sameVersionPolicy.Status -eq 'exact_current'
+        if (-not $coreAlreadyCurrent) {
+            $resolvedBinDirectory = Resolve-ManagedDirectory -Path $requestedBinDirectory -Label 'CLI directory'
+            $resolvedSkillDirectory = Resolve-ManagedDirectory -Path $requestedSkillDirectory -Label 'Skill directory'
+            $installReceiptDirectory = Resolve-ManagedDirectory -Path $requestedInstallReceiptDirectory -Label 'Rayman install receipt directory'
+        }
+        Assert-ReplaceableFile -Path $destinationCli -Label 'CLI'
+        Assert-ReplaceableFile -Path $destinationWorker -Label 'Versioned update worker'
+        Assert-ReplaceableFile -Path $destinationInstallReceipt -Label 'Rayman install receipt'
+        foreach ($resource in $skillResources) {
+            Assert-ReplaceableFile -Path $resource.Destination -Label "Codex skill resource '$($resource.DestinationRelative)'"
         }
         $installReceiptSource = Join-Path $doctorWorkspaceRecord.Root 'rayman-install-receipt.json'
         $installReceiptText = $installReceipt | ConvertTo-Json -Depth 8
@@ -6156,6 +6608,9 @@ try {
             [Text.UTF8Encoding]::new($false)
         )
         $installReceiptHash = (Get-FileHash -LiteralPath $installReceiptSource -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($coreAlreadyCurrent) {
+            $installReceiptHash = [string]$sameVersionPolicy.ReceiptSha256
+        }
 
         if ($AddToUserPath) {
             Assert-PersistentUserEnvironmentCasCapability
@@ -6170,12 +6625,14 @@ try {
         $machinePathSnapshotCaptured = $false
         $coreCommitted = $false
         try {
-            $installed += Install-FileWithRollback -Source $artifact -Destination $destinationCli -Nonce $nonce -ExpectedHash $verifiedArtifactHash
-            $installed += Install-FileWithRollback -Source $workerArtifact -Destination $destinationWorker -Nonce $nonce -ExpectedHash $verifiedWorkerHash
-            foreach ($resource in $skillResources) {
-                $installed += Install-FileWithRollback -Source $resource.Source -Destination $resource.Destination -Nonce $nonce -ExpectedHash $resourceHashes[$resource.DestinationRelative]
+            if (-not $coreAlreadyCurrent) {
+                $installed += Install-FileWithRollback -Source $artifact -Destination $destinationCli -Nonce $nonce -ExpectedHash $verifiedArtifactHash
+                $installed += Install-FileWithRollback -Source $workerArtifact -Destination $destinationWorker -Nonce $nonce -ExpectedHash $verifiedWorkerHash
+                foreach ($resource in $skillResources) {
+                    $installed += Install-FileWithRollback -Source $resource.Source -Destination $resource.Destination -Nonce $nonce -ExpectedHash $resourceHashes[$resource.DestinationRelative]
+                }
+                $installed += Install-FileWithRollback -Source $installReceiptSource -Destination $destinationInstallReceipt -Nonce $nonce -ExpectedHash $installReceiptHash
             }
-            $installed += Install-FileWithRollback -Source $installReceiptSource -Destination $destinationInstallReceipt -Nonce $nonce -ExpectedHash $installReceiptHash
 
             Assert-ExpectedFileHash -Path $artifact -ExpectedHash $verifiedArtifactHash -Label 'Verified artifact before post-install check'
             Assert-ExpectedFileHash -Path $destinationCli -ExpectedHash $verifiedArtifactHash -Label 'Installed CLI'
@@ -6186,7 +6643,9 @@ try {
                 Assert-ExpectedFileHash -Path $resource.Source -ExpectedHash $expectedHash -Label "Verified resource before post-install check '$($resource.SourceRelative)'"
                 Assert-ExpectedFileHash -Path $resource.Destination -ExpectedHash $expectedHash -Label "Installed resource '$($resource.DestinationRelative)'"
             }
-            Assert-ExpectedFileHash -Path $installReceiptSource -ExpectedHash $installReceiptHash -Label 'Verified install receipt before post-install check'
+            if (-not $coreAlreadyCurrent) {
+                Assert-ExpectedFileHash -Path $installReceiptSource -ExpectedHash $installReceiptHash -Label 'Verified install receipt before post-install check'
+            }
             Assert-ExpectedFileHash -Path $destinationInstallReceipt -ExpectedHash $installReceiptHash -Label 'Installed Rayman receipt'
 
             if ($AddToUserPath) {
@@ -6245,7 +6704,9 @@ try {
                 Assert-ExpectedFileHash -Path $resource.Source -ExpectedHash $expectedHash -Label "Verified resource after post-install check '$($resource.SourceRelative)'"
                 Assert-ExpectedFileHash -Path $resource.Destination -ExpectedHash $expectedHash -Label "Installed resource after post-install check '$($resource.DestinationRelative)'"
             }
-            Assert-ExpectedFileHash -Path $installReceiptSource -ExpectedHash $installReceiptHash -Label 'Verified install receipt after post-install check'
+            if (-not $coreAlreadyCurrent) {
+                Assert-ExpectedFileHash -Path $installReceiptSource -ExpectedHash $installReceiptHash -Label 'Verified install receipt after post-install check'
+            }
             Assert-ExpectedFileHash -Path $destinationInstallReceipt -ExpectedHash $installReceiptHash -Label 'Installed Rayman receipt after post-install check'
             if ((Get-FileHash -LiteralPath $cargoApplication -Algorithm SHA256).Hash.ToLowerInvariant() -ne $cargoApplicationHash) {
                 throw 'Cargo executable identity changed during installation.'

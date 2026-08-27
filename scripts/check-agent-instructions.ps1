@@ -60,6 +60,9 @@ $pendingSource = Read-StrictUtf8 'crates/rayman/src/goal/pending.rs'
 $goalCliSource = Read-StrictUtf8 'crates/rayman/src/goal_cli.rs'
 $codexHookSource = Read-StrictUtf8 'crates/rayman/src/codex_hook.rs'
 $auditDocumentation = Read-StrictUtf8 'docs/AUDIT.md'
+$traceabilityDocumentation = Read-StrictUtf8 'docs/TEST_TRACEABILITY.md'
+$traceabilityManifest = Read-StrictUtf8 'governance/test-traceability.json'
+$testInventory = Read-StrictUtf8 'governance/first-party-test-inventory.json'
 $auditSource = Read-StrictUtf8 'scripts/audit-repository.ps1'
 $workspaceManifest = Read-StrictUtf8 'Cargo.toml'
 $ciWorkflow = Read-StrictUtf8 '.github/workflows/ci.yml'
@@ -390,6 +393,35 @@ foreach ($required in @('--must-proof KIND::TEXT', 'goal handoff start', 'Unboun
     if (-not $workflow.Contains($required, [StringComparison]::OrdinalIgnoreCase)) {
         throw "Shared workflow reference is missing required contract text: $required"
     }
+}
+foreach ($required in @(
+        'repository_first_party_executable_tests',
+        'source -> rule -> execution gate -> test',
+        'exact predecessor schema, generation, and bytes',
+        'Active IDs may not disappear'
+    )) {
+    if (-not $workflow.Contains($required, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Shared workflow reference is missing traceability contract text: $required"
+    }
+}
+foreach ($required in @(
+        'Byte source versus semantic source',
+        'valid_until',
+        'predecessor schema, generation, and SHA-256',
+        'executable selector is removed',
+        'newly discovered test is unregistered'
+    )) {
+    if (-not $traceabilityDocumentation.Contains($required, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "TEST_TRACEABILITY.md is missing required source/retirement semantics: $required"
+    }
+}
+if (-not $traceabilityManifest.Contains('rayman.test-traceability.v2', [StringComparison]::Ordinal) -or
+    -not $traceabilityManifest.Contains('repository_first_party_executable_tests', [StringComparison]::Ordinal)) {
+    throw 'Traceability manifest is missing its v2 schema or complete first-party scope.'
+}
+if (-not $testInventory.Contains('rayman.first-party-test-inventory.v1', [StringComparison]::Ordinal) -or
+    -not $testInventory.Contains('repository_first_party_executable_tests', [StringComparison]::Ordinal)) {
+    throw 'First-party test inventory is missing its schema or complete repository scope.'
 }
 
 # Keep the public human-boundary contract aligned with the event-local Stop

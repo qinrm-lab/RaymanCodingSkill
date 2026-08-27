@@ -357,6 +357,8 @@ function Get-ReleaseBinding {
     $scripts = [ordered]@{}
     foreach ($name in @(
         'audit-repository.ps1',
+        'check-test-traceability.ps1',
+        'check-test-traceability-v2.ps1',
         'check-update-freshness.ps1',
         'check-repo.ps1',
         'install-rayman.ps1',
@@ -397,7 +399,7 @@ function Get-ReleaseBinding {
     $msrv['llvm'] = Resolve-MsrvLlvmIdentities -Rustc $msrv.rustc
 
     return [ordered]@{
-        schema = 'rayman.release.binding.v4'
+        schema = 'rayman.release.binding.v6'
         workspace = (Resolve-Path -LiteralPath $repoRoot).ProviderPath
         head = $head
         clean = $true
@@ -406,6 +408,16 @@ function Get-ReleaseBinding {
         cli = [ordered]@{ path = $resolvedCli; sha256 = Get-Sha256 $resolvedCli }
         worker = [ordered]@{ path = $resolvedWorker; sha256 = Get-Sha256 $resolvedWorker }
         skill = [ordered]@{ path = $resolvedSkill; sha256 = Get-Sha256 $resolvedSkill }
+        test_traceability = [ordered]@{
+            manifest = [ordered]@{
+                path = (Resolve-OrdinaryFile (Join-Path $repoRoot 'governance/test-traceability.json') 'Test traceability manifest')
+                sha256 = Get-Sha256 (Join-Path $repoRoot 'governance/test-traceability.json')
+            }
+            inventory = [ordered]@{
+                path = (Resolve-OrdinaryFile (Join-Path $repoRoot 'governance/first-party-test-inventory.json') 'First-party test inventory')
+                sha256 = Get-Sha256 (Join-Path $repoRoot 'governance/first-party-test-inventory.json')
+            }
+        }
         scripts = $scripts
         tools = $tools
         msrv = $msrv
@@ -420,7 +432,7 @@ function Test-ReusableEvidence {
     try {
         foreach ($candidate in @($Evidence.binding, $Binding)) {
             if ($null -eq $candidate -or
-                $candidate.schema -ne 'rayman.release.binding.v4' -or
+                $candidate.schema -ne 'rayman.release.binding.v6' -or
                 $candidate.workspace_activation.schema -ne 'rayman.workspace-activation.snapshot.v1' -or
                 $candidate.workspace_activation.path -notmatch '[\\/]\.RaymanCodingSkill[\\/]workspace_skill\.yaml$' -or
                 $candidate.workspace_activation.sha256 -notmatch '^[0-9a-f]{64}$' -or
@@ -432,6 +444,10 @@ function Test-ReusableEvidence {
                 @($candidate.source_fresh_environment.rejected_names).Count -ne 0 -or
                 $candidate.worker.path -eq $null -or
                 $candidate.worker.sha256 -notmatch '^[0-9a-f]{64}$' -or
+                $candidate.test_traceability.manifest.path -notmatch '[\\/]governance[\\/]test-traceability\.json$' -or
+                $candidate.test_traceability.manifest.sha256 -notmatch '^[0-9a-f]{64}$' -or
+                $candidate.test_traceability.inventory.path -notmatch '[\\/]governance[\\/]first-party-test-inventory\.json$' -or
+                $candidate.test_traceability.inventory.sha256 -notmatch '^[0-9a-f]{64}$' -or
                 $candidate.cargo_net_offline.effective -ne $true) {
                 return $false
             }
@@ -568,7 +584,7 @@ if ($PSCmdlet.ParameterSetName -eq 'SelfTest') {
         }
     }
     $binding = [ordered]@{
-        schema = 'rayman.release.binding.v4'
+        schema = 'rayman.release.binding.v6'
         workspace = 'repository'
         head = ('a' * 40)
         clean = $true
@@ -577,6 +593,16 @@ if ($PSCmdlet.ParameterSetName -eq 'SelfTest') {
         cli = [ordered]@{ path = 'rayman'; sha256 = ('b' * 64) }
         worker = [ordered]@{ path = 'rayman-update-worker'; sha256 = ('8' * 64) }
         skill = [ordered]@{ path = 'SKILL.md'; sha256 = ('c' * 64) }
+        test_traceability = [ordered]@{
+            manifest = [ordered]@{
+                path = 'repository/governance/test-traceability.json'
+                sha256 = ('7' * 64)
+            }
+            inventory = [ordered]@{
+                path = 'repository/governance/first-party-test-inventory.json'
+                sha256 = ('9' * 64)
+            }
+        }
         scripts = [ordered]@{ audit = ('c' * 64) }
         tools = [ordered]@{
             cargo = [ordered]@{ path = 'cargo'; sha256 = ('d' * 64); version = 'cargo 1.97.1' }
@@ -612,7 +638,9 @@ if ($PSCmdlet.ParameterSetName -eq 'SelfTest') {
     foreach ($legacySchema in @(
         'rayman.release.binding.v1',
         'rayman.release.binding.v2',
-        'rayman.release.binding.v3'
+        'rayman.release.binding.v3',
+        'rayman.release.binding.v4',
+        'rayman.release.binding.v5'
     )) {
         $legacyBinding = $binding | ConvertTo-Json -Depth 20 | ConvertFrom-Json -Depth 20
         $legacyBinding.schema = $legacySchema

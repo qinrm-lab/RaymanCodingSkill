@@ -143,11 +143,21 @@ manifest digest/key epoch/sequence. A Cargo target binary, renamed copy,
 hard-link alias, PATH shadow, changed resource, missing receipt, or different
 destination cannot request automatic apply.
 
+Before publishing an already installed version, the source installer compares
+the existing receipt with the verified candidate. CLI/worker paths and hashes,
+CLI contract, all three managed resources, install-manifest hash, source class,
+and signed-release tuple must be identical, and every live destination must
+still match. Only a new installation ID or timestamp may differ; that exact
+case preserves the old receipt and skips core tuple publication. Any semantic
+same-version difference or live-byte drift fails before an installation target
+directory is created or a managed file is replaced.
+
 The worker re-reads consent and the complete receipt tuple after acquiring the
 installation-scoped Windows mutex. It rejects versions at or below the
 installed version, lower key epochs/sequences, lower previously seen versions,
-clock rollback, and same-version manifest equivocation. Exact manifest replay
-is allowed only to recover its existing transaction.
+clock rollback, and same-version manifest equivocation. An exact trusted-floor
+identity on the fresh path is rejected; it is accepted only after the exact
+active request and fixed-role journal have independently authorized recovery.
 
 Immediately before the first transaction-directory mutation the worker writes
 `active.json`, binding the request, prior receipt/version, managed CLI path,
@@ -158,6 +168,14 @@ roll back only that existing transaction, not to choose another release. If no
 journal was ever written, the staged-only directory is removed by held-handle
 cleanup and the old generation remains. Once a journal exists, the exact signed
 bundle and captured plan must reverify before recovery runs.
+
+The journal is not trusted merely because its plan hash and transaction ID are
+present. Its exact schema, six ordered roles, destinations, deterministic
+backup paths, old/new hashes, absence expectations, completion prefix, phase,
+next-role frontier, and committed flag are reconstructed from the verified plan
+and compared before any recovery read or write. A committed journal also
+requires every destination hash to remain committed, and an exact rerun leaves
+the journal, result, and destination bytes unchanged.
 
 Downloaded files are created exclusively below a held no-reparse transaction
 root and revalidated by legacy and 128-bit Windows file identity. Publication

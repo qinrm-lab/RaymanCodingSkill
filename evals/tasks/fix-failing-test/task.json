@@ -1,0 +1,12 @@
+{
+  "schema": "rayman.eval-task.v2",
+  "source_ids": ["SRC-EVAL-SYNTHETIC-BUILTIN", "SRC-EVAL-ORACLE-INTEGRITY"],
+  "rule_ids": ["RULE-EVAL-BASIC-CORRECTNESS"],
+  "editable_paths": ["src/lib.rs"],
+  "oracle": {
+    "kind": "rust_module",
+    "source": "tests.rs",
+    "module_file": "src/lib.rs",
+    "expected_tests": ["adds_two_numbers"]
+  }
+}

@@ -1,1 +1,1 @@
-pwsh -NoProfile -File tests/verify.ps1
+pwsh -NoProfile -File tests/__rayman_oracle.ps1

@@ -85,6 +85,9 @@ pub struct RunProvenance {
     pub git_head: Option<String>,
     pub skill: ArtifactHash,
     pub rayman_binary: ArtifactHash,
+    /// Exact governed source-rule-test registry used to interpret task IDs.
+    /// The repository gate validates its graph; this report binds the bytes.
+    pub traceability_manifest: ArtifactHash,
     pub host: HostProvenance,
     pub seed: u64,
     pub order_strategy: String,
@@ -506,9 +509,10 @@ impl EvalReport {
             out.push_str("- Grade execution: **CUSTOM HOST COMMANDS EXPLICITLY ACKNOWLEDGED**\n");
         }
         out.push_str(&format!(
-            "- Provenance: skill SHA-256 `{}`, rayman SHA-256 `{}`, {} task/fixture manifests in `report.json`\n\n",
+            "- Provenance: skill SHA-256 `{}`, rayman SHA-256 `{}`, traceability SHA-256 `{}`, {} task/fixture manifests in `report.json`\n\n",
             self.provenance.skill.sha256,
             self.provenance.rayman_binary.sha256,
+            self.provenance.traceability_manifest.sha256,
             self.provenance.tasks.len()
         ));
         out.push_str("| Task | With skill | Control |\n|---|---|---|\n");
@@ -592,6 +596,10 @@ mod tests {
             rayman_binary: ArtifactHash {
                 path: "rayman".into(),
                 sha256: "binary".into(),
+            },
+            traceability_manifest: ArtifactHash {
+                path: "governance/test-traceability.json".into(),
+                sha256: "traceability".into(),
             },
             host: HostProvenance {
                 os: "test".into(),

@@ -12,6 +12,10 @@ Set-Location -LiteralPath $repoRoot
 $auditIntegrationTestName = 'audit_self_test_exercises_only_the_audit_contract'
 
 & (Join-Path $PSScriptRoot 'check-agent-instructions.ps1') -SelfTest
+& (Join-Path $PSScriptRoot 'check-ci-workflow.ps1') -SelfTest
+& (Join-Path $PSScriptRoot 'check-ci-workflow.ps1')
+& (Join-Path $PSScriptRoot 'check-test-traceability.ps1') -SelfTest
+& (Join-Path $PSScriptRoot 'check-test-traceability.ps1') -RuntimeInventory
 & (Join-Path $PSScriptRoot 'release-closeout.ps1') -SelfTest
 # Keep sibling PowerShell regressions explicit and single-owner. The audit
 # self-test now exercises only audit-repository.ps1, so root Cargo tests do not

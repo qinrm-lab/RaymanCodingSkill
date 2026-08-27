@@ -142,14 +142,21 @@ struct DoctorSourceFresh {
 struct InputBaseline {
     skill_sha256: String,
     rayman_sha256: String,
+    traceability_sha256: String,
     tasks: BTreeMap<String, TaskProvenance>,
 }
 
 impl InputBaseline {
-    fn new(skill_sha256: String, rayman_sha256: String, tasks: &[TaskProvenance]) -> Self {
+    fn new(
+        skill_sha256: String,
+        rayman_sha256: String,
+        traceability_sha256: String,
+        tasks: &[TaskProvenance],
+    ) -> Self {
         Self {
             skill_sha256,
             rayman_sha256,
+            traceability_sha256,
             tasks: tasks
                 .iter()
                 .cloned()
@@ -163,6 +170,7 @@ impl InputBaseline {
         &self,
         skill_path: &Path,
         rayman_binary_path: &Path,
+        traceability_path: &Path,
         tasks: &[task::Task],
     ) -> Vec<String> {
         let mut events = Vec::new();
@@ -188,6 +196,17 @@ impl InputBaseline {
                 }
             }
             Err(error) => events.push(format!("无法复核 rayman 二进制身份: {error:#}")),
+        }
+        match sha256_regular_file(traceability_path, "测试追踪清单") {
+            Ok(actual) => {
+                if actual != self.traceability_sha256 {
+                    events.push(format!(
+                        "测试追踪清单 SHA-256 漂移（expected {}, actual {}）",
+                        self.traceability_sha256, actual
+                    ));
+                }
+            }
+            Err(error) => events.push(format!("无法复核测试追踪清单身份: {error:#}")),
         }
         if self.tasks.len() != tasks.len() {
             events.push(format!(
@@ -584,30 +603,82 @@ fn run_trial(
             return result;
         }
     }
+    let oracle = match task::prepare_grade_workspace(task, &workspace, authorized_task) {
+        Ok(oracle) => oracle,
+        Err(error) => {
+            let policy_violation = error.kind() == task::OraclePreparationFailure::PolicyViolation;
+            result.outcome = if policy_violation {
+                Outcome::Fail
+            } else {
+                Outcome::Error
+            };
+            result.grade_outcome = if policy_violation {
+                GradeOutcome::Failed
+            } else {
+                GradeOutcome::InfrastructureError
+            };
+            result.grade_exit = -1;
+            result.error = Some(if policy_violation {
+                format!("agent workspace/oracle policy violation: {error:#}")
+            } else {
+                format!("oracle preparation infrastructure error: {error:#}")
+            });
+            return result;
+        }
+    };
     let graded = grade::run_shell(
         &workspace,
         &task.grade_cmd,
-        &EnvPolicy::default(),
+        &EnvPolicy::with_rayman(ctx.rayman_bin_dir.to_path_buf()),
         grade::GRADE_TIMEOUT,
     );
+    apply_grade_result(&mut result, &workspace, &oracle, &graded, agent_had_error);
+    result
+}
+
+fn apply_grade_result(
+    result: &mut TrialResult,
+    workspace: &Path,
+    oracle: &task::OracleSeal,
+    graded: &grade::GradeResult,
+    agent_had_error: bool,
+) {
     // 普通非零评分才是模型 Fail。评分命令本身未能形成可靠观察（超时、临时文件、
-    // spawn/wait 失败）必须是 Error，避免把评测器故障计进 evaluable 分母。
+    // spawn/wait 失败）必须保持 Error；缺少 test/marker 是这种错误的必然结果，不能
+    // 反过来把基础设施故障改写成可评估的模型失败。
     result.outcome = classify_trial_outcome(graded.outcome, agent_had_error);
     result.grade_outcome = graded.outcome;
     result.grade_exit = graded.exit;
     if graded.outcome.is_evaluation_error() {
+        let seal_error = task::verify_grade_seal(workspace, oracle).err();
         let grade_error = format!(
             "评分未形成可评估结果（{}，exit={}）: {}",
             graded.outcome.label(),
             graded.exit,
             graded.stderr.trim()
         );
-        result.error = Some(match result.error.take() {
+        let mut details = match result.error.take() {
             Some(agent_error) => format!("{agent_error}\n{grade_error}"),
             None => grade_error,
+        };
+        if let Some(error) = seal_error {
+            details.push_str(&format!(
+                "\n基础设施错误期间 oracle seal 复核失败: {error:#}"
+            ));
+        }
+        result.error = Some(details);
+        return;
+    }
+    if let Err(error) =
+        task::verify_grade_observation(workspace, oracle, &graded.stdout, &graded.stderr)
+    {
+        result.outcome = Outcome::Fail;
+        result.grade_outcome = GradeOutcome::Failed;
+        result.error = Some(match result.error.take() {
+            Some(existing) => format!("{existing}\n受保护 oracle 验证失败: {error:#}"),
+            None => format!("受保护 oracle 验证失败: {error:#}"),
         });
     }
-    result
 }
 
 fn classify_trial_outcome(grade_outcome: GradeOutcome, agent_had_error: bool) -> Outcome {
@@ -677,8 +748,14 @@ fn run() -> Result<()> {
         ReleaseContractProvenance::not_required_for_mock()
     };
     let release_contract_verified = release_contract.verified;
-    let input_baseline =
-        InputBaseline::new(skill_hash.clone(), rayman_hash.clone(), &task_manifests);
+    let traceability_path = repo_root.join("governance/test-traceability.json");
+    let traceability_hash = sha256_regular_file(&traceability_path, "测试来源追踪清单")?;
+    let input_baseline = InputBaseline::new(
+        skill_hash.clone(),
+        rayman_hash.clone(),
+        traceability_hash.clone(),
+        &task_manifests,
+    );
 
     let runs_dir = ensure_or_create_real_directory(&runs_dir, "runs 目录")?;
     let (run_id, run_dir) = create_run_directory(&runs_dir)?;
@@ -700,6 +777,10 @@ fn run() -> Result<()> {
         rayman_binary: ArtifactHash {
             path: rayman_binary.path.display().to_string(),
             sha256: rayman_hash,
+        },
+        traceability_manifest: ArtifactHash {
+            path: traceability_path.display().to_string(),
+            sha256: traceability_hash,
         },
         host: HostProvenance {
             os: std::env::consts::OS.into(),
@@ -747,7 +828,12 @@ fn run() -> Result<()> {
         for trial in 0..cli.trials {
             let conditions = condition_order(seed, &task.name, trial);
             for (order, condition) in conditions.into_iter().enumerate() {
-                let before = input_baseline.verify(&skill_path, &rayman_binary.path, &tasks);
+                let before = input_baseline.verify(
+                    &skill_path,
+                    &rayman_binary.path,
+                    &traceability_path,
+                    &tasks,
+                );
                 if !before.is_empty() {
                     eprintln!("评测输入完整性失败；停止后续 trial: {}", before.join("; "));
                     input_integrity.drift_detected = true;
@@ -763,7 +849,12 @@ fn run() -> Result<()> {
                     break 'evaluation;
                 };
                 let mut result = run_trial(&ctx, task, authorized_task, condition, trial, order);
-                let after = input_baseline.verify(&skill_path, &rayman_binary.path, &tasks);
+                let after = input_baseline.verify(
+                    &skill_path,
+                    &rayman_binary.path,
+                    &traceability_path,
+                    &tasks,
+                );
                 if !after.is_empty() {
                     let drift_error = format!("评测输入漂移: {}", after.join("; "));
                     result.outcome = Outcome::Error;
@@ -1093,7 +1184,30 @@ mod tests {
     fn sample_task(root: &Path) -> task::Task {
         let task_dir = root.join("tasks/sample");
         write(&task_dir.join("prompt.md"), "fix it\n");
-        write(&task_dir.join("grade.txt"), "cargo test\n");
+        write(
+            &task_dir.join("grade.txt"),
+            "pwsh -NoProfile -File tests/__rayman_oracle.ps1\n",
+        );
+        write(
+            &task_dir.join("task.json"),
+            r#"{
+  "schema": "rayman.eval-task.v2",
+  "source_ids": ["SRC-TEST"],
+  "rule_ids": ["RULE-TEST"],
+  "editable_paths": ["src/lib.rs"],
+  "oracle": {
+    "kind": "power_shell",
+    "source": "verify.ps1",
+    "destination": "tests/__rayman_oracle.ps1",
+    "success_marker": "RAYMAN_EVAL_ORACLE_PASS sample"
+  }
+}
+"#,
+        );
+        write(
+            &task_dir.join("oracle/verify.ps1"),
+            "Write-Output 'RAYMAN_EVAL_ORACLE_PASS sample'\n",
+        );
         write(
             &task_dir.join("fixture/src/lib.rs"),
             "pub fn original() {}\n",
@@ -1313,6 +1427,213 @@ mod tests {
         );
     }
 
+    #[test]
+    fn run_trial_preserves_grade_infrastructure_error_when_oracle_marker_is_absent() {
+        let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let task = task::load_tasks(&repo.join("tasks"), Some("fix-failing-test"))
+            .unwrap()
+            .remove(0);
+        let manifest = task.provenance().unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = temp.path().join("workspace");
+        task::setup_workspace(&task, &workspace, &manifest.fixture_sha256).unwrap();
+        write(
+            &workspace.join("src/lib.rs"),
+            "pub fn add(a: i32, b: i32) -> i32 { a + b }\n",
+        );
+        let seal = task::prepare_grade_workspace(&task, &workspace, &manifest).unwrap();
+        let mut result = TrialResult {
+            task: task.name.clone(),
+            condition: WITH_SKILL.into(),
+            trial: 0,
+            condition_order: 0,
+            outcome: Outcome::Fail,
+            grade_outcome: GradeOutcome::NotRun,
+            grade_exit: -1,
+            steps: 1,
+            tool_calls: 0,
+            rayman_invocations: 0,
+            finished: true,
+            error: None,
+        };
+        let graded = grade::GradeResult {
+            outcome: GradeOutcome::InfrastructureError,
+            exit: -1,
+            stdout: String::new(),
+            stderr: "spawn failed".into(),
+        };
+        apply_grade_result(&mut result, &workspace, &seal, &graded, false);
+        assert_eq!(result.outcome, Outcome::Error);
+        assert_eq!(result.grade_outcome, GradeOutcome::InfrastructureError);
+        assert!(
+            result
+                .error
+                .as_deref()
+                .is_some_and(|error| error.contains("评分未形成可评估结果"))
+        );
+        assert!(
+            !result
+                .error
+                .as_deref()
+                .unwrap_or_default()
+                .contains("grade 未执行并通过受保护测试")
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn adjacent_oracle_rejects_placeholder_pending_when_panic_remains() {
+        let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let task = task::load_tasks(&repo.join("tasks"), Some("adjacent-bug-escalation"))
+            .unwrap()
+            .remove(0);
+        let manifest = task.provenance().unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = temp.path().join("workspace");
+        task::setup_workspace(&task, &workspace, &manifest.fixture_sha256).unwrap();
+        write(
+            &workspace.join("src/lib.rs"),
+            r#"pub mod config;
+pub fn parse_duration(input: &str) -> Option<u64> {
+    let (digits, unit) = input.split_at(input.len().checked_sub(1)?);
+    let value = digits.parse::<u64>().ok()?;
+    Some(value.checked_mul(match unit { "s" => 1, "m" => 60, "h" => 3600, _ => return None })?)
+}
+"#,
+        );
+        write(
+            &workspace.join(".RaymanCodingSkill/pending.json"),
+            r#"{"items":[]}"#,
+        );
+        let seal = task::prepare_grade_workspace(&task, &workspace, &manifest).unwrap();
+        let graded = grade::run_shell(
+            &workspace,
+            &task.grade_cmd,
+            &EnvPolicy::with_rayman(temp.path().to_path_buf()),
+            grade::GRADE_TIMEOUT,
+        );
+        assert_eq!(graded.outcome, GradeOutcome::Failed);
+        let error =
+            task::verify_grade_observation(&workspace, &seal, &graded.stdout, &graded.stderr)
+                .unwrap_err();
+        assert!(error.to_string().contains("adjacent_bug_is_fixed"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn hidden_oracle_rejects_test_deletion_and_still_accepts_correct_implementation() {
+        let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let task = task::load_tasks(&repo.join("tasks"), Some("fix-failing-test"))
+            .unwrap()
+            .remove(0);
+        let manifest = task.provenance().unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let run_dir = temp.path().join("run");
+        fs::create_dir_all(run_dir.join("workspaces")).unwrap();
+
+        let correct = MockModel::new(
+            "correct",
+            vec![vec![(
+                "write_file".into(),
+                json!({
+                    "path": "src/lib.rs",
+                    "content": "pub fn add(a: i32, b: i32) -> i32 { a + b }\n"
+                }),
+            )]],
+        );
+        let correct_ctx = RunContext {
+            model: &correct,
+            skill_text: "",
+            rayman_bin_dir: temp.path(),
+            run_dir: &run_dir,
+            max_steps: 2,
+        };
+        let correct_result = run_trial(&correct_ctx, &task, &manifest, WITH_SKILL, 0, 0);
+        assert_eq!(correct_result.outcome, Outcome::Pass, "{correct_result:?}");
+
+        let wrong = MockModel::new(
+            "wrong",
+            vec![vec![(
+                "write_file".into(),
+                json!({
+                    "path": "src/lib.rs",
+                    "content": "pub fn add(a: i32, b: i32) -> i32 { a - b }\n"
+                }),
+            )]],
+        );
+        let wrong_ctx = RunContext {
+            model: &wrong,
+            skill_text: "",
+            rayman_bin_dir: temp.path(),
+            run_dir: &run_dir,
+            max_steps: 2,
+        };
+        let wrong_result = run_trial(&wrong_ctx, &task, &manifest, WITH_SKILL, 1, 0);
+        assert_eq!(wrong_result.outcome, Outcome::Fail, "{wrong_result:?}");
+        assert_ne!(wrong_result.grade_outcome, GradeOutcome::Passed);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn human_boundary_hidden_oracle_requires_goal_bound_v2_state() {
+        let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let task = task::load_tasks(&repo.join("tasks"), Some("human-boundary-solution-pack"))
+            .unwrap()
+            .remove(0);
+        let manifest = task.provenance().unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = temp.path().join("workspace");
+        task::setup_workspace(&task, &workspace, &manifest.fixture_sha256).unwrap();
+        write(&workspace.join("build.ok"), "ok\n");
+        write(
+            &workspace.join(".RaymanCodingSkill/goals/goal_demo.json"),
+            r#"{"id":"goal_demo","lifecycle":"current","status":"active"}"#,
+        );
+        write(
+            &workspace.join(".RaymanCodingSkill/pending.json"),
+            r#"{"items":[{"contract_version":2,"id":"pending_demo","goal_id":"goal_demo","owner":"human","kind":"human_input","attempts":["attempt"],"evidence_paths":["evidence"],"minimum_input":"token","recommended_action":"provide token","alternatives":["use connector"],"risk":"blocked","resume_command":"rayman prepare --goal goal_demo","auto_resume_condition":"token present","capability_key":"credentials/demo","boundary_class":"credentials"}]}"#,
+        );
+        let seal = task::prepare_grade_workspace(&task, &workspace, &manifest).unwrap();
+        let graded = grade::run_shell(
+            &workspace,
+            &task.grade_cmd,
+            &EnvPolicy::default(),
+            grade::GRADE_TIMEOUT,
+        );
+        assert_eq!(graded.outcome, GradeOutcome::Passed, "{graded:?}");
+        task::verify_grade_observation(&workspace, &seal, &graded.stdout, &graded.stderr).unwrap();
+
+        let invalid_workspace = temp.path().join("invalid-workspace");
+        task::setup_workspace(&task, &invalid_workspace, &manifest.fixture_sha256).unwrap();
+        write(&invalid_workspace.join("build.ok"), "ok\n");
+        write(
+            &invalid_workspace.join(".RaymanCodingSkill/goals/goal_demo.json"),
+            r#"{"id":"goal_demo","lifecycle":"current","status":"active"}"#,
+        );
+        write(
+            &invalid_workspace.join(".RaymanCodingSkill/pending.json"),
+            r#"{"items":[{"contract_version":2,"id":"pending_demo","goal_id":"goal_demo","owner":"human","kind":"human_input","attempts":["attempt"],"evidence_paths":["evidence"],"minimum_input":"token","recommended_action":"provide token","alternatives":["use connector"],"risk":"blocked","resume_command":"rayman prepare --goal goal_demo","auto_resume_condition":"token present","capability_key":"","boundary_class":"credentials"}]}"#,
+        );
+        let invalid_seal =
+            task::prepare_grade_workspace(&task, &invalid_workspace, &manifest).unwrap();
+        let invalid_grade = grade::run_shell(
+            &invalid_workspace,
+            &task.grade_cmd,
+            &EnvPolicy::default(),
+            grade::GRADE_TIMEOUT,
+        );
+        assert_eq!(invalid_grade.outcome, GradeOutcome::Failed);
+        assert!(
+            task::verify_grade_observation(
+                &invalid_workspace,
+                &invalid_seal,
+                &invalid_grade.stdout,
+                &invalid_grade.stderr,
+            )
+            .is_err()
+        );
+    }
+
     /// 回归：控制组模型跑普通 `cmd` 语法时，该命令曾被误判为“提及 rayman”，整轮 trial 被
     /// 记为 Error 并跳过评分。受测组没有这条拦截，Error 因此系统性偏向控制组，直接污染 A/B。
     /// 现在这类命令正常执行，trial 照常评分。
@@ -1432,8 +1753,10 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let skill = temp.path().join("SKILL.md");
         let binary = temp.path().join("rayman");
+        let traceability = temp.path().join("test-traceability.json");
         write(&skill, "skill version one\n");
         write(&binary, "binary version one\n");
+        write(&traceability, "traceability version one\n");
         let task = sample_task(temp.path());
         let tasks = vec![task];
         let manifests = tasks
@@ -1444,17 +1767,23 @@ mod tests {
         let baseline = InputBaseline::new(
             sha256_bytes(read_regular_text(&skill, "技能文件").unwrap().as_bytes()),
             sha256_regular_file(&binary, "rayman 二进制").unwrap(),
+            sha256_regular_file(&traceability, "测试追踪清单").unwrap(),
             &manifests,
         );
-        assert!(baseline.verify(&skill, &binary, &tasks).is_empty());
+        assert!(
+            baseline
+                .verify(&skill, &binary, &traceability, &tasks)
+                .is_empty()
+        );
 
         write(&skill, "skill version two\n");
         write(&binary, "binary version two\n");
+        write(&traceability, "traceability version two\n");
         write(
             &temp.path().join("tasks/sample/fixture/src/lib.rs"),
             "pub fn mutated() {}\n",
         );
-        let events = baseline.verify(&skill, &binary, &tasks);
+        let events = baseline.verify(&skill, &binary, &traceability, &tasks);
         assert!(
             events
                 .iter()
@@ -1465,6 +1794,12 @@ mod tests {
             events
                 .iter()
                 .any(|event| event.contains("rayman 二进制 SHA-256 漂移")),
+            "{events:?}"
+        );
+        assert!(
+            events
+                .iter()
+                .any(|event| event.contains("测试追踪清单 SHA-256 漂移")),
             "{events:?}"
         );
         assert!(
