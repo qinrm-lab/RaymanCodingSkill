@@ -20,8 +20,12 @@
     ]
   },
   "revision": {
-    "generation": 1,
-    "predecessor": null
+    "generation": 2,
+    "predecessor": {
+      "schema": "rayman.first-party-test-inventory.v1",
+      "generation": 1,
+      "sha256": "cf17944620b0a0ee17efd9cf80aba1044ade2a2ab6b809a1087a528b2c4e5a8d"
+    }
   },
   "tests": [
     {
@@ -793,13 +797,32 @@
     },
     {
       "test_id": "TEST-PS-SELFTEST-1CE180031456",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/audit-repository.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/audit-repository.ps1",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "selector_sha256": "9c8b8953c01ce0e65e3676c1a3da465fe2d73ef51cd1c9575fdc5caf2e6b305f",
+      "cfg": "all",
+      "owner": "",
+      "retirement": {
+        "retired_at": "2026-08-28",
+        "reason": "Audit self-test gained the complete custom-grade task fixture regression.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-1CE180031456-V2"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-PS-SELFTEST-1CE180031456-V2",
+      "status": "active",
+      "identity": "powershell::powershell_self_test::scripts/audit-repository.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/audit-repository.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "1e3e56a6b95341a6fb94019d23e8c1c3a78b94816b42f77a2749e5ac8b7a948c",
       "cfg": "all",
       "owner": "",
       "retirement": null

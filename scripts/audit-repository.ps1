@@ -824,6 +824,52 @@ function New-ManagedAuditDirectory {
     return Resolve-OrCreateRealAuditDirectory -Path $directory -Label 'Managed audit run'
 }
 
+function New-CustomGradeGuardTask {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$TasksRoot
+    )
+
+    $tasksRootItem = Get-Item -LiteralPath $TasksRoot -Force -ErrorAction Stop
+    if (-not $tasksRootItem.PSIsContainer -or
+        $tasksRootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw "Custom grade guard tasks root must be a real directory: $TasksRoot"
+    }
+    $customTask = Join-Path $tasksRootItem.FullName 'custom'
+    if (Test-Path -LiteralPath $customTask) {
+        throw "Custom grade guard task destination must be new: $customTask"
+    }
+    New-Item -ItemType Directory -Path $customTask | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $customTask 'fixture/src') | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $customTask 'oracle') | Out-Null
+    Set-Content -LiteralPath (Join-Path $customTask 'prompt.md') `
+        -Value 'Make no change.' -Encoding utf8
+    Set-Content -LiteralPath (Join-Path $customTask 'grade.txt') `
+        -Value 'echo must-not-run' -Encoding utf8
+    Set-Content -LiteralPath (Join-Path $customTask 'fixture/src/lib.rs') `
+        -Value 'pub fn sample() {}' -Encoding utf8
+    Set-Content -LiteralPath (Join-Path $customTask 'oracle/verify.ps1') `
+        -Value "Write-Output 'RAYMAN_EVAL_ORACLE_PASS custom-grade-guard'" `
+        -Encoding utf8
+    $contract = [ordered]@{
+        schema = 'rayman.eval-task.v2'
+        source_ids = @('SRC-EVAL-RUNTIME-CONTRACT')
+        rule_ids = @('RULE-REPO-EVAL-RUNTIME')
+        oracle = [ordered]@{
+            kind = 'power_shell'
+            source = 'verify.ps1'
+            destination = 'tests/__rayman_oracle.ps1'
+            success_marker = 'RAYMAN_EVAL_ORACLE_PASS custom-grade-guard'
+        }
+    }
+    [IO.File]::WriteAllText(
+        (Join-Path $customTask 'task.json'),
+        (($contract | ConvertTo-Json -Depth 8) + [Environment]::NewLine),
+        [Text.UTF8Encoding]::new($false)
+    )
+    return $customTask
+}
+
 function Remove-ManagedAuditDirectory {
     param([string]$Path)
 
@@ -1169,6 +1215,50 @@ function Invoke-AuditScriptSelfTest {
     if (($llvmPreparation -join ' ') -ne 'component add llvm-tools-preview --toolchain 1.97.1' -or
         ($coveragePreparation -join ' ') -ne 'install cargo-llvm-cov --locked --version 0.8.7 --root persistent-cargo-root') {
         throw 'Audit self-test failed: explicit tool preparation command shape drifted.'
+    }
+
+    $customGradeFixture = New-ManagedAuditDirectory -Label 'custom-grade-guard-selftest'
+    try {
+        $customTask = New-CustomGradeGuardTask -TasksRoot $customGradeFixture
+        Assert-OrdinaryDirectoryTree `
+            -Path $customTask `
+            -Label 'Custom grade guard self-test task'
+        foreach ($directory in @('fixture', 'fixture/src', 'oracle')) {
+            $item = Get-Item -LiteralPath (Join-Path $customTask $directory) -Force
+            if (-not $item.PSIsContainer -or
+                $item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                throw "Audit self-test failed: custom grade guard directory is invalid: $directory"
+            }
+        }
+        foreach ($file in @(
+                'prompt.md', 'grade.txt', 'task.json',
+                'fixture/src/lib.rs', 'oracle/verify.ps1'
+            )) {
+            $item = Get-Item -LiteralPath (Join-Path $customTask $file) -Force
+            if ($item.PSIsContainer -or
+                $item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                throw "Audit self-test failed: custom grade guard file is invalid: $file"
+            }
+        }
+        $taskContract = Get-Content -LiteralPath (Join-Path $customTask 'task.json') -Raw |
+            ConvertFrom-Json -Depth 8 -NoEnumerate -ErrorAction Stop
+        $contractProperties = @($taskContract.PSObject.Properties.Name | Sort-Object)
+        $oracleProperties = @($taskContract.oracle.PSObject.Properties.Name | Sort-Object)
+        if (($contractProperties -join ',') -cne 'oracle,rule_ids,schema,source_ids' -or
+            ($oracleProperties -join ',') -cne 'destination,kind,source,success_marker' -or
+            $taskContract.schema -cne 'rayman.eval-task.v2' -or
+            @($taskContract.source_ids).Count -ne 1 -or
+            [string]$taskContract.source_ids[0] -cne 'SRC-EVAL-RUNTIME-CONTRACT' -or
+            @($taskContract.rule_ids).Count -ne 1 -or
+            [string]$taskContract.rule_ids[0] -cne 'RULE-REPO-EVAL-RUNTIME' -or
+            $taskContract.oracle.kind -cne 'power_shell' -or
+            $taskContract.oracle.source -cne 'verify.ps1' -or
+            $taskContract.oracle.destination -cne 'tests/__rayman_oracle.ps1' -or
+            $taskContract.oracle.success_marker -cne 'RAYMAN_EVAL_ORACLE_PASS custom-grade-guard') {
+            throw 'Audit self-test failed: custom grade guard task contract is incomplete or semantically drifted.'
+        }
+    } finally {
+        Remove-ManagedAuditDirectory -Path $customGradeFixture
     }
 
     foreach ($identity in $NativeIdentities) {
@@ -1545,7 +1635,7 @@ db-path = "unexpected"
     foreach ($identity in $NativeIdentities) {
         Assert-NativeApplicationIdentity -Identity $identity
     }
-    Write-Host 'Audit script self-test passed: native shadow/identity, explicit preparation authority, exact isolated MSRV, isolated advisory state, and managed coverage guards fail closed.'
+    Write-Host 'Audit script self-test passed: native shadow/identity, explicit preparation authority, complete custom-grade guard task, exact isolated MSRV, isolated advisory state, and managed coverage guards fail closed.'
 }
 
 $nativeApplications = $null
@@ -1854,11 +1944,7 @@ try {
 
     $customTasksRoot = New-ManagedAuditDirectory -Label 'custom-grade-guard'
     try {
-        $customTask = Join-Path $customTasksRoot 'custom'
-        New-Item -ItemType Directory -Path (Join-Path $customTask 'fixture/src') | Out-Null
-        Set-Content -LiteralPath (Join-Path $customTask 'prompt.md') -Value 'Make no change.' -Encoding utf8
-        Set-Content -LiteralPath (Join-Path $customTask 'grade.txt') -Value 'echo must-not-run' -Encoding utf8
-        Set-Content -LiteralPath (Join-Path $customTask 'fixture/src/lib.rs') -Value 'pub fn sample() {}' -Encoding utf8
+        $null = New-CustomGradeGuardTask -TasksRoot $customTasksRoot
         Invoke-NativeExpectedFailure $nativeApplications.Cargo.Path @(
             'run', '--manifest-path', 'evals/Cargo.toml', '--locked', '--',
             '--backend', 'mock', '--tasks', $customTasksRoot, '--task', 'custom',

@@ -5,13 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 1,
-    "predecessor": null
+    "generation": 2,
+    "predecessor": {
+      "schema": "rayman.test-traceability.v2",
+      "generation": 1,
+      "sha256": "45c68815871b9fad853d479de71c613643f80b94853291823c61776faf01e60e"
+    }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "cf17944620b0a0ee17efd9cf80aba1044ade2a2ab6b809a1087a528b2c4e5a8d"
+    "sha256": "f807be4aa7273affb9ac782de51975c6837d599ea7f31501784b7c61c8a01752"
   },
   "sources": [
     {
@@ -521,7 +525,7 @@
       "kind": "powershell_self_test",
       "title": "PowerShell self-test: scripts/audit-repository.ps1",
       "path": "scripts/audit-repository.ps1",
-      "sha256": "9c8b8953c01ce0e65e3676c1a3da465fe2d73ef51cd1c9575fdc5caf2e6b305f",
+      "sha256": "1e3e56a6b95341a6fb94019d23e8c1c3a78b94816b42f77a2749e5ac8b7a948c",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "target_matrix": [
@@ -6168,7 +6172,7 @@
     },
     {
       "binding_id": "BIND-CASE-3E7DA4CB321F51F0",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE"
       ],
@@ -6185,6 +6189,33 @@
         "valid_until": "2027-02-27"
       },
       "semantic_sha256": "3277baf71dbd414eaec61d6a287ba18468cfa167d8ad203d9660bc7ae880051b",
+      "retirement": {
+        "retired_at": "2026-08-28",
+        "reason": "Audit self-test selector and gate bytes gained the complete custom-grade task fixture regression.",
+        "replaced_by": [
+          "BIND-CASE-3E7DA4CB321F51F0-V2"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-3E7DA4CB321F51F0-V2",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-1CE180031456-V2"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-PS-AUDIT-REPOSITORY",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-08-28",
+        "valid_until": "2027-02-27"
+      },
+      "semantic_sha256": "ab6f673bc11dfe2b584a2f2175717c5cfecd5d0916c622cfd9ddead370d462b2",
       "retirement": null
     },
     {
