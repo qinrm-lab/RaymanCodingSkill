@@ -1,4 +1,20 @@
-# Strict quality policy
+# Context, project-map, asset, toolchain, and strict-quality policy
+
+This repository-owned document is the normative source for the context/quality
+test family. Content indexing hashes every included byte and records read
+failures. Cargo and pyproject discovery, topology, symbol lookup, dependency
+impact, test anchors, and tool application resolution must be deterministic,
+path-contained, and conservative when topology or ecosystem support is
+incomplete. Impact and quality output is heuristic guidance, never validation
+authority.
+
+The read-only asset scan reports obsolete filename patterns and authored work
+markers without deleting them; strings used as test fixtures are not themselves
+cleanup authority. Toolchain/application discovery distinguishes a missing,
+ambiguous, shadowed, or non-application command instead of treating a basename
+as identity.
+
+## Strict profile
 
 `standard` reports maintainability warnings but does not promote them, and it
 does not read the workspace policy file at all: promotions, exemptions, and

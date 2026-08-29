@@ -721,6 +721,9 @@ fn authority_classification_rejects_a_focused_command_promoted_by_flag() {
             .unwrap_err();
     assert!(rejected.to_string().contains("authority gate"));
     assert!(validate_authority_command(dir.path(), "cargo test --workspace --all-targets").is_ok());
+    assert!(
+        validate_authority_command(dir.path(), "./cargo test --workspace --all-targets").is_err()
+    );
 }
 
 #[test]
@@ -753,6 +756,9 @@ fn xtask_authority_accepts_only_the_canonical_explicit_cargo_run() {
         "cargo run --locked --manifest-path ./xtask/Cargo.toml -- repository-gate",
         "cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate extra",
         "cargo +stable run --locked --manifest-path xtask/Cargo.toml -- repository-gate",
+        "./cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate",
+        "/tmp/cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate",
+        "C:\\temp\\cargo.exe run --locked --manifest-path xtask/Cargo.toml -- repository-gate",
     ] {
         assert!(
             validate_authority_command(dir.path(), rejected).is_err(),

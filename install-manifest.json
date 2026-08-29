@@ -2,8 +2,7 @@
   "schema_version": 2,
   "clients": {
     "codex": {
-      "deployment_scope": "global_skill",
-      "destination": "~/.codex/skills/raymancodingskill"
+      "deployment_scope": "global_skill"
     },
     "claude_code": {
       "deployment_scope": "repository_entrypoint_only",

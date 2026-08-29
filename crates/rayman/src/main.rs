@@ -10,7 +10,7 @@ mod state_audit_cli;
 mod task_workflow;
 mod update_cli;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command as ProcessCommand;
 
 use anyhow::{Context, Result, bail};
@@ -1384,7 +1384,16 @@ fn run_validation_command_in_session(
         executable.args[2] = script.launch_argument().to_owned();
     }
     goal::run_with_managed_validation_temp(root, &executable, |effective, environment| {
-        let mut process = ProcessCommand::new(&effective.program);
+        let launch_program = if Path::new(&effective.program).components().count() == 1 {
+            rayman::toolchain::resolve_spawnable_program(&effective.program).ok_or_else(|| {
+                anyhow::anyhow!(rayman::toolchain::unreachable_tool_advice(
+                    &effective.program
+                ))
+            })?
+        } else {
+            PathBuf::from(&effective.program)
+        };
+        let mut process = ProcessCommand::new(&launch_program);
         process.args(&effective.args).current_dir(root);
         session.apply(&mut process)?;
         if let Some(environment) = environment {

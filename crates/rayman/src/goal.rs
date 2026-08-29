@@ -83,13 +83,11 @@ pub struct GoalLoadIssue {
 
 /// Caller-owned inputs for a goal readiness decision.
 ///
-/// This type is intentionally introduced in slices. The current version fixes
-/// the workspace baseline and the exact captured workspace bytes, which lets
-/// validation relevance parse Cargo workspace exclusions without reopening
-/// `Cargo.toml`. Command containment, authority closure, lifecycle history,
-/// handoff source state and maintenance artifacts migrate in later slices;
-/// callers must not infer that those observations are captured merely because
-/// they use this context.
+/// The captured form fixes workspace bytes, source state, maintenance-artifact
+/// hashes, and workspace identity for readiness, handoff, replacement, and
+/// receipt checks. The `live` constructor deliberately leaves those optional
+/// fields absent; callers must inspect the context rather than infer capture
+/// merely from using this type.
 pub(crate) struct CapturedWorkspaceFile<'a> {
     /// Exact key recorded by the caller's complete workspace capture.
     pub key: String,

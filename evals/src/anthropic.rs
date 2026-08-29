@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 
 use crate::agent::{Assistant, Model, ToolCall, Truncated};
 
-/// 默认模型：除非用户显式指定，始终用最新最强的 Opus。
+/// 默认模型固定为这个精确 ID；不声称动态选择“最新”或“最强”模型。
 pub const DEFAULT_MODEL: &str = "claude-opus-4-8";
 
 const ENDPOINT: &str = "https://api.anthropic.com/v1/messages";

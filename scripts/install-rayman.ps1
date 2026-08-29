@@ -82,7 +82,11 @@ function Get-CodexSkillResourcePlan {
     } catch {
         throw "Install manifest is invalid: $($_.Exception.Message)"
     }
+    $codexClientProperties = @($manifest.clients.codex.PSObject.Properties.Name | Sort-Object)
+    $claudeClientProperties = @($manifest.clients.claude_code.PSObject.Properties.Name | Sort-Object)
     if ($manifest.schema_version -ne 2 -or
+        ($codexClientProperties -join ',') -ne 'deployment_scope' -or
+        ($claudeClientProperties -join ',') -ne 'deployment_scope,entrypoint' -or
         $manifest.clients.codex.deployment_scope -ne 'global_skill' -or
         $manifest.clients.claude_code.deployment_scope -ne 'repository_entrypoint_only' -or
         $manifest.clients.claude_code.entrypoint -ne 'CLAUDE.md' -or

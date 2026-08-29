@@ -95,6 +95,32 @@ function Assert-CiWorkflowContract {
         $signedRelease.Groups[1].Value -notmatch '(?m)^      - test-traceability\s*$') {
         throw 'signed-release must directly depend on the full-history test-traceability job'
     }
+    if (-not $signedRelease.Success -or
+        $signedRelease.Groups[1].Value -notmatch '(?m)-AssetDirectory\s+dist(?:\s|$)') {
+        throw 'signed-release must verify the complete staged asset directory before publication'
+    }
+    $freshness = [regex]::Match(
+        $Text,
+        '(?ms)^  signed-release-freshness:\s*$(.*?)(?=^  [A-Za-z0-9_-]+:\s*$|\z)'
+    )
+    if (-not $freshness.Success) {
+        throw 'CI workflow is missing the signed-release-freshness job'
+    }
+    foreach ($required in @(
+            '--pattern rayman-update-manifest-v1.json',
+            '--pattern rayman-update-manifest-v1.sig',
+            '--pattern rayman-windows-x86_64.exe',
+            '--pattern rayman-update-worker-windows-x86_64.exe',
+            '--pattern raymancodingskill-SKILL.md',
+            '--pattern raymancodingskill-AGENTS.md',
+            '--pattern raymancodingskill-workflow-contract.md',
+            '--pattern install-rayman.ps1',
+            '-AssetDirectory $assetRoot'
+        )) {
+        if (-not $freshness.Groups[1].Value.Contains($required)) {
+            throw "signed-release-freshness does not verify complete bundle input: $required"
+        }
+    }
 }
 
 function Assert-Rejected {
@@ -154,7 +180,13 @@ jobs:
   signed-release:
     needs:
       - test-traceability
-    steps: []
+    steps:
+      - run: ./scripts/check-update-freshness.ps1 -AssetDirectory dist
+  signed-release-freshness:
+    steps:
+      - run: |
+          gh release download v1.2.3 --pattern rayman-update-manifest-v1.json --pattern rayman-update-manifest-v1.sig --pattern rayman-windows-x86_64.exe --pattern rayman-update-worker-windows-x86_64.exe --pattern raymancodingskill-SKILL.md --pattern raymancodingskill-AGENTS.md --pattern raymancodingskill-workflow-contract.md --pattern install-rayman.ps1
+          ./scripts/check-update-freshness.ps1 -AssetDirectory $assetRoot
 '@
     Assert-CiWorkflowContract -Text $valid
     Assert-Rejected -Label 'runner context in job env' -Text @'
@@ -196,6 +228,8 @@ jobs:
     Assert-Rejected -Label 'shallow traceability history' -Text ($valid -replace 'fetch-depth: 0', 'fetch-depth: 1')
     Assert-Rejected -Label 'signed release without traceability dependency' -Text ($valid -replace '      - test-traceability', '      - check')
     Assert-Rejected -Label 'missing non-linux-unix test gate' -Text ($valid -replace ', macos-latest', '')
+    Assert-Rejected -Label 'freshness missing payload asset' -Text ($valid -replace '--pattern raymancodingskill-SKILL.md', '--pattern missing-SKILL.md')
+    Assert-Rejected -Label 'tag release missing staged asset directory' -Text ($valid -replace '-AssetDirectory dist', '-MinimumRemainingDays 29')
     Write-Output 'check-ci-workflow self-test: PASS'
     return
 }

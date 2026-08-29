@@ -64,8 +64,7 @@ switch ($PSCmdlet.ParameterSetName) {
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $artifactName = if ($IsWindows) { 'rayman.exe' } else { 'rayman' }
 $script:CurrentAuditPhase = 'bootstrap'
-$script:AuditIntegrationTestName = 'audit_self_test_exercises_only_the_audit_contract'
-
+$script:RepositoryQualityProviderSha256 = '47f405e725ad272b2d2c0d2b189855375962689f2b356eadc306305f957a0b77'
 function Write-AuditPhase {
     param(
         [Parameter(Mandatory = $true)]
@@ -501,8 +500,6 @@ function Invoke-IsolatedMsrvChecks {
         [Parameter(Mandatory = $true)]
         $RustcIdentity,
 
-        [string]$SkippedIntegrationTest,
-
         [scriptblock]$CommandRunner
     )
 
@@ -533,13 +530,9 @@ function Invoke-IsolatedMsrvChecks {
         & $CommandRunner `
             -FilePath $CargoIdentity.Path `
             -Arguments @('build', '--locked', '--release', '-p', 'rayman')
-        $testArguments = @('test', '--locked', '--workspace', '--all-targets')
-        if (-not [string]::IsNullOrWhiteSpace($SkippedIntegrationTest)) {
-            $testArguments += @('--', '--skip', $SkippedIntegrationTest)
-        }
         & $CommandRunner `
             -FilePath $CargoIdentity.Path `
-            -Arguments $testArguments
+            -Arguments @('test', '--locked', '--workspace', '--all-targets')
         Assert-ExactApplicationIdentity -Identity $CargoIdentity
         Assert-ExactApplicationIdentity -Identity $RustcIdentity
     } finally {
@@ -570,8 +563,6 @@ function Invoke-IsolatedCoverageCheck {
 
         [Parameter(Mandatory = $true)]
         [int]$MinimumLineCoverage,
-
-        [string]$SkippedIntegrationTest,
 
         [scriptblock]$CommandRunner
     )
@@ -627,9 +618,6 @@ function Invoke-IsolatedCoverageCheck {
             'llvm-cov', '--locked', '--workspace', '--all-features', '--all-targets',
             '--fail-under-lines', $MinimumLineCoverage.ToString()
         )
-        if (-not [string]::IsNullOrWhiteSpace($SkippedIntegrationTest)) {
-            $coverageArguments += @('--', '--skip', $SkippedIntegrationTest)
-        }
         & $CommandRunner `
             -FilePath $CoverageIdentity.Path `
             -Arguments $coverageArguments
@@ -1430,7 +1418,6 @@ function Invoke-AuditScriptSelfTest {
             Invoke-IsolatedMsrvChecks `
                 -CargoIdentity $msrvApplications.Cargo `
                 -RustcIdentity $msrvApplications.Rustc `
-                -SkippedIntegrationTest $script:AuditIntegrationTestName `
                 -CommandRunner $commandRunner
         } catch {
             $msrvFailureMessage = $_.Exception.Message
@@ -1439,7 +1426,7 @@ function Invoke-AuditScriptSelfTest {
         if (-not $expectedFailureObserved -or
             $commandCalls.Count -ne 2 -or
             $commandCalls[0] -ne 'build --locked --release -p rayman' -or
-            $commandCalls[1] -ne "test --locked --workspace --all-targets -- --skip $script:AuditIntegrationTestName" -or
+            $commandCalls[1] -ne 'test --locked --workspace --all-targets' -or
             $createdTargets.Count -ne 1 -or
             (Test-Path -LiteralPath $createdTargets[0]) -or
             $env:RUSTC -ne 'ambient-rustc' -or
@@ -1512,7 +1499,6 @@ function Invoke-AuditScriptSelfTest {
                 -LlvmCovIdentity $msrvLlvmApplications.LlvmCov `
                 -LlvmProfdataIdentity $msrvLlvmApplications.LlvmProfdata `
                 -MinimumLineCoverage 75 `
-                -SkippedIntegrationTest $script:AuditIntegrationTestName `
                 -CommandRunner $coverageRunner
         } catch {
             $coverageFailureMessage = $_.Exception.Message
@@ -1520,7 +1506,7 @@ function Invoke-AuditScriptSelfTest {
         }
         if (-not $coverageFailureObserved -or
             $coverageCalls.Count -ne 1 -or
-            $coverageCalls[0] -ne "llvm-cov --locked --workspace --all-features --all-targets --fail-under-lines 75 -- --skip $script:AuditIntegrationTestName" -or
+            $coverageCalls[0] -ne 'llvm-cov --locked --workspace --all-features --all-targets --fail-under-lines 75' -or
             $coverageTargets.Count -ne 1 -or
             (Test-Path -LiteralPath $coverageTargets[0]) -or
             $env:PATH -ne 'ambient-path' -or
@@ -1736,9 +1722,16 @@ function Get-RepositoryQualityCommands {
         [string]$ProviderPath = (Join-Path $PSScriptRoot 'repository-quality.ps1')
     )
 
+    $usingDefaultProvider = $ProviderPath -ceq (Join-Path $PSScriptRoot 'repository-quality.ps1')
     $helper = $ProviderPath
     if (-not (Test-Path -LiteralPath $helper -PathType Leaf)) {
         throw "Repository quality command provider is missing: $helper"
+    }
+    if ($usingDefaultProvider) {
+        $actualProviderHash = Get-FileSha256 -Path $helper
+        if ($actualProviderHash -cne $script:RepositoryQualityProviderSha256) {
+            throw "Repository quality command provider hash drifted: $actualProviderHash"
+        }
     }
     $json = & $helper -Suite $Suite | Out-String
     if (-not $? -or [string]::IsNullOrWhiteSpace($json)) {
@@ -1896,13 +1889,9 @@ try {
 
     Write-AuditPhase -Name 'root_quality' -Status 'start'
     foreach ($qualityCommand in @(Get-RepositoryQualityCommands -Suite Root)) {
-        $qualityArguments = @($qualityCommand.argv)
-        if ($qualityCommand.name -eq 'test') {
-            $qualityArguments += @('--', '--skip', $script:AuditIntegrationTestName)
-        }
         Invoke-NativeChecked `
             -FilePath $nativeApplications.Cargo.Path `
-            -Arguments $qualityArguments
+            -Arguments $qualityCommand.argv
     }
     Write-AuditPhase -Name 'root_quality' -Status 'pass'
 
@@ -1912,8 +1901,7 @@ try {
     Write-AuditPhase -Name 'msrv' -Status 'start'
     Invoke-IsolatedMsrvChecks `
         -CargoIdentity $msrvApplications.Cargo `
-        -RustcIdentity $msrvApplications.Rustc `
-        -SkippedIntegrationTest $script:AuditIntegrationTestName
+        -RustcIdentity $msrvApplications.Rustc
     Write-AuditPhase -Name 'msrv' -Status 'pass'
 
     # Real shipped-CLI coverage uses the exact preinstalled PATH Application
@@ -1926,8 +1914,7 @@ try {
         -RustcIdentity $msrvApplications.Rustc `
         -LlvmCovIdentity $msrvLlvmApplications.LlvmCov `
         -LlvmProfdataIdentity $msrvLlvmApplications.LlvmProfdata `
-        -MinimumLineCoverage $MinimumCliLineCoverage `
-        -SkippedIntegrationTest $script:AuditIntegrationTestName
+        -MinimumLineCoverage $MinimumCliLineCoverage
     Write-AuditPhase -Name 'cli_coverage' -Status 'pass'
 
     Write-AuditPhase -Name 'evals' -Status 'start'

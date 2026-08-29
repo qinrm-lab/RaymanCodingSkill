@@ -154,7 +154,7 @@ function Assert-AuditAuthorizationDocumentation {
         [Parameter(Mandatory = $true)][string]$Source
     )
     foreach ($required in @(
-            'an audit request by itself does not grant write authorization',
+            'an audit request by itself does not grant tracked-source repair authority',
             'When the user explicitly asks to repair or close audit findings',
             'The default audit never provisions host audit tools or changes rustup components',
             '`-PrepareAuditTools` is the sole provisioning authorization'
@@ -488,10 +488,12 @@ try {
     throw "install-manifest.json is invalid JSON: $($_.Exception.Message)"
 }
 if ($manifest.schema_version -ne 2) { throw 'Unsupported install manifest schema.' }
-if ($manifest.clients.codex.deployment_scope -ne 'global_skill') {
+if ((@($manifest.clients.codex.PSObject.Properties.Name | Sort-Object) -join ',') -ne 'deployment_scope' -or
+    $manifest.clients.codex.deployment_scope -ne 'global_skill') {
     throw 'Codex deployment scope must be global_skill.'
 }
-if ($manifest.clients.claude_code.deployment_scope -ne 'repository_entrypoint_only' -or
+if ((@($manifest.clients.claude_code.PSObject.Properties.Name | Sort-Object) -join ',') -ne 'deployment_scope,entrypoint' -or
+    $manifest.clients.claude_code.deployment_scope -ne 'repository_entrypoint_only' -or
     $manifest.clients.claude_code.entrypoint -ne 'CLAUDE.md') {
     throw 'Claude Code must remain a repository-only entrypoint.'
 }
@@ -565,8 +567,8 @@ if ($SelfTest) {
     Assert-Throws -Label 'audit documentation implies write authority' -Action {
         Assert-AuditAuthorizationDocumentation `
             -Documentation $auditDocumentation.Replace(
-                'an audit request by itself does not grant write authorization',
-                'an audit request may imply write authorization'
+                'an audit request by itself does not grant tracked-source repair authority',
+                'an audit request may imply tracked-source repair authority'
             ) `
             -Source $auditSource
     }

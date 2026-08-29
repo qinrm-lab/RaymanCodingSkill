@@ -173,6 +173,18 @@ pub(super) fn executable_name(command: &ParsedValidationCommand) -> String {
         .to_string()
 }
 
+/// Authority syntax names a reviewed tool class, not an arbitrary caller path
+/// whose basename happens to match. Normal validation may still use explicit
+/// executable paths; only authority classification requires one bare token.
+pub(super) fn exact_authority_program(command: &ParsedValidationCommand, expected: &str) -> bool {
+    Path::new(&command.program).components().count() == 1
+        && executable_name(command).eq_ignore_ascii_case(expected)
+}
+
+fn exact_authority_pytest_program(command: &ParsedValidationCommand) -> bool {
+    Path::new(&command.program).components().count() == 1 && pytest_invocation(command)
+}
+
 pub(super) fn powershell_script(command: &ParsedValidationCommand) -> Option<&str> {
     if matches!(executable_name(command).as_str(), "powershell" | "pwsh")
         && command.args.len() >= 3
@@ -1311,40 +1323,28 @@ fn command_is_workspace_wide_with_context(
     release_installer_invocation_with_context(decision, command).unwrap_or(false)
         || trusted_workspace_gate_script_with_context(decision, command).unwrap_or(false)
         || trusted_xtask_repository_gate_with_context(decision, command).unwrap_or(false)
-        || (cargo_subcommand(command).is_some()
+        || (exact_authority_program(command, "cargo")
+            && cargo_subcommand(command).is_some()
             && command
                 .args
                 .iter()
                 .any(|argument| matches!(argument.as_str(), "--workspace" | "--all"))
             && !cargo_command_is_narrowed(command))
-        || (pytest_invocation(command) && !pytest_command_is_narrowed(command))
+        || (exact_authority_pytest_program(command) && !pytest_command_is_narrowed(command))
 }
 
 pub(super) fn command_is_workspace_wide(root: &Path, command: &ParsedValidationCommand) -> bool {
     release_installer_invocation(root, command)
         || trusted_workspace_gate_script(root, command)
         || trusted_xtask_repository_gate(root, command).unwrap_or(false)
-        || (cargo_subcommand(command).is_some()
+        || (exact_authority_program(command, "cargo")
+            && cargo_subcommand(command).is_some()
             && command
                 .args
                 .iter()
                 .any(|argument| matches!(argument.as_str(), "--workspace" | "--all"))
             && !cargo_command_is_narrowed(command))
-        || (pytest_invocation(command) && !pytest_command_is_narrowed(command))
-}
-
-/// Authority receipts are stronger than ordinary validation receipts: the
-/// command must be an explicit repository gate, not merely a locally relevant
-/// build. Unknown ecosystems can opt in by exposing a reviewed workspace-local
-/// gate at one of the conventional script paths below.
-pub fn validate_authority_command(root: &Path, command: &str) -> Result<()> {
-    let parsed = parse_validation_command(command)?;
-    validate_command_security(root, &parsed)?;
-    validate_authority_command_syntax_with_gate(
-        &parsed,
-        trusted_workspace_gate_script(root, &parsed)
-            || trusted_xtask_repository_gate(root, &parsed)?,
-    )
+        || (exact_authority_pytest_program(command) && !pytest_command_is_narrowed(command))
 }
 
 pub(super) fn validate_authority_command_syntax_with_gate(
@@ -1353,13 +1353,15 @@ pub(super) fn validate_authority_command_syntax_with_gate(
 ) -> Result<()> {
     // "Selector-free" is part of the contract, not decoration: a filtered run
     // exits 0 while the rest of the suite is red.
-    let workspace_cargo_test = matches!(cargo_subcommand(parsed), Some(("test", _)))
+    let workspace_cargo_test = exact_authority_program(parsed, "cargo")
+        && matches!(cargo_subcommand(parsed), Some(("test", _)))
         && parsed
             .args
             .iter()
             .any(|argument| matches!(argument.as_str(), "--workspace" | "--all"))
         && !cargo_command_is_narrowed(parsed);
-    let workspace_pytest = pytest_invocation(parsed) && !pytest_command_is_narrowed(parsed);
+    let workspace_pytest =
+        exact_authority_pytest_program(parsed) && !pytest_command_is_narrowed(parsed);
 
     if !trusted_script && !workspace_cargo_test && !workspace_pytest {
         bail!(
@@ -1367,19 +1369,6 @@ pub(super) fn validate_authority_command_syntax_with_gate(
         );
     }
     Ok(())
-}
-
-pub(crate) fn validate_authority_command_with_context(
-    decision: &GoalDecisionContext<'_>,
-    command: &str,
-) -> Result<()> {
-    let parsed = parse_validation_command(command)?;
-    validate_command_security_with_context(decision, &parsed)?;
-    validate_authority_command_syntax_with_gate(
-        &parsed,
-        trusted_workspace_gate_script_with_context(decision, &parsed)?
-            || trusted_xtask_repository_gate_with_context(decision, &parsed)?,
-    )
 }
 
 pub(super) fn validation_matches_impact_with_context(

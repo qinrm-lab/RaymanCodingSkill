@@ -847,7 +847,6 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "无法保留复制权限: {}",
     "无法写入临时文件: {}",
     "无法执行验证程序: {}",
-    "无法清理临时目录: {}",
     "无法确定文件类型: {}",
     "无法读取临时目录: {}",
     "无法读取状态目录: {}",
@@ -1196,8 +1195,6 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "validation host-temp lease 命名空间",
     "validation host-temp 外部 lease 命名空间或根在句柄操作期间发生身份变化",
     "validation host-temp 外部 lease 命名空间或根在句柄操作期间发生身份变化: {binding_error:#}",
-    "validation process external lease 必须通过持有 validation host-temp 根复验",
-    "validation process external lease 必须通过持有 validation host-temp 根释放",
     "validation process lease manifest 已发布但临时目录未创建",
     "validation process lease manifest 已发布但嵌套验证根未创建",
     "validation process lease 创建部分状态的 manifest 封存不完整",
@@ -2707,14 +2704,6 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     (
         "validation host-temp 外部 lease 命名空间或根在句柄操作期间发生身份变化: {binding_error:#}",
         "validation host-temp external lease namespace or root identity changed during handle operation: {binding_error:#}",
-    ),
-    (
-        "validation process external lease 必须通过持有 validation host-temp 根复验",
-        "validation process external lease must be revalidated through the held validation host-temp root",
-    ),
-    (
-        "validation process external lease 必须通过持有 validation host-temp 根释放",
-        "validation process external lease must be released through the held validation host-temp root",
     ),
     (
         "validation process lease manifest 已发布但临时目录未创建",
@@ -5637,10 +5626,6 @@ const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "unable to create the managed temp directory",
     ),
     ("无法释放", "unable to release"),
-    (
-        "无法清理临时目录",
-        "unable to clean the temporary directory",
-    ),
     ("无法哈希", "unable to hash"),
     ("无法规范化", "unable to canonicalize"),
     ("无法复算", "unable to recompute"),

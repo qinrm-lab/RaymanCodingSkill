@@ -6,6 +6,8 @@ param(
     [string]$SignaturePath,
     [Parameter(Mandatory = $true, ParameterSetName = 'Check')]
     [string]$WorkerPath,
+    [Parameter(Mandatory = $true, ParameterSetName = 'Check')]
+    [string]$AssetDirectory,
     [Parameter(ParameterSetName = 'Check')]
     [string]$ExpectedVersion,
     [Parameter(ParameterSetName = 'Check')]
@@ -33,6 +35,21 @@ function Resolve-OrdinaryFile {
         ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
         (-not [string]::IsNullOrWhiteSpace($linkType) -and $linkType -cne 'HardLink')) {
         throw "$Label must be an ordinary non-reparse file: $Path"
+    }
+    return $item.FullName
+}
+
+function Resolve-OrdinaryDirectory {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+    if (-not $item.PSIsContainer -or
+        ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+        -not [string]::IsNullOrWhiteSpace([string]$item.LinkType)) {
+        throw "$Label must be an ordinary non-reparse directory: $Path"
     }
     return $item.FullName
 }
@@ -123,6 +140,51 @@ function Assert-ManifestFreshness {
     }
 }
 
+function Get-VerifiedManifestAssetHashes {
+    param(
+        [Parameter(Mandatory = $true)][pscustomobject]$Manifest,
+        [Parameter(Mandatory = $true)][string]$Directory
+    )
+
+    $expected = [ordered]@{
+        cli = 'rayman-windows-x86_64.exe'
+        update_worker = 'rayman-update-worker-windows-x86_64.exe'
+        skill = 'raymancodingskill-SKILL.md'
+        agent_contract = 'raymancodingskill-AGENTS.md'
+        workflow_contract = 'raymancodingskill-workflow-contract.md'
+        installer_script = 'install-rayman.ps1'
+    }
+    if ($Manifest.assets -isnot [array] -or $Manifest.assets.Count -ne $expected.Count) {
+        throw 'Verified update manifest does not contain the exact six-role asset set.'
+    }
+    $root = Resolve-OrdinaryDirectory -Path $Directory -Label 'Update asset directory'
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $hashes = [ordered]@{}
+    foreach ($asset in $Manifest.assets) {
+        $role = [string]$asset.role
+        $name = [string]$asset.name
+        if (-not $expected.Contains($role) -or $expected[$role] -cne $name -or
+            -not $seen.Add($role) -or $name -cne [IO.Path]::GetFileName($name) -or
+            [string]$asset.sha256 -cnotmatch '^[0-9a-f]{64}$') {
+            throw "Verified update manifest contains an invalid asset identity: role=$role name=$name"
+        }
+        $path = Resolve-OrdinaryFile -Path (Join-Path $root $name) -Label "Update asset '$role'"
+        $item = Get-Item -LiteralPath $path -Force
+        if ([uint64]$item.Length -ne [uint64]$asset.size) {
+            throw "Update asset '$name' size does not match the signed manifest."
+        }
+        $hash = Get-Sha256 -Path $path
+        if ($hash -cne [string]$asset.sha256) {
+            throw "Update asset '$name' SHA-256 does not match the signed manifest."
+        }
+        $hashes[$name] = $hash
+    }
+    if ($seen.Count -ne $expected.Count) {
+        throw 'Verified update manifest asset roles are incomplete.'
+    }
+    return $hashes
+}
+
 function Invoke-SelfTest {
     $now = [DateTimeOffset]::Parse('2026-01-01T00:00:00Z')
     $fresh = [pscustomobject]@{
@@ -151,6 +213,53 @@ function Invoke-SelfTest {
         }
         if (-not $rejected) {
             throw "Freshness self-test accepted $($case.Name)."
+        }
+    }
+
+    $assetRoot = Join-Path ([IO.Path]::GetTempPath()) ("rayman-freshness-selftest-" + [Guid]::NewGuid().ToString('N'))
+    try {
+        $null = New-Item -ItemType Directory -Path $assetRoot -ErrorAction Stop
+        $assetRows = @()
+        foreach ($entry in ([ordered]@{
+                cli = 'rayman-windows-x86_64.exe'
+                update_worker = 'rayman-update-worker-windows-x86_64.exe'
+                skill = 'raymancodingskill-SKILL.md'
+                agent_contract = 'raymancodingskill-AGENTS.md'
+                workflow_contract = 'raymancodingskill-workflow-contract.md'
+                installer_script = 'install-rayman.ps1'
+            }).GetEnumerator()) {
+            $content = [Text.Encoding]::UTF8.GetBytes("self-test-$($entry.Key)")
+            $path = Join-Path $assetRoot $entry.Value
+            [IO.File]::WriteAllBytes($path, $content)
+            $assetRows += [pscustomobject]@{
+                role = [string]$entry.Key
+                name = [string]$entry.Value
+                size = [uint64]$content.Length
+                sha256 = Get-Sha256 -Path $path
+            }
+        }
+        $assetManifest = [pscustomobject]@{ assets = [array]$assetRows }
+        $hashes = Get-VerifiedManifestAssetHashes -Manifest $assetManifest -Directory $assetRoot
+        if ($hashes.Count -ne 6) {
+            throw 'Asset completeness self-test did not verify all six roles.'
+        }
+        [IO.File]::WriteAllText(
+            (Join-Path $assetRoot 'rayman-windows-x86_64.exe'),
+            'tampered',
+            [Text.UTF8Encoding]::new($false)
+        )
+        $rejected = $false
+        try {
+            $null = Get-VerifiedManifestAssetHashes -Manifest $assetManifest -Directory $assetRoot
+        } catch {
+            $rejected = $true
+        }
+        if (-not $rejected) {
+            throw 'Asset completeness self-test accepted a modified payload.'
+        }
+    } finally {
+        if (Test-Path -LiteralPath $assetRoot -PathType Container) {
+            Remove-Item -LiteralPath $assetRoot -Recurse -Force
         }
     }
     Write-Output 'check-update-freshness self-test: PASS'
@@ -240,6 +349,7 @@ $freshness = Assert-ManifestFreshness `
     -Manifest $document `
     -Now ([DateTimeOffset]::UtcNow) `
     -MinimumDays $MinimumRemainingDays
+$assetHashes = Get-VerifiedManifestAssetHashes -Manifest $document -Directory $AssetDirectory
 
 $final = [ordered]@{
     manifest = Get-Sha256 $manifest
@@ -249,6 +359,12 @@ $final = [ordered]@{
 foreach ($name in $initial.Keys) {
     if ($initial[$name] -cne $final[$name]) {
         throw "Update freshness input '$name' changed after manifest inspection."
+    }
+}
+$finalAssetHashes = Get-VerifiedManifestAssetHashes -Manifest $document -Directory $AssetDirectory
+foreach ($name in $assetHashes.Keys) {
+    if ($finalAssetHashes[$name] -cne $assetHashes[$name]) {
+        throw "Update asset '$name' changed after manifest inspection."
     }
 }
 
@@ -266,4 +382,6 @@ foreach ($name in $initial.Keys) {
     manifest_sha256 = $initial.manifest
     signature_sha256 = $initial.signature
     worker_sha256 = $initial.worker
+    assets_verified = $assetHashes.Count
+    asset_sha256 = $assetHashes
 } | ConvertTo-Json -Depth 4

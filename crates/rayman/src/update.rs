@@ -1,15 +1,10 @@
-//! Pure, fail-closed primitives for discovering RaymanCodingSkill releases.
+//! Fail-closed release discovery plus a separately authenticated update path.
 //!
-//! Its only concrete transport is a Windows WinHTTP provider locked to the
-//! official Releases endpoint.  The module has no filesystem access, process
-//! spawning, installer, or activation integration.  A caller may use the
-//! injectable [`UpdateProvider`] to discover a newer release, but discovery is
-//! only a prompt candidate: it never authorizes a download, install, or a
-//! change to another workspace's activation contract.
-//!
-//! A future automatic installer must be a separate, authenticated delivery
-//! protocol (signed manifest, pinned verification key, per-file hashes, and a
-//! transaction with rollback).  A GitHub tag alone is not such authorization.
+//! The discovery core accepts only the fixed official Releases endpoint and
+//! produces untrusted observations. The `trust`, `state`, `transport`, and
+//! `install` submodules implement the existing receipt-bound, signed-manifest,
+//! per-asset verified worker transaction. Discovery alone never authorizes a
+//! download, install, or change to another workspace's activation contract.
 
 use std::cmp::Ordering;
 use std::fmt;
@@ -276,7 +271,7 @@ impl UpdateProvider for OfficialReleaseProvider {
     ) -> Result<Vec<String>, UpdateProviderError> {
         // `OfficialUpdateSource` has no arbitrary endpoint constructor.  Keep
         // this check at the provider boundary so a future source extension
-        // fails closed until it has its own independently reviewed transport.
+        // fails closed until it has its own separately reviewed transport.
         if source.endpoint() != OFFICIAL_RELEASES_ENDPOINT {
             return Err(UpdateProviderError::MalformedResponse);
         }

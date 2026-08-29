@@ -111,13 +111,14 @@ and hash.
 The 30-day validity window is a deliberate freshness boundary, not a license to
 extend or replace metadata for an existing tag. A supported stable release must
 therefore be followed by a newer signed patch release before its manifest
-expires. The tag workflow runs `scripts/check-update-freshness.ps1` after
-signature verification and requires at least 29 days to remain before it can
-publish. The weekly `signed-release-freshness` job builds the verifier from
-current protected source rather than from the release under inspection, passes
-the stable tag as an explicit expected version, verifies the detached
-signature, rechecks the tag/commit binding, and fails when fewer than 14 days
-remain.
+expires. The tag workflow runs `scripts/check-update-freshness.ps1` against all
+six staged payloads after signature verification and requires at least 29 days
+to remain before it can publish. The weekly `signed-release-freshness` job
+builds the verifier from current protected source rather than from the release
+under inspection, passes the stable tag as an explicit expected version,
+downloads every fixed-role payload, verifies its signed name/size/SHA-256 plus
+the detached signature and tag/commit binding, and fails when any asset is
+missing or fewer than 14 days remain.
 
 That failure is an operator release boundary, never automatic publication
 authority. Recover by producing a new semantic patch from a clean HEAD through

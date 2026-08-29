@@ -1,5 +1,7 @@
-//! 精简版托管临时目录：运行期临时文件放工作区本地 `.RaymanCodingSkill/tmp/`，
-//! 不用系统临时目录、不记忆跨项目位置。提供创建、递归审计与清理；清理只删自己管辖的目录。
+//! 托管临时目录：operator scratch 和显式 CLI lease 位于工作区
+//! `.RaymanCodingSkill/tmp/`；Windows 生产 validation child 使用单独配置的
+//! external host root。两类路径都以 manifest/强身份限定清理权限，绝不把任意
+//! 系统临时目录当作删除根。
 
 use std::collections::BTreeMap;
 #[cfg(windows)]
@@ -654,6 +656,7 @@ pub(crate) fn create_managed_pytest_lease(root: &Path, label: &str) -> Result<Ma
     )
 }
 
+#[cfg(any(not(windows), test))]
 pub(crate) fn create_external_managed_pytest_lease(
     root: &Path,
     label: &str,
@@ -1438,6 +1441,7 @@ pub(crate) fn release_managed_pytest_lease(
     release_managed_pytest_lease_with_storage(root, expected, PytestLeaseStorage::Workspace)
 }
 
+#[cfg(any(not(windows), test))]
 pub(crate) fn release_external_managed_pytest_lease(
     root: &Path,
     expected: &ManagedPytestLease,
@@ -2316,11 +2320,7 @@ fn ensure_real_directory(path: &Path) -> Result<()> {
 
 /// 清理整个托管临时根。只删 `.RaymanCodingSkill/tmp`，绝不触碰其它用户数据。
 pub fn cleanup(root: &Path) -> Result<bool> {
-    let Some(dir) = state_paths::managed_state_dir(root, Path::new("tmp"), false)? else {
-        return Ok(false);
-    };
-    fs::remove_dir_all(&dir).with_context(|| format!("无法清理临时目录: {}", dir.display()))?;
-    Ok(true)
+    state_paths::remove_managed_state_dir_all(root, Path::new("tmp"))
 }
 
 #[cfg(test)]
@@ -2362,7 +2362,11 @@ mod tests {
         let scratch = scratch_dir(root, "build cache").unwrap();
         fs::create_dir_all(scratch.join("nested")).unwrap();
         fs::write(scratch.join("f.txt"), "x").unwrap();
-        fs::write(scratch.join("nested/g.txt"), "xyz").unwrap();
+        let readonly = scratch.join("nested/g.txt");
+        fs::write(&readonly, "xyz").unwrap();
+        let mut permissions = fs::metadata(&readonly).unwrap().permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(&readonly, permissions).unwrap();
         let report = status(root);
         assert!(report.exists);
         assert_eq!(report.entry_count, 1);

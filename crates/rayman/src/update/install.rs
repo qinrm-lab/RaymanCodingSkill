@@ -62,8 +62,20 @@ impl VerifiedBundle {
 /// A production build may expose automatic installation only after its
 /// compiled signing root has been provisioned. Discovery and notification do
 /// not depend on this capability.
+fn trusted_install_platform(target_os: &str, target_arch: &str, target_env: &str) -> bool {
+    target_os == "windows" && target_arch == "x86_64" && target_env == "msvc"
+}
+
 pub fn trusted_install_available() -> bool {
-    cfg!(windows) && super::trust::production_trust_ready()
+    let target_env = if cfg!(target_env = "msvc") {
+        "msvc"
+    } else if cfg!(target_env = "gnu") {
+        "gnu"
+    } else {
+        "other"
+    };
+    trusted_install_platform(std::env::consts::OS, std::env::consts::ARCH, target_env)
+        && super::trust::production_trust_ready()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -611,6 +623,23 @@ mod tests {
                 calls: RefCell::new(Vec::new()),
             },
         )
+    }
+
+    #[test]
+    fn trusted_install_platform_is_exactly_windows_x86_64_msvc() {
+        assert!(trusted_install_platform("windows", "x86_64", "msvc"));
+        for (target_os, target_arch, target_env) in [
+            ("windows", "aarch64", "msvc"),
+            ("windows", "x86_64", "gnu"),
+            ("linux", "x86_64", "gnu"),
+            ("macos", "aarch64", "other"),
+        ] {
+            assert!(!trusted_install_platform(
+                target_os,
+                target_arch,
+                target_env
+            ));
+        }
     }
 
     #[test]

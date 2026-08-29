@@ -9,8 +9,7 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $repoRoot
-$auditIntegrationTestName = 'audit_self_test_exercises_only_the_audit_contract'
-
+$script:RepositoryQualityProviderSha256 = '47f405e725ad272b2d2c0d2b189855375962689f2b356eadc306305f957a0b77'
 & (Join-Path $PSScriptRoot 'check-agent-instructions.ps1') -SelfTest
 & (Join-Path $PSScriptRoot 'check-ci-workflow.ps1') -SelfTest
 & (Join-Path $PSScriptRoot 'check-ci-workflow.ps1')
@@ -18,8 +17,7 @@ $auditIntegrationTestName = 'audit_self_test_exercises_only_the_audit_contract'
 & (Join-Path $PSScriptRoot 'check-test-traceability.ps1') -RuntimeInventory
 & (Join-Path $PSScriptRoot 'release-closeout.ps1') -SelfTest
 # Keep sibling PowerShell regressions explicit and single-owner. The audit
-# self-test now exercises only audit-repository.ps1, so root Cargo tests do not
-# recursively launch the installer/verifier/profile suites.
+# dependency-policy lane executes its own PowerShell self-test directly.
 & (Join-Path $PSScriptRoot 'install-rayman.ps1') -SelfTest
 & (Join-Path $PSScriptRoot 'update-rayman.ps1') -SelfTest
 & (Join-Path $PSScriptRoot 'check-update-freshness.ps1') -SelfTest
@@ -62,9 +60,16 @@ function Get-RepositoryQualityCommands {
         [string]$ProviderPath = (Join-Path $PSScriptRoot 'repository-quality.ps1')
     )
 
+    $usingDefaultProvider = $ProviderPath -ceq (Join-Path $PSScriptRoot 'repository-quality.ps1')
     $helper = $ProviderPath
     if (-not (Test-Path -LiteralPath $helper -PathType Leaf)) {
         throw "Repository quality command provider is missing: $helper"
+    }
+    if ($usingDefaultProvider) {
+        $actualProviderHash = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actualProviderHash -cne $script:RepositoryQualityProviderSha256) {
+            throw "Repository quality command provider hash drifted: $actualProviderHash"
+        }
     }
     $json = & $helper -Suite $Suite | Out-String
     if (-not $? -or [string]::IsNullOrWhiteSpace($json)) {
@@ -112,14 +117,7 @@ $git = Resolve-NativeApplication -Name 'git'
 
 foreach ($suite in @('Root', 'Evals')) {
     foreach ($qualityCommand in @(Get-RepositoryQualityCommands -Suite $suite)) {
-        $qualityArguments = @($qualityCommand.argv)
-        if ($suite -eq 'Root' -and $qualityCommand.name -eq 'test') {
-            # DependencyPolicyOnly already executed the real audit PowerShell
-            # self-test above. Skip exactly that one integration test here so
-            # the selector-free outer Cargo suite does not recursively launch it.
-            $qualityArguments += @('--', '--skip', $auditIntegrationTestName)
-        }
-        Invoke-NativeChecked -Application $cargo -Arguments $qualityArguments
+        Invoke-NativeChecked -Application $cargo -Arguments $qualityCommand.argv
     }
 }
 $raymanName = if ($IsWindows) { 'rayman.exe' } else { 'rayman' }

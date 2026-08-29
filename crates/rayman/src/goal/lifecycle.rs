@@ -597,9 +597,9 @@ pub fn goal_gate_verdict_with_baseline(
     )
 }
 
-/// Captured readiness entrypoint. The fixed baseline and Cargo workspace
-/// exclusion relevance consume the decision context now; remaining goal-state
-/// live observations migrate in later slices.
+/// Captured readiness entrypoint. Baseline, workspace bytes, source state,
+/// maintenance artifacts, and workspace identity are consumed through the
+/// decision context; explicitly absent optional fields retain the live fallback.
 pub fn goal_gate_verdict_with_context(
     goal: &Goal,
     all_goals: &[Goal],

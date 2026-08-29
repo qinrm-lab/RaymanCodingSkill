@@ -105,11 +105,16 @@ binding at the unchanged stable test ID. Gate and path-qualified asset
 successors work the same way. The test itself retires only when its last active
 semantic binding disappears or its executable selector bytes change.
 
-A shared test is not deleted when another independently reviewed, unexpired
+A shared test is not deleted when another separately reviewed, unexpired
 binding remains. Conversely, adding an unrelated edge cannot launder an old
 test: a new binding has a new stable ID, review horizon, and digest. A negative
 test for removed behavior may remain only when an active rule still requires
 that behavior to be rejected.
+
+`reviewed_at` and `valid_until` prove only the recorded review horizon for that
+repository-owned relation. They do not identify an independent reviewer or
+constitute an external attestation; any such identity claim needs separate
+evidence outside this manifest.
 
 The tombstone stays forever even though executable code and last-reference
 files are removed. Active IDs cannot disappear, be born retired, be changed in

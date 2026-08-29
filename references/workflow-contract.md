@@ -327,7 +327,7 @@ execution.
 Retirement is a reverse-closure transaction, not history cleanup. Retire a
 source and its incident links; retire a rule when it loses its last defining
 source; retire its semantic bindings; and retire/delete every test that then
-has no other active, independently reviewed binding in the same revision. A
+has no other active, separately review-horizon-bound binding in the same revision. A
 shared test remains only through its surviving binding. A negative test for
 removed behavior remains only when an active rule still requires rejection.
 Dedicated test assets use delete-on-last-reference ownership: the final

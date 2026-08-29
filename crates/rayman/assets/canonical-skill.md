@@ -29,37 +29,13 @@ this adapter does not redefine their identity or permission contract.
 
 ## Installed-version currency
 
-At the start of an explicit non-read-only Rayman task, run `rayman --format
-json update poll` before activation repair. The polling preference is enabled
-by default. On Windows, discovery uses only the compiled official release
-source; on non-Windows, a due poll returns the zero-network
-`unsupported_platform` boundary and claims no notification capability. Polling
-may update only the user-level update cache. A network, metadata, or cache
-failure never grants installation authority and must not block the original
-coding task.
-
-`auto_install` is a separate consent bit that defaults to false and can be set
-only by `rayman update configure --auto-install --yes`. When poll returns a
-`worker_launch`, execute exactly its program plus argv as a direct process,
-never as a shell string. The receipt-bound versioned worker must recheck
-consent, the current managed install tuple, signed canonical manifest, pinned
-key epoch, anti-replay floor, every asset size/hash, and the recoverable
-publication journal. Any missing or unverifiable link is fail closed. After a
-successful worker result reports `restart_required=true`, stop and request a
-Codex restart; the old loaded adapter must not claim the new skill/runtime is
-active. On the next invocation run `rayman workspace ensure-current --yes` and
-continue only if its existing activation is eligible for identity-only rebind.
-That next-use migration is deliberately limited to this workspace's
-`workspace_skill.yaml` identity scalars. It reports
-`migration_scope=current_workspace_activation_identity_only`, never injects
-Rayman's repository `xtask` into a consumer project, never rewrites the
-project's Python or other automation, and never scans or rewrites another
-workspace. Migrating a consumer project's own automation requires its own
-explicit project-scoped goal and validation.
-
-A read-only request does not run poll, a worker, or `ensure-current --yes`.
-It may use `rayman update status` and `rayman workspace ensure-current` only to
-report current state and an exact recovery command without writes.
+Polling, install consent, worker execution, restart authority, and identity-only
+rebind are governed by the shared workflow reference. This adapter adds only
+the Codex host boundary: after a successful worker reports
+`restart_required=true`, stop and request a Codex restart because the loaded
+adapter is still the old one. On the next invocation follow the shared
+`workspace ensure-current` contract; do not infer that a restart or UI version
+display migrated project automation.
 
 ## Codex adapter
 

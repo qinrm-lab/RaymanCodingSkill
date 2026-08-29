@@ -46,7 +46,7 @@ Retirement is a reverse-closure transaction. Retiring a declaration/source
 retires its incident source-rule links. A rule with no remaining defining
 source retires with every semantic binding that uses it. A test whose last
 active binding disappears retires in the same revision and its executable
-selector is deleted. Shared tests remain only while another independently
+selector is deleted. Shared tests remain only while another separately
 reviewed, active binding survives. A negative test for deleted behavior may
 remain only through an active rule that still requires that behavior to be
 rejected.

@@ -22,7 +22,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # 唯一非自证的强制门禁：机器化执行 fmt / clippy / test，替代此前手打的 validation records。
+  # Primary fast source gate: machine-executed fmt/clippy/test. Tagged release
+  # authority additionally depends on every explicit job listed below.
   check:
     name: fmt + clippy + test
     strategy:
@@ -519,6 +520,7 @@ jobs:
             -ManifestPath dist/rayman-update-manifest-v1.json `
             -SignaturePath dist/rayman-update-manifest-v1.sig `
             -WorkerPath target/release/rayman-update-worker.exe `
+            -AssetDirectory dist `
             -MinimumRemainingDays 29
 
       - name: Publish immutable asset set for the exact tag
@@ -559,7 +561,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable, pinned 2026-07-14
 
-      - name: Verify latest signed release remains installable
+      - name: Verify latest signed release bundle remains installable
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -596,14 +598,21 @@ jobs:
             gh release download $tag `
               --pattern rayman-update-manifest-v1.json `
               --pattern rayman-update-manifest-v1.sig `
+              --pattern rayman-windows-x86_64.exe `
+              --pattern rayman-update-worker-windows-x86_64.exe `
+              --pattern raymancodingskill-SKILL.md `
+              --pattern raymancodingskill-AGENTS.md `
+              --pattern raymancodingskill-workflow-contract.md `
+              --pattern install-rayman.ps1 `
               --dir $assetRoot
-            if ($LASTEXITCODE -ne 0) { throw "Unable to download signed metadata for $tag." }
+            if ($LASTEXITCODE -ne 0) { throw "Unable to download the complete signed bundle for $tag." }
 
             $worker = Join-Path $PWD 'target/release/rayman-update-worker'
             $freshnessText = ./scripts/check-update-freshness.ps1 `
               -ManifestPath (Join-Path $assetRoot 'rayman-update-manifest-v1.json') `
               -SignaturePath (Join-Path $assetRoot 'rayman-update-manifest-v1.sig') `
               -WorkerPath $worker `
+              -AssetDirectory $assetRoot `
               -ExpectedVersion $tag.Substring(1) `
               -MinimumRemainingDays 14
             $freshness = $freshnessText | ConvertFrom-Json -ErrorAction Stop

@@ -1,7 +1,8 @@
 //! 共享的最小 agent 循环 + 工具执行 + 可插拔模型后端。
 //!
 //! 循环与工具是共享的；后端（mock / anthropic）只负责“给定对话，产出下一条 assistant 消息”。
-//! 这样 A/B 两组之间**唯一的自变量**就是 system 提示里有没有技能文本 + `rayman` 是否可用。
+//! A/B treatment 同时捆绑 skill system 文本与 `rayman` 可用性；结果仅作描述性
+//! 比较，不把这个耦合 treatment bundle 解释为单一自变量或因果效应。
 
 use std::fs;
 use std::io::Write;

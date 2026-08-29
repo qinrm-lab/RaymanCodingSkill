@@ -9,30 +9,14 @@ use super::{ParsedValidationCommand, pytest_invocation, python_pytest_module_ind
 
 struct ManagedPytestLeaseGuard {
     root: PathBuf,
-    storage: ManagedPytestLeaseStorage,
     lease: Option<crate::temp::ManagedPytestLease>,
 }
 
-#[derive(Clone, Copy)]
-#[cfg_attr(not(test), allow(dead_code))]
-enum ManagedPytestLeaseStorage {
-    Workspace,
-    External,
-}
-
 impl ManagedPytestLeaseGuard {
-    fn prepare(root: &Path, storage: ManagedPytestLeaseStorage) -> Result<Self> {
-        let lease = match storage {
-            ManagedPytestLeaseStorage::Workspace => {
-                crate::temp::create_managed_pytest_lease(root, "goal-validation")?
-            }
-            ManagedPytestLeaseStorage::External => {
-                crate::temp::create_external_managed_pytest_lease(root, "p")?
-            }
-        };
+    fn prepare(root: &Path) -> Result<Self> {
+        let lease = crate::temp::create_managed_pytest_lease(root, "goal-validation")?;
         Ok(Self {
             root: root.to_path_buf(),
-            storage,
             lease: Some(lease),
         })
     }
@@ -50,28 +34,14 @@ impl ManagedPytestLeaseGuard {
         let Some(lease) = self.lease.take() else {
             return Ok(());
         };
-        match self.storage {
-            ManagedPytestLeaseStorage::Workspace => {
-                crate::temp::release_managed_pytest_lease(&self.root, &lease)
-            }
-            ManagedPytestLeaseStorage::External => {
-                crate::temp::release_external_managed_pytest_lease(&self.root, &lease)
-            }
-        }
+        crate::temp::release_managed_pytest_lease(&self.root, &lease)
     }
 }
 
 impl Drop for ManagedPytestLeaseGuard {
     fn drop(&mut self) {
         if let Some(lease) = self.lease.take() {
-            let _ = match self.storage {
-                ManagedPytestLeaseStorage::Workspace => {
-                    crate::temp::release_managed_pytest_lease(&self.root, &lease)
-                }
-                ManagedPytestLeaseStorage::External => {
-                    crate::temp::release_external_managed_pytest_lease(&self.root, &lease)
-                }
-            };
+            let _ = crate::temp::release_managed_pytest_lease(&self.root, &lease);
         }
     }
 }
@@ -293,26 +263,7 @@ pub fn run_with_managed_pytest_lease(
     command: &ParsedValidationCommand,
     runner: impl FnOnce(&ParsedValidationCommand, Option<&BTreeMap<String, String>>) -> Result<Output>,
 ) -> Result<Output> {
-    run_with_managed_pytest_lease_storage(
-        root,
-        command,
-        ManagedPytestLeaseStorage::Workspace,
-        runner,
-    )
-}
-
-#[cfg_attr(not(test), allow(dead_code))]
-pub(super) fn run_with_external_managed_pytest_lease(
-    root: &Path,
-    command: &ParsedValidationCommand,
-    runner: impl FnOnce(&ParsedValidationCommand, Option<&BTreeMap<String, String>>) -> Result<Output>,
-) -> Result<Output> {
-    run_with_managed_pytest_lease_storage(
-        root,
-        command,
-        ManagedPytestLeaseStorage::External,
-        runner,
-    )
+    run_with_workspace_managed_pytest_lease(root, command, runner)
 }
 
 pub(super) fn run_with_external_managed_pytest_lease_at_host_root(
@@ -374,10 +325,9 @@ pub(super) fn run_with_external_managed_pytest_lease_at_host_root(
     }
 }
 
-fn run_with_managed_pytest_lease_storage(
+fn run_with_workspace_managed_pytest_lease(
     root: &Path,
     command: &ParsedValidationCommand,
-    storage: ManagedPytestLeaseStorage,
     runner: impl FnOnce(&ParsedValidationCommand, Option<&BTreeMap<String, String>>) -> Result<Output>,
 ) -> Result<Output> {
     if !pytest_invocation(command) {
@@ -387,7 +337,7 @@ fn run_with_managed_pytest_lease_storage(
 
     // create_pytest_lease finishes by verifying the manifest and probing every
     // directory. The physical command is built only from that verified object.
-    let mut guard = ManagedPytestLeaseGuard::prepare(root, storage)?;
+    let mut guard = ManagedPytestLeaseGuard::prepare(root)?;
     let lease = guard.lease()?;
     // Keep command construction inside the operation result. Even an internal
     // construction failure after lease creation must pass through cleanup.
@@ -599,105 +549,6 @@ mod tests {
     }
 
     #[test]
-    fn external_execution_uses_a_marker_free_tree_and_releases_on_success() {
-        let root = tempfile::tempdir().unwrap();
-        let command = super::super::parse_validation_command("pytest -q").unwrap();
-        let mut observed_root = None;
-
-        let output =
-            run_with_external_managed_pytest_lease(root.path(), &command, |_, environment| {
-                let temp = environment
-                    .and_then(|values| values.get("TEMP"))
-                    .expect("managed TEMP");
-                let lease_root = PathBuf::from(temp).parent().unwrap().to_path_buf();
-                assert!(
-                    lease_root
-                        .canonicalize()
-                        .unwrap()
-                        .starts_with(root.path().join("p").canonicalize().unwrap())
-                );
-                assert!(!root.path().join(".RaymanCodingSkill").exists());
-                observed_root = Some(lease_root);
-                Ok(process_output(0))
-            })
-            .unwrap();
-
-        assert!(output.status.success());
-        assert!(!observed_root.expect("lease root was observed").exists());
-        assert!(!root.path().join(".RaymanCodingSkill").exists());
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn external_pre_release_leaf_replacement_blocks_success() {
-        let root = tempfile::tempdir().unwrap();
-        let command = super::super::parse_validation_command("pytest -q").unwrap();
-        let mut observed = None;
-
-        let error =
-            run_with_external_managed_pytest_lease(root.path(), &command, |_, environment| {
-                let temp = environment
-                    .and_then(|values| values.get("TEMP"))
-                    .expect("managed TEMP");
-                let lease_root = PathBuf::from(temp).parent().unwrap().to_path_buf();
-                let manifest = std::fs::read(lease_root.join("lease.json")).unwrap();
-                let id = lease_root.file_name().unwrap().to_string_lossy();
-                let displaced = lease_root.with_file_name(format!("{id}-displaced"));
-                std::fs::rename(&lease_root, &displaced).unwrap();
-                std::fs::create_dir(&lease_root).unwrap();
-                for name in ["b", "c", "t", "y", "n"] {
-                    std::fs::create_dir(lease_root.join(name)).unwrap();
-                }
-                std::fs::write(lease_root.join("lease.json"), manifest).unwrap();
-                observed = Some((displaced, lease_root));
-                Ok(process_output(0))
-            })
-            .unwrap_err();
-
-        assert!(format!("{error:#}").contains("创建目录"), "{error:#}");
-        let (displaced, replacement) = observed.expect("replacement paths");
-        assert!(
-            displaced.is_dir() && replacement.is_dir(),
-            "identity mismatch must preserve both the original object and replacement"
-        );
-        assert!(!root.path().join(".RaymanCodingSkill").exists());
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn external_pre_spawn_leaf_replacement_blocks_runner() {
-        let root = tempfile::tempdir().unwrap();
-        let mut guard =
-            ManagedPytestLeaseGuard::prepare(root.path(), ManagedPytestLeaseStorage::External)
-                .unwrap();
-        let lease = guard.lease().unwrap().clone();
-        let original = PathBuf::from(&lease.root);
-        let displaced = original.with_file_name(format!("{}-displaced", lease.id));
-        std::fs::rename(&original, &displaced).unwrap();
-        std::fs::create_dir(&original).unwrap();
-        for name in ["b", "c", "t", "y", "n"] {
-            std::fs::create_dir(original.join(name)).unwrap();
-        }
-        crate::file_io::write_json(&original.join("lease.json"), &lease).unwrap();
-
-        let mut runner_called = false;
-        let error = guard
-            .lease()
-            .map(|_| {
-                runner_called = true;
-            })
-            .unwrap_err();
-        assert!(format!("{error:#}").contains("创建目录"), "{error:#}");
-        assert!(
-            !runner_called,
-            "runner must not receive a replacement lease"
-        );
-        assert!(guard.finish().is_err());
-        assert!(displaced.is_dir() && original.is_dir());
-        assert!(!root.path().join(".RaymanCodingSkill").exists());
-    }
-
-    #[test]
     fn panic_unwind_uses_the_best_effort_release_guard() {
         let root = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(root.path().join(".RaymanCodingSkill")).unwrap();
@@ -716,28 +567,6 @@ mod tests {
 
         assert!(panic.is_err());
         assert!(!observed_root.expect("lease root was observed").exists());
-    }
-
-    #[test]
-    fn external_panic_unwind_releases_the_same_storage_kind() {
-        let root = tempfile::tempdir().unwrap();
-        let command = super::super::parse_validation_command("pytest -q").unwrap();
-        let mut observed_root = None;
-
-        let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ =
-                run_with_external_managed_pytest_lease(root.path(), &command, |_, environment| {
-                    let temp = environment
-                        .and_then(|values| values.get("TEMP"))
-                        .expect("managed TEMP");
-                    observed_root = Some(PathBuf::from(temp).parent().unwrap().to_path_buf());
-                    panic!("simulated external validation panic");
-                });
-        }));
-
-        assert!(panic.is_err());
-        assert!(!observed_root.expect("lease root was observed").exists());
-        assert!(!root.path().join(".RaymanCodingSkill").exists());
     }
 
     #[test]

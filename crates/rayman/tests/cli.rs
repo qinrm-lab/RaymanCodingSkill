@@ -4162,15 +4162,10 @@ fn pytest_validation_child_can_run_nested_goal_validate_from_its_managed_temp() 
 #[test]
 fn goal_validate_isolates_every_pytest_process_without_receipt_leakage() {
     let probe = NativePytestProbe::build();
-    let py_program = probe
-        .bin_dir
-        .join(format!("py{}", std::env::consts::EXE_SUFFIX))
-        .to_string_lossy()
-        .replace('\\', "/");
     let commands = [
         "pytest -q --".to_string(),
         "python -m pytest -q --".to_string(),
-        format!("\"{py_program}\" -3.12 -m pytest -q --"),
+        "py -3.12 -m pytest -q --".to_string(),
     ];
     for (index, command) in commands.iter().enumerate() {
         let command = command.as_str();

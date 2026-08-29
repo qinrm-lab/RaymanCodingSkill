@@ -822,6 +822,35 @@ function Get-NodeMap {
     return $map
 }
 
+function Get-ActiveReplacementNodes {
+    param(
+        [Parameter(Mandatory = $true)]$Node,
+        [Parameter(Mandatory = $true)]$Map,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Collections.Generic.HashSet[string]]$Trail = ([Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal))
+    )
+    $active = [Collections.Generic.List[object]]::new()
+    foreach ($replacementId in @($Node.retirement.replaced_by)) {
+        $id = [string]$replacementId
+        if (-not $Map.ContainsKey($id)) {
+            Throw-TraceError 'TRACE_RETIREMENT_REPLACEMENT' "$Label references a missing replacement: $id"
+        }
+        if (-not $Trail.Add($id)) {
+            Throw-TraceError 'TRACE_RETIREMENT_REPLACEMENT' "$Label replacement chain contains a cycle at: $id"
+        }
+        $replacement = $Map[$id]
+        if ([string]$replacement.status -eq 'active') {
+            $active.Add($replacement)
+        } else {
+            foreach ($terminal in @(Get-ActiveReplacementNodes -Node $replacement -Map $Map -Label $Label -Trail $Trail)) {
+                $active.Add($terminal)
+            }
+        }
+        $null = $Trail.Remove($id)
+    }
+    return @($active)
+}
+
 function Invoke-GitBytes {
     param([Parameter(Mandatory = $true)][string[]]$Arguments)
     $git = @(Get-Command git -All -ErrorAction SilentlyContinue | Where-Object CommandType -eq Application | Select-Object -First 1)
@@ -883,13 +912,11 @@ function Get-PredecessorBytes {
 function Get-ComparableJson {
     param(
         [Parameter(Mandatory = $true)]$Node,
-        [switch]$IgnoreLifecycle,
-        [switch]$IgnoreSha256
+        [switch]$IgnoreLifecycle
     )
     $copy = [ordered]@{}
     foreach ($property in $Node.PSObject.Properties) {
         if ($IgnoreLifecycle -and $property.Name -in @('status', 'retirement')) { continue }
-        if ($IgnoreSha256 -and $property.Name -eq 'sha256') { continue }
         $copy[$property.Name] = $property.Value
     }
     return $copy | ConvertTo-Json -Depth 30 -Compress
@@ -900,8 +927,7 @@ function Assert-CollectionHistory {
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][array]$Previous,
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][array]$Current,
         [Parameter(Mandatory = $true)][string]$IdProperty,
-        [Parameter(Mandatory = $true)][string]$Label,
-        [switch]$AllowSha256Change
+        [Parameter(Mandatory = $true)][string]$Label
     )
     $previousMap = @{}
     $currentMap = @{}
@@ -922,8 +948,7 @@ function Assert-CollectionHistory {
             if ((Get-ComparableJson -Node $old -IgnoreLifecycle) -cne (Get-ComparableJson -Node $new -IgnoreLifecycle)) {
                 Throw-TraceError 'TRACE_TOMBSTONE_MUTATED' "retirement changed the identity of $id"
             }
-        } elseif ((Get-ComparableJson -Node $old -IgnoreSha256:$AllowSha256Change) -cne
-            (Get-ComparableJson -Node $new -IgnoreSha256:$AllowSha256Change)) {
+        } elseif ((Get-ComparableJson -Node $old) -cne (Get-ComparableJson -Node $new)) {
             Throw-TraceError 'TRACE_ACTIVE_ID_MUTATED' "active semantic identity changed without retirement: $id"
         }
     }
@@ -1095,18 +1120,10 @@ function Assert-InventoryDocument {
         }
     }
     foreach ($test in @($tests.Values | Where-Object status -eq 'retired')) {
-        foreach ($replacementId in @($test.retirement.replaced_by)) {
-            if (-not $tests.ContainsKey([string]$replacementId) -or [string]$tests[[string]$replacementId].status -ne 'active') {
-                Throw-TraceError 'TRACE_RETIREMENT_REPLACEMENT' "retired test references a missing/inactive replacement: $replacementId"
-            }
-        }
+        $null = Get-ActiveReplacementNodes -Node $test -Map $tests -Label 'retired test'
     }
     foreach ($asset in @($assets.Values | Where-Object status -eq 'retired')) {
-        foreach ($replacementId in @($asset.retirement.replaced_by)) {
-            if (-not $assets.ContainsKey([string]$replacementId) -or [string]$assets[[string]$replacementId].status -ne 'active') {
-                Throw-TraceError 'TRACE_RETIREMENT_REPLACEMENT' "retired asset references a missing/inactive replacement: $replacementId"
-            }
-        }
+        $null = Get-ActiveReplacementNodes -Node $asset -Map $assets -Label 'retired asset'
     }
 
     $discoveredMap = @{}
@@ -1136,14 +1153,10 @@ function Assert-InventoryDocument {
     foreach ($test in @($tests.Values | Where-Object status -eq 'retired')) {
         if (-not $discoveredMap.ContainsKey([string]$test.identity)) { continue }
         $replacementAllowed = $false
-        foreach ($replacementId in @($test.retirement.replaced_by)) {
-            if ($tests.ContainsKey([string]$replacementId)) {
-                $replacement = $tests[[string]$replacementId]
-                if ([string]$replacement.status -eq 'active' -and
-                    [string]$replacement.identity -ceq [string]$test.identity -and
-                    [string]$replacement.selector_sha256 -cne [string]$test.selector_sha256) {
-                    $replacementAllowed = $true
-                }
+        foreach ($replacement in @(Get-ActiveReplacementNodes -Node $test -Map $tests -Label 'retired executable test')) {
+            if ([string]$replacement.identity -ceq [string]$test.identity -and
+                [string]$replacement.selector_sha256 -cne [string]$test.selector_sha256) {
+                $replacementAllowed = $true
             }
         }
         if (-not $replacementAllowed) {
@@ -1171,14 +1184,10 @@ function Assert-InventoryDocument {
         $path = Resolve-TracePath -RelativePath ([string]$asset.path) -AllowMissing
         if (-not (Test-Path -LiteralPath $path)) { continue }
         $replacementAllowed = $false
-        foreach ($replacementId in @($asset.retirement.replaced_by)) {
-            if ($assets.ContainsKey([string]$replacementId)) {
-                $replacement = $assets[[string]$replacementId]
-                if ([string]$replacement.status -eq 'active' -and
-                    [string]$replacement.path -ceq [string]$asset.path -and
-                    [string]$replacement.sha256 -cne [string]$asset.sha256) {
-                    $replacementAllowed = $true
-                }
+        foreach ($replacement in @(Get-ActiveReplacementNodes -Node $asset -Map $assets -Label 'retired dedicated asset')) {
+            if ([string]$replacement.path -ceq [string]$asset.path -and
+                [string]$replacement.sha256 -cne [string]$asset.sha256) {
+                $replacementAllowed = $true
             }
         }
         if (-not $replacementAllowed) {
@@ -1281,12 +1290,45 @@ function Get-SemanticBindingSha256 {
     return Get-Sha256Text -Text ($projection | ConvertTo-Json -Depth 30 -Compress)
 }
 
+function Assert-CargoGateCommandContract {
+    param([Parameter(Mandatory = $true)]$Gate)
+
+    $checkRepoPath = Resolve-TracePath -RelativePath 'scripts/check-repo.ps1'
+    $providerPath = Resolve-TracePath -RelativePath 'scripts/repository-quality.ps1'
+    $checkRepo = [IO.File]::ReadAllText($checkRepoPath, $script:Utf8)
+    $providerHash = (Get-FileHash -LiteralPath $providerPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if (-not $checkRepo.Contains($providerHash) -or
+        $checkRepo -match '(?m)--skip\b' -or
+        $checkRepo -notmatch '(?s)Invoke-NativeChecked\s+-Application\s+\$cargo\s+-Arguments\s+\$qualityCommand\.argv') {
+        Throw-TraceError 'TRACE_ENFORCEMENT_MISSING' 'Cargo gate does not byte-bind and directly execute the selector-free repository quality provider'
+    }
+    $suite = if ([string]$Gate.kind -ceq 'cargo_root_suite') { 'Root' } else { 'Evals' }
+    $text = & $providerPath -Suite $suite | Out-String
+    try {
+        $document = $text | ConvertFrom-Json -Depth 8 -NoEnumerate -ErrorAction Stop
+    } catch {
+        Throw-TraceError 'TRACE_ENFORCEMENT_MISSING' "Cargo gate provider returned invalid JSON for $suite"
+    }
+    $test = @($document.commands | Where-Object name -CEQ 'test')
+    $expected = if ($suite -eq 'Root') {
+        @('test', '--locked', '--workspace', '--all-targets')
+    } else {
+        @('test', '--manifest-path', 'evals/Cargo.toml', '--locked', '--all-targets')
+    }
+    if ($test.Count -ne 1 -or (@($test[0].argv) -join "`0") -cne ($expected -join "`0")) {
+        Throw-TraceError 'TRACE_ENFORCEMENT_MISSING' "Cargo gate provider narrows or changes the $suite test command"
+    }
+}
+
 function Assert-GateSelector {
     param([Parameter(Mandatory = $true)]$Gate)
     $path = Resolve-TracePath -RelativePath ([string]$Gate.path)
     if ([string]$Gate.selector_kind -eq 'powershell_function') {
         if ((Get-PowerShellSelectorCount -Path $path -Kind 'powershell_function' -Selector ([string]$Gate.selector)) -ne 1) {
             Throw-TraceError 'TRACE_ENFORCEMENT_MISSING' "gate function is missing or ambiguous: $($Gate.gate_id)"
+        }
+        if ([string]$Gate.kind -in @('cargo_root_suite', 'cargo_evals_suite')) {
+            Assert-CargoGateCommandContract -Gate $Gate
         }
     } elseif ([string]$Gate.selector_kind -eq 'powershell_self_test_suite') {
         if ((Get-PowerShellSelectorCount -Path $path -Kind 'powershell_self_test_suite' -Selector '-SelfTest') -ne 1) {
@@ -1571,11 +1613,7 @@ function Assert-TraceabilityDocument {
         $map = $descriptor[0]
         $label = $descriptor[2]
         foreach ($node in @($map.Values | Where-Object status -eq 'retired')) {
-            foreach ($replacement in @($node.retirement.replaced_by)) {
-                if (-not $map.ContainsKey([string]$replacement) -or [string]$map[[string]$replacement].status -ne 'active') {
-                    Throw-TraceError 'TRACE_RETIREMENT_REPLACEMENT' "retired $label references a missing/inactive replacement: $replacement"
-                }
-            }
+            $null = Get-ActiveReplacementNodes -Node $node -Map $map -Label "retired $label"
         }
     }
 
@@ -1589,7 +1627,7 @@ function Assert-TraceabilityDocument {
     } else {
         Assert-CollectionHistory -Previous @($previous.sources) -Current @($Manifest.sources) -IdProperty 'source_id' -Label 'source'
         Assert-CollectionHistory -Previous @($previous.rules) -Current @($Manifest.rules) -IdProperty 'rule_id' -Label 'rule'
-        Assert-CollectionHistory -Previous @($previous.gates) -Current @($Manifest.gates) -IdProperty 'gate_id' -Label 'gate' -AllowSha256Change
+        Assert-CollectionHistory -Previous @($previous.gates) -Current @($Manifest.gates) -IdProperty 'gate_id' -Label 'gate'
         Assert-CollectionHistory -Previous @($previous.source_rule_links) -Current @($Manifest.source_rule_links) -IdProperty 'link_id' -Label 'source-rule link'
         Assert-CollectionHistory -Previous @($previous.semantic_bindings) -Current @($Manifest.semantic_bindings) -IdProperty 'binding_id' -Label 'semantic binding'
     }
@@ -1990,6 +2028,27 @@ if ($SelfTest) { Write-Output 'no cases dispatched' }
     Assert-SelfTestRejected -Code 'TRACE_ACTIVE_ID_MUTATED' -Action {
         Assert-CollectionHistory -Previous @($fixture.Inventory.tests) -Current @($activeMutation.tests) -IdProperty 'test_id' -Label 'test'
     }
+    $gateMutation = Copy-JsonObject $fixture.Manifest
+    $gateMutation.gates[0].sha256 = 'f' * 64
+    $gateMutationError = $null
+    try {
+        Assert-CollectionHistory -Previous @($fixture.Manifest.gates) -Current @($gateMutation.gates) -IdProperty 'gate_id' -Label 'gate'
+    } catch {
+        $gateMutationError = $_.Exception.Message
+    }
+    if ($null -eq $gateMutationError -or
+        -not $gateMutationError.StartsWith('[TRACE_ACTIVE_ID_MUTATED]', [StringComparison]::Ordinal)) {
+        throw "traceability self-test allowed an active gate hash mutation: $gateMutationError"
+    }
+    $chain = @{
+        'TEST-CHAIN-V1' = [pscustomobject]@{ status = 'retired'; retirement = [pscustomobject]@{ replaced_by = @('TEST-CHAIN-V2') } }
+        'TEST-CHAIN-V2' = [pscustomobject]@{ status = 'retired'; retirement = [pscustomobject]@{ replaced_by = @('TEST-CHAIN-V3') } }
+        'TEST-CHAIN-V3' = [pscustomobject]@{ status = 'active'; retirement = $null }
+    }
+    $terminals = @(Get-ActiveReplacementNodes -Node $chain['TEST-CHAIN-V1'] -Map $chain -Label 'self-test chain')
+    if ($terminals.Count -ne 1 -or $terminals[0] -ne $chain['TEST-CHAIN-V3']) {
+        throw 'traceability self-test did not resolve a transitive active replacement'
+    }
     $previousInventoryBytes = $script:Utf8.GetBytes(($fixture.Inventory | ConvertTo-Json -Depth 100 -Compress))
     $badPredecessor = Copy-JsonObject $fixture.Inventory
     $badPredecessor.revision.generation = 2
@@ -2026,7 +2085,7 @@ if ($SelfTest) { Write-Output 'no cases dispatched' }
         $null = Assert-TraceabilityDocument -Manifest $cascade -InventoryContext $fixture.Context -AsOf $asOf -PredecessorBytes $cascadePreviousBytes -ExpectedInventorySha256 $fixture.Manifest.inventory.sha256 -SkipEvalCrosscheck
     }
 
-    # A shared test survives retirement of only one independently reviewed
+    # A shared test survives retirement of only one separately reviewed
     # source/binding. Both semantic paths exist in the predecessor; no new edge
     # is fabricated in the retirement revision.
     $sharedInventory = Copy-JsonObject $fixture.Inventory

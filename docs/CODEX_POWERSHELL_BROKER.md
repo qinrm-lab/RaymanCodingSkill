@@ -66,7 +66,7 @@ than `false` when a protected query fails.
 
 ## Capability boundary
 
-Version 1 installs exactly one operation:
+Request schema v2 currently admits exactly one operation:
 
 - `identity_probe`: returns account, SID, user profile, process/session IDs,
   PowerShell version, and language mode.

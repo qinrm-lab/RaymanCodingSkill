@@ -272,6 +272,9 @@ fn strict_authority_key(raw: &str, require_ps1: bool) -> Result<String> {
 }
 
 fn strict_gate_kind(command: &ParsedValidationCommand) -> Result<Option<GateKind>> {
+    if !super::validation::exact_authority_program(command, "pwsh") {
+        return Ok(None);
+    }
     let Some(script) = powershell_script(command) else {
         return Ok(None);
     };
@@ -1142,7 +1145,7 @@ fn manifest_dependency_key(key: &str) -> bool {
 /// alias only: user, parent, or environment Cargo configuration can replace an
 /// alias, so authority accepts one exact built-in `cargo run` argv instead.
 pub(super) fn xtask_repository_gate_invocation(command: &ParsedValidationCommand) -> bool {
-    super::validation::executable_name(command) == "cargo"
+    super::validation::exact_authority_program(command, "cargo")
         && command.args.iter().map(String::as_str).eq([
             "run",
             "--locked",
@@ -1291,6 +1294,33 @@ fn authority_command_goal_delta_conflicts(
         }
     }
     Ok(conflicts)
+}
+
+/// Authority receipts are stronger than ordinary validation receipts: the
+/// command must be an explicit repository gate, not merely a locally relevant
+/// build. Unknown ecosystems can opt in by exposing a reviewed workspace-local
+/// gate at one of the conventional script paths below.
+pub fn validate_authority_command(root: &Path, command: &str) -> Result<()> {
+    let parsed = super::validation::parse_validation_command(command)?;
+    super::validation::validate_command_security(root, &parsed)?;
+    super::validation::validate_authority_command_syntax_with_gate(
+        &parsed,
+        trusted_workspace_gate_script(root, &parsed)
+            || trusted_xtask_repository_gate(root, &parsed)?,
+    )
+}
+
+pub(crate) fn validate_authority_command_with_context(
+    decision: &GoalDecisionContext<'_>,
+    command: &str,
+) -> Result<()> {
+    let parsed = super::validation::parse_validation_command(command)?;
+    super::validation::validate_command_security_with_context(decision, &parsed)?;
+    super::validation::validate_authority_command_syntax_with_gate(
+        &parsed,
+        trusted_workspace_gate_script_with_context(decision, &parsed)?
+            || trusted_xtask_repository_gate_with_context(decision, &parsed)?,
+    )
 }
 
 pub(super) fn validate_authority_command_for_goal_with_context(

@@ -53,12 +53,7 @@ struct ValidationProcessLease {
 }
 
 #[cfg(windows)]
-struct WindowsValidationProcessLeaseGuards {
-    root: state_paths::WindowsDirectoryObjectGuard,
-    temp_dir: state_paths::WindowsDirectoryChildIdentity,
-    nested_validation_root: state_paths::WindowsDirectoryChildIdentity,
-    manifest: WindowsLeaseManifestSeal,
-}
+struct WindowsValidationProcessLeaseGuards;
 
 #[cfg(windows)]
 struct WindowsExternalValidationProcessLeaseGuards {
@@ -66,16 +61,6 @@ struct WindowsExternalValidationProcessLeaseGuards {
     temp_dir: state_paths::WindowsDirectoryChildIdentity,
     nested_validation_root: state_paths::WindowsDirectoryChildIdentity,
     manifest: WindowsLeaseManifestSeal,
-}
-
-#[cfg(windows)]
-enum WindowsValidationProcessLeaseBinding {
-    // Workspace-local direct leases remain reachable only in Windows unit-test
-    // fixtures. Production validation leases always use the external
-    // identity-only binding below the held host root.
-    #[allow(dead_code)]
-    Direct(WindowsValidationProcessLeaseGuards),
-    External(WindowsExternalValidationProcessLeaseGuards),
 }
 
 #[cfg(windows)]
@@ -209,17 +194,6 @@ impl WindowsValidationProcessLeaseGuards {
         }
         Self::verify_namespace_fields(root, temp_dir, nested_validation_root)
     }
-
-    #[allow(dead_code)]
-    fn verify_current(&self, lease: &ValidationProcessLease) -> Result<()> {
-        Self::verify_current_fields(
-            &self.root,
-            &self.temp_dir,
-            &self.nested_validation_root,
-            &self.manifest,
-            lease,
-        )
-    }
 }
 
 #[cfg(windows)]
@@ -250,38 +224,16 @@ impl WindowsExternalValidationProcessLeaseGuards {
 struct ManagedValidationProcessLease {
     lease: ValidationProcessLease,
     #[cfg(windows)]
-    directory_guards: WindowsValidationProcessLeaseBinding,
+    directory_guards: WindowsExternalValidationProcessLeaseGuards,
 }
 
 impl ManagedValidationProcessLease {
-    #[allow(dead_code)]
-    fn verify_current(&self) -> Result<()> {
-        #[cfg(windows)]
-        match &self.directory_guards {
-            WindowsValidationProcessLeaseBinding::Direct(guards) => {
-                guards.verify_current(&self.lease)?;
-            }
-            WindowsValidationProcessLeaseBinding::External(_) => {
-                bail!("validation process external lease 必须通过持有 validation host-temp 根复验")
-            }
-        }
-        Ok(())
-    }
-
     fn verify_current_at_host_root(&self, host_root: &ValidationProcessStateRoot) -> Result<()> {
         #[cfg(not(windows))]
         let _ = host_root;
         #[cfg(windows)]
-        match &self.directory_guards {
-            WindowsValidationProcessLeaseBinding::Direct(guards) => {
-                host_root.verify_current()?;
-                guards.verify_current(&self.lease)?;
-                host_root.verify_current()?;
-            }
-            WindowsValidationProcessLeaseBinding::External(guards) => {
-                guards.verify_current_at_host_root(host_root, &self.lease)?;
-            }
-        }
+        self.directory_guards
+            .verify_current_at_host_root(host_root, &self.lease)?;
         Ok(())
     }
 }
@@ -1037,14 +989,12 @@ fn create_validation_process_lease_with_held_host_root(
         return match creation {
             Ok(created) => Ok(ManagedValidationProcessLease {
                 lease: created.lease,
-                directory_guards: WindowsValidationProcessLeaseBinding::External(
-                    WindowsExternalValidationProcessLeaseGuards {
-                        binding,
-                        temp_dir: created.temp_dir,
-                        nested_validation_root: created.nested_validation_root,
-                        manifest: created.manifest,
-                    },
-                ),
+                directory_guards: WindowsExternalValidationProcessLeaseGuards {
+                    binding,
+                    temp_dir: created.temp_dir,
+                    nested_validation_root: created.nested_validation_root,
+                    manifest: created.manifest,
+                },
             }),
             Err(creation_error) => {
                 let cleanup = state_root.remove_external_lease_tree(
@@ -1124,219 +1074,68 @@ where
             .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })
             .collect::<String>();
         let id = format!("{safe_label}-{timestamp}-{}-{sequence}", std::process::id());
-        #[cfg(windows)]
-        {
-            let root_guard = match state_paths::create_windows_directory_object_exclusive(
-                &parent,
-                OsStr::new(&id),
-                "validation process lease 创建目录",
-            ) {
-                Ok(root) => root,
-                Err(error) if windows_creation_collision(&error) => continue,
-                Err(error) => {
-                    return Err(error).with_context(|| {
-                        format!(
-                            "无法独占创建 validation process lease: {}",
-                            display_path(&parent.join(&id))
-                        )
-                    });
-                }
-            };
-            let relative = validation_process_lease_relative(&id)?;
-            let mut partial = WindowsValidationProcessLeasePartial::default();
-            let creation = (|| -> Result<WindowsValidationProcessLeaseCreation> {
-                let lease_root = root_guard.path().to_path_buf();
-                partial.temp_dir = Some(root_guard.create_child_exclusive(
-                    OsStr::new(TEMP_DIR),
-                    "validation process lease 临时目录",
-                )?);
-                partial.nested_validation_root = Some(root_guard.create_child_exclusive(
-                    OsStr::new(NESTED_VALIDATION_DIR),
-                    "validation process lease 嵌套验证根",
-                )?);
-                let temp_dir = partial
-                    .temp_dir
-                    .as_ref()
-                    .expect("just created validation temp directory")
-                    .path()
-                    .to_path_buf();
-                let nested_validation_root = partial
-                    .nested_validation_root
-                    .as_ref()
-                    .expect("just created validation nested root")
-                    .path()
-                    .to_path_buf();
-                root_guard.probe_direct_child(
-                    partial
-                        .temp_dir
-                        .as_ref()
-                        .expect("just created validation temp directory"),
-                    OsStr::new(TEMP_DIR),
-                    "validation process lease 临时目录",
-                )?;
-                root_guard.probe_direct_child(
-                    partial
-                        .nested_validation_root
-                        .as_ref()
-                        .expect("just created validation nested root"),
-                    OsStr::new(NESTED_VALIDATION_DIR),
-                    "validation process lease 嵌套验证根",
-                )?;
-                let environment = temp_environment(&temp_dir, &nested_validation_root);
-                let lease = ValidationProcessLease {
-                    schema: "rayman.validation-process-lease.v1".into(),
-                    id: id.clone(),
-                    label: label.to_string(),
-                    created_at: crate::timefmt::now_iso(),
-                    root: path_text(&lease_root),
-                    temp_dir: path_text(&temp_dir),
-                    nested_validation_root: path_text(&nested_validation_root),
-                    environment,
-                };
-                let manifest = create_windows_lease_manifest(
-                    &root_guard,
-                    LEASE_MANIFEST,
-                    "validation process lease manifest",
-                    &lease,
-                )?;
-                partial.lease = Some(lease);
-                partial.manifest = Some(manifest);
-                partial.verify_created(&root_guard)?;
-                Ok(WindowsValidationProcessLeaseCreation {
-                    lease: partial
-                        .lease
-                        .take()
-                        .expect("just sealed validation process lease"),
-                    temp_dir: partial
-                        .temp_dir
-                        .take()
-                        .expect("just created validation temp directory"),
-                    nested_validation_root: partial
-                        .nested_validation_root
-                        .take()
-                        .expect("just created validation nested root"),
-                    manifest: partial
-                        .manifest
-                        .take()
-                        .expect("just sealed validation process lease manifest"),
-                })
-            })();
-            return match creation {
-                Ok(created) => Ok(ManagedValidationProcessLease {
-                    lease: created.lease,
-                    directory_guards: WindowsValidationProcessLeaseBinding::Direct(
-                        WindowsValidationProcessLeaseGuards {
-                            root: root_guard,
-                            temp_dir: created.temp_dir,
-                            nested_validation_root: created.nested_validation_root,
-                            manifest: created.manifest,
-                        },
-                    ),
-                }),
-                Err(creation_error) => {
-                    let cleanup =
-                        state_paths::remove_managed_external_dir_all_windows_verified_with_snapshot(
-                            state_root,
-                            &relative,
-                            |leaf, current_root| {
-                                state_paths::verify_windows_directory_object(
-                                    &root_guard,
-                                    leaf,
-                                    current_root,
-                                    "validation process lease 创建目录",
-                                )?;
-                                partial.verify_created(&root_guard)
-                            },
-                            |snapshot_path, snapshot_leaf| {
-                                state_paths::verify_windows_directory_object(
-                                    &root_guard,
-                                    snapshot_leaf,
-                                    snapshot_path,
-                                    "validation process lease 创建目录",
-                                )?;
-                                partial.verify_created(&root_guard)
-                            },
-                        );
-                    match cleanup {
-                        Ok(true) => Err(creation_error),
-                        Ok(false) => Err(creation_error)
-                            .context("validation process lease 创建失败后受管目录已消失"),
-                        Err(cleanup_error) => Err(creation_error).context(format!(
-                            "validation process lease 创建或探测失败后的清理也失败: {cleanup_error:#}"
-                        )),
-                    }
-                }
-            };
+        let lease_root = parent.join(&id);
+        match fs::create_dir(&lease_root) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(error).with_context(|| {
+                    format!(
+                        "无法独占创建 validation process lease: {}",
+                        display_path(&lease_root)
+                    )
+                });
+            }
         }
 
-        #[cfg(not(windows))]
-        {
-            let lease_root = parent.join(&id);
-            match fs::create_dir(&lease_root) {
-                Ok(()) => {}
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
-                Err(error) => {
-                    return Err(error).with_context(|| {
-                        format!(
-                            "无法独占创建 validation process lease: {}",
-                            display_path(&lease_root)
-                        )
-                    });
+        let relative = validation_process_lease_relative(&id)?;
+        let creation = (|| {
+            let lease_root = state_paths::managed_external_dir(state_root, &relative, false)?
+                .ok_or_else(|| anyhow::anyhow!("validation process lease 创建后消失: {id}"))?;
+            let temp_dir = lease_root.join(TEMP_DIR);
+            fs::create_dir(&temp_dir).with_context(|| {
+                format!(
+                    "无法创建 validation process lease 临时目录: {}",
+                    display_path(&temp_dir)
+                )
+            })?;
+            probe(&temp_dir)?;
+            let nested_validation_root = lease_root.join(NESTED_VALIDATION_DIR);
+            fs::create_dir(&nested_validation_root).with_context(|| {
+                format!(
+                    "无法独占创建 validation process 嵌套验证根: {}",
+                    display_path(&nested_validation_root)
+                )
+            })?;
+            probe(&nested_validation_root)?;
+            let environment = temp_environment(&temp_dir, &nested_validation_root);
+            let lease = ValidationProcessLease {
+                schema: "rayman.validation-process-lease.v1".into(),
+                id: id.clone(),
+                label: label.to_string(),
+                created_at: crate::timefmt::now_iso(),
+                root: path_text(&lease_root),
+                temp_dir: path_text(&temp_dir),
+                nested_validation_root: path_text(&nested_validation_root),
+                environment,
+            };
+            crate::file_io::write_json(&lease_root.join(LEASE_MANIFEST), &lease)?;
+            verify_validation_process_lease(state_root, &id)
+        })();
+        return match creation {
+            Ok(lease) => Ok(ManagedValidationProcessLease { lease }),
+            Err(creation_error) => {
+                let cleanup = state_paths::remove_managed_external_dir_all(state_root, &relative);
+                match cleanup {
+                    Ok(true) => Err(creation_error),
+                    Ok(false) => Err(creation_error)
+                        .context("validation process lease 创建失败后受管目录已消失"),
+                    Err(cleanup_error) => Err(creation_error).context(format!(
+                        "validation process lease 创建或探测失败后的清理也失败: {cleanup_error:#}"
+                    )),
                 }
             }
-
-            let relative = validation_process_lease_relative(&id)?;
-            let creation = (|| {
-                let lease_root = state_paths::managed_external_dir(state_root, &relative, false)?
-                    .ok_or_else(|| {
-                    anyhow::anyhow!("validation process lease 创建后消失: {id}")
-                })?;
-                let temp_dir = lease_root.join(TEMP_DIR);
-                fs::create_dir(&temp_dir).with_context(|| {
-                    format!(
-                        "无法创建 validation process lease 临时目录: {}",
-                        display_path(&temp_dir)
-                    )
-                })?;
-                probe(&temp_dir)?;
-                let nested_validation_root = lease_root.join(NESTED_VALIDATION_DIR);
-                fs::create_dir(&nested_validation_root).with_context(|| {
-                    format!(
-                        "无法独占创建 validation process 嵌套验证根: {}",
-                        display_path(&nested_validation_root)
-                    )
-                })?;
-                probe(&nested_validation_root)?;
-                let environment = temp_environment(&temp_dir, &nested_validation_root);
-                let lease = ValidationProcessLease {
-                    schema: "rayman.validation-process-lease.v1".into(),
-                    id: id.clone(),
-                    label: label.to_string(),
-                    created_at: crate::timefmt::now_iso(),
-                    root: path_text(&lease_root),
-                    temp_dir: path_text(&temp_dir),
-                    nested_validation_root: path_text(&nested_validation_root),
-                    environment,
-                };
-                crate::file_io::write_json(&lease_root.join(LEASE_MANIFEST), &lease)?;
-                verify_validation_process_lease(state_root, &id)
-            })();
-            return match creation {
-                Ok(lease) => Ok(ManagedValidationProcessLease { lease }),
-                Err(creation_error) => {
-                    let cleanup =
-                        state_paths::remove_managed_external_dir_all(state_root, &relative);
-                    match cleanup {
-                        Ok(true) => Err(creation_error),
-                        Ok(false) => Err(creation_error)
-                            .context("validation process lease 创建失败后受管目录已消失"),
-                        Err(cleanup_error) => Err(creation_error).context(format!(
-                            "validation process lease 创建或探测失败后的清理也失败: {cleanup_error:#}"
-                        )),
-                    }
-                }
-            };
-        }
+        };
     }
     bail!("无法独占创建 validation process lease（连续名称冲突）")
 }
@@ -1437,38 +1236,21 @@ fn release_validation_process_lease_at_host_root(
             .remove_external_lease_tree(
                 &relative,
                 |leaf, lease_root| {
-                    let bytes = match &expected.directory_guards {
-                        WindowsValidationProcessLeaseBinding::Direct(guards) => {
-                            state_paths::verify_windows_directory_object(
-                                &guards.root,
-                                leaf,
-                                lease_root,
-                                "validation process lease 创建目录",
-                            )?;
-                            verify_windows_lease_manifest(
-                                &guards.root,
-                                &guards.manifest,
-                                LEASE_MANIFEST,
-                                "validation process lease manifest",
-                            )?
-                        }
-                        WindowsValidationProcessLeaseBinding::External(guards) => {
-                            state_paths::verify_windows_directory_child_identity_from_open(
-                                &guards.binding.root,
-                                leaf,
-                                lease_root,
-                                "validation process lease 创建目录",
-                            )?;
-                            guards.verify_current_at_host_root(state_root, manifest)?;
-                            verify_windows_lease_manifest_from_directory_handle(
-                                leaf,
-                                lease_root,
-                                &guards.manifest,
-                                LEASE_MANIFEST,
-                                "validation process lease manifest",
-                            )?
-                        }
-                    };
+                    let guards = &expected.directory_guards;
+                    state_paths::verify_windows_directory_child_identity_from_open(
+                        &guards.binding.root,
+                        leaf,
+                        lease_root,
+                        "validation process lease 创建目录",
+                    )?;
+                    guards.verify_current_at_host_root(state_root, manifest)?;
+                    let bytes = verify_windows_lease_manifest_from_directory_handle(
+                        leaf,
+                        lease_root,
+                        &guards.manifest,
+                        LEASE_MANIFEST,
+                        "validation process lease manifest",
+                    )?;
                     let actual =
                         parse_validation_process_manifest(&manifest.id, lease_root, &bytes)?;
                     if actual != *manifest {
@@ -1481,24 +1263,13 @@ fn release_validation_process_lease_at_host_root(
                     state_root.verify_current()
                 },
                 |snapshot_path, snapshot_leaf| {
-                    match &expected.directory_guards {
-                        WindowsValidationProcessLeaseBinding::Direct(guards) => {
-                            state_paths::verify_windows_directory_object(
-                                &guards.root,
-                                snapshot_leaf,
-                                snapshot_path,
-                                "validation process lease 创建目录",
-                            )?;
-                        }
-                        WindowsValidationProcessLeaseBinding::External(guards) => {
-                            state_paths::verify_windows_directory_child_identity_from_open(
-                                &guards.binding.root,
-                                snapshot_leaf,
-                                snapshot_path,
-                                "validation process lease 创建目录",
-                            )?;
-                        }
-                    }
+                    let guards = &expected.directory_guards;
+                    state_paths::verify_windows_directory_child_identity_from_open(
+                        &guards.binding.root,
+                        snapshot_leaf,
+                        snapshot_path,
+                        "validation process lease 创建目录",
+                    )?;
                     expected.verify_current_at_host_root(state_root)?;
                     state_root.verify_current()
                 },
@@ -1525,88 +1296,31 @@ fn release_validation_process_lease(
     state_root: &Path,
     expected: &ManagedValidationProcessLease,
 ) -> Result<()> {
-    #[cfg(windows)]
-    {
-        expected.verify_current()?;
-        let WindowsValidationProcessLeaseBinding::Direct(guards) = &expected.directory_guards
-        else {
-            bail!("validation process external lease 必须通过持有 validation host-temp 根释放");
-        };
-        let manifest = &expected.lease;
-        let relative = validation_process_lease_relative(&manifest.id)?;
-        let removed = state_paths::remove_managed_external_dir_all_windows_verified_with_snapshot(
-            state_root,
-            &relative,
-            |leaf, lease_root| {
-                state_paths::verify_windows_directory_object(
-                    &guards.root,
-                    leaf,
-                    lease_root,
-                    "validation process lease 创建目录",
-                )?;
-                let bytes = verify_windows_lease_manifest(
-                    &guards.root,
-                    &guards.manifest,
-                    LEASE_MANIFEST,
-                    "validation process lease manifest",
-                )?;
-                let actual = parse_validation_process_manifest(&manifest.id, lease_root, &bytes)?;
-                if actual != *manifest {
-                    bail!(
-                        "validation process lease 释放身份与 session 不一致: {}",
-                        manifest.id
-                    );
-                }
-                expected.verify_current()
-            },
-            |snapshot_path, snapshot_leaf| {
-                state_paths::verify_windows_directory_object(
-                    &guards.root,
-                    snapshot_leaf,
-                    snapshot_path,
-                    "validation process lease 创建目录",
-                )?;
-                expected.verify_current()
-            },
-        )
-        .with_context(|| format!("无法释放 validation process lease: {}", manifest.id))?;
-        if !removed {
-            bail!(
-                "validation process lease 在已验证释放前消失: {}",
-                manifest.id
-            );
-        }
-        Ok(())
+    let expected = &expected.lease;
+    let (lease_root, actual) = load_validation_process_lease(state_root, &expected.id)?;
+    if actual != *expected {
+        bail!(
+            "validation process lease 释放身份与 session 不一致: {}",
+            expected.id
+        );
     }
-
-    #[cfg(not(windows))]
-    {
-        let expected = &expected.lease;
-        let (lease_root, actual) = load_validation_process_lease(state_root, &expected.id)?;
-        if actual != *expected {
-            bail!(
-                "validation process lease 释放身份与 session 不一致: {}",
-                expected.id
-            );
-        }
-        let removed = state_paths::remove_managed_external_dir_all(
-            state_root,
-            &validation_process_lease_relative(&expected.id)?,
+    let removed = state_paths::remove_managed_external_dir_all(
+        state_root,
+        &validation_process_lease_relative(&expected.id)?,
+    )
+    .with_context(|| {
+        format!(
+            "无法释放 validation process lease: {}",
+            display_path(&lease_root)
         )
-        .with_context(|| {
-            format!(
-                "无法释放 validation process lease: {}",
-                display_path(&lease_root)
-            )
-        })?;
-        if !removed {
-            bail!(
-                "validation process lease 在已验证释放前消失: {}",
-                expected.id
-            );
-        }
-        Ok(())
+    })?;
+    if !removed {
+        bail!(
+            "validation process lease 在已验证释放前消失: {}",
+            expected.id
+        );
     }
+    Ok(())
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -1793,12 +1507,7 @@ mod tests {
             create_validation_process_lease_at_host_root(&host_root, "post-operation-namespace")
                 .unwrap();
         let lease = managed.lease.clone();
-        let binding = match &managed.directory_guards {
-            WindowsValidationProcessLeaseBinding::External(guards) => guards.binding.clone(),
-            WindowsValidationProcessLeaseBinding::Direct(_) => {
-                panic!("production external lease must retain a host-root binding")
-            }
-        };
+        let binding = managed.directory_guards.binding.clone();
         let namespace = original.join(LEASES_RELATIVE);
         let displaced = namespace.with_file_name("v-displaced");
 
@@ -1844,12 +1553,7 @@ mod tests {
             create_validation_process_lease_at_host_root(&host_root, "post-operation-lease")
                 .unwrap();
         let lease = managed.lease.clone();
-        let binding = match &managed.directory_guards {
-            WindowsValidationProcessLeaseBinding::External(guards) => guards.binding.clone(),
-            WindowsValidationProcessLeaseBinding::Direct(_) => {
-                panic!("production external lease must retain a host-root binding")
-            }
-        };
+        let binding = managed.directory_guards.binding.clone();
         let lease_root = PathBuf::from(&lease.root);
         let displaced = lease_root.with_file_name(format!("{}-displaced", lease.id));
 

@@ -1,7 +1,14 @@
-# CLI reference notes
+# CLI behavioral contract
 
-The Clap schema and behavioral tests are authoritative. This page records the
-public update/activation ordering that is easy to misuse from help text alone.
+This repository-owned document is the normative semantic source for the public
+CLI. The Clap schema is authoritative for exact syntax/help generation; tests
+verify this contract and do not define it. This internal contract is not a host
+transcript or an independent-reviewer attestation.
+
+Every command must preserve UTF-8/Unicode paths and dynamic values, emit
+locale-independent JSON when requested, and return nonzero rather than convert
+an unknown, stale, malformed, or incomplete state into success. Simplified
+Chinese and English human output must describe the same machine state.
 
 ## Update
 
@@ -79,3 +86,26 @@ independent-reviewer attestation. `verify-release-contract.ps1 -RequireSourceFre
 the CLI and update worker to one locked isolated rebuild. A signed-release
 worker receipt proves authenticated published bytes; it does not pretend those
 bytes were rebuilt locally from the checkout.
+
+## Context, map, goal, state, and host integration
+
+- `context status` is a cheap stat-only observation. `context refresh` is the
+  content-hashed authority used by map/readiness checks; stale or unreadable
+  content fails closed.
+- `map` reports deterministic project structure, path-safe dependency/impact
+  hints, and conservative quality results. Its heuristics never become test or
+  completion evidence.
+- `goal`, `prepare`, `check --goal`, and `finish` preserve caller-authored
+  requirements, immutable baselines/plans, current receipts, lifecycle history,
+  and the task/workspace distinction defined by the shared workflow contract.
+- `checkpoint`, `autosave`, `state`, `assets`, and `temp` keep recovery,
+  read-only inspection, and deletion authority separate. A status or scan never
+  silently becomes cleanup authority.
+- `codex-hook`, `doctor`, and `workspace` preserve the host/identity boundaries:
+  UI state, elevation labels, and caller-supplied identity names are not proof of
+  installation, permissions, delivery, or user awareness.
+
+The exact command families above may delegate to focused modules, but every
+public exit status and JSON object remains one end-to-end CLI integration
+contract. Retired commands must fail with an actionable migration rather than
+silently emulating current behavior.

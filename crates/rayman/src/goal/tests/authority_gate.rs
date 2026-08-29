@@ -1553,6 +1553,15 @@ fn absolute_workspace_powershell_script_is_execution_safe_but_not_authority() {
         validate_authority_command(root, &command).is_err(),
         "an absolute execution path must not borrow the strict authority identity"
     );
+    let fake_pwsh = root.join("pwsh.exe");
+    let fake_host = format!(
+        "\"{}\" -NoProfile -File scripts/check-repo.ps1",
+        fake_pwsh.display()
+    );
+    assert!(
+        validate_authority_command(root, &fake_host).is_err(),
+        "a caller-selected PowerShell host path must not acquire authority"
+    );
 }
 
 #[test]

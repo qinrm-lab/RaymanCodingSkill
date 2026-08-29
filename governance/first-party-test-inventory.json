@@ -20,14 +20,27 @@
     ]
   },
   "revision": {
-    "generation": 2,
+    "generation": 3,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 1,
-      "sha256": "cf17944620b0a0ee17efd9cf80aba1044ade2a2ab6b809a1087a528b2c4e5a8d"
+      "generation": 2,
+      "sha256": "f807be4aa7273affb9ac782de51975c6837d599ea7f31501784b7c61c8a01752"
     }
   },
   "tests": [
+    {
+      "test_id": "TEST-PS-ASSERT-REJECTED-FRESHNESS-MISSING-PAYLOAD-ASSET-6AF892E7911F",
+      "status": "active",
+      "identity": "powershell::powershell_named_case::scripts/check-ci-workflow.ps1::powershell_named_case::Assert-Rejected::freshness missing payload asset",
+      "role": "powershell_named_case",
+      "path": "scripts/check-ci-workflow.ps1",
+      "selector_kind": "powershell_named_case",
+      "selector": "Assert-Rejected::freshness missing payload asset",
+      "selector_sha256": "0e006134dce450d434ec4b963b73da309ce98ceb6106b61dad28810b25cdd88f",
+      "cfg": "all",
+      "owner": "",
+      "retirement": null
+    },
     {
       "test_id": "TEST-PS-ASSERT-REJECTED-HAND-WRITTEN-ACTIVATION-E8AB25995555",
       "status": "active",
@@ -89,6 +102,19 @@
       "selector_kind": "powershell_named_case",
       "selector": "Assert-Rejected::signed release without traceability dependency",
       "selector_sha256": "bb75adff2b0516a9481ca223bcfd8c2aec0f55ed0355dacf77bb9bc230498115",
+      "cfg": "all",
+      "owner": "",
+      "retirement": null
+    },
+    {
+      "test_id": "TEST-PS-ASSERT-REJECTED-TAG-RELEASE-MISSING-STAGED-ASSET-A98593F75E0F",
+      "status": "active",
+      "identity": "powershell::powershell_named_case::scripts/check-ci-workflow.ps1::powershell_named_case::Assert-Rejected::tag release missing staged asset directory",
+      "role": "powershell_named_case",
+      "path": "scripts/check-ci-workflow.ps1",
+      "selector_kind": "powershell_named_case",
+      "selector": "Assert-Rejected::tag release missing staged asset directory",
+      "selector_sha256": "251284253d8971bbe683991f76ad2b77051c45e912b95a7ce545966fda535623",
       "cfg": "all",
       "owner": "",
       "retirement": null
@@ -816,13 +842,32 @@
     },
     {
       "test_id": "TEST-PS-SELFTEST-1CE180031456-V2",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/audit-repository.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/audit-repository.ps1",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "selector_sha256": "1e3e56a6b95341a6fb94019d23e8c1c3a78b94816b42f77a2749e5ac8b7a948c",
+      "cfg": "all",
+      "owner": "",
+      "retirement": {
+        "retired_at": "2026-08-28",
+        "reason": "Executable selector bytes changed during the 2026-08-28 audit repair.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-1CE180031456-V2-R3"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-PS-SELFTEST-1CE180031456-V2-R3",
+      "status": "active",
+      "identity": "powershell::powershell_self_test::scripts/audit-repository.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/audit-repository.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "eada31fb8d3bddfb298a0949be2ad1eadd20768e66e09156baaa60f6f846271f",
       "cfg": "all",
       "owner": "",
       "retirement": null
@@ -855,13 +900,32 @@
     },
     {
       "test_id": "TEST-PS-SELFTEST-3AF243E44D59",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/check-test-traceability.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/check-test-traceability.ps1",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "selector_sha256": "8e5937f82f75978ad6c5d544cf12b9401eee1b79abfbf5af52fb9758b206e2bf",
+      "cfg": "all",
+      "owner": "",
+      "retirement": {
+        "retired_at": "2026-08-28",
+        "reason": "Executable selector bytes changed during the 2026-08-28 audit repair.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-3AF243E44D59-R3"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-PS-SELFTEST-3AF243E44D59-R3",
+      "status": "active",
+      "identity": "powershell::powershell_self_test::scripts/check-test-traceability.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/check-test-traceability.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "3b9cbb7b8fe073513c11b987245066703aee75d3927a50b38436b1198d6177f2",
       "cfg": "all",
       "owner": "",
       "retirement": null
@@ -894,13 +958,32 @@
     },
     {
       "test_id": "TEST-PS-SELFTEST-6209A42C1826",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/check-update-freshness.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/check-update-freshness.ps1",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "selector_sha256": "900cacfdd5b3edca2f32b8af8c1bac4d13fb7e72c1ec85fa3ec3e04fe1814f0f",
+      "cfg": "all",
+      "owner": "",
+      "retirement": {
+        "retired_at": "2026-08-28",
+        "reason": "Executable selector bytes changed during the 2026-08-28 audit repair.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-6209A42C1826-R3"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-PS-SELFTEST-6209A42C1826-R3",
+      "status": "active",
+      "identity": "powershell::powershell_self_test::scripts/check-update-freshness.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/check-update-freshness.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "c7c01cc9f819f521218e5fb76cb18f2a7c7d54eeca8f0e5b5d678c2a7cb9387c",
       "cfg": "all",
       "owner": "",
       "retirement": null
@@ -933,7 +1016,7 @@
     },
     {
       "test_id": "TEST-PS-SELFTEST-8A044D6B903C",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/install-rayman.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/install-rayman.ps1",
@@ -942,11 +1025,30 @@
       "selector_sha256": "82322b00c2b27ef5647ef49acbe03d2bf81372b052a8a358eefb9898c7d0c0f2",
       "cfg": "all",
       "owner": "",
+      "retirement": {
+        "retired_at": "2026-08-28",
+        "reason": "Executable selector bytes changed during the 2026-08-28 audit repair.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-8A044D6B903C-R3"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-PS-SELFTEST-8A044D6B903C-R3",
+      "status": "active",
+      "identity": "powershell::powershell_self_test::scripts/install-rayman.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/install-rayman.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "686fdff43fa7508def7aef08b7c7927d08fa0055e14c4abfa9384e3e08e1ed09",
+      "cfg": "all",
+      "owner": "",
       "retirement": null
     },
     {
       "test_id": "TEST-PS-SELFTEST-A3DCE69BBABB",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/check-ci-workflow.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/check-ci-workflow.ps1",
@@ -955,17 +1057,55 @@
       "selector_sha256": "f13efa1b03ca57a4864aa94593b64ac06cadf0ac87b262be895821af151c0941",
       "cfg": "all",
       "owner": "",
+      "retirement": {
+        "retired_at": "2026-08-28",
+        "reason": "Executable selector bytes changed during the 2026-08-28 audit repair.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-A3DCE69BBABB-R3"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-PS-SELFTEST-A3DCE69BBABB-R3",
+      "status": "active",
+      "identity": "powershell::powershell_self_test::scripts/check-ci-workflow.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/check-ci-workflow.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "e08dba3c23ad9db5311aae18b7fe9b9584a3410d641a269ae197859b1d71a145",
+      "cfg": "all",
+      "owner": "",
       "retirement": null
     },
     {
       "test_id": "TEST-PS-SELFTEST-E4332C6D1ADD",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/check-agent-instructions.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/check-agent-instructions.ps1",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "selector_sha256": "40a5e0bb67b999443a9cce5b6a4acf530c9cea71e9d908cb87c55e5c1be461d2",
+      "cfg": "all",
+      "owner": "",
+      "retirement": {
+        "retired_at": "2026-08-28",
+        "reason": "Executable selector bytes changed during the 2026-08-28 audit repair.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-E4332C6D1ADD-R3"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-PS-SELFTEST-E4332C6D1ADD-R3",
+      "status": "active",
+      "identity": "powershell::powershell_self_test::scripts/check-agent-instructions.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/check-agent-instructions.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "8afc491a83f8085d89b0842484e78be0a217ccba0db219ba6d6583c0b9661e71",
       "cfg": "all",
       "owner": "",
       "retirement": null
@@ -1193,13 +1333,32 @@
     },
     {
       "test_id": "TEST-RUST-ABSOLUTE-WORKSPACE-POWERSHELL-SCRIPT-IS-EXECUTIO-2F79BD5A6EC5",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/goal/tests/authority_gate.rs::absolute_workspace_powershell_script_is_execution_safe_but_not_authority",
       "role": "root_cargo",
       "path": "crates/rayman/src/goal/tests/authority_gate.rs",
       "selector_kind": "rust_test_fn",
       "selector": "absolute_workspace_powershell_script_is_execution_safe_but_not_authority",
       "selector_sha256": "debadbda6d45f0720705d32b2a43498e3ce658b46c42a65dd8d0bc6669e73bb4",
+      "cfg": "all",
+      "owner": null,
+      "retirement": {
+        "retired_at": "2026-08-28",
+        "reason": "Executable selector bytes changed during the 2026-08-28 audit repair.",
+        "replaced_by": [
+          "TEST-RUST-ABSOLUTE-WORKSPACE-POWERSHELL-SCRIPT-IS-EXECUTIO-2F79BD5A6EC5-R3"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-ABSOLUTE-WORKSPACE-POWERSHELL-SCRIPT-IS-EXECUTIO-2F79BD5A6EC5-R3",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/goal/tests/authority_gate.rs::absolute_workspace_powershell_script_is_execution_safe_but_not_authority",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/goal/tests/authority_gate.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "absolute_workspace_powershell_script_is_execution_safe_but_not_authority",
+      "selector_sha256": "a3d6746e5c5c048dfb2cdca89ec8d98cbf06cf6663785b1b8dac4cab5029486d",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -1648,7 +1807,7 @@
     },
     {
       "test_id": "TEST-RUST-AUDIT-ORCHESTRATION-HAS-NO-ENVIRONMENT-BYPASS-OR-565B2A9F1C31",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/tests/audit_script.rs::audit_orchestration_has_no_environment_bypass_or_implicit_provisioning",
       "role": "root_cargo",
       "path": "crates/rayman/tests/audit_script.rs",
@@ -1657,11 +1816,30 @@
       "selector_sha256": "bd5ed2f3f0a164f002cd2ee824239d08486314eedda88a1283e923802b7e5732",
       "cfg": "all",
       "owner": null,
+      "retirement": {
+        "retired_at": "2026-08-28",
+        "reason": "Executable selector bytes changed during the 2026-08-28 audit repair.",
+        "replaced_by": [
+          "TEST-RUST-AUDIT-ORCHESTRATION-HAS-NO-ENVIRONMENT-BYPASS-OR-565B2A9F1C31-R3"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-AUDIT-ORCHESTRATION-HAS-NO-ENVIRONMENT-BYPASS-OR-565B2A9F1C31-R3",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/tests/audit_script.rs::audit_orchestration_has_no_environment_bypass_or_implicit_provisioning",
+      "role": "root_cargo",
+      "path": "crates/rayman/tests/audit_script.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "audit_orchestration_has_no_environment_bypass_or_implicit_provisioning",
+      "selector_sha256": "7de63d35f3c61a4dee4f4b5bc8cf4a5b1d7d52649600600f32e515a4277bc08b",
+      "cfg": "all",
+      "owner": null,
       "retirement": null
     },
     {
       "test_id": "TEST-RUST-AUDIT-SELF-TEST-EXERCISES-ONLY-THE-AUDIT-CONTRAC-A15F1E020641",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/tests/audit_script.rs::audit_self_test_exercises_only_the_audit_contract",
       "role": "root_cargo",
       "path": "crates/rayman/tests/audit_script.rs",
@@ -1670,17 +1848,40 @@
       "selector_sha256": "dcf62f780321811a8e12d6a523fdd95d58f19fad7babd49c95fa6d7de623310f",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-08-28",
+        "reason": "Audit proved the executable selector was skipped by its gate or belonged only to an obsolete test-only route.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-AUTHORITY-CLASSIFICATION-REJECTS-A-FOCUSED-COMMA-5DF5588E4215",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/goal/tests/workflow.rs::authority_classification_rejects_a_focused_command_promoted_by_flag",
       "role": "root_cargo",
       "path": "crates/rayman/src/goal/tests/workflow.rs",
       "selector_kind": "rust_test_fn",
       "selector": "authority_classification_rejects_a_focused_command_promoted_by_flag",
       "selector_sha256": "c3381da547f9e12886ba48a585d8ae750b9411f21ae4d48761c6fd6f58d03c7c",
+      "cfg": "all",
+      "owner": null,
+      "retirement": {
+        "retired_at": "2026-08-28",
+        "reason": "Executable selector bytes changed during the 2026-08-28 audit repair.",
+        "replaced_by": [
+          "TEST-RUST-AUTHORITY-CLASSIFICATION-REJECTS-A-FOCUSED-COMMA-5DF5588E4215-R3"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-AUTHORITY-CLASSIFICATION-REJECTS-A-FOCUSED-COMMA-5DF5588E4215-R3",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/goal/tests/workflow.rs::authority_classification_rejects_a_focused_command_promoted_by_flag",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/goal/tests/workflow.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "authority_classification_rejects_a_focused_command_promoted_by_flag",
+      "selector_sha256": "0c1eed37ed41e29425a194b3e9a8f5d9500e875d624117725e7d74085328f544",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -3897,7 +4098,7 @@
     },
     {
       "test_id": "TEST-RUST-EXTERNAL-EXECUTION-USES-A-MARKER-FREE-TREE-AND-R-5557B779BAF6",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/goal/validation/pytest_isolation.rs::external_execution_uses_a_marker_free_tree_and_releases_on_success",
       "role": "root_cargo",
       "path": "crates/rayman/src/goal/validation/pytest_isolation.rs",
@@ -3906,7 +4107,11 @@
       "selector_sha256": "64f94c2ead8812f6035f5f82afd8ba09ee94aeaa4e9c9bb7f5ad67442b794785",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-08-28",
+        "reason": "Audit proved the executable selector was skipped by its gate or belonged only to an obsolete test-only route.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-EXTERNAL-MANAGED-DIRECTORY-REJECTS-AN-EMPTY-PATH-C85F8D3C1FBB",
@@ -3923,7 +4128,7 @@
     },
     {
       "test_id": "TEST-RUST-EXTERNAL-PANIC-UNWIND-RELEASES-THE-SAME-STORAGE-6B6F26A76264",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/goal/validation/pytest_isolation.rs::external_panic_unwind_releases_the_same_storage_kind",
       "role": "root_cargo",
       "path": "crates/rayman/src/goal/validation/pytest_isolation.rs",
@@ -3932,11 +4137,15 @@
       "selector_sha256": "7517117fd83f498781ea13a593f8b32a2148b0248b34f9b46fa264e28b9d0ef9",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-08-28",
+        "reason": "Audit proved the executable selector was skipped by its gate or belonged only to an obsolete test-only route.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-EXTERNAL-PRE-RELEASE-LEAF-REPLACEMENT-BLOCKS-SUC-A532C2AD64F4",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/goal/validation/pytest_isolation.rs::external_pre_release_leaf_replacement_blocks_success",
       "role": "root_cargo",
       "path": "crates/rayman/src/goal/validation/pytest_isolation.rs",
@@ -3945,11 +4154,15 @@
       "selector_sha256": "dd601b3fd7ca1f254777d9a0c1d6e12a96e25b3b0eb9625485d66875c1b2d707",
       "cfg": "windows",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-08-28",
+        "reason": "Audit proved the executable selector was skipped by its gate or belonged only to an obsolete test-only route.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-EXTERNAL-PRE-SPAWN-LEAF-REPLACEMENT-BLOCKS-RUNNE-65144E4ADE5F",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/goal/validation/pytest_isolation.rs::external_pre_spawn_leaf_replacement_blocks_runner",
       "role": "root_cargo",
       "path": "crates/rayman/src/goal/validation/pytest_isolation.rs",
@@ -3958,7 +4171,11 @@
       "selector_sha256": "a372416e896bc1701247c4ed530e5a3a35411699af3209c2ec220e96cf58dab6",
       "cfg": "windows",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-08-28",
+        "reason": "Audit proved the executable selector was skipped by its gate or belonged only to an obsolete test-only route.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-EXTERNAL-PYTEST-LEASE-USES-A-MARKER-FREE-SIBLING-43D9D0B8027F",
@@ -4482,13 +4699,32 @@
     },
     {
       "test_id": "TEST-RUST-GOAL-VALIDATE-ISOLATES-EVERY-PYTEST-PROCESS-WITH-B89499E55261",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/tests/cli.rs::goal_validate_isolates_every_pytest_process_without_receipt_leakage",
       "role": "root_cargo",
       "path": "crates/rayman/tests/cli.rs",
       "selector_kind": "rust_test_fn",
       "selector": "goal_validate_isolates_every_pytest_process_without_receipt_leakage",
       "selector_sha256": "5bcafd75c79bf48d3747f5518cee693c190321eb4d37f652c2619022308ba026",
+      "cfg": "all",
+      "owner": null,
+      "retirement": {
+        "retired_at": "2026-08-28",
+        "reason": "Executable selector bytes changed during the 2026-08-28 audit repair.",
+        "replaced_by": [
+          "TEST-RUST-GOAL-VALIDATE-ISOLATES-EVERY-PYTEST-PROCESS-WITH-B89499E55261-R3"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-GOAL-VALIDATE-ISOLATES-EVERY-PYTEST-PROCESS-WITH-B89499E55261-R3",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/tests/cli.rs::goal_validate_isolates_every_pytest_process_without_receipt_leakage",
+      "role": "root_cargo",
+      "path": "crates/rayman/tests/cli.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "goal_validate_isolates_every_pytest_process_without_receipt_leakage",
+      "selector_sha256": "7d952c2d851fa71e82a9cb7dbc7ada71da50e66183efa762417e412998746079",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -7407,7 +7643,7 @@
     },
     {
       "test_id": "TEST-RUST-POST-OPERATION-LEASE-REPLACEMENT-IS-REJECTED-BEF-155AB293C96F",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/temp/validation_process.rs::post_operation_lease_replacement_is_rejected_before_path_publication",
       "role": "root_cargo",
       "path": "crates/rayman/src/temp/validation_process.rs",
@@ -7416,17 +7652,55 @@
       "selector_sha256": "33cd9b1c6de82e697efee3c7991a85721fc2b6d644cbca74449c6a461f11b85b",
       "cfg": "windows",
       "owner": null,
+      "retirement": {
+        "retired_at": "2026-08-28",
+        "reason": "Executable selector bytes changed during the 2026-08-28 audit repair.",
+        "replaced_by": [
+          "TEST-RUST-POST-OPERATION-LEASE-REPLACEMENT-IS-REJECTED-BEF-155AB293C96F-R3"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-POST-OPERATION-LEASE-REPLACEMENT-IS-REJECTED-BEF-155AB293C96F-R3",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/temp/validation_process.rs::post_operation_lease_replacement_is_rejected_before_path_publication",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/temp/validation_process.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "post_operation_lease_replacement_is_rejected_before_path_publication",
+      "selector_sha256": "3da5a5b29d1ac747cfb141a6a0e3963d3b1275f83609781846d41b4e14b1452f",
+      "cfg": "windows",
+      "owner": null,
       "retirement": null
     },
     {
       "test_id": "TEST-RUST-POST-OPERATION-NAMESPACE-REPLACEMENT-IS-REJECTED-DC508DD37570",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/temp/validation_process.rs::post_operation_namespace_replacement_is_rejected_before_path_publication",
       "role": "root_cargo",
       "path": "crates/rayman/src/temp/validation_process.rs",
       "selector_kind": "rust_test_fn",
       "selector": "post_operation_namespace_replacement_is_rejected_before_path_publication",
       "selector_sha256": "4a3e9a9d158e1dd031244b6238004ff5fe9e831785940748db060250e445779e",
+      "cfg": "windows",
+      "owner": null,
+      "retirement": {
+        "retired_at": "2026-08-28",
+        "reason": "Executable selector bytes changed during the 2026-08-28 audit repair.",
+        "replaced_by": [
+          "TEST-RUST-POST-OPERATION-NAMESPACE-REPLACEMENT-IS-REJECTED-DC508DD37570-R3"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-POST-OPERATION-NAMESPACE-REPLACEMENT-IS-REJECTED-DC508DD37570-R3",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/temp/validation_process.rs::post_operation_namespace_replacement_is_rejected_before_path_publication",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/temp/validation_process.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "post_operation_namespace_replacement_is_rejected_before_path_publication",
+      "selector_sha256": "5a7e9d95692e6f88530217e8cbeda08ce48eee1001179f64c58eabf366cb3084",
       "cfg": "windows",
       "owner": null,
       "retirement": null
@@ -9487,13 +9761,32 @@
     },
     {
       "test_id": "TEST-RUST-SCRATCH-CREATE-STATUS-AND-CLEANUP-034C0E170E74",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/temp.rs::scratch_create_status_and_cleanup",
       "role": "root_cargo",
       "path": "crates/rayman/src/temp.rs",
       "selector_kind": "rust_test_fn",
       "selector": "scratch_create_status_and_cleanup",
       "selector_sha256": "5d9b85391c654b1b50b4d617225884f2464cc72da6562a3a452a468c73976c69",
+      "cfg": "all",
+      "owner": null,
+      "retirement": {
+        "retired_at": "2026-08-28",
+        "reason": "Executable selector bytes changed during the 2026-08-28 audit repair.",
+        "replaced_by": [
+          "TEST-RUST-SCRATCH-CREATE-STATUS-AND-CLEANUP-034C0E170E74-R3"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-SCRATCH-CREATE-STATUS-AND-CLEANUP-034C0E170E74-R3",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/temp.rs::scratch_create_status_and_cleanup",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/temp.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "scratch_create_status_and_cleanup",
+      "selector_sha256": "cac27c354c7fa0c4ffe7f965560e15bd82d0b1d2accbf79bceb240e8dcc6afe2",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -10825,6 +11118,19 @@
       "retirement": null
     },
     {
+      "test_id": "TEST-RUST-TRUSTED-INSTALL-PLATFORM-IS-EXACTLY-WINDOWS-X86-72C8B74E28CC",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/update/install.rs::trusted_install_platform_is_exactly_windows_x86_64_msvc",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/update/install.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "trusted_install_platform_is_exactly_windows_x86_64_msvc",
+      "selector_sha256": "cb85688ce3dd1bee92855e03339632d08bd754d9e31267335739ac3b0dc350c3",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
       "test_id": "TEST-RUST-TYPED-CATALOG-MESSAGES-LOCALIZE-TEMPLATES-BUT-PR-C71565BC982D",
       "status": "active",
       "identity": "rust::root_cargo::crates/rayman/src/i18n.rs::typed_catalog_messages_localize_templates_but_preserve_dynamic_unicode",
@@ -11866,13 +12172,32 @@
     },
     {
       "test_id": "TEST-RUST-XTASK-AUTHORITY-ACCEPTS-ONLY-THE-CANONICAL-EXPLI-344CEBDCCD10",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/goal/tests/workflow.rs::xtask_authority_accepts_only_the_canonical_explicit_cargo_run",
       "role": "root_cargo",
       "path": "crates/rayman/src/goal/tests/workflow.rs",
       "selector_kind": "rust_test_fn",
       "selector": "xtask_authority_accepts_only_the_canonical_explicit_cargo_run",
       "selector_sha256": "4a1edd76258f12000a9e805d4359c0c8d0f1cee28813c662b71f35a79bb6719f",
+      "cfg": "all",
+      "owner": null,
+      "retirement": {
+        "retired_at": "2026-08-28",
+        "reason": "Executable selector bytes changed during the 2026-08-28 audit repair.",
+        "replaced_by": [
+          "TEST-RUST-XTASK-AUTHORITY-ACCEPTS-ONLY-THE-CANONICAL-EXPLI-344CEBDCCD10-R3"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-XTASK-AUTHORITY-ACCEPTS-ONLY-THE-CANONICAL-EXPLI-344CEBDCCD10-R3",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/goal/tests/workflow.rs::xtask_authority_accepts_only_the_canonical_explicit_cargo_run",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/goal/tests/workflow.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "xtask_authority_accepts_only_the_canonical_explicit_cargo_run",
+      "selector_sha256": "efbf50970314b584d551525739f61a6e6e6c73f8fc6a150aca5e57d8609fc362",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -11942,12 +12267,18 @@
     },
     {
       "asset_id": "ASSET-FILE-122826F13190",
-      "status": "active",
+      "status": "retired",
       "path": "crates/rayman/tests/audit_script.rs",
       "sha256": "e7f351806f95510a119f5edf240d394e0f89131fd3086e9eaa5983c3dd7b2fb7",
       "kind": "dedicated_file",
       "cleanup_policy": "delete_on_last_reference",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-08-28",
+        "reason": "Dedicated test asset bytes changed with the reviewed audit repair.",
+        "replaced_by": [
+          "ASSET-FILE-R3-9184A69725FE"
+        ]
+      }
     },
     {
       "asset_id": "ASSET-FILE-28E138CDA2A4",
@@ -12050,9 +12381,33 @@
     },
     {
       "asset_id": "ASSET-FILE-EA63E29F08E3",
-      "status": "active",
+      "status": "retired",
       "path": "crates/rayman/tests/cli.rs",
       "sha256": "3cd3e064f13115567172a547b8845f017e15bc47429177863879e090f0ac7015",
+      "kind": "dedicated_file",
+      "cleanup_policy": "delete_on_last_reference",
+      "retirement": {
+        "retired_at": "2026-08-28",
+        "reason": "Dedicated test asset bytes changed with the reviewed audit repair.",
+        "replaced_by": [
+          "ASSET-FILE-R3-ABDF95A0F020"
+        ]
+      }
+    },
+    {
+      "asset_id": "ASSET-FILE-R3-9184A69725FE",
+      "status": "active",
+      "path": "crates/rayman/tests/audit_script.rs",
+      "sha256": "c12a37541d4ee34de5bc7d1cf432d22924f6bf78e9504446fc544eb391de16a8",
+      "kind": "dedicated_file",
+      "cleanup_policy": "delete_on_last_reference",
+      "retirement": null
+    },
+    {
+      "asset_id": "ASSET-FILE-R3-ABDF95A0F020",
+      "status": "active",
+      "path": "crates/rayman/tests/cli.rs",
+      "sha256": "9a7b9bfd9547dc272fe8b3081ecb98ba250867cc252bf157c4fc06e6197909c2",
       "kind": "dedicated_file",
       "cleanup_policy": "delete_on_last_reference",
       "retirement": null

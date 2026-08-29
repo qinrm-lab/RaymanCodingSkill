@@ -1,5 +1,6 @@
-//! rayman：RaymanCodingSkill 的精简 v2 核心。
-//! 只保留 load-bearing 能力：上下文索引、最小目标契约、只读资产扫描、托管临时目录。
+//! rayman：RaymanCodingSkill 的 load-bearing v2 核心。
+//! 模块覆盖 activation、context/map、goal/authority、recovery、host integration、
+//! managed temp 与 trusted update；各能力的完成边界由共享 workflow contract 定义。
 
 pub mod assets;
 pub const CLI_CONTRACT: &str = "rayman-cli-contract-v18";

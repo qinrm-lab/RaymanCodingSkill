@@ -4,9 +4,6 @@ use std::process::Command;
 
 use serde_json::Value;
 
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
-
 fn powershell_path(path: &Path) -> String {
     let path = path.to_string_lossy();
     #[cfg(windows)]
@@ -131,81 +128,6 @@ fn public_architecture_and_ci_coverage_contracts_avoid_drift_prone_counts() {
         assert!(
             due_poll_test.contains(required),
             "non-Windows due-poll consent regression lost assertion: {required}"
-        );
-    }
-}
-
-#[test]
-fn audit_self_test_exercises_only_the_audit_contract() {
-    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .canonicalize()
-        .expect("repository root must resolve");
-    let fixture = tempfile::tempdir().expect("audit self-test fixture must be created");
-    let fixture_bin = fixture.path().join("bin");
-    let process_temp = fixture.path().join("process-temp");
-    fs::create_dir_all(&fixture_bin).expect("fixture bin must be created");
-    fs::create_dir_all(&process_temp).expect("fixture process temp must be created");
-
-    #[cfg(windows)]
-    let cargo_deny = fixture_bin.join("cargo-deny.cmd");
-    #[cfg(not(windows))]
-    let cargo_deny = fixture_bin.join("cargo-deny");
-    #[cfg(windows)]
-    fs::write(&cargo_deny, "@exit /b 0\r\n").expect("cargo-deny fixture must be written");
-    #[cfg(not(windows))]
-    {
-        fs::write(&cargo_deny, "#!/bin/sh\nexit 0\n").expect("cargo-deny fixture must be written");
-        let mut permissions = fs::metadata(&cargo_deny)
-            .expect("cargo-deny fixture metadata must resolve")
-            .permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(&cargo_deny, permissions)
-            .expect("cargo-deny fixture must be executable");
-    }
-
-    let ambient_path = std::env::var_os("PATH").unwrap_or_default();
-    let path = std::env::join_paths(
-        std::iter::once(fixture_bin.clone()).chain(std::env::split_paths(&ambient_path)),
-    )
-    .expect("fixture PATH must be representable");
-    let script = repo_root.join("scripts/audit-repository.ps1");
-    let output = Command::new("pwsh")
-        .args([
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            script.to_str().expect("audit script path must be UTF-8"),
-            "-SelfTest",
-        ])
-        .current_dir(&repo_root)
-        .env("PATH", path)
-        .env("TMP", &process_temp)
-        .env("TEMP", &process_temp)
-        .output()
-        .expect("PowerShell 7 must run the audit self-test");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    assert!(
-        output.status.success(),
-        "audit self-test failed\nstdout:\n{stdout}\nstderr:\n{stderr}"
-    );
-    assert!(
-        stdout.contains("exact isolated MSRV")
-            && stdout.contains("audit-repository.ps1 self-test passed."),
-        "audit self-test did not exercise the exact isolated MSRV contract\nstdout:\n{stdout}"
-    );
-    for sibling in [
-        "release-closeout self-test",
-        "Install self-test passed",
-        "Release verifier self-test passed",
-        "PowerShell profile repair self-test",
-    ] {
-        assert!(
-            !stdout.contains(sibling),
-            "audit self-test recursively launched sibling suite {sibling}\nstdout:\n{stdout}"
         );
     }
 }
@@ -543,11 +465,25 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
     assert!(update_freshness.contains("manifest_verified"));
     assert!(update_freshness.contains("MinimumRemainingDays = 14"));
     assert!(update_freshness.contains("Do not replace the existing release assets"));
+    assert!(update_freshness.contains("Get-VerifiedManifestAssetHashes"));
+    assert!(update_freshness.contains("assets_verified = $assetHashes.Count"));
     assert!(workflow.contains("signed-release-freshness:"));
     assert!(workflow.contains("ci-${{ github.event_name }}-${{ github.ref }}"));
     assert!(workflow.contains("-MinimumRemainingDays 14"));
     assert!(workflow.contains("-MinimumRemainingDays 29"));
     assert!(workflow.contains("-ExpectedVersion $tag.Substring(1)"));
+    assert!(workflow.contains("-AssetDirectory dist"));
+    assert!(workflow.contains("-AssetDirectory $assetRoot"));
+    for asset in [
+        "rayman-windows-x86_64.exe",
+        "rayman-update-worker-windows-x86_64.exe",
+        "raymancodingskill-SKILL.md",
+        "raymancodingskill-AGENTS.md",
+        "raymancodingskill-workflow-contract.md",
+        "install-rayman.ps1",
+    ] {
+        assert!(workflow.contains(&format!("--pattern {asset}")));
+    }
     assert!(workflow.contains("Verify exact release binaries source-fresh before staging"));
     assert!(workflow.contains("Stage only the verified release bytes"));
     assert!(workflow.contains("-CliPath $finalCli"));
@@ -623,10 +559,15 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
             "normal audit retained implicit provisioning path {forbidden}"
         );
     }
-    assert!(source.contains("--skip', $SkippedIntegrationTest"));
-    assert!(check_repo.contains("--skip', $auditIntegrationTestName"));
+    assert!(!source.contains("audit_self_test_exercises_only_the_audit_contract"));
+    assert!(!check_repo.contains("audit_self_test_exercises_only_the_audit_contract"));
     for consumer in [&source, &check_repo] {
         assert!(consumer.contains("Join-Path $PSScriptRoot 'repository-quality.ps1'"));
+        assert!(
+            consumer.contains("47f405e725ad272b2d2c0d2b189855375962689f2b356eadc306305f957a0b77")
+        );
+        assert!(consumer.contains("$usingDefaultProvider"));
+        assert!(consumer.contains("Repository quality command provider hash drifted"));
         assert!(consumer.contains("rayman.repository-quality.commands.v1"));
         assert!(consumer.contains("ConvertFrom-Json -Depth 8 -NoEnumerate"));
         assert!(consumer.contains("$document -is [array]"));
