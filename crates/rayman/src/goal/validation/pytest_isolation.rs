@@ -293,11 +293,14 @@ pub(super) fn run_with_external_managed_pytest_lease_at_host_root(
     let root_recheck = host_root.verify_current();
     match (execution, cleanup, root_recheck) {
         (Ok(output), Ok(()), Ok(())) => Ok(output),
-        (Ok(output), Err(cleanup_error), Ok(())) if output.status.success() => bail!(
-            "pytest 验证结束后无法释放受管 lease；stdout_sha256={} stderr_sha256={}: {cleanup_error:#}",
-            sha256_hex(&output.stdout),
-            sha256_hex(&output.stderr)
-        ),
+        (Ok(output), Err(cleanup_error), Ok(())) if output.status.success() => {
+            let context = format!(
+                "pytest 验证结束后无法释放受管 lease；stdout_sha256={} stderr_sha256={}: {cleanup_error:#}",
+                sha256_hex(&output.stdout),
+                sha256_hex(&output.stderr)
+            );
+            Err(cleanup_error).context(context)
+        }
         (Ok(output), Err(cleanup_error), Ok(())) => bail!(
             "pytest 验证进程非零退出（exit={}）且 lease 释放失败；stdout_sha256={} stderr_sha256={}: {cleanup_error:#}",
             output.status.code().unwrap_or(-1),
@@ -348,11 +351,12 @@ fn run_with_workspace_managed_pytest_lease(
     match (execution, cleanup) {
         (Ok(output), Ok(())) => Ok(output),
         (Ok(output), Err(cleanup_error)) if output.status.success() => {
-            bail!(
+            let context = format!(
                 "pytest 验证结束后无法释放受管 lease；stdout_sha256={} stderr_sha256={}: {cleanup_error:#}",
                 sha256_hex(&output.stdout),
                 sha256_hex(&output.stderr)
-            )
+            );
+            Err(cleanup_error).context(context)
         }
         (Ok(output), Err(cleanup_error)) => bail!(
             "pytest 验证进程非零退出（exit={}）且 lease 释放失败；stdout_sha256={} stderr_sha256={}: {cleanup_error:#}",
@@ -588,10 +592,11 @@ mod tests {
 
         assert!(rendered.contains("无法释放受管 lease"), "{rendered}");
         assert!(
-            rendered.contains("消失")
-                || rendered.contains("不存在")
-                || rendered.contains("系统找不到指定的文件")
-                || rendered.contains("The system cannot find the file specified"),
+            error.chain().any(|cause| {
+                cause
+                    .downcast_ref::<std::io::Error>()
+                    .is_some_and(|error| error.raw_os_error() == Some(2))
+            }),
             "{rendered}"
         );
     }

@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 3,
+    "generation": 4,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 2,
-      "sha256": "8f3843adb5ed8a309a34544839abad3aeecc6ef86c17bc9f1a4be72ef83a4193"
+      "generation": 3,
+      "sha256": "f90411693175e5daf3db3b62d574bc89a46c5ccd0154926982d1bc386351976f"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "96ce4722ab22eaf259cd697b831ad99e9e65cd431419790fee9d48aa2ac8764c"
+    "sha256": "a477be30b052c95079e9ab35b7b93b54a75d188c946c9ee3b0642d605d06854b"
   },
   "sources": [
     {
@@ -68,6 +68,16 @@
       "path": "docs/CLI.md",
       "sha256": "1aa8b1c653602cec5aebd284dfaa5fc7ddec30766713779f143d3e9353faed5f",
       "valid_until": "2027-08-28",
+      "retirement": null
+    },
+    {
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "status": "active",
+      "kind": "internal_contract",
+      "title": "Codex fixed local Git commit capability contract",
+      "path": "docs/CODEX_POWERSHELL_BROKER.md",
+      "sha256": "7fb28dac1c05ad7135ab371946eddafe79cf91e897fc2f4ce26919d14913b353",
+      "valid_until": "2027-09-01",
       "retirement": null
     },
     {
@@ -262,6 +272,138 @@
       "statement": "Runner-specific GitHub context must be evaluated at step scope, not job-level env scope.",
       "criticality": "release_blocking",
       "required_modes": [
+        "behavioral_negative"
+      ],
+      "retirement": null
+    },
+    {
+      "rule_id": "RULE-CODEX-GIT-AUTHORIZATION",
+      "status": "active",
+      "statement": "Every production install, upgrade, uninstall, partial recovery and launcher preparation requires Yes.IsPresent; explicit -Yes:$false is rejected before path normalization or mutation. The persistent git_local_commit_v1 grant remains limited to the installed repository, branch, identity and local commit operation and never grants push, Full Access, arbitrary commands or ACL reset.",
+      "criticality": "release_blocking",
+      "required_modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "retirement": null
+    },
+    {
+      "rule_id": "RULE-CODEX-GIT-DIAGNOSTIC-BOUNDARY",
+      "status": "active",
+      "statement": "Upgrade diagnostics are advisory console phase/error facts only: there is no mutable fixed diagnostic file and no WMI/CIM query; heartbeat timeout retains the last rejected heartbeat reason plus a read-only Task Scheduler COM snapshot of registration, state, running instances and LastTaskResult, and no diagnostic result can replace independent receipt, journal, task, heartbeat or ready verification.",
+      "criticality": "release_blocking",
+      "required_modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "retirement": null
+    },
+    {
+      "rule_id": "RULE-CODEX-GIT-EXECUTION",
+      "status": "active",
+      "statement": "Every git_local_commit_v1 Git invocation is fixed, starts suspended in a single-process Job, terminates a pre-resume failure, disables indirect execution and network-capable helpers, and exposes no push, fetch, signing, hook, filter, editor, or arbitrary program dispatch.",
+      "criticality": "release_blocking",
+      "required_modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "retirement": null
+    },
+    {
+      "rule_id": "RULE-CODEX-GIT-INSTALLATION-SERIALIZATION",
+      "status": "active",
+      "statement": "Fresh install and upgrade require an independently committed clean source: every governed source is one normal H index entry at stage 0 whose mode and blob OID agree with HEAD and with the Git blob computed from the retained worktree bytes. Hidden index flags and status-hidden drift fail closed. One action-bound short-lived authority manifest and one held installer/source epoch remain under the installation mutex. Existing-install -Install is ordinary-user read-only identity_probe attestation. Task registration/start uses fixed Task Scheduler COM and no WINDIR-derived executable; a busy Check reads no mixed installation epoch. Main, crash and recovery SelfTest modes share one compact case-root constructor and enforce the deepest native-held worker path budget.",
+      "criticality": "release_blocking",
+      "required_modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "retirement": null
+    },
+    {
+      "rule_id": "RULE-CODEX-GIT-INSTALLER-CLEANUP",
+      "status": "active",
+      "statement": "Installer rollback removes only exact transaction-owned objects. Normal uninstall snapshots every bounded non-reparse user-owned descendant before Task deletion, retains a DELETE-capable no-reparse handle with delete sharing denied for the root and every descendant directory, removes files under that held ancestor chain and deletes directories bottom-up through their original exact handles, and preserves concurrent leaf replacement, ancestor rename/junction substitution, external sentinels or unknown state.",
+      "criticality": "release_blocking",
+      "required_modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "retirement": null
+    },
+    {
+      "rule_id": "RULE-CODEX-GIT-RECOVERY",
+      "status": "active",
+      "statement": "git_local_commit_v1 failure before ref mutation preserves HEAD, live index, and worktree, while failure after ref mutation is forward-only, journaled, idempotent, and classified indeterminate whenever exact recovery cannot be proven.",
+      "criticality": "release_blocking",
+      "required_modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "retirement": null
+    },
+    {
+      "rule_id": "RULE-CODEX-GIT-REGISTRATION",
+      "status": "active",
+      "statement": "git_local_commit_v1 binds one repository, direct main ref, signed and hash-bound direct Git, fixed author identity, exact configuration, absent info/attributes, and local-only standing-authority flags.",
+      "criticality": "release_blocking",
+      "required_modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "retirement": null
+    },
+    {
+      "rule_id": "RULE-CODEX-GIT-REQUEST",
+      "status": "active",
+      "statement": "git_local_commit_v1 accepts only an exact expected-HEAD tracked-change snapshot, holds the registered root and every modified-file ancestor/leaf against namespace replacement, rejects junction/reparse traversal, and rejects arbitrary command, path, executable, ref, remote, environment, argv, duplicate JSON, untracked, staged, conflicted, or unsafe path input.",
+      "criticality": "release_blocking",
+      "required_modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "retirement": null
+    },
+    {
+      "rule_id": "RULE-CODEX-GIT-STAGING-RECOVERY",
+      "status": "active",
+      "statement": "Upgrade stops only a receipt-bound orphan worker, preserves nonempty transaction journals, and clears interrupted staging only when exactly one extra hash-version and the complete protected tuple are proven beside the formal v2 worker.",
+      "criticality": "release_blocking",
+      "required_modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "retirement": null
+    },
+    {
+      "rule_id": "RULE-CODEX-GIT-TRANSACTION",
+      "status": "active",
+      "statement": "git_local_commit_v1 hashes held bytes through the protected attributes, rejects symbolic registered refs, stages the verified index under standard index.lock, uses no-deref ref CAS, proves the replaced-index backup, and verifies exact clean commit output.",
+      "criticality": "release_blocking",
+      "required_modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "retirement": null
+    },
+    {
+      "rule_id": "RULE-CODEX-GIT-UPGRADE",
+      "status": "active",
+      "statement": "Fresh install and schema-v3 upgrade use only clean independently committed source bytes held by the action-bound authority. Upgrade retains journaled crash recovery, nonce-before-stop, receipt probes, bounded heartbeat diagnostics, ready-last publication and exact current-schema rollback/forward recovery without production GetNewClosure.",
+      "criticality": "release_blocking",
+      "required_modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "retirement": null
+    },
+    {
+      "rule_id": "RULE-CODEX-GIT-UPGRADE-AUTHORITY",
+      "status": "active",
+      "statement": "Install and upgrade publish no mutable launcher: one profile-free conversation command pins runtime, installer and action-specific nonce manifest; the administrator independently holds Goal, pending and the complete clean HEAD/status/Git-input epoch before any source query, then holds all governed sources and proves each is one normal stage-0 HEAD blob from the retained bytes, never executes workspace-built Rayman, and rejects hidden index flags, stale, mismatched-action or replayed authority.",
+      "criticality": "release_blocking",
+      "required_modes": [
+        "integration",
         "behavioral_negative"
       ],
       "retirement": null
@@ -678,6 +820,20 @@
       "retirement": null
     },
     {
+      "gate_id": "GATE-CARGO-ROOT-WINDOWS-R4",
+      "status": "active",
+      "kind": "cargo_root_suite",
+      "title": "Windows root workspace Cargo suite",
+      "path": "scripts/check-repo.ps1",
+      "sha256": "faca6418316c81e460f6b260b8ff2e53fba0026f9c6ae5d44b2a9dce9fa60c69",
+      "selector_kind": "powershell_function",
+      "selector": "Get-RepositoryQualityCommands",
+      "target_matrix": [
+        "windows"
+      ],
+      "retirement": null
+    },
+    {
       "gate_id": "GATE-EVAL-ORACLE",
       "status": "active",
       "kind": "eval_oracle",
@@ -754,11 +910,33 @@
     },
     {
       "gate_id": "GATE-PS-CHECK-AGENT-INSTRUCTIONS-R3",
-      "status": "active",
+      "status": "retired",
       "kind": "powershell_self_test",
       "title": "PowerShell self-test: scripts/check-agent-instructions.ps1",
       "path": "scripts/check-agent-instructions.ps1",
       "sha256": "8afc491a83f8085d89b0842484e78be0a217ccba0db219ba6d6583c0b9661e71",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "target_matrix": [
+        "windows",
+        "linux",
+        "other_unix"
+      ],
+      "retirement": {
+        "retired_at": "2026-08-29",
+        "reason": "Agent-instruction self-test gate bytes changed with the corrected v6 negative fixture.",
+        "replaced_by": [
+          "GATE-PS-CHECK-AGENT-INSTRUCTIONS-R5"
+        ]
+      }
+    },
+    {
+      "gate_id": "GATE-PS-CHECK-AGENT-INSTRUCTIONS-R5",
+      "status": "active",
+      "kind": "powershell_self_test",
+      "title": "PowerShell self-test: scripts/check-agent-instructions.ps1",
+      "path": "scripts/check-agent-instructions.ps1",
+      "sha256": "af59a226ef4636c8c56f944967af2862aba9b6a035b2e5563055bfb0d5eb85ca",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "target_matrix": [
@@ -884,11 +1062,33 @@
     },
     {
       "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER",
-      "status": "active",
+      "status": "retired",
       "kind": "powershell_self_test",
       "title": "PowerShell self-test: scripts/codex-powershell-broker.ps1",
       "path": "scripts/codex-powershell-broker.ps1",
       "sha256": "7893f375273a079b0ef27e7296e5a05ecf0ea65d38e69c5b09838aaa4f56d472",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "target_matrix": [
+        "windows",
+        "linux",
+        "other_unix"
+      ],
+      "retirement": {
+        "retired_at": "2026-08-29",
+        "reason": "PowerShell self-test gate bytes changed for git_local_commit_v1.",
+        "replaced_by": [
+          "GATE-PS-CODEX-POWERSHELL-BROKER-R4"
+        ]
+      }
+    },
+    {
+      "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER-R4",
+      "status": "active",
+      "kind": "powershell_self_test",
+      "title": "PowerShell self-test: scripts/codex-powershell-broker.ps1",
+      "path": "scripts/codex-powershell-broker.ps1",
+      "sha256": "1ac1780ec2b1c1ae76eacedcd97507ef82c389965c25152a522c1d592fc36ff0",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "target_matrix": [
@@ -916,11 +1116,33 @@
     },
     {
       "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER",
-      "status": "active",
+      "status": "retired",
       "kind": "powershell_self_test",
       "title": "PowerShell self-test: scripts/install-codex-powershell-broker.ps1",
       "path": "scripts/install-codex-powershell-broker.ps1",
       "sha256": "b21a360da4ea896e206030e7bd5f4e4a1264736d8cfe8a86ef4dfdd3acd40b8c",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "target_matrix": [
+        "windows",
+        "linux",
+        "other_unix"
+      ],
+      "retirement": {
+        "retired_at": "2026-08-29",
+        "reason": "PowerShell self-test gate bytes changed for git_local_commit_v1.",
+        "replaced_by": [
+          "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4"
+        ]
+      }
+    },
+    {
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "status": "active",
+      "kind": "powershell_self_test",
+      "title": "PowerShell self-test: scripts/install-codex-powershell-broker.ps1",
+      "path": "scripts/install-codex-powershell-broker.ps1",
+      "sha256": "f8907b643a1678a85e515426d9c538cbd0f7abd5e90262613f4468fb33144eaa",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "target_matrix": [
@@ -1079,6 +1301,150 @@
       "review": {
         "reviewed_at": "2026-08-27",
         "valid_until": "2027-02-27"
+      },
+      "retirement": null
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-AUTHORIZATION-SOURCE",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "rule_id": "RULE-CODEX-GIT-AUTHORIZATION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "retirement": null
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-DIAGNOSTIC-BOUNDARY-SOURCE",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "rule_id": "RULE-CODEX-GIT-DIAGNOSTIC-BOUNDARY",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "retirement": null
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-EXECUTION-SOURCE",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "rule_id": "RULE-CODEX-GIT-EXECUTION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "retirement": null
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-INSTALLATION-SERIALIZATION-SOURCE",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "rule_id": "RULE-CODEX-GIT-INSTALLATION-SERIALIZATION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "retirement": null
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-INSTALLER-CLEANUP-SOURCE",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "rule_id": "RULE-CODEX-GIT-INSTALLER-CLEANUP",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "retirement": null
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-RECOVERY-SOURCE",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "rule_id": "RULE-CODEX-GIT-RECOVERY",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "retirement": null
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-REGISTRATION-SOURCE",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "rule_id": "RULE-CODEX-GIT-REGISTRATION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "retirement": null
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-REQUEST-SOURCE",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "rule_id": "RULE-CODEX-GIT-REQUEST",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "retirement": null
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-STAGING-RECOVERY-SOURCE",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "rule_id": "RULE-CODEX-GIT-STAGING-RECOVERY",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "retirement": null
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-TRANSACTION-SOURCE",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "rule_id": "RULE-CODEX-GIT-TRANSACTION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "retirement": null
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-UPGRADE-AUTHORITY-SOURCE",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "rule_id": "RULE-CODEX-GIT-UPGRADE-AUTHORITY",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "retirement": null
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-UPGRADE-SOURCE",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "rule_id": "RULE-CODEX-GIT-UPGRADE",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
       },
       "retirement": null
     },
@@ -10970,7 +11336,7 @@
     },
     {
       "binding_id": "BIND-CASE-3570B72D3DEC401E-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3"
       ],
@@ -10987,6 +11353,33 @@
         "valid_until": "2027-02-28"
       },
       "semantic_sha256": "ed30a28daaf8efcd8951a41345d9873c33be36fbf4c227b47434547c156a6037",
+      "retirement": {
+        "retired_at": "2026-08-29",
+        "reason": "Binding received a reviewed test, gate, or dedicated-asset successor.",
+        "replaced_by": [
+          "BIND-CASE-3570B72D3DEC401E-R4"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-3570B72D3DEC401E-R4",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-PUBLIC-ARCHITECTURE-AND-CI-COVERAGE-CONTRACTS-AV-199B06D66A6C"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-08-29",
+        "valid_until": "2027-02-28"
+      },
+      "semantic_sha256": "55bab35a90cb1d09342942a49e02367c1246f07cf0924e76034399617decf814",
       "retirement": null
     },
     {
@@ -15500,7 +15893,7 @@
     },
     {
       "binding_id": "BIND-CASE-4BD97854DEDDFA95-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3"
       ],
@@ -15517,6 +15910,33 @@
         "valid_until": "2027-02-28"
       },
       "semantic_sha256": "86b2dd0b1d2750cf530ab0d75487cc0673d1ba9c1bf462c200bcac1e3bba259e",
+      "retirement": {
+        "retired_at": "2026-08-29",
+        "reason": "Binding received a reviewed test, gate, or dedicated-asset successor.",
+        "replaced_by": [
+          "BIND-CASE-4BD97854DEDDFA95-R4"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-4BD97854DEDDFA95-R4",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "d674fca41ba9fe3557f98ec3494681ba32601a7b6413784ece36a41ca736e626",
       "retirement": null
     },
     {
@@ -16245,7 +16665,7 @@
     },
     {
       "binding_id": "BIND-CASE-502F7D5679217AC1-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3"
       ],
@@ -16262,6 +16682,33 @@
         "valid_until": "2027-02-28"
       },
       "semantic_sha256": "11d6c64ad9007f4a2be7ab94be00fc874253e6c658b1d2bda03e8b3261f03628",
+      "retirement": {
+        "retired_at": "2026-08-29",
+        "reason": "Binding received a reviewed test, gate, or dedicated-asset successor.",
+        "replaced_by": [
+          "BIND-CASE-502F7D5679217AC1-R4"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-502F7D5679217AC1-R4",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-AUDIT-ORCHESTRATION-HAS-NO-ENVIRONMENT-BYPASS-OR-565B2A9F1C31-R4"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "6dd9e573ceae30e2d6b6bad03fa305ed79252180bd44b8bf43d14e050ab4e7c8",
       "retirement": null
     },
     {
@@ -18836,7 +19283,7 @@
     },
     {
       "binding_id": "BIND-CASE-62342DFF31E86D67-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-TRACE-ACTIVE-SOURCE-R3"
       ],
@@ -18854,6 +19301,34 @@
         "valid_until": "2027-02-28"
       },
       "semantic_sha256": "70b8e7df8071bcb2f21129f462eef9d480ead571f9e846f92d44423d0acc8049",
+      "retirement": {
+        "retired_at": "2026-08-29",
+        "reason": "Binding received a reviewed test, gate, or dedicated-asset successor.",
+        "replaced_by": [
+          "BIND-CASE-62342DFF31E86D67-R4"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-62342DFF31E86D67-R4",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-TRACE-ACTIVE-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-TEST-TRACEABILITY-CHECKER-EXECUTES-MUTATION-SELF-97AF5E15E036"
+      ],
+      "rule_id": "RULE-TRACE-ACTIVE-GRAPH-R3",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "behavioral_positive",
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-08-29",
+        "valid_until": "2027-02-28"
+      },
+      "semantic_sha256": "cb0c0fbaf519a23c94b94fc71faae7ad7d5c82c603bb501ac843e26fda30af6c",
       "retirement": null
     },
     {
@@ -22983,7 +23458,7 @@
     },
     {
       "binding_id": "BIND-CASE-77A7BAC9FBF1EF1B-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3"
       ],
@@ -23000,6 +23475,33 @@
         "valid_until": "2027-02-28"
       },
       "semantic_sha256": "bdd629bb755bf37debdf5934ccec10d0a19297607553a0f5390de482e3f1d58d",
+      "retirement": {
+        "retired_at": "2026-08-29",
+        "reason": "Binding received a reviewed test, gate, or dedicated-asset successor.",
+        "replaced_by": [
+          "BIND-CASE-77A7BAC9FBF1EF1B-R4"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-77A7BAC9FBF1EF1B-R4",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-CODEX-BROKER-SHARED-RUNSPACE-R4"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-CARGO-ROOT-WINDOWS-R4",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "5291dd7d1d3fe724e1b63ac872a181b7e589ab3264c2da80d78660acfa146ea6",
       "retirement": null
     },
     {
@@ -23725,7 +24227,7 @@
     },
     {
       "binding_id": "BIND-CASE-7DF69D0B8254CB4A-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3"
       ],
@@ -23742,6 +24244,33 @@
         "valid_until": "2027-02-28"
       },
       "semantic_sha256": "8dd4004ac0c301ffa4a63464dc43ded18dead8b3d8846130930e8b3b70cebb46",
+      "retirement": {
+        "retired_at": "2026-08-29",
+        "reason": "Binding received a reviewed test, gate, or dedicated-asset successor.",
+        "replaced_by": [
+          "BIND-CASE-7DF69D0B8254CB4A-R4"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-7DF69D0B8254CB4A-R4",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-REPOSITORY-QUALITY-PROVIDER-EMITS-THE-EXACT-VERS-BFA31317DEB1"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-08-29",
+        "valid_until": "2027-02-28"
+      },
+      "semantic_sha256": "b3fefdec7ece03dc7ea869b3191285e5d5343105a031bd9edb2ad03acb59234c",
       "retirement": null
     },
     {
@@ -24349,7 +24878,7 @@
     },
     {
       "binding_id": "BIND-CASE-816675A5B0030158-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3"
       ],
@@ -24366,6 +24895,33 @@
         "valid_until": "2027-02-28"
       },
       "semantic_sha256": "e8ceca5b6e5d9121215816b3168e5d813606a9878925c28dd1570c21d4947f67",
+      "retirement": {
+        "retired_at": "2026-08-29",
+        "reason": "Binding received a reviewed test, gate, or dedicated-asset successor.",
+        "replaced_by": [
+          "BIND-CASE-816675A5B0030158-R4"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-816675A5B0030158-R4",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-REPOSITORY-QUALITY-CONSUMERS-REJECT-MALFORMED-TY-B97DE1372281"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-08-29",
+        "valid_until": "2027-02-28"
+      },
+      "semantic_sha256": "e3f8dc204c1595a857e87791483baaf7ebe8fe1cebc7511610cd7000fb9be05a",
       "retirement": null
     },
     {
@@ -27371,7 +27927,7 @@
     },
     {
       "binding_id": "BIND-CASE-919C1D53A3ED5B80-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-VALIDATION-ISOLATION-SOURCE-R3"
       ],
@@ -27388,6 +27944,33 @@
         "valid_until": "2027-02-28"
       },
       "semantic_sha256": "fe5a1a889575f8dcb0010fe003eb542d7b859537a9254840f6a96002704c9035",
+      "retirement": {
+        "retired_at": "2026-08-31",
+        "reason": "The bound test bytes changed to remove locale-dependent error-text matching.",
+        "replaced_by": [
+          "BIND-CASE-919C1D53A3ED5B80-R4"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-919C1D53A3ED5B80-R4",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-VALIDATION-ISOLATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-MISSING-CARGO-TARGET-LEASE-BLOCKS-SUCCESS-RECEIP-02AAA9DE66AB-R4"
+      ],
+      "rule_id": "RULE-REPO-VALIDATION-ISOLATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-08-31",
+        "valid_until": "2027-02-28"
+      },
+      "semantic_sha256": "3c15b46b1790c15cd9940677f5e73b12ea38410ba7bf0c02215c56d2d47af75a",
       "retirement": null
     },
     {
@@ -28907,7 +29490,7 @@
     },
     {
       "binding_id": "BIND-CASE-99CAAA63DECFF0D9-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3"
       ],
@@ -28924,6 +29507,33 @@
         "valid_until": "2027-02-28"
       },
       "semantic_sha256": "20177ef3968c50f8eeadab31439259a5dd41904798329503c085136b623cbc47",
+      "retirement": {
+        "retired_at": "2026-08-29",
+        "reason": "Binding received a reviewed test, gate, or dedicated-asset successor.",
+        "replaced_by": [
+          "BIND-CASE-99CAAA63DECFF0D9-R4"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-99CAAA63DECFF0D9-R4",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-61C6537DDEBC-R4"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-08-29",
+        "valid_until": "2027-02-28"
+      },
+      "semantic_sha256": "b3cd4e17f5860c3ceb754e1f6e67e008c03d2a3fcc5e6f8daa617a03b7420b0b",
       "retirement": null
     },
     {
@@ -42761,7 +43371,7 @@
     },
     {
       "binding_id": "BIND-CASE-EDA96FC9DAD78B1E-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-VALIDATION-ISOLATION-SOURCE-R3"
       ],
@@ -42778,6 +43388,33 @@
         "valid_until": "2027-02-28"
       },
       "semantic_sha256": "eeac5426fa561dfed750637dbc498f19458731e608deab99d299b3828c2bc929",
+      "retirement": {
+        "retired_at": "2026-08-31",
+        "reason": "The bound test bytes changed to remove locale-dependent error-text matching.",
+        "replaced_by": [
+          "BIND-CASE-EDA96FC9DAD78B1E-R4"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-EDA96FC9DAD78B1E-R4",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-VALIDATION-ISOLATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-MISSING-MANAGED-LEASE-BLOCKS-A-SUCCESSFUL-RESULT-E73714B49155-R4"
+      ],
+      "rule_id": "RULE-REPO-VALIDATION-ISOLATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-08-31",
+        "valid_until": "2027-02-28"
+      },
+      "semantic_sha256": "2ffb5390f3a30577cd6a1ccf407866afb381aba2e9437a8bc887faf49bd614d9",
       "retirement": null
     },
     {
@@ -43237,7 +43874,7 @@
     },
     {
       "binding_id": "BIND-CASE-F20B17ACC51F4B40-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3"
       ],
@@ -43254,6 +43891,33 @@
         "valid_until": "2027-02-28"
       },
       "semantic_sha256": "6fd6df7835a4f060a53122bb78e9af87b98e092aa1f8e7b38b012e784f9f0b87",
+      "retirement": {
+        "retired_at": "2026-08-29",
+        "reason": "Binding received the reviewed agent-instruction test and gate successors.",
+        "replaced_by": [
+          "BIND-CASE-F20B17ACC51F4B40-R5"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-F20B17ACC51F4B40-R5",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-E4332C6D1ADD-R5"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-PS-CHECK-AGENT-INSTRUCTIONS-R5",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-08-29",
+        "valid_until": "2027-02-28"
+      },
+      "semantic_sha256": "c5a3b19394062707378d453259669196ba027e11b2bfee20f784823a78695441",
       "retirement": null
     },
     {
@@ -45236,6 +45900,292 @@
         "valid_until": "2027-02-28"
       },
       "semantic_sha256": "304738f9bd65fc3c749bbc5cb6527a08f7c4a5467894f25d84dcc5cf0320aa26",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-AUTHORIZATION",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-AUTHORIZATION-SOURCE"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-AUTHORIZATION",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "61f92f07c9e7ee2c2052efc528388dc20e731c86ff6f3b601e900559c3bfa491",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-DIAGNOSTIC-BOUNDARY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-DIAGNOSTIC-BOUNDARY-SOURCE"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-DIAGNOSTIC-BOUNDARY",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "94292059630e1e926de1c3759e7b38d5fbcc87cd7acfa27b398561575139feef",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-EXECUTION",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-EXECUTION-SOURCE"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-61C6537DDEBC-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-EXECUTION",
+      "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "80e41ff1d06bbb00242aa3e0ea00be00cc70a32b409f54fe8799c53a24b8303a",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-EXPLICIT-CONFIRMATION-R4",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-AUTHORIZATION-SOURCE"
+      ],
+      "test_ids": [
+        "TEST-RUST-CODEX-POWERSHELL-BROKER-PRODUCTION-REJECTS-EXPLI-E36B74A06220"
+      ],
+      "rule_id": "RULE-CODEX-GIT-AUTHORIZATION",
+      "gate_id": "GATE-CARGO-ROOT-WINDOWS-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "e7dec85bd5a9b5792f657f190bfe6580f637d147915837c42f48090fdeb05f47",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-INSTALLATION-SERIALIZATION",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-INSTALLATION-SERIALIZATION-SOURCE"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-INSTALLATION-SERIALIZATION",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "408e0a3348b687e646602909e60dc8ef05a32fff5c16145f661f49cad52dd049",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-INSTALLER-CLEANUP",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-INSTALLER-CLEANUP-SOURCE"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-INSTALLER-CLEANUP",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "5135417c0ab4d5655cde77b2727e3a7b4d17060f75a676207d5a3739c590644b",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-RECOVERY-SOURCE"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-61C6537DDEBC-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-RECOVERY",
+      "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "6bc78c9823efb8f269dfaa1bbdd4d68efa637349eab0e2fb48a160e9db27052a",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-REGISTRATION",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-REGISTRATION-SOURCE"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-REGISTRATION",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "c96f54ed2473eb9460c11492c1d661d89a23d7a5ef9c003f797090fad06640be",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-REQUEST",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-REQUEST-SOURCE"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-61C6537DDEBC-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-REQUEST",
+      "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "c3f27b1e895d7d658637e0a4e0c840465b4986decc23e8635e4cf96642617c47",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-STAGING-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-STAGING-RECOVERY-SOURCE"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-STAGING-RECOVERY",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "a48d51293ebf71479b4da850124616c39dd0e63b6d7ab14519b8e4294a19ec83",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-TRANSACTION",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-TRANSACTION-SOURCE"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-61C6537DDEBC-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-TRANSACTION",
+      "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "f734ba7059558c1a1aa62911052de5814431d592fcd76d695cf17b4ddf97219c",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-UPGRADE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-UPGRADE-SOURCE"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-UPGRADE",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "155419bdce078b579c0e9c2a5868abf6c14715810482fa86a6c6f007f1795294",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-UPGRADE-AUTHORITY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-UPGRADE-AUTHORITY-SOURCE"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-UPGRADE-AUTHORITY",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "59998e070f5c4ef0824f85c2b1454af4779492702f6760a28c0093172a800870",
       "retirement": null
     }
   ]

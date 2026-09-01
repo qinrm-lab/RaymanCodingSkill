@@ -19,6 +19,7 @@
     "deny.toml",
     "docs/AUDIT.md",
     "docs/CLI.md",
+    "docs/CODEX_POWERSHELL_BROKER.md",
     "docs/QUALITY_POLICY.md",
     "docs/RELEASE_CONTRACT.md",
     "docs/TEST_TRACEABILITY.md",

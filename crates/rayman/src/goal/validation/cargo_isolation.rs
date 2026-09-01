@@ -805,10 +805,11 @@ mod tests {
         let error = session.finish_with(Ok(())).unwrap_err();
         assert!(error.to_string().contains("不会写入 receipt"), "{error:#}");
         assert!(
-            format!("{error:#}").contains("已验证释放前消失")
-                || format!("{error:#}").contains("不存在")
-                || format!("{error:#}").contains("系统找不到指定的文件")
-                || format!("{error:#}").contains("The system cannot find the file specified"),
+            error.chain().any(|cause| {
+                cause
+                    .downcast_ref::<std::io::Error>()
+                    .is_some_and(|error| error.raw_os_error() == Some(2))
+            }),
             "{error:#}"
         );
     }

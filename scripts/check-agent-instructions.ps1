@@ -587,8 +587,9 @@ if ($SelfTest) {
         Assert-ManagedBlockIsolation -CodexText $legacyCodex -ClaudeText $claude
     }
     Assert-Throws -Label 'v6 managed block invokes Python bridge' -Action {
-        $pythonCodex = $agents.Replace('save-work-status.exe', 'workspace_activation.py')
-        $pythonClaude = $claude.Replace('save-work-status.exe', 'workspace_activation.py')
+        $runtimePattern = '(?i)save-work-status(?:-[0-9a-f]{8,64})?\.exe'
+        $pythonCodex = [regex]::Replace($agents, $runtimePattern, 'workspace_activation.py')
+        $pythonClaude = [regex]::Replace($claude, $runtimePattern, 'workspace_activation.py')
         Assert-ManagedBlockIsolation -CodexText $pythonCodex -ClaudeText $pythonClaude
     }
     Assert-Throws -Label 'missing client ownership exclusion' -Action {

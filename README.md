@@ -43,30 +43,111 @@ fixtures; `scripts/check-repo.ps1` runs the same self-test.
 
 ## Windows PowerShell identity broker
 
-Use a Codex-managed or permanent Git worktree for every concurrent writing
-chat. Keep normal build, test, Git, and repository PowerShell commands in the
-native `elevated` sandbox. Only a command whose evidence genuinely depends on
-the logged-on Windows identity may use the optional fixed-capability broker:
+Use a Codex-managed or permanent Git worktree for every concurrent writer.
+Keep normal build, tests, read-only Git, and repository PowerShell commands in
+the native `elevated` sandbox. The optional broker delegates only reviewed,
+installed fixed capabilities to the logged-on Windows user. This repository's
+protected `.git` mutations use its single-repository local-commit capability:
 
 ```powershell
 pwsh -NoProfile -File .\scripts\install-codex-powershell-broker.ps1 -SelfTest
 pwsh -NoProfile -File .\scripts\install-codex-powershell-broker.ps1 `
-  -Install -Yes -UserAccount "$env:USERDOMAIN\qinrm"
+  -PrepareInstallLauncher -Yes `
+  -ExpectedGoalId 'goal_0123456789' `
+  -ExpectedSourceFingerprint ('0' * 64)
 
 pwsh -NoProfile -File .\scripts\codex-powershell-broker.ps1 `
   -Operation identity_probe
+
+pwsh -NoProfile -File .\scripts\codex-powershell-broker.ps1 `
+  -Operation git_local_commit_v1 `
+  -CommitMessage 'fix: describe the exact local change' -Yes
 ```
 
-The install requires one narrowly approved administrator run. It atomically
-creates a protected ProgramData tree, binds the current `pwsh.exe`, worker,
-task XML, and fresh `install_id`, and refuses unknown pre-existing state. The
-persistent task itself uses `InteractiveToken` plus `LeastPrivilege`, runs
-hidden, accepts only `identity_probe`, and writes results below a directory the
-sandbox group can read but not modify. Requests are claimed through an
-exclusive no-reparse handle and parsed from the exact hashed bytes. Adding a
-capability is a reviewed source/install change; request JSON can never provide
-command text, a script path, or argv. See
+Fresh install and upgrade first require an independently committed clean source,
+same-fingerprint review and repeat-2 authority, plus one exact human pending
+boundary. Their generated one-shot command is the only supported administrator
+entry; direct fresh `-Install` and direct `-Upgrade` fail closed. An ordinary
+non-administrator `-Install -Yes` against an already installed exact tuple is a
+read-only typed attestation: it uses the fixed `identity_probe`, performs no
+installation write, and returns `already_current=true`. Explicit `-Yes:$false`
+is rejected before any write/destructive dispatch.
+
+The installed standing grant never commits its own still-uncommitted broker or
+installer source. Source review and authority are followed by an independently
+authorized host commit; installation/activation and source-fresh attestation are
+a separate later stage.
+
+The generated install command creates and
+verifies a protected ProgramData tree through a rollback-checked transaction,
+binding the current `pwsh.exe`, worker, task XML, fresh `install_id`, and the
+protected Git capability manifest. The schema-v2 to v3 switch writes a durable,
+hash-bound recovery journal before replacing the receipt/task, so a later run
+can either complete a ready v3 tuple or restore the exact v2 tuple. The result
+root is held against deletion throughout both interrupted recovery and the new
+switch, and can be reconstructed with its exact protected ACL only from a
+validated recovery journal. Receipt
+replacement first proves exact DELETE/share readiness and retries only a
+bounded access/sharing window. A final
+protected ready marker is published only after the worker heartbeat is
+verified; without it the Git capability remains fail-closed. The
+persistent task uses `InteractiveToken` plus `LeastPrivilege` and accepts only
+`identity_probe` and `git_local_commit_v1`. The latter is permanently bound to
+this repository, `main`, a signed/hash-bound direct Git executable, fixed
+`rayman` identity, tracked-only exact snapshots whose directory chain is held
+against rename and rejected on junction/reparse traversal, a single-process Job, local
+HEAD CAS, and forward-only journal recovery. It has no push/fetch/remote,
+arbitrary program, script, repository path, ref, environment, or argv input.
+The user's installation-scoped standing grant means the agent supplies `-Yes`
+without asking again for each commit. Requests remain exclusive-handle claimed
+and exact-byte hashed; results are sandbox-readable but not writable. See
 [docs/CODEX_POWERSHELL_BROKER.md](docs/CODEX_POWERSHELL_BROKER.md).
+
+The final UAC boundary is prepared only after an independent host commit leaves
+the final source clean while the same-fingerprint review and repeated authority
+remain current. The restricted `-PrepareInstallLauncher` and
+`-PrepareUpgradeLauncher` parameter sets publish one ignored, nonce-specific
+authority manifest and return a PowerShell command; they publish no `.cmd`,
+outer script or elevated script. The user starts the fixed PowerShell 7 binary
+as administrator with `-NoProfile -NoLogo` and pastes that command only there;
+the command rejects a profile-loaded host. It holds the lexical runtime,
+installer and manifest entries with no-follow same-handle type, reparse and hash
+checks while the same elevated process
+validates the exact Goal and pending-state bytes, HEAD/status, Git execution
+inputs before any source query, then all 13 source objects. Each source must also be one ordinary `H`
+index entry at stage 0: index mode/OID must equal the exact HEAD tree entry and
+the SHA-1 Git blob computed directly from the already held worktree bytes.
+`assume-unchanged`, `skip-worktree`, sparse/unmerged state and bytes hidden from
+status are therefore rejected. The unprivileged generator uses its local
+Rayman CLI only as a non-authoritative preflight for the expected
+`ask_user/paused_for_user/ready` tuple. The administrator process independently
+parses the held Goal and pending bytes; no workspace-built Rayman executable
+crosses or runs inside that boundary. A 30-minute TTL, durable nonce
+consumption and installation-wide mutex reject stale, replayed or concurrent
+runs. Bound-file opens retry only native sharing/lock violations for a bounded
+window and report the exact path and Win32 code on exhaustion; every other open
+failure remains immediate and fail-closed. Console errors are advisory only;
+formal receipt/journal/ready state is independently checked. The self-test proves real cross-process replacement
+denial, leaf-symlink and ancestor-junction refusal, profile-host rejection,
+release-after-exit, Windows PowerShell rejection, hidden Git index-flag and
+HEAD-blob rejection, retained descendant-directory rename denial, external
+sentinel preservation and crash recovery.
+Every main, crash and recovery SelfTest process-temp case root uses one shared
+compact `b-<token>` constructor. Parent and child modes independently assert the
+deepest hash-versioned worker path stays within a conservative native path
+budget, so Rayman-managed validation leases exercise the same SelfTest without
+depending on a short ambient `TEMP` path.
+Task registration and start use Task Scheduler COM directly; no user-controlled
+`WINDIR` value or path-selected `schtasks.exe` crosses the administrator boundary.
+Before publishing a UAC manifest, the generator also proves that any existing
+protected Git transaction lock is idle. Worker-lock contention exits nonzero
+instead of impersonating a successful task run. A cold task start has a
+60-second bounded heartbeat budget; timeout diagnostics include the last
+heartbeat validation error plus Task Scheduler state and `LastTaskResult`
+without using WMI/CIM or treating diagnostics as installation authority.
+Legacy recovery derives the transaction-lock cleanup binding directly from its
+already-held exclusive stream; it never reopens its own lock and cannot
+self-deadlock on Win32 sharing violation 32.
 
 ## Build
 

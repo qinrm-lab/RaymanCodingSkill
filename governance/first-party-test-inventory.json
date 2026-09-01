@@ -20,11 +20,11 @@
     ]
   },
   "revision": {
-    "generation": 3,
+    "generation": 4,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 2,
-      "sha256": "f807be4aa7273affb9ac782de51975c6837d599ea7f31501784b7c61c8a01752"
+      "generation": 3,
+      "sha256": "96ce4722ab22eaf259cd697b831ad99e9e65cd431419790fee9d48aa2ac8764c"
     }
   },
   "tests": [
@@ -945,13 +945,32 @@
     },
     {
       "test_id": "TEST-PS-SELFTEST-61C6537DDEBC",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/codex-powershell-broker.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/codex-powershell-broker.ps1",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "selector_sha256": "7893f375273a079b0ef27e7296e5a05ecf0ea65d38e69c5b09838aaa4f56d472",
+      "cfg": "all",
+      "owner": "",
+      "retirement": {
+        "retired_at": "2026-08-29",
+        "reason": "Executable selector bytes changed for the reviewed git_local_commit_v1 implementation.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-61C6537DDEBC-R4"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-PS-SELFTEST-61C6537DDEBC-R4",
+      "status": "active",
+      "identity": "powershell::powershell_self_test::scripts/codex-powershell-broker.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/codex-powershell-broker.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "1ac1780ec2b1c1ae76eacedcd97507ef82c389965c25152a522c1d592fc36ff0",
       "cfg": "all",
       "owner": "",
       "retirement": null
@@ -990,13 +1009,32 @@
     },
     {
       "test_id": "TEST-PS-SELFTEST-6BB97440C533",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/install-codex-powershell-broker.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/install-codex-powershell-broker.ps1",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "selector_sha256": "b21a360da4ea896e206030e7bd5f4e4a1264736d8cfe8a86ef4dfdd3acd40b8c",
+      "cfg": "all",
+      "owner": "",
+      "retirement": {
+        "retired_at": "2026-08-29",
+        "reason": "Executable selector bytes changed for the reviewed git_local_commit_v1 implementation.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-6BB97440C533-R4"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-PS-SELFTEST-6BB97440C533-R4",
+      "status": "active",
+      "identity": "powershell::powershell_self_test::scripts/install-codex-powershell-broker.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/install-codex-powershell-broker.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "f8907b643a1678a85e515426d9c538cbd0f7abd5e90262613f4468fb33144eaa",
       "cfg": "all",
       "owner": "",
       "retirement": null
@@ -1099,13 +1137,32 @@
     },
     {
       "test_id": "TEST-PS-SELFTEST-E4332C6D1ADD-R3",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/check-agent-instructions.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/check-agent-instructions.ps1",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "selector_sha256": "8afc491a83f8085d89b0842484e78be0a217ccba0db219ba6d6583c0b9661e71",
+      "cfg": "all",
+      "owner": "",
+      "retirement": {
+        "retired_at": "2026-08-29",
+        "reason": "The v6 runtime-negative fixture now mutates stable and versioned Rust runtime names.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-E4332C6D1ADD-R5"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-PS-SELFTEST-E4332C6D1ADD-R5",
+      "status": "active",
+      "identity": "powershell::powershell_self_test::scripts/check-agent-instructions.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/check-agent-instructions.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "af59a226ef4636c8c56f944967af2862aba9b6a035b2e5563055bfb0d5eb85ca",
       "cfg": "all",
       "owner": "",
       "retirement": null
@@ -1826,13 +1883,32 @@
     },
     {
       "test_id": "TEST-RUST-AUDIT-ORCHESTRATION-HAS-NO-ENVIRONMENT-BYPASS-OR-565B2A9F1C31-R3",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/tests/audit_script.rs::audit_orchestration_has_no_environment_bypass_or_implicit_provisioning",
       "role": "root_cargo",
       "path": "crates/rayman/tests/audit_script.rs",
       "selector_kind": "rust_test_fn",
       "selector": "audit_orchestration_has_no_environment_bypass_or_implicit_provisioning",
       "selector_sha256": "7de63d35f3c61a4dee4f4b5bc8cf4a5b1d7d52649600600f32e515a4277bc08b",
+      "cfg": "all",
+      "owner": null,
+      "retirement": {
+        "retired_at": "2026-08-29",
+        "reason": "Executable selector bytes changed for the reviewed git_local_commit_v1 implementation.",
+        "replaced_by": [
+          "TEST-RUST-AUDIT-ORCHESTRATION-HAS-NO-ENVIRONMENT-BYPASS-OR-565B2A9F1C31-R4"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-AUDIT-ORCHESTRATION-HAS-NO-ENVIRONMENT-BYPASS-OR-565B2A9F1C31-R4",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/tests/audit_script.rs::audit_orchestration_has_no_environment_bypass_or_implicit_provisioning",
+      "role": "root_cargo",
+      "path": "crates/rayman/tests/audit_script.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "audit_orchestration_has_no_environment_bypass_or_implicit_provisioning",
+      "selector_sha256": "6ed7c41d246738a5e6326748d7f20cb677d897580e9e1387958d012ffb5be3da",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -2966,8 +3042,34 @@
       "retirement": null
     },
     {
-      "test_id": "TEST-RUST-CODEX-POWERSHELL-BROKER-SELF-TESTS-EXECUTE-THE-T-0A1EA798D244",
+      "test_id": "TEST-RUST-CODEX-BROKER-SHARED-RUNSPACE-R4",
       "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/tests/audit_script.rs::codex_powershell_broker_self_tests_execute_the_task_xml_contract",
+      "role": "root_cargo",
+      "path": "crates/rayman/tests/audit_script.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "codex_powershell_broker_self_tests_execute_the_task_xml_contract",
+      "selector_sha256": "3bc1e4463b0273c4be620b17b7179fd4892805898d5e8b9c3ce7654a960aa0fb",
+      "cfg": "windows",
+      "owner": null,
+      "retirement": null
+    },
+    {
+      "test_id": "TEST-RUST-CODEX-POWERSHELL-BROKER-PRODUCTION-REJECTS-EXPLI-E36B74A06220",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/tests/audit_script.rs::codex_powershell_broker_production_rejects_explicit_false_confirmation",
+      "role": "root_cargo",
+      "path": "crates/rayman/tests/audit_script.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "codex_powershell_broker_production_rejects_explicit_false_confirmation",
+      "selector_sha256": "db1ff73f03f4f8179ddbbea216264d66e04f599ee7a1caa13b3309c978d23e35",
+      "cfg": "windows",
+      "owner": null,
+      "retirement": null
+    },
+    {
+      "test_id": "TEST-RUST-CODEX-POWERSHELL-BROKER-SELF-TESTS-EXECUTE-THE-T-0A1EA798D244",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/tests/audit_script.rs::codex_powershell_broker_self_tests_execute_the_task_xml_contract",
       "role": "root_cargo",
       "path": "crates/rayman/tests/audit_script.rs",
@@ -2976,7 +3078,13 @@
       "selector_sha256": "d8bbf4314e63d24d96fda3130518cebe051a76970daae8bb6b6b7ee6ff8bb288",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-08-29",
+        "reason": "shared-runspace regression extended selector bytes",
+        "replaced_by": [
+          "TEST-RUST-CODEX-BROKER-SHARED-RUNSPACE-R4"
+        ]
+      }
     },
     {
       "test_id": "TEST-RUST-CODEX-STOP-HOOK-BLOCKS-ACTIVE-GOAL-AND-INSTALLS-4CF1411C3E4F",
@@ -6655,13 +6763,32 @@
     },
     {
       "test_id": "TEST-RUST-MISSING-CARGO-TARGET-LEASE-BLOCKS-SUCCESS-RECEIP-02AAA9DE66AB",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/goal/validation/cargo_isolation.rs::missing_cargo_target_lease_blocks_success_receipt",
       "role": "root_cargo",
       "path": "crates/rayman/src/goal/validation/cargo_isolation.rs",
       "selector_kind": "rust_test_fn",
       "selector": "missing_cargo_target_lease_blocks_success_receipt",
       "selector_sha256": "e4aa0a16a3188c207d921f99c2c5114eee7656c8d584ba225301e8e4f3c86faf",
+      "cfg": "all",
+      "owner": null,
+      "retirement": {
+        "retired_at": "2026-08-31",
+        "reason": "The locale-dependent missing-file assertion was replaced by a structured OS error-code assertion.",
+        "replaced_by": [
+          "TEST-RUST-MISSING-CARGO-TARGET-LEASE-BLOCKS-SUCCESS-RECEIP-02AAA9DE66AB-R4"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-MISSING-CARGO-TARGET-LEASE-BLOCKS-SUCCESS-RECEIP-02AAA9DE66AB-R4",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/goal/validation/cargo_isolation.rs::missing_cargo_target_lease_blocks_success_receipt",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/goal/validation/cargo_isolation.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "missing_cargo_target_lease_blocks_success_receipt",
+      "selector_sha256": "df21abbcd1455a7de2072882f78d9e4d09631f37d687b46d35b0b7b1f3731570",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -6681,13 +6808,32 @@
     },
     {
       "test_id": "TEST-RUST-MISSING-MANAGED-LEASE-BLOCKS-A-SUCCESSFUL-RESULT-E73714B49155",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/goal/validation/pytest_isolation.rs::missing_managed_lease_blocks_a_successful_result",
       "role": "root_cargo",
       "path": "crates/rayman/src/goal/validation/pytest_isolation.rs",
       "selector_kind": "rust_test_fn",
       "selector": "missing_managed_lease_blocks_a_successful_result",
       "selector_sha256": "cef02e101a716504925787afbc65ef081ed395674cfe1ed7e0dfcdb85013b378",
+      "cfg": "all",
+      "owner": null,
+      "retirement": {
+        "retired_at": "2026-08-31",
+        "reason": "The locale-dependent missing-file assertion was replaced by a structured OS error-code assertion.",
+        "replaced_by": [
+          "TEST-RUST-MISSING-MANAGED-LEASE-BLOCKS-A-SUCCESSFUL-RESULT-E73714B49155-R4"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-MISSING-MANAGED-LEASE-BLOCKS-A-SUCCESSFUL-RESULT-E73714B49155-R4",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/goal/validation/pytest_isolation.rs::missing_managed_lease_blocks_a_successful_result",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/goal/validation/pytest_isolation.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "missing_managed_lease_blocks_a_successful_result",
+      "selector_sha256": "57afb57dd0e45c8c23576a33e276fa4459d8bad685b3f22217afdec54ac1891b",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -12396,18 +12542,33 @@
     },
     {
       "asset_id": "ASSET-FILE-R3-9184A69725FE",
-      "status": "active",
+      "status": "retired",
       "path": "crates/rayman/tests/audit_script.rs",
       "sha256": "c12a37541d4ee34de5bc7d1cf432d22924f6bf78e9504446fc544eb391de16a8",
       "kind": "dedicated_file",
       "cleanup_policy": "delete_on_last_reference",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-08-29",
+        "reason": "Dedicated audit-script asset bytes changed for the reviewed broker contract.",
+        "replaced_by": [
+          "ASSET-FILE-R4-9BDB5C4AB657"
+        ]
+      }
     },
     {
       "asset_id": "ASSET-FILE-R3-ABDF95A0F020",
       "status": "active",
       "path": "crates/rayman/tests/cli.rs",
       "sha256": "9a7b9bfd9547dc272fe8b3081ecb98ba250867cc252bf157c4fc06e6197909c2",
+      "kind": "dedicated_file",
+      "cleanup_policy": "delete_on_last_reference",
+      "retirement": null
+    },
+    {
+      "asset_id": "ASSET-FILE-R4-9BDB5C4AB657",
+      "status": "active",
+      "path": "crates/rayman/tests/audit_script.rs",
+      "sha256": "e0c662cb87b1672d2ad568abb003b30d04d6c5441d64b93dce7ae03c928aa4c3",
       "kind": "dedicated_file",
       "cleanup_policy": "delete_on_last_reference",
       "retirement": null
