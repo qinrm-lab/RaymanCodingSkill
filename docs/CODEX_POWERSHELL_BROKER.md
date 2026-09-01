@@ -93,7 +93,12 @@ fail-closed and requires a reviewed reinstall or upgrade.
 
 The caller supplies only a one-line 1–200 character NFC commit message, the
 expected 40-hex HEAD, the installed manifest hash, and a strictly sorted exact
-list of tracked modifications/deletions. Each entry binds the prior index
+list of tracked modifications/deletions. The sandbox-side caller treats the
+registered `.git` directory as read-only: fixed `ls-files --stage` output must
+be a complete stage-0 mode/OID bijection with fixed recursive `ls-tree HEAD`
+output. It never runs `write-tree` against the live index, creates
+`.git/index.lock`, stages files, writes objects, or mutates a ref; only the
+logged-on-user worker performs the alternate-index transaction below. Each entry binds the prior index
 mode/blob and the post-worktree raw SHA-256 plus the filtered Git blob OID that
 the protected attributes would place in the index, or explicit null
 after-hashes for a deletion. The filtered OID is derived from the exact held
@@ -295,7 +300,8 @@ pwsh -NoProfile -File .\scripts\install-codex-powershell-broker.ps1 -SelfTest
 ```
 
 The broker self-test uses an isolated temporary Git repository. It covers a
-real CRLF-to-filtered-index commit, exact output, absent `info/attributes`,
+read-only client snapshot while `.git` file creation is denied, a real
+CRLF-to-filtered-index commit, exact output, absent `info/attributes`,
 direct-ref enforcement, arbitrary-field rejection, duplicate JSON keys,
 untracked and pre-staged refusal, held-ancestor rename denial, junction-backed
 tracked-file refusal, standard `index.lock` staging, failure before

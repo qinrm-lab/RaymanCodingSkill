@@ -20,11 +20,11 @@
     ]
   },
   "revision": {
-    "generation": 4,
+    "generation": 5,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 3,
-      "sha256": "96ce4722ab22eaf259cd697b831ad99e9e65cd431419790fee9d48aa2ac8764c"
+      "generation": 4,
+      "sha256": "a477be30b052c95079e9ab35b7b93b54a75d188c946c9ee3b0642d605d06854b"
     }
   },
   "tests": [
@@ -964,13 +964,32 @@
     },
     {
       "test_id": "TEST-PS-SELFTEST-61C6537DDEBC-R4",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/codex-powershell-broker.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/codex-powershell-broker.ps1",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "selector_sha256": "1ac1780ec2b1c1ae76eacedcd97507ef82c389965c25152a522c1d592fc36ff0",
+      "cfg": "all",
+      "owner": "",
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Client snapshot became strictly read-only while preserving the reviewed worker transaction.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-61C6537DDEBC-R5"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-PS-SELFTEST-61C6537DDEBC-R5",
+      "status": "active",
+      "identity": "powershell::powershell_self_test::scripts/codex-powershell-broker.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/codex-powershell-broker.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "60597f8c0a093c3ad9e66aaf5b4f8ec96a25751b55413618c41167e6f8e50fc2",
       "cfg": "all",
       "owner": "",
       "retirement": null
@@ -1902,13 +1921,32 @@
     },
     {
       "test_id": "TEST-RUST-AUDIT-ORCHESTRATION-HAS-NO-ENVIRONMENT-BYPASS-OR-565B2A9F1C31-R4",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/tests/audit_script.rs::audit_orchestration_has_no_environment_bypass_or_implicit_provisioning",
       "role": "root_cargo",
       "path": "crates/rayman/tests/audit_script.rs",
       "selector_kind": "rust_test_fn",
       "selector": "audit_orchestration_has_no_environment_bypass_or_implicit_provisioning",
       "selector_sha256": "6ed7c41d246738a5e6326748d7f20cb677d897580e9e1387958d012ffb5be3da",
+      "cfg": "all",
+      "owner": null,
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Static broker-contract guard now proves the client snapshot cannot call write-tree.",
+        "replaced_by": [
+          "TEST-RUST-AUDIT-ORCHESTRATION-HAS-NO-ENVIRONMENT-BYPASS-OR-565B2A9F1C31-R5"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-AUDIT-ORCHESTRATION-HAS-NO-ENVIRONMENT-BYPASS-OR-565B2A9F1C31-R5",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/tests/audit_script.rs::audit_orchestration_has_no_environment_bypass_or_implicit_provisioning",
+      "role": "root_cargo",
+      "path": "crates/rayman/tests/audit_script.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "audit_orchestration_has_no_environment_bypass_or_implicit_provisioning",
+      "selector_sha256": "592ddb28cdfa81a07c2808ef94d4f200f43bac91229443ecd17c6c2539ad9aa4",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -12566,9 +12604,24 @@
     },
     {
       "asset_id": "ASSET-FILE-R4-9BDB5C4AB657",
-      "status": "active",
+      "status": "retired",
       "path": "crates/rayman/tests/audit_script.rs",
       "sha256": "e0c662cb87b1672d2ad568abb003b30d04d6c5441d64b93dce7ae03c928aa4c3",
+      "kind": "dedicated_file",
+      "cleanup_policy": "delete_on_last_reference",
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Dedicated audit-script bytes changed for the reviewed read-only client snapshot contract.",
+        "replaced_by": [
+          "ASSET-FILE-R4-9BDB5C4AB657-R5"
+        ]
+      }
+    },
+    {
+      "asset_id": "ASSET-FILE-R4-9BDB5C4AB657-R5",
+      "status": "active",
+      "path": "crates/rayman/tests/audit_script.rs",
+      "sha256": "e60659971cc8ed61ebedf3373c97647bec93d6e63db9197551546ff7aa8eda7d",
       "kind": "dedicated_file",
       "cleanup_policy": "delete_on_last_reference",
       "retirement": null

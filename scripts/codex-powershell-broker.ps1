@@ -2079,7 +2079,7 @@ function Invoke-FixedGit {
         [Parameter(Mandatory = $true)]$Manifest,
         [Parameter(Mandatory = $true)]$Paths,
         [Parameter(Mandatory = $true)]
-        [ValidateSet('rev-parse-head', 'rev-parse-head-tree', 'symbolic-ref',
+        [ValidateSet('rev-parse-head', 'rev-parse-head-tree', 'ls-tree-head', 'symbolic-ref',
             'allowed-ref-symbolic',
             'write-tree', 'status', 'ls-files', 'add-update', 'hash-commit',
             'hash-filtered-blob',
@@ -2106,6 +2106,7 @@ function Invoke-FixedGit {
     $specific = switch ($FixedCommand) {
         'rev-parse-head' { @('rev-parse', '--verify', 'HEAD') }
         'rev-parse-head-tree' { @('rev-parse', '--verify', 'HEAD^{tree}') }
+        'ls-tree-head' { @('ls-tree', '-r', '-z', '--full-tree', 'HEAD') }
         'symbolic-ref' { @('symbolic-ref', '-q', 'HEAD') }
         'allowed-ref-symbolic' {
             @('symbolic-ref', '-q', [string]$Manifest.allowed_ref)
@@ -2299,15 +2300,10 @@ function Get-GitTrackedChangeSnapshot {
         -FixedCommand rev-parse-head).StandardOutput.Trim()
     $headTree = (Invoke-FixedGit -Manifest $Manifest -Paths $Paths `
         -FixedCommand rev-parse-head-tree).StandardOutput.Trim()
-    $indexTree = (Invoke-FixedGit -Manifest $Manifest -Paths $Paths `
-        -FixedCommand write-tree).StandardOutput.Trim()
-    foreach ($oid in @($head, $headTree, $indexTree)) {
+    foreach ($oid in @($head, $headTree)) {
         if ($oid -notmatch '^[0-9a-f]{40}$') {
             throw 'git_local_commit_v1 received a non-SHA1 object identity.'
         }
-    }
-    if ($indexTree -cne $headTree) {
-        throw 'git_local_commit_v1 rejects pre-staged index content.'
     }
     $lsFilesResult = Invoke-FixedGit -Manifest $Manifest -Paths $Paths `
         -FixedCommand ls-files
@@ -2330,6 +2326,39 @@ function Get-GitTrackedChangeSnapshot {
         }
         $tracked[$path] = [pscustomobject]@{ Mode = $mode; Oid = $oid }
     }
+    $headEntriesResult = Invoke-FixedGit -Manifest $Manifest -Paths $Paths `
+        -FixedCommand ls-tree-head
+    $headEntries = @{}
+    foreach ($record in @($headEntriesResult.StandardOutput.Split(
+        [char]0, [StringSplitOptions]::RemoveEmptyEntries
+    ))) {
+        if ($record -notmatch '^([0-7]{6}) blob ([0-9a-f]{40})\t(.+)$') {
+            throw 'git_local_commit_v1 rejects non-blob or malformed HEAD tree entries.'
+        }
+        $mode = [string]$Matches[1]
+        $oid = [string]$Matches[2]
+        $path = Assert-SafeGitRelativePath -Path ([string]$Matches[3])
+        if (($mode -cne '100644' -and $mode -cne '100755') -or
+            $headEntries.ContainsKey($path) -or $path -ieq '.gitmodules') {
+            throw "git_local_commit_v1 rejects unsupported or duplicate HEAD tree entries: $path"
+        }
+        $headEntries[$path] = [pscustomobject]@{ Mode = $mode; Oid = $oid }
+    }
+    if ($headEntries.Count -ne $tracked.Count) {
+        throw 'git_local_commit_v1 rejects pre-staged index content: index and HEAD path counts differ.'
+    }
+    foreach ($path in $tracked.Keys) {
+        if (-not $headEntries.ContainsKey($path) -or
+            [string]$headEntries[$path].Mode -cne [string]$tracked[$path].Mode -or
+            [string]$headEntries[$path].Oid -cne [string]$tracked[$path].Oid) {
+            throw "git_local_commit_v1 rejects pre-staged index content: index and HEAD entry differ: $path"
+        }
+    }
+    # The complete stage-0 index map is byte-for-byte equivalent to HEAD's
+    # recursive tree map, so its tree identity is the already verified HEAD
+    # tree. The sandbox-side client never runs write-tree against the live
+    # index; only the logged-on-user worker writes its alternate index.
+    $indexTree = $headTree
     $statusResult = Invoke-FixedGit -Manifest $Manifest -Paths $Paths `
         -FixedCommand status
     $statusRecords = @($statusResult.StandardOutput.Split(
@@ -4301,8 +4330,35 @@ function Invoke-SelfTest {
         if ($LASTEXITCODE -ne 0) {
             throw 'git_local_commit_v1 symbolic-ref self-test target cleanup failed.'
         }
-        $gitPayload = New-GitCommitPayload -Paths $paths -Receipt $receipt `
-            -Message 'test: fixed local commit'
+        $gitPayload = $null
+        $gitAcl = Get-Acl -LiteralPath $fixtureGitDir
+        $gitAclSddl = $gitAcl.GetSecurityDescriptorSddlForm(
+            [Security.AccessControl.AccessControlSections]::All
+        )
+        $currentSid = [Security.Principal.WindowsIdentity]::GetCurrent().User
+        $denyCreate = [Security.AccessControl.FileSystemAccessRule]::new(
+            $currentSid,
+            [Security.AccessControl.FileSystemRights]::CreateFiles,
+            [Security.AccessControl.InheritanceFlags]::None,
+            [Security.AccessControl.PropagationFlags]::None,
+            [Security.AccessControl.AccessControlType]::Deny
+        )
+        [void]$gitAcl.AddAccessRule($denyCreate)
+        Set-Acl -LiteralPath $fixtureGitDir -AclObject $gitAcl
+        try {
+            $gitPayload = New-GitCommitPayload -Paths $paths -Receipt $receipt `
+                -Message 'test: fixed local commit'
+            if (Test-Path -LiteralPath (Join-Path $fixtureGitDir 'index.lock')) {
+                throw 'git_local_commit_v1 client snapshot created index.lock under a read-only Git directory.'
+            }
+        } finally {
+            $restoreGitAcl = [Security.AccessControl.DirectorySecurity]::new()
+            $restoreGitAcl.SetSecurityDescriptorSddlForm($gitAclSddl)
+            Set-Acl -LiteralPath $fixtureGitDir -AclObject $restoreGitAcl
+        }
+        if ($null -eq $gitPayload) {
+            throw 'git_local_commit_v1 read-only client snapshot returned no payload.'
+        }
         $rawCrlfOid = Get-GitBlobOid -Bytes (
             [Text.UTF8Encoding]::new($false).GetBytes("commit-one`r`n")
         )

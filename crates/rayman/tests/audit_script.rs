@@ -644,6 +644,19 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
     assert!(codex_broker.contains("core.hooksPath="));
     assert!(codex_broker.contains("git_local_commit_v1 rejects an active repository hook"));
     assert!(codex_broker.contains("'add-update' { @('add', '-u', '--', ':/') }"));
+    assert!(
+        codex_broker.contains("'ls-tree-head' { @('ls-tree', '-r', '-z', '--full-tree', 'HEAD') }")
+    );
+    let client_snapshot = codex_broker
+        .split("function Get-GitTrackedChangeSnapshot")
+        .nth(1)
+        .and_then(|tail| tail.split("function Close-GitSnapshotHandles").next())
+        .expect("broker client snapshot function must be bounded");
+    assert!(client_snapshot.contains("-FixedCommand ls-tree-head"));
+    assert!(!client_snapshot.contains("-FixedCommand write-tree"));
+    assert!(
+        codex_broker.contains("client snapshot created index.lock under a read-only Git directory")
+    );
     assert!(codex_broker.contains("'hash-filtered-blob'"));
     assert!(codex_broker.contains("@('-C', [string]$Manifest.repository_root, 'hash-object',"));
     assert!(codex_broker.contains("('--path=' + $filteredPath), '--stdin')"));

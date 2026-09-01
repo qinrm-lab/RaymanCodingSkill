@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 4,
+    "generation": 5,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 3,
-      "sha256": "f90411693175e5daf3db3b62d574bc89a46c5ccd0154926982d1bc386351976f"
+      "generation": 4,
+      "sha256": "77c9748b6c6be30288247b4c787a30ad9145d1f61f5cb9928f027d909aaa14b8"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "a477be30b052c95079e9ab35b7b93b54a75d188c946c9ee3b0642d605d06854b"
+    "sha256": "9c088a6d8cf90348c485006260bda27f5ba78aa0c5dffed9abee6478f40a8c6e"
   },
   "sources": [
     {
@@ -72,11 +72,27 @@
     },
     {
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
-      "status": "active",
+      "status": "retired",
       "kind": "internal_contract",
       "title": "Codex fixed local Git commit capability contract",
       "path": "docs/CODEX_POWERSHELL_BROKER.md",
       "sha256": "7fb28dac1c05ad7135ab371946eddafe79cf91e897fc2f4ce26919d14913b353",
+      "valid_until": "2027-09-01",
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "The caller snapshot contract now explicitly forbids live-index write-tree and index.lock creation.",
+        "replaced_by": [
+          "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5"
+        ]
+      }
+    },
+    {
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
+      "status": "active",
+      "kind": "internal_contract",
+      "title": "Codex fixed local Git commit capability contract",
+      "path": "docs/CODEX_POWERSHELL_BROKER.md",
+      "sha256": "6aa796e003befff6cb5ad985effb17e99a4c8fb1544f88152cb2ae73b9534875",
       "valid_until": "2027-09-01",
       "retirement": null
     },
@@ -1084,11 +1100,33 @@
     },
     {
       "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER-R4",
-      "status": "active",
+      "status": "retired",
       "kind": "powershell_self_test",
       "title": "PowerShell self-test: scripts/codex-powershell-broker.ps1",
       "path": "scripts/codex-powershell-broker.ps1",
       "sha256": "1ac1780ec2b1c1ae76eacedcd97507ef82c389965c25152a522c1d592fc36ff0",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "target_matrix": [
+        "windows",
+        "linux",
+        "other_unix"
+      ],
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Broker SelfTest bytes changed for the read-only client snapshot regression.",
+        "replaced_by": [
+          "GATE-PS-CODEX-POWERSHELL-BROKER-R5"
+        ]
+      }
+    },
+    {
+      "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER-R5",
+      "status": "active",
+      "kind": "powershell_self_test",
+      "title": "PowerShell self-test: scripts/codex-powershell-broker.ps1",
+      "path": "scripts/codex-powershell-broker.ps1",
+      "sha256": "60597f8c0a093c3ad9e66aaf5b4f8ec96a25751b55413618c41167e6f8e50fc2",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "target_matrix": [
@@ -1306,8 +1344,26 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-AUTHORIZATION-SOURCE",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "rule_id": "RULE-CODEX-GIT-AUTHORIZATION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Reviewed source bytes advanced to the read-only client snapshot contract.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-AUTHORIZATION-SOURCE-R5"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-AUTHORIZATION-SOURCE-R5",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
       "rule_id": "RULE-CODEX-GIT-AUTHORIZATION",
       "relation": "defines",
       "review": {
@@ -1318,8 +1374,26 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-DIAGNOSTIC-BOUNDARY-SOURCE",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "rule_id": "RULE-CODEX-GIT-DIAGNOSTIC-BOUNDARY",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Reviewed source bytes advanced to the read-only client snapshot contract.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-DIAGNOSTIC-BOUNDARY-SOURCE-R5"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-DIAGNOSTIC-BOUNDARY-SOURCE-R5",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
       "rule_id": "RULE-CODEX-GIT-DIAGNOSTIC-BOUNDARY",
       "relation": "defines",
       "review": {
@@ -1330,8 +1404,26 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-EXECUTION-SOURCE",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "rule_id": "RULE-CODEX-GIT-EXECUTION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Reviewed source bytes advanced to the read-only client snapshot contract.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-EXECUTION-SOURCE-R5"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-EXECUTION-SOURCE-R5",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
       "rule_id": "RULE-CODEX-GIT-EXECUTION",
       "relation": "defines",
       "review": {
@@ -1342,8 +1434,26 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-INSTALLATION-SERIALIZATION-SOURCE",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "rule_id": "RULE-CODEX-GIT-INSTALLATION-SERIALIZATION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Reviewed source bytes advanced to the read-only client snapshot contract.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-INSTALLATION-SERIALIZATION-SOURCE-R5"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-INSTALLATION-SERIALIZATION-SOURCE-R5",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
       "rule_id": "RULE-CODEX-GIT-INSTALLATION-SERIALIZATION",
       "relation": "defines",
       "review": {
@@ -1354,8 +1464,26 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-INSTALLER-CLEANUP-SOURCE",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "rule_id": "RULE-CODEX-GIT-INSTALLER-CLEANUP",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Reviewed source bytes advanced to the read-only client snapshot contract.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-INSTALLER-CLEANUP-SOURCE-R5"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-INSTALLER-CLEANUP-SOURCE-R5",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
       "rule_id": "RULE-CODEX-GIT-INSTALLER-CLEANUP",
       "relation": "defines",
       "review": {
@@ -1366,8 +1494,26 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-RECOVERY-SOURCE",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "rule_id": "RULE-CODEX-GIT-RECOVERY",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Reviewed source bytes advanced to the read-only client snapshot contract.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-RECOVERY-SOURCE-R5"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-RECOVERY-SOURCE-R5",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
       "rule_id": "RULE-CODEX-GIT-RECOVERY",
       "relation": "defines",
       "review": {
@@ -1378,8 +1524,26 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-REGISTRATION-SOURCE",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "rule_id": "RULE-CODEX-GIT-REGISTRATION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Reviewed source bytes advanced to the read-only client snapshot contract.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-REGISTRATION-SOURCE-R5"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-REGISTRATION-SOURCE-R5",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
       "rule_id": "RULE-CODEX-GIT-REGISTRATION",
       "relation": "defines",
       "review": {
@@ -1390,8 +1554,26 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-REQUEST-SOURCE",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "rule_id": "RULE-CODEX-GIT-REQUEST",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Reviewed source bytes advanced to the read-only client snapshot contract.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-REQUEST-SOURCE-R5"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-REQUEST-SOURCE-R5",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
       "rule_id": "RULE-CODEX-GIT-REQUEST",
       "relation": "defines",
       "review": {
@@ -1402,8 +1584,26 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-STAGING-RECOVERY-SOURCE",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "rule_id": "RULE-CODEX-GIT-STAGING-RECOVERY",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Reviewed source bytes advanced to the read-only client snapshot contract.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-STAGING-RECOVERY-SOURCE-R5"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-STAGING-RECOVERY-SOURCE-R5",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
       "rule_id": "RULE-CODEX-GIT-STAGING-RECOVERY",
       "relation": "defines",
       "review": {
@@ -1414,8 +1614,26 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-TRANSACTION-SOURCE",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "rule_id": "RULE-CODEX-GIT-TRANSACTION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Reviewed source bytes advanced to the read-only client snapshot contract.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-TRANSACTION-SOURCE-R5"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-TRANSACTION-SOURCE-R5",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
       "rule_id": "RULE-CODEX-GIT-TRANSACTION",
       "relation": "defines",
       "review": {
@@ -1426,8 +1644,26 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-UPGRADE-AUTHORITY-SOURCE",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "rule_id": "RULE-CODEX-GIT-UPGRADE-AUTHORITY",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Reviewed source bytes advanced to the read-only client snapshot contract.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-UPGRADE-AUTHORITY-SOURCE-R5"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-UPGRADE-AUTHORITY-SOURCE-R5",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
       "rule_id": "RULE-CODEX-GIT-UPGRADE-AUTHORITY",
       "relation": "defines",
       "review": {
@@ -1438,8 +1674,26 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-UPGRADE-SOURCE",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT",
+      "rule_id": "RULE-CODEX-GIT-UPGRADE",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Reviewed source bytes advanced to the read-only client snapshot contract.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-UPGRADE-SOURCE-R5"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-UPGRADE-SOURCE-R5",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
       "rule_id": "RULE-CODEX-GIT-UPGRADE",
       "relation": "defines",
       "review": {
@@ -11363,7 +11617,7 @@
     },
     {
       "binding_id": "BIND-CASE-3570B72D3DEC401E-R4",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3"
       ],
@@ -11380,6 +11634,33 @@
         "valid_until": "2027-02-28"
       },
       "semantic_sha256": "55bab35a90cb1d09342942a49e02367c1246f07cf0924e76034399617decf814",
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Source, gate, executable selector, or dedicated audit asset advanced for the read-only client snapshot repair.",
+        "replaced_by": [
+          "BIND-CASE-3570B72D3DEC401E-R5"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-3570B72D3DEC401E-R5",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-PUBLIC-ARCHITECTURE-AND-CI-COVERAGE-CONTRACTS-AV-199B06D66A6C"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "0b14ccf347db4c00bbf344355eac19e9a07bf7c2cb04a444c1434a0224732f81",
       "retirement": null
     },
     {
@@ -16692,7 +16973,7 @@
     },
     {
       "binding_id": "BIND-CASE-502F7D5679217AC1-R4",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3"
       ],
@@ -16709,6 +16990,33 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "6dd9e573ceae30e2d6b6bad03fa305ed79252180bd44b8bf43d14e050ab4e7c8",
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Source, gate, executable selector, or dedicated audit asset advanced for the read-only client snapshot repair.",
+        "replaced_by": [
+          "BIND-CASE-502F7D5679217AC1-R5"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-502F7D5679217AC1-R5",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-AUDIT-ORCHESTRATION-HAS-NO-ENVIRONMENT-BYPASS-OR-565B2A9F1C31-R5"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "23020badd45921d93c1d82ea5f01dbc17c4e51f7e460159bb9fed51dc7b47449",
       "retirement": null
     },
     {
@@ -19311,7 +19619,7 @@
     },
     {
       "binding_id": "BIND-CASE-62342DFF31E86D67-R4",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-TRACE-ACTIVE-SOURCE-R3"
       ],
@@ -19329,6 +19637,34 @@
         "valid_until": "2027-02-28"
       },
       "semantic_sha256": "cb0c0fbaf519a23c94b94fc71faae7ad7d5c82c603bb501ac843e26fda30af6c",
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Source, gate, executable selector, or dedicated audit asset advanced for the read-only client snapshot repair.",
+        "replaced_by": [
+          "BIND-CASE-62342DFF31E86D67-R5"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-62342DFF31E86D67-R5",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-TRACE-ACTIVE-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-TEST-TRACEABILITY-CHECKER-EXECUTES-MUTATION-SELF-97AF5E15E036"
+      ],
+      "rule_id": "RULE-TRACE-ACTIVE-GRAPH-R3",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "behavioral_positive",
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "8e7bc3cc26b8987e2ad7ab6d368689ddaf052d6d10399e3dd7e0e0f17b24d59a",
       "retirement": null
     },
     {
@@ -23485,7 +23821,7 @@
     },
     {
       "binding_id": "BIND-CASE-77A7BAC9FBF1EF1B-R4",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3"
       ],
@@ -23502,6 +23838,33 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "5291dd7d1d3fe724e1b63ac872a181b7e589ab3264c2da80d78660acfa146ea6",
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Source, gate, executable selector, or dedicated audit asset advanced for the read-only client snapshot repair.",
+        "replaced_by": [
+          "BIND-CASE-77A7BAC9FBF1EF1B-R5"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-77A7BAC9FBF1EF1B-R5",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-CODEX-BROKER-SHARED-RUNSPACE-R4"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-CARGO-ROOT-WINDOWS-R4",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "ee31d2b76407caddee1e7b74f2c1640830dd646915012d30f03598d8581abafb",
       "retirement": null
     },
     {
@@ -24254,7 +24617,7 @@
     },
     {
       "binding_id": "BIND-CASE-7DF69D0B8254CB4A-R4",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3"
       ],
@@ -24271,6 +24634,33 @@
         "valid_until": "2027-02-28"
       },
       "semantic_sha256": "b3fefdec7ece03dc7ea869b3191285e5d5343105a031bd9edb2ad03acb59234c",
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Source, gate, executable selector, or dedicated audit asset advanced for the read-only client snapshot repair.",
+        "replaced_by": [
+          "BIND-CASE-7DF69D0B8254CB4A-R5"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-7DF69D0B8254CB4A-R5",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-REPOSITORY-QUALITY-PROVIDER-EMITS-THE-EXACT-VERS-BFA31317DEB1"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "bd658a3bf7d91090f3bd656779c506fe51729688263ab0024885e661190a96cd",
       "retirement": null
     },
     {
@@ -24905,7 +25295,7 @@
     },
     {
       "binding_id": "BIND-CASE-816675A5B0030158-R4",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3"
       ],
@@ -24922,6 +25312,33 @@
         "valid_until": "2027-02-28"
       },
       "semantic_sha256": "e3f8dc204c1595a857e87791483baaf7ebe8fe1cebc7511610cd7000fb9be05a",
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Source, gate, executable selector, or dedicated audit asset advanced for the read-only client snapshot repair.",
+        "replaced_by": [
+          "BIND-CASE-816675A5B0030158-R5"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-816675A5B0030158-R5",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-REPOSITORY-QUALITY-CONSUMERS-REJECT-MALFORMED-TY-B97DE1372281"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "4c30e93bca2832d82b626ffedbbb1fb653141ae0ff9957c7e0c93c44a0864c13",
       "retirement": null
     },
     {
@@ -29517,7 +29934,7 @@
     },
     {
       "binding_id": "BIND-CASE-99CAAA63DECFF0D9-R4",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3"
       ],
@@ -29534,6 +29951,33 @@
         "valid_until": "2027-02-28"
       },
       "semantic_sha256": "b3cd4e17f5860c3ceb754e1f6e67e008c03d2a3fcc5e6f8daa617a03b7420b0b",
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Source, gate, executable selector, or dedicated audit asset advanced for the read-only client snapshot repair.",
+        "replaced_by": [
+          "BIND-CASE-99CAAA63DECFF0D9-R5"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-99CAAA63DECFF0D9-R5",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-61C6537DDEBC-R5"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER-R5",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "5ad287b4e23e87ba7e6eefdc4d8a62e886cf3e4ab3f06d2e5e141f1a3e6e4f14",
       "retirement": null
     },
     {
@@ -45904,7 +46348,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-AUTHORIZATION",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-AUTHORIZATION-SOURCE"
       ],
@@ -45922,11 +46366,39 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "61f92f07c9e7ee2c2052efc528388dc20e731c86ff6f3b601e900559c3bfa491",
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Source, gate, executable selector, or dedicated audit asset advanced for the read-only client snapshot repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-AUTHORIZATION-R5"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-AUTHORIZATION-R5",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-AUTHORIZATION-SOURCE-R5"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-AUTHORIZATION",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "d958098b8b9ed28f6daf085c7711f51a7516cb09e892d087d56eebcf06698dc0",
       "retirement": null
     },
     {
       "binding_id": "BIND-CODEX-GIT-DIAGNOSTIC-BOUNDARY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-DIAGNOSTIC-BOUNDARY-SOURCE"
       ],
@@ -45944,11 +46416,39 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "94292059630e1e926de1c3759e7b38d5fbcc87cd7acfa27b398561575139feef",
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Source, gate, executable selector, or dedicated audit asset advanced for the read-only client snapshot repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-DIAGNOSTIC-BOUNDARY-R5"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-DIAGNOSTIC-BOUNDARY-R5",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-DIAGNOSTIC-BOUNDARY-SOURCE-R5"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-DIAGNOSTIC-BOUNDARY",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "e3385f373b85361e0b43f048c3925b60f65bbcb1c1cdf94931f288ceb5a3c675",
       "retirement": null
     },
     {
       "binding_id": "BIND-CODEX-GIT-EXECUTION",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-EXECUTION-SOURCE"
       ],
@@ -45966,11 +46466,39 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "80e41ff1d06bbb00242aa3e0ea00be00cc70a32b409f54fe8799c53a24b8303a",
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Source, gate, executable selector, or dedicated audit asset advanced for the read-only client snapshot repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-EXECUTION-R5"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-EXECUTION-R5",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-EXECUTION-SOURCE-R5"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-61C6537DDEBC-R5"
+      ],
+      "rule_id": "RULE-CODEX-GIT-EXECUTION",
+      "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER-R5",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "7e65d8e01c448af54372f6368bc413e765823e788f456db8670fd4d8a545ecdd",
       "retirement": null
     },
     {
       "binding_id": "BIND-CODEX-GIT-EXPLICIT-CONFIRMATION-R4",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-AUTHORIZATION-SOURCE"
       ],
@@ -45988,11 +46516,39 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "e7dec85bd5a9b5792f657f190bfe6580f637d147915837c42f48090fdeb05f47",
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Source, gate, executable selector, or dedicated audit asset advanced for the read-only client snapshot repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-EXPLICIT-CONFIRMATION-R5"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-EXPLICIT-CONFIRMATION-R5",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-AUTHORIZATION-SOURCE-R5"
+      ],
+      "test_ids": [
+        "TEST-RUST-CODEX-POWERSHELL-BROKER-PRODUCTION-REJECTS-EXPLI-E36B74A06220"
+      ],
+      "rule_id": "RULE-CODEX-GIT-AUTHORIZATION",
+      "gate_id": "GATE-CARGO-ROOT-WINDOWS-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "c87f247ba5b07d9afb600d1ba6ec414f026e751d23b49e131433c72df8eedf63",
       "retirement": null
     },
     {
       "binding_id": "BIND-CODEX-GIT-INSTALLATION-SERIALIZATION",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-INSTALLATION-SERIALIZATION-SOURCE"
       ],
@@ -46010,11 +46566,39 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "408e0a3348b687e646602909e60dc8ef05a32fff5c16145f661f49cad52dd049",
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Source, gate, executable selector, or dedicated audit asset advanced for the read-only client snapshot repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-INSTALLATION-SERIALIZATION-R5"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-INSTALLATION-SERIALIZATION-R5",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-INSTALLATION-SERIALIZATION-SOURCE-R5"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-INSTALLATION-SERIALIZATION",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "ebc3d9b0cf24c20044a90e166564af29ea93459c2ff60db860428c988403613a",
       "retirement": null
     },
     {
       "binding_id": "BIND-CODEX-GIT-INSTALLER-CLEANUP",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-INSTALLER-CLEANUP-SOURCE"
       ],
@@ -46032,11 +46616,39 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "5135417c0ab4d5655cde77b2727e3a7b4d17060f75a676207d5a3739c590644b",
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Source, gate, executable selector, or dedicated audit asset advanced for the read-only client snapshot repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-INSTALLER-CLEANUP-R5"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-INSTALLER-CLEANUP-R5",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-INSTALLER-CLEANUP-SOURCE-R5"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-INSTALLER-CLEANUP",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "c0e5aa55003b4a7211c520dbafa7f7dc600661a418a41882747a3ba6f5311147",
       "retirement": null
     },
     {
       "binding_id": "BIND-CODEX-GIT-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-RECOVERY-SOURCE"
       ],
@@ -46054,11 +46666,39 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "6bc78c9823efb8f269dfaa1bbdd4d68efa637349eab0e2fb48a160e9db27052a",
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Source, gate, executable selector, or dedicated audit asset advanced for the read-only client snapshot repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-RECOVERY-R5"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-RECOVERY-R5",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-RECOVERY-SOURCE-R5"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-61C6537DDEBC-R5"
+      ],
+      "rule_id": "RULE-CODEX-GIT-RECOVERY",
+      "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER-R5",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "4c1497b7da3a215663d7abf95fae217cc0ca4df52e90db0122b3a7de83398da8",
       "retirement": null
     },
     {
       "binding_id": "BIND-CODEX-GIT-REGISTRATION",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-REGISTRATION-SOURCE"
       ],
@@ -46076,11 +46716,39 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "c96f54ed2473eb9460c11492c1d661d89a23d7a5ef9c003f797090fad06640be",
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Source, gate, executable selector, or dedicated audit asset advanced for the read-only client snapshot repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-REGISTRATION-R5"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-REGISTRATION-R5",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-REGISTRATION-SOURCE-R5"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-REGISTRATION",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "0b301dd5a8329264d1a61c84e451639fadf02c8ecca26666ae4254383bda8acc",
       "retirement": null
     },
     {
       "binding_id": "BIND-CODEX-GIT-REQUEST",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-REQUEST-SOURCE"
       ],
@@ -46098,11 +46766,39 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "c3f27b1e895d7d658637e0a4e0c840465b4986decc23e8635e4cf96642617c47",
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Source, gate, executable selector, or dedicated audit asset advanced for the read-only client snapshot repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-REQUEST-R5"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-REQUEST-R5",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-REQUEST-SOURCE-R5"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-61C6537DDEBC-R5"
+      ],
+      "rule_id": "RULE-CODEX-GIT-REQUEST",
+      "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER-R5",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "2efcac638ca1910a7277415ba98f815c0752f8450776b52ad2fee973301736fc",
       "retirement": null
     },
     {
       "binding_id": "BIND-CODEX-GIT-STAGING-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-STAGING-RECOVERY-SOURCE"
       ],
@@ -46120,11 +46816,39 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "a48d51293ebf71479b4da850124616c39dd0e63b6d7ab14519b8e4294a19ec83",
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Source, gate, executable selector, or dedicated audit asset advanced for the read-only client snapshot repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-STAGING-RECOVERY-R5"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-STAGING-RECOVERY-R5",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-STAGING-RECOVERY-SOURCE-R5"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-STAGING-RECOVERY",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "6e9e21351d92ccc600942e1af2a6577240f2259ed2adb2ff116579b7929fb2a8",
       "retirement": null
     },
     {
       "binding_id": "BIND-CODEX-GIT-TRANSACTION",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-TRANSACTION-SOURCE"
       ],
@@ -46142,11 +46866,39 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "f734ba7059558c1a1aa62911052de5814431d592fcd76d695cf17b4ddf97219c",
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Source, gate, executable selector, or dedicated audit asset advanced for the read-only client snapshot repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-TRANSACTION-R5"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-TRANSACTION-R5",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-TRANSACTION-SOURCE-R5"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-61C6537DDEBC-R5"
+      ],
+      "rule_id": "RULE-CODEX-GIT-TRANSACTION",
+      "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER-R5",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "ceb5e0464936d0a082357e66c82b340494396629c8532543b94b70d2f0b1b173",
       "retirement": null
     },
     {
       "binding_id": "BIND-CODEX-GIT-UPGRADE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-UPGRADE-SOURCE"
       ],
@@ -46164,11 +46916,17 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "155419bdce078b579c0e9c2a5868abf6c14715810482fa86a6c6f007f1795294",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Source, gate, executable selector, or dedicated audit asset advanced for the read-only client snapshot repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-UPGRADE-R5"
+        ]
+      }
     },
     {
       "binding_id": "BIND-CODEX-GIT-UPGRADE-AUTHORITY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-UPGRADE-AUTHORITY-SOURCE"
       ],
@@ -46186,6 +46944,56 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "59998e070f5c4ef0824f85c2b1454af4779492702f6760a28c0093172a800870",
+      "retirement": {
+        "retired_at": "2026-09-01",
+        "reason": "Source, gate, executable selector, or dedicated audit asset advanced for the read-only client snapshot repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-UPGRADE-AUTHORITY-R5"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-UPGRADE-AUTHORITY-R5",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-UPGRADE-AUTHORITY-SOURCE-R5"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-UPGRADE-AUTHORITY",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "67616fae79d97249112650fe5d7cda6f4b1dacc8c8352fb906d3846d89a6b629",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-UPGRADE-R5",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-UPGRADE-SOURCE-R5"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-UPGRADE",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-01",
+        "valid_until": "2027-03-01"
+      },
+      "semantic_sha256": "a6ae7d0cfc0488e24780145e9ea2a9e0797a80a1b4af215db4324fc6c759ad81",
       "retirement": null
     }
   ]
