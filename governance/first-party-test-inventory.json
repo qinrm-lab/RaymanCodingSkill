@@ -20,11 +20,11 @@
     ]
   },
   "revision": {
-    "generation": 7,
+    "generation": 8,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 6,
-      "sha256": "5d7490dcd317decba01af2331e46d9f921aa02217b7181c260c9c3bdf420fba0"
+      "generation": 7,
+      "sha256": "12fc1180a10dba41a82fcdab4f1ade8126b7924c745a92ade46bb816ebed202a"
     }
   },
   "tests": [
@@ -1104,13 +1104,32 @@
     },
     {
       "test_id": "TEST-PS-SELFTEST-6BB97440C533-R5",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/install-codex-powershell-broker.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/install-codex-powershell-broker.ps1",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "selector_sha256": "7ab011eac1518c728defda7e7f55a61fdd64287e3dac668d1c8c8b6b46094c9f",
+      "cfg": "all",
+      "owner": "",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Installer SelfTest now reproduces two production-inherited terminal journal/result pairs and rejects mixed ACL drift.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-6BB97440C533-R6"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-PS-SELFTEST-6BB97440C533-R6",
+      "status": "active",
+      "identity": "powershell::powershell_self_test::scripts/install-codex-powershell-broker.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/install-codex-powershell-broker.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "c77125ec8fa3a4835416083f34cbe22659eb67dac07ce3572dbbeca7d3f5b110",
       "cfg": "all",
       "owner": "",
       "retirement": null
@@ -2016,13 +2035,32 @@
     },
     {
       "test_id": "TEST-RUST-AUDIT-ORCHESTRATION-HAS-NO-ENVIRONMENT-BYPASS-OR-565B2A9F1C31-R6",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/tests/audit_script.rs::audit_orchestration_has_no_environment_bypass_or_implicit_provisioning",
       "role": "root_cargo",
       "path": "crates/rayman/tests/audit_script.rs",
       "selector_kind": "rust_test_fn",
       "selector": "audit_orchestration_has_no_environment_bypass_or_implicit_provisioning",
       "selector_sha256": "71fc2c7e731d69cc3c4ce4fe9ec10212c19f4f260167b0e152d99f51b2dea34b",
+      "cfg": "all",
+      "owner": null,
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Static audit now binds production-inherited terminal ACL simulation and drift rejection guards.",
+        "replaced_by": [
+          "TEST-RUST-AUDIT-ORCHESTRATION-HAS-NO-ENVIRONMENT-BYPASS-OR-565B2A9F1C31-R7"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-AUDIT-ORCHESTRATION-HAS-NO-ENVIRONMENT-BYPASS-OR-565B2A9F1C31-R7",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/tests/audit_script.rs::audit_orchestration_has_no_environment_bypass_or_implicit_provisioning",
+      "role": "root_cargo",
+      "path": "crates/rayman/tests/audit_script.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "audit_orchestration_has_no_environment_bypass_or_implicit_provisioning",
+      "selector_sha256": "4be59c89ccdb0a89ca156f794c25a0de2c0a12f3f96b1ce36306b655644e6759",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -12710,9 +12748,24 @@
     },
     {
       "asset_id": "ASSET-FILE-R4-9BDB5C4AB657-R6",
-      "status": "active",
+      "status": "retired",
       "path": "crates/rayman/tests/audit_script.rs",
       "sha256": "3dcce712a8fe5c73c892ce200069640b7d4bc53ad9d611a49f42cf9facd76dd4",
+      "kind": "dedicated_file",
+      "cleanup_policy": "delete_on_last_reference",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Audit source bytes changed for inherited terminal ACL compatibility guards.",
+        "replaced_by": [
+          "ASSET-FILE-R4-9BDB5C4AB657-R7"
+        ]
+      }
+    },
+    {
+      "asset_id": "ASSET-FILE-R4-9BDB5C4AB657-R7",
+      "status": "active",
+      "path": "crates/rayman/tests/audit_script.rs",
+      "sha256": "60811facd1c2bfff65fada6ca8e10059307012c1878acbe4276bd41313c44eee",
       "kind": "dedicated_file",
       "cleanup_policy": "delete_on_last_reference",
       "retirement": null

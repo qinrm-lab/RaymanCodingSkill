@@ -838,9 +838,16 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
     assert!(
         codex_broker_installer.contains("function Remove-TerminalGitTransactionJournalsForUpgrade")
     );
+    assert!(codex_broker_installer.contains("function Test-BrokerExactInheritedFileSecurity"));
+    assert!(codex_broker_installer.contains("function Assert-TerminalGitArtifactSecurity"));
+    assert!(codex_broker_installer.contains(
+        "Production-inherited terminal artifact simulation did not reproduce the worker ACL shape."
+    ));
+    assert!(codex_broker_installer.contains("terminal inherited journal with explicit ACL drift"));
+    assert!(codex_broker_installer.contains("terminal inherited result with explicit ACL drift"));
     assert!(
         codex_broker_installer
-            .contains("Terminal journal self-test did not retire only the verified journal.")
+            .contains("Terminal journal self-test did not retire exactly two verified inherited journals while preserving both results.")
     );
     assert!(
         codex_broker_installer.contains("Nonterminal journal self-test removed recovery evidence.")
@@ -896,6 +903,11 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
     assert!(codex_broker_contract.contains("must each return exactly one object"));
     assert!(codex_broker_contract.contains("sequentially publishes the new receipt/task"));
     assert!(codex_broker_contract.contains("one complete extra staged hash-version"));
+    assert!(codex_broker_contract.contains("every ACE is inherited, no explicit ACE exists"));
+    assert!(codex_broker_contract.contains("never rewrites, protects, normalizes or"));
+    assert!(codex_broker_contract.contains("widens an ACL"));
+    assert!(codex_broker_contract.contains("result identity and ACL"));
+    assert!(codex_broker_contract.contains("must remain stable too"));
     assert!(!codex_broker_contract.contains("atomically switches receipt/task"));
     assert!(!codex_broker_contract.contains("Any failure restores"));
     assert!(repository_gate_inputs.contains("docs/CODEX_POWERSHELL_BROKER.md"));

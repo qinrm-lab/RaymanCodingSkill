@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 7,
+    "generation": 8,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 6,
-      "sha256": "f19e851b11db264e0f20490c7b1bc7245a3100cfb7a566a5df91e691c3dcfdb5"
+      "generation": 7,
+      "sha256": "5eaf0a93efcf1b65b6c785fd25f480922549731936df8558ba183475fcac8d1b"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "12fc1180a10dba41a82fcdab4f1ade8126b7924c745a92ade46bb816ebed202a"
+    "sha256": "9787004c63f1a03248614b6f135f7c79aec2df8271a4fe46fb4ecd258e470cd4"
   },
   "sources": [
     {
@@ -120,11 +120,27 @@
     },
     {
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R7",
-      "status": "active",
+      "status": "retired",
       "kind": "internal_contract",
       "title": "Codex fixed local Git commit capability contract",
       "path": "docs/CODEX_POWERSHELL_BROKER.md",
       "sha256": "8eb545009d2c84c441dd904a01f9a53f767371d7b25b723a118a58d456435bb8",
+      "valid_until": "2027-09-02",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Broker contract now defines exact legacy inherited terminal artifact ACL compatibility without ACL mutation.",
+        "replaced_by": [
+          "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R8"
+        ]
+      }
+    },
+    {
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R8",
+      "status": "active",
+      "kind": "internal_contract",
+      "title": "Codex fixed local Git commit capability contract",
+      "path": "docs/CODEX_POWERSHELL_BROKER.md",
+      "sha256": "3d5a4154992baa6084b7f0f0e8cf628716981eef177ac5273aae74e43c7f935f",
       "valid_until": "2027-09-02",
       "retirement": null
     },
@@ -431,8 +447,25 @@
     },
     {
       "rule_id": "RULE-CODEX-GIT-STAGING-RECOVERY-R7",
-      "status": "active",
+      "status": "retired",
       "statement": "Upgrade stops only a receipt-bound orphan worker, preserves every active, nonterminal, mismatched or unknown transaction journal, and clears interrupted staging only for the exact protected tuple. A current-schema upgrade may retire only terminal verified commit journals whose immutable success results and absent request/scratch state match under the exclusive transaction lock.",
+      "criticality": "release_blocking",
+      "required_modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Terminal recovery now distinguishes exact inherited worker artifacts from mixed ACL drift.",
+        "replaced_by": [
+          "RULE-CODEX-GIT-STAGING-RECOVERY-R8"
+        ]
+      }
+    },
+    {
+      "rule_id": "RULE-CODEX-GIT-STAGING-RECOVERY-R8",
+      "status": "active",
+      "statement": "Upgrade stops only a receipt-bound orphan worker, preserves every active, nonterminal, mismatched or unknown transaction journal, and clears interrupted staging only for the exact protected tuple. A current-schema upgrade may retire only terminal verified commit journals whose immutable success results and absent request/scratch state match under the exclusive transaction lock, and whose held journal/result ACL is either canonical protected or an all-inherited semantic match under its exact protected parent; mixed ACLs and any identity, content or security drift remain recovery evidence.",
       "criticality": "release_blocking",
       "required_modes": [
         "integration",
@@ -1291,11 +1324,33 @@
     },
     {
       "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R5",
-      "status": "active",
+      "status": "retired",
       "kind": "powershell_self_test",
       "title": "PowerShell self-test: scripts/install-codex-powershell-broker.ps1",
       "path": "scripts/install-codex-powershell-broker.ps1",
       "sha256": "7ab011eac1518c728defda7e7f55a61fdd64287e3dac668d1c8c8b6b46094c9f",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "target_matrix": [
+        "windows",
+        "linux",
+        "other_unix"
+      ],
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Installer SelfTest now simulates two production-inherited terminal journal/result pairs and ACL drift rejection.",
+        "replaced_by": [
+          "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R6"
+        ]
+      }
+    },
+    {
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R6",
+      "status": "active",
+      "kind": "powershell_self_test",
+      "title": "PowerShell self-test: scripts/install-codex-powershell-broker.ps1",
+      "path": "scripts/install-codex-powershell-broker.ps1",
+      "sha256": "c77125ec8fa3a4835416083f34cbe22659eb67dac07ce3572dbbeca7d3f5b110",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "target_matrix": [
@@ -1513,8 +1568,26 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-AUTHORIZATION-SOURCE-R7",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R7",
+      "rule_id": "RULE-CODEX-GIT-AUTHORIZATION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed broker contract source advanced to inherited-ACL compatibility generation 8.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-AUTHORIZATION-SOURCE-R8"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-AUTHORIZATION-SOURCE-R8",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R8",
       "rule_id": "RULE-CODEX-GIT-AUTHORIZATION",
       "relation": "defines",
       "review": {
@@ -1579,8 +1652,26 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-DIAGNOSTIC-BOUNDARY-SOURCE-R7",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R7",
+      "rule_id": "RULE-CODEX-GIT-DIAGNOSTIC-BOUNDARY",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed broker contract source advanced to inherited-ACL compatibility generation 8.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-DIAGNOSTIC-BOUNDARY-SOURCE-R8"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-DIAGNOSTIC-BOUNDARY-SOURCE-R8",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R8",
       "rule_id": "RULE-CODEX-GIT-DIAGNOSTIC-BOUNDARY",
       "relation": "defines",
       "review": {
@@ -1645,8 +1736,26 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-EXECUTION-SOURCE-R7",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R7",
+      "rule_id": "RULE-CODEX-GIT-EXECUTION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed broker contract source advanced to inherited-ACL compatibility generation 8.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-EXECUTION-SOURCE-R8"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-EXECUTION-SOURCE-R8",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R8",
       "rule_id": "RULE-CODEX-GIT-EXECUTION",
       "relation": "defines",
       "review": {
@@ -1711,8 +1820,26 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-INSTALLATION-SERIALIZATION-SOURCE-R7",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R7",
+      "rule_id": "RULE-CODEX-GIT-INSTALLATION-SERIALIZATION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed broker contract source advanced to inherited-ACL compatibility generation 8.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-INSTALLATION-SERIALIZATION-SOURCE-R8"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-INSTALLATION-SERIALIZATION-SOURCE-R8",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R8",
       "rule_id": "RULE-CODEX-GIT-INSTALLATION-SERIALIZATION",
       "relation": "defines",
       "review": {
@@ -1777,8 +1904,26 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-INSTALLER-CLEANUP-SOURCE-R7",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R7",
+      "rule_id": "RULE-CODEX-GIT-INSTALLER-CLEANUP",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed broker contract source advanced to inherited-ACL compatibility generation 8.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-INSTALLER-CLEANUP-SOURCE-R8"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-INSTALLER-CLEANUP-SOURCE-R8",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R8",
       "rule_id": "RULE-CODEX-GIT-INSTALLER-CLEANUP",
       "relation": "defines",
       "review": {
@@ -1843,8 +1988,26 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-RECOVERY-SOURCE-R7",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R7",
+      "rule_id": "RULE-CODEX-GIT-RECOVERY",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed broker contract source advanced to inherited-ACL compatibility generation 8.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-RECOVERY-SOURCE-R8"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-RECOVERY-SOURCE-R8",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R8",
       "rule_id": "RULE-CODEX-GIT-RECOVERY",
       "relation": "defines",
       "review": {
@@ -1909,8 +2072,26 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-REGISTRATION-SOURCE-R7",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R7",
+      "rule_id": "RULE-CODEX-GIT-REGISTRATION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed broker contract source advanced to inherited-ACL compatibility generation 8.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-REGISTRATION-SOURCE-R8"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-REGISTRATION-SOURCE-R8",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R8",
       "rule_id": "RULE-CODEX-GIT-REGISTRATION",
       "relation": "defines",
       "review": {
@@ -1975,8 +2156,26 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-REQUEST-SOURCE-R7",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R7",
+      "rule_id": "RULE-CODEX-GIT-REQUEST",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed broker contract source advanced to inherited-ACL compatibility generation 8.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-REQUEST-SOURCE-R8"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-REQUEST-SOURCE-R8",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R8",
       "rule_id": "RULE-CODEX-GIT-REQUEST",
       "relation": "defines",
       "review": {
@@ -2041,9 +2240,27 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-STAGING-RECOVERY-SOURCE-R7",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R7",
       "rule_id": "RULE-CODEX-GIT-STAGING-RECOVERY-R7",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed broker contract source advanced to inherited-ACL compatibility generation 8.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-STAGING-RECOVERY-SOURCE-R8"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-STAGING-RECOVERY-SOURCE-R8",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R8",
+      "rule_id": "RULE-CODEX-GIT-STAGING-RECOVERY-R8",
       "relation": "defines",
       "review": {
         "reviewed_at": "2026-09-02",
@@ -2107,8 +2324,26 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-TRANSACTION-SOURCE-R7",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R7",
+      "rule_id": "RULE-CODEX-GIT-TRANSACTION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed broker contract source advanced to inherited-ACL compatibility generation 8.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-TRANSACTION-SOURCE-R8"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-TRANSACTION-SOURCE-R8",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R8",
       "rule_id": "RULE-CODEX-GIT-TRANSACTION",
       "relation": "defines",
       "review": {
@@ -2173,8 +2408,26 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-UPGRADE-AUTHORITY-SOURCE-R7",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R7",
+      "rule_id": "RULE-CODEX-GIT-UPGRADE-AUTHORITY",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed broker contract source advanced to inherited-ACL compatibility generation 8.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-UPGRADE-AUTHORITY-SOURCE-R8"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-UPGRADE-AUTHORITY-SOURCE-R8",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R8",
       "rule_id": "RULE-CODEX-GIT-UPGRADE-AUTHORITY",
       "relation": "defines",
       "review": {
@@ -2239,8 +2492,26 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-UPGRADE-SOURCE-R7",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R7",
+      "rule_id": "RULE-CODEX-GIT-UPGRADE",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed broker contract source advanced to inherited-ACL compatibility generation 8.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-UPGRADE-SOURCE-R8"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-UPGRADE-SOURCE-R8",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R8",
       "rule_id": "RULE-CODEX-GIT-UPGRADE",
       "relation": "defines",
       "review": {
@@ -12218,7 +12489,7 @@
     },
     {
       "binding_id": "BIND-CASE-3570B72D3DEC401E-R7",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3"
       ],
@@ -12235,6 +12506,33 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "0c85bfe85f7ea4d992f5f7b36dcbb909c3039e5872992e298b2f4259aa34beeb",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed binding advanced to generation 8 for inherited terminal ACL compatibility and current source, gate, test and asset bytes.",
+        "replaced_by": [
+          "BIND-CASE-3570B72D3DEC401E-R8"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-3570B72D3DEC401E-R8",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-PUBLIC-ARCHITECTURE-AND-CI-COVERAGE-CONTRACTS-AV-199B06D66A6C"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "64648cfa774e66078ca882e272e3d1f2a159c748fd6fbec0f956e882a1b01dac",
       "retirement": null
     },
     {
@@ -16802,7 +17100,7 @@
     },
     {
       "binding_id": "BIND-CASE-4BD97854DEDDFA95-R7",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3"
       ],
@@ -16819,6 +17117,33 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "06a99ea38803044a5db6188f53a0a730cbf0c51c7aad8c589caf3610a3a7a702",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed binding advanced to generation 8 for inherited terminal ACL compatibility and current source, gate, test and asset bytes.",
+        "replaced_by": [
+          "BIND-CASE-4BD97854DEDDFA95-R8"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-4BD97854DEDDFA95-R8",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R6"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R6",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "d55467dce13e56c343a048be21060494fa83f25da62b5498503c1a3911e4bc45",
       "retirement": null
     },
     {
@@ -17628,7 +17953,7 @@
     },
     {
       "binding_id": "BIND-CASE-502F7D5679217AC1-R7",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3"
       ],
@@ -17645,6 +17970,33 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "076473024995549c042fb8f40673c10a89317e5fbbc05d5ee02b177b5a62f171",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed binding advanced to generation 8 for inherited terminal ACL compatibility and current source, gate, test and asset bytes.",
+        "replaced_by": [
+          "BIND-CASE-502F7D5679217AC1-R8"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-502F7D5679217AC1-R8",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-AUDIT-ORCHESTRATION-HAS-NO-ENVIRONMENT-BYPASS-OR-565B2A9F1C31-R7"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "4b51d7943a865eae2ebcd4c7c0b4e53430126a3a0633dbe4b7e5fe970d3450d2",
       "retirement": null
     },
     {
@@ -20303,7 +20655,7 @@
     },
     {
       "binding_id": "BIND-CASE-62342DFF31E86D67-R7",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-TRACE-ACTIVE-SOURCE-R3"
       ],
@@ -20321,6 +20673,34 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "7a1acb9fc1ca77d77757d73d1d971ba30ece77302ad2c8de5e349042aa86bd86",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed binding advanced to generation 8 for inherited terminal ACL compatibility and current source, gate, test and asset bytes.",
+        "replaced_by": [
+          "BIND-CASE-62342DFF31E86D67-R8"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-62342DFF31E86D67-R8",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-TRACE-ACTIVE-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-TEST-TRACEABILITY-CHECKER-EXECUTES-MUTATION-SELF-97AF5E15E036"
+      ],
+      "rule_id": "RULE-TRACE-ACTIVE-GRAPH-R3",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "behavioral_positive",
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "f687748d43cf9d2d94714c9812b15616bd9409880200241a2cef7238991af755",
       "retirement": null
     },
     {
@@ -24531,7 +24911,7 @@
     },
     {
       "binding_id": "BIND-CASE-77A7BAC9FBF1EF1B-R7",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3"
       ],
@@ -24548,6 +24928,33 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "63c1c496938223fa0c956acd626f86747c797d0ce82be944111b16eb0587ccc7",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed binding advanced to generation 8 for inherited terminal ACL compatibility and current source, gate, test and asset bytes.",
+        "replaced_by": [
+          "BIND-CASE-77A7BAC9FBF1EF1B-R8"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-77A7BAC9FBF1EF1B-R8",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-CODEX-BROKER-SHARED-RUNSPACE-R4"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-CARGO-ROOT-WINDOWS-R4",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "a42e16ebb67d6d92b0369b2713cf4560ff81e04731496f4795d9f28fe6c83459",
       "retirement": null
     },
     {
@@ -25354,7 +25761,7 @@
     },
     {
       "binding_id": "BIND-CASE-7DF69D0B8254CB4A-R7",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3"
       ],
@@ -25371,6 +25778,33 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "f0c4bc25b6cd24442a0c5abd1612d48fe71b7991dbc2a339021f2e65286282ce",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed binding advanced to generation 8 for inherited terminal ACL compatibility and current source, gate, test and asset bytes.",
+        "replaced_by": [
+          "BIND-CASE-7DF69D0B8254CB4A-R8"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-7DF69D0B8254CB4A-R8",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-REPOSITORY-QUALITY-PROVIDER-EMITS-THE-EXACT-VERS-BFA31317DEB1"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "74ffd6efde1f101d2c2095ba0414c6ad4a65a4583688177d09c6d5e4c5b2ec81",
       "retirement": null
     },
     {
@@ -26059,7 +26493,7 @@
     },
     {
       "binding_id": "BIND-CASE-816675A5B0030158-R7",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3"
       ],
@@ -26076,6 +26510,33 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "e0e8c9aff357cb35f6a88f1246a62ff76740b944aa202eba0b43d87b21a9ee4f",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed binding advanced to generation 8 for inherited terminal ACL compatibility and current source, gate, test and asset bytes.",
+        "replaced_by": [
+          "BIND-CASE-816675A5B0030158-R8"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-816675A5B0030158-R8",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-REPOSITORY-QUALITY-CONSUMERS-REJECT-MALFORMED-TY-B97DE1372281"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "88d6eec6296693372a6d736dcb4cc96f680707c9845b15cac10d890bf743487b",
       "retirement": null
     },
     {
@@ -47223,7 +47684,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-AUTHORIZATION-R7",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-AUTHORIZATION-SOURCE-R7"
       ],
@@ -47241,6 +47702,34 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "477073e619c879a6e1d3a9a6842a60f4c9434dfae44a6bd34146fb254b765e3c",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed binding advanced to generation 8 for inherited terminal ACL compatibility and current source, gate, test and asset bytes.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-AUTHORIZATION-R8"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-AUTHORIZATION-R8",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-AUTHORIZATION-SOURCE-R8"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R6"
+      ],
+      "rule_id": "RULE-CODEX-GIT-AUTHORIZATION",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R6",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "366cb694e0af833e0422b73e07dfd78724f872a5cfb536fa11b8334168cab245",
       "retirement": null
     },
     {
@@ -47329,7 +47818,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-DIAGNOSTIC-BOUNDARY-R7",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-DIAGNOSTIC-BOUNDARY-SOURCE-R7"
       ],
@@ -47347,6 +47836,34 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "076b104f10233fe4de1b7ee20e1c9d03655626c06641506d4a49004c3d6ff9b9",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed binding advanced to generation 8 for inherited terminal ACL compatibility and current source, gate, test and asset bytes.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-DIAGNOSTIC-BOUNDARY-R8"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-DIAGNOSTIC-BOUNDARY-R8",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-DIAGNOSTIC-BOUNDARY-SOURCE-R8"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R6"
+      ],
+      "rule_id": "RULE-CODEX-GIT-DIAGNOSTIC-BOUNDARY",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R6",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "42fd92c7cd203d26bde42026d1933ea01a441ccb04619c97f396251829b41c3d",
       "retirement": null
     },
     {
@@ -47435,7 +47952,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-EXECUTION-R7",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-EXECUTION-SOURCE-R7"
       ],
@@ -47453,6 +47970,34 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "c0e602cd7ae2e5a2779af2069c471e5ded494c7eca963eedc6eed2f7a76db5cb",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed binding advanced to generation 8 for inherited terminal ACL compatibility and current source, gate, test and asset bytes.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-EXECUTION-R8"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-EXECUTION-R8",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-EXECUTION-SOURCE-R8"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-61C6537DDEBC-R7"
+      ],
+      "rule_id": "RULE-CODEX-GIT-EXECUTION",
+      "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER-R7",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "b0732b1588bad8babd6229b464104f388ee9763b1f811170bdad1e5ea20fe9a1",
       "retirement": null
     },
     {
@@ -47541,7 +48086,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-EXPLICIT-CONFIRMATION-R7",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-AUTHORIZATION-SOURCE-R7"
       ],
@@ -47559,6 +48104,34 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "0a451f1e45fa8ddd2eb7f16db07e7ebd126ee9d283cae998dcfb733c9cc7f109",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed binding advanced to generation 8 for inherited terminal ACL compatibility and current source, gate, test and asset bytes.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-EXPLICIT-CONFIRMATION-R8"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-EXPLICIT-CONFIRMATION-R8",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-AUTHORIZATION-SOURCE-R8"
+      ],
+      "test_ids": [
+        "TEST-RUST-CODEX-POWERSHELL-BROKER-PRODUCTION-REJECTS-EXPLI-E36B74A06220"
+      ],
+      "rule_id": "RULE-CODEX-GIT-AUTHORIZATION",
+      "gate_id": "GATE-CARGO-ROOT-WINDOWS-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "57ea698cf4d9745e33da6dae438f05be7ff1d73b0b9606c80492a55a12d7da3e",
       "retirement": null
     },
     {
@@ -47647,7 +48220,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-INSTALLATION-SERIALIZATION-R7",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-INSTALLATION-SERIALIZATION-SOURCE-R7"
       ],
@@ -47665,6 +48238,34 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "aa4deb868f35e133a9bc52e7516c96b656b297dfee0368cc0096748e3616c223",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed binding advanced to generation 8 for inherited terminal ACL compatibility and current source, gate, test and asset bytes.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-INSTALLATION-SERIALIZATION-R8"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-INSTALLATION-SERIALIZATION-R8",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-INSTALLATION-SERIALIZATION-SOURCE-R8"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R6"
+      ],
+      "rule_id": "RULE-CODEX-GIT-INSTALLATION-SERIALIZATION",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R6",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "164d4f6d29b79ddaed9b1832ea90ae59055993f26485d06c6bb6eee43a5b7aa2",
       "retirement": null
     },
     {
@@ -47753,7 +48354,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-INSTALLER-CLEANUP-R7",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-INSTALLER-CLEANUP-SOURCE-R7"
       ],
@@ -47771,6 +48372,34 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "7804b047c68e7522cf9a4c39caf308f7dcdd88ae67b51e9400d63c70429f35e2",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed binding advanced to generation 8 for inherited terminal ACL compatibility and current source, gate, test and asset bytes.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-INSTALLER-CLEANUP-R8"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-INSTALLER-CLEANUP-R8",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-INSTALLER-CLEANUP-SOURCE-R8"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R6"
+      ],
+      "rule_id": "RULE-CODEX-GIT-INSTALLER-CLEANUP",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R6",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "a4ccc1bc4142f86d1446242f70dd0fc666c37bac26b4a0d91ae566f7ea8481b9",
       "retirement": null
     },
     {
@@ -47859,7 +48488,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-RECOVERY-R7",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-RECOVERY-SOURCE-R7"
       ],
@@ -47877,6 +48506,34 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "2b335750262ddb75e2bdc2303abed26f0c3c0ff53b0d22271667124d40ad3ca8",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed binding advanced to generation 8 for inherited terminal ACL compatibility and current source, gate, test and asset bytes.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-RECOVERY-R8"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-RECOVERY-R8",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-RECOVERY-SOURCE-R8"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-61C6537DDEBC-R7"
+      ],
+      "rule_id": "RULE-CODEX-GIT-RECOVERY",
+      "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER-R7",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "f77763e054cce31948d1bf291a621df95b1e5779ac3c0840557c2a78056ed011",
       "retirement": null
     },
     {
@@ -47965,7 +48622,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-REGISTRATION-R7",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-REGISTRATION-SOURCE-R7"
       ],
@@ -47983,6 +48640,34 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "6b758a2ad169185c07f6101d2726b40ef92735f3d0b581ca5d54be98eda4d6b9",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed binding advanced to generation 8 for inherited terminal ACL compatibility and current source, gate, test and asset bytes.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-REGISTRATION-R8"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-REGISTRATION-R8",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-REGISTRATION-SOURCE-R8"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R6"
+      ],
+      "rule_id": "RULE-CODEX-GIT-REGISTRATION",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R6",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "0666f43ed6286420b3e6f7358f035262387e461534cdad43adfe583800487d83",
       "retirement": null
     },
     {
@@ -48071,7 +48756,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-REQUEST-R7",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-REQUEST-SOURCE-R7"
       ],
@@ -48089,6 +48774,34 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "bb116385594440eaa0be3a88893d9f89ffe4baa4f1215efcd24cf2dd8f4079c2",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed binding advanced to generation 8 for inherited terminal ACL compatibility and current source, gate, test and asset bytes.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-REQUEST-R8"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-REQUEST-R8",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-REQUEST-SOURCE-R8"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-61C6537DDEBC-R7"
+      ],
+      "rule_id": "RULE-CODEX-GIT-REQUEST",
+      "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER-R7",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "5eb38baa9e33867b93d6b165171b9051d8c1b28969f56877037ae0142bd25fa7",
       "retirement": null
     },
     {
@@ -48177,7 +48890,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-STAGING-RECOVERY-R7",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-STAGING-RECOVERY-SOURCE-R7"
       ],
@@ -48195,6 +48908,34 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "345c971c141f07f0d856784d2e9d762bb4be42e3d633c28b9487381b4baa7e06",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed binding advanced to generation 8 for inherited terminal ACL compatibility and current source, gate, test and asset bytes.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-STAGING-RECOVERY-R8"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-STAGING-RECOVERY-R8",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-STAGING-RECOVERY-SOURCE-R8"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R6"
+      ],
+      "rule_id": "RULE-CODEX-GIT-STAGING-RECOVERY-R8",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R6",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "4d60afc35973a35d8683d778ec72d570b1f5846de1d47e6d2ddbac5a95ab3d78",
       "retirement": null
     },
     {
@@ -48283,7 +49024,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-TRANSACTION-R7",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-TRANSACTION-SOURCE-R7"
       ],
@@ -48301,6 +49042,34 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "7dbfb6cc21c0b1a07066c218a4ebccc5f6da77cce0b5695bd8ef548b02786175",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed binding advanced to generation 8 for inherited terminal ACL compatibility and current source, gate, test and asset bytes.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-TRANSACTION-R8"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-TRANSACTION-R8",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-TRANSACTION-SOURCE-R8"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-61C6537DDEBC-R7"
+      ],
+      "rule_id": "RULE-CODEX-GIT-TRANSACTION",
+      "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER-R7",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "f7a3c9f622c84dd9c17cf74727c5b5ce21d69aae27e193cd1a9029964877e96e",
       "retirement": null
     },
     {
@@ -48417,7 +49186,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-UPGRADE-AUTHORITY-R7",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-UPGRADE-AUTHORITY-SOURCE-R7"
       ],
@@ -48435,6 +49204,34 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "86abb9b93f602df460fac985d7efee4b3b58a8f0ad721f76a5d6f8f0d4ca3f1d",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed binding advanced to generation 8 for inherited terminal ACL compatibility and current source, gate, test and asset bytes.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-UPGRADE-AUTHORITY-R8"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-UPGRADE-AUTHORITY-R8",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-UPGRADE-AUTHORITY-SOURCE-R8"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R6"
+      ],
+      "rule_id": "RULE-CODEX-GIT-UPGRADE-AUTHORITY",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R6",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "b0e7b07e1ab840b0b629cebf3b15a533a4889e4c64ff43143a61c5cb3a15b1ec",
       "retirement": null
     },
     {
@@ -48495,7 +49292,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-UPGRADE-R7",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-UPGRADE-SOURCE-R7"
       ],
@@ -48513,6 +49310,34 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "39e39565ea0c31dcb3c4520f0e9b6b48ea722098a96aa59a1e817958c303a315",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed binding advanced to generation 8 for inherited terminal ACL compatibility and current source, gate, test and asset bytes.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-UPGRADE-R8"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-UPGRADE-R8",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-UPGRADE-SOURCE-R8"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R6"
+      ],
+      "rule_id": "RULE-CODEX-GIT-UPGRADE",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R6",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "17c1c637b31835052989dc2ebec32bc3017e5e2d3a15b732d89710538bf82d44",
       "retirement": null
     }
   ]

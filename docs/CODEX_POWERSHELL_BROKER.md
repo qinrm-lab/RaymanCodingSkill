@@ -453,12 +453,21 @@ Result history is never deleted by terminal-journal retirement.
 For compatibility with an older schema-v3 worker that retained terminal
 verified journals after a successful commit, current-schema upgrade first
 classifies every extra transaction-root entry. While holding the exclusive
-transaction lock it exact-deletes only journals whose protected ACL, strict
-schema, install/request identity, verified output and immutable success result
-all agree and whose request and scratch are absent. It then requires the
-transaction root to contain only the same zero-byte lock before creating any
-upgrade staging. A held lock, unresolved journal, mismatched result, reparse,
-directory or unknown filename remains recovery evidence and blocks upgrade.
+transaction lock it exact-deletes only journals whose strict schema,
+install/request identity, verified output and immutable success result all
+agree and whose request and scratch are absent. Journal and result ACLs must be
+either the canonical explicit protected file ACL or the production worker's
+legacy shape: every ACE is inherited, no explicit ACE exists, and the complete
+SID/right/type/inheritance/propagation tuple is semantically identical to that
+canonical file ACL while each direct parent remains the exact protected
+read-only root. The compatibility path never rewrites, protects, normalizes or
+widens an ACL. It binds the held file identity, bytes, owner, raw access SDDL
+and protection mode before the exclusive-lock recheck; result identity and ACL
+must remain stable too. It then requires the transaction root to contain only
+the same zero-byte lock before creating any upgrade staging. A held lock,
+unresolved journal, mixed explicit/inherited or otherwise mismatched ACL,
+mismatched result, reparse, directory or unknown filename remains recovery
+evidence and blocks upgrade.
 
 Current-schema crash recovery commits forward only when the new receipt, Task,
 ready marker and heartbeat all agree. Before that commit point it restores the

@@ -1787,6 +1787,97 @@ function Assert-ExactSecurity {
     }
 }
 
+function Get-BrokerFileAccessRuleSemanticKey {
+    param(
+        [Parameter(Mandatory = $true)]
+        [Security.AccessControl.FileSystemAccessRule]$Rule
+    )
+
+    return ('{0}|{1}|{2}|{3}|{4}' -f
+        [string]$Rule.IdentityReference.Value,
+        [int]$Rule.AccessControlType,
+        [int64]$Rule.FileSystemRights,
+        [int]$Rule.InheritanceFlags,
+        [int]$Rule.PropagationFlags)
+}
+
+function Test-BrokerExactInheritedFileSecurity {
+    param(
+        [Parameter(Mandatory = $true)][string]$AccessSddl,
+        [Parameter(Mandatory = $true)]
+        [Security.AccessControl.FileSecurity]$Expected
+    )
+
+    try {
+        $actual = [Security.AccessControl.FileSecurity]::new()
+        $actual.SetSecurityDescriptorSddlForm(
+            $AccessSddl,
+            [Security.AccessControl.AccessControlSections]::Access
+        )
+        $actualRules = @($actual.GetAccessRules(
+            $true, $true, [Security.Principal.SecurityIdentifier]
+        ))
+        $expectedRules = @($Expected.GetAccessRules(
+            $true, $true, [Security.Principal.SecurityIdentifier]
+        ))
+        if ($actualRules.Count -eq 0 -or
+            $actualRules.Count -ne $expectedRules.Count) {
+            return $false
+        }
+        $actualKeys = [Collections.Generic.List[string]]::new()
+        foreach ($rule in $actualRules) {
+            if (-not $rule.IsInherited) { return $false }
+            [void]$actualKeys.Add((
+                Get-BrokerFileAccessRuleSemanticKey -Rule $rule
+            ))
+        }
+        $expectedKeys = [Collections.Generic.List[string]]::new()
+        foreach ($rule in $expectedRules) {
+            if ($rule.IsInherited) { return $false }
+            [void]$expectedKeys.Add((
+                Get-BrokerFileAccessRuleSemanticKey -Rule $rule
+            ))
+        }
+        $actualArray = [string[]]$actualKeys.ToArray()
+        $expectedArray = [string[]]$expectedKeys.ToArray()
+        [Array]::Sort($actualArray, [StringComparer]::Ordinal)
+        [Array]::Sort($expectedArray, [StringComparer]::Ordinal)
+        for ($index = 0; $index -lt $actualArray.Count; $index++) {
+            if ($actualArray[$index] -cne $expectedArray[$index]) {
+                return $false
+            }
+        }
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Assert-TerminalGitArtifactSecurity {
+    param(
+        [Parameter(Mandatory = $true)]$Snapshot,
+        [Parameter(Mandatory = $true)]
+        [Security.AccessControl.FileSecurity]$Expected,
+        [Parameter(Mandatory = $true)][string]$ExpectedOwnerSid,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $expectedAccess = $Expected.GetSecurityDescriptorSddlForm(
+        [Security.AccessControl.AccessControlSections]::Access
+    )
+    $protectedExact = [bool]$Snapshot.AccessRulesProtected -and
+        [string]$Snapshot.AccessSddl -ceq $expectedAccess
+    $inheritedExact = -not [bool]$Snapshot.AccessRulesProtected -and
+        (Test-BrokerExactInheritedFileSecurity `
+            -AccessSddl ([string]$Snapshot.AccessSddl) -Expected $Expected)
+    if ([string]$Snapshot.OwnerSid -cne $ExpectedOwnerSid -or
+        (-not $protectedExact -and -not $inheritedExact)) {
+        throw "$Label owner/DACL mismatch. ExpectedOwner=$ExpectedOwnerSid ActualOwner=$($Snapshot.OwnerSid) ExpectedDacl=$expectedAccess ActualDacl=$($Snapshot.AccessSddl) ActualProtected=$($Snapshot.AccessRulesProtected)"
+    }
+    if ($protectedExact) { return 'protected_exact' }
+    return 'inherited_exact'
+}
+
 function Test-ExactAllowRule {
     param(
         [Parameter(Mandatory = $true)]$Rule,
@@ -5347,10 +5438,11 @@ function Get-TerminalGitTransactionJournalBinding {
         throw 'Git transaction journal name is not a fixed request identity.'
     }
     $requestId = [string]$Matches[1]
-    Assert-ExactSecurity -Path $JournalPath -Expected $FileSecurity `
-        -ExpectedOwnerSid $UserSid -Label 'Terminal Git transaction journal'
     $journalSnapshot = Get-BrokerFileSnapshot -Path $JournalPath `
         -Label 'Terminal Git transaction journal' -MaximumBytes 512KB
+    $journalSecurityMode = Assert-TerminalGitArtifactSecurity `
+        -Snapshot $journalSnapshot -Expected $FileSecurity `
+        -ExpectedOwnerSid $UserSid -Label 'Terminal Git transaction journal'
     $journal = ConvertFrom-StrictJsonBytes -Bytes $journalSnapshot.Bytes `
         -Label 'Terminal Git transaction journal'
     Assert-ExactProperties -Document $journal `
@@ -5419,10 +5511,11 @@ function Get-TerminalGitTransactionJournalBinding {
     $resultPath = Assert-ChildPath `
         -Child (Join-Path $expectedResultsRoot ($requestId + '.result.json')) `
         -Parent $expectedResultsRoot -Label 'Terminal Git transaction result'
-    Assert-ExactSecurity -Path $resultPath -Expected $FileSecurity `
-        -ExpectedOwnerSid $UserSid -Label 'Terminal Git transaction result'
     $resultSnapshot = Get-BrokerFileSnapshot -Path $resultPath `
         -Label 'Terminal Git transaction result' -MaximumBytes 256KB
+    $resultSecurityMode = Assert-TerminalGitArtifactSecurity `
+        -Snapshot $resultSnapshot -Expected $FileSecurity `
+        -ExpectedOwnerSid $UserSid -Label 'Terminal Git transaction result'
     $result = ConvertFrom-StrictJsonBytes -Bytes $resultSnapshot.Bytes `
         -Label 'Terminal Git transaction result'
     Assert-ExactProperties -Document $result `
@@ -5480,8 +5573,13 @@ function Get-TerminalGitTransactionJournalBinding {
         Identity = [string]$journalSnapshot.Identity
         OwnerSid = [string]$journalSnapshot.OwnerSid
         AccessSddl = [string]$journalSnapshot.AccessSddl
+        SecurityMode = [string]$journalSecurityMode
         RequestId = $requestId
         ResultSha256 = [string]$resultSnapshot.Sha256
+        ResultIdentity = [string]$resultSnapshot.Identity
+        ResultOwnerSid = [string]$resultSnapshot.OwnerSid
+        ResultAccessSddl = [string]$resultSnapshot.AccessSddl
+        ResultSecurityMode = [string]$resultSecurityMode
     }
 }
 
@@ -5496,7 +5594,23 @@ function Get-GitTransactionOperationalState {
         [string]$RepositoryRoot = $script:RepositoryRoot
     )
 
-    [void](Assert-RealDirectory -Path $Path -Label 'Git transaction operational root')
+    $expectedTransactions = Join-Path $Root $script:GitTransactionDirectoryName
+    $expectedResults = Join-Path $Root 'results'
+    if ([IO.Path]::GetFullPath($Path) -cne
+            [IO.Path]::GetFullPath($expectedTransactions)) {
+        throw 'Git transaction operational root escaped the installed tuple.'
+    }
+    $readOnlySecurity = New-ManagedDirectorySecurity `
+        -UserSid $UserSid `
+        -SandboxSid ([string]$Receipt.sandbox_group_sid) -Kind ReadOnly
+    foreach ($entry in @(
+        @($Path, 'Git transaction operational root'),
+        @($expectedResults, 'Git transaction result root')
+    )) {
+        [void](Assert-RealDirectory -Path $entry[0] -Label $entry[1])
+        Assert-ExactSecurity -Path $entry[0] -Expected $readOnlySecurity `
+            -ExpectedOwnerSid $UserSid -Label $entry[1]
+    }
     $entries = @(Get-ChildItem -LiteralPath $Path -Force -ErrorAction Stop)
     if ($entries.Count -lt 1 -or $entries.Count -gt 129) {
         throw 'Git transaction operational root has an invalid entry count.'
@@ -5561,7 +5675,16 @@ function Remove-TerminalGitTransactionJournalsForUpgrade {
         if ([string]$actual.Path -cne [string]$expected.Path -or
             [string]$actual.Sha256 -cne [string]$expected.Sha256 -or
             [string]$actual.Identity -cne [string]$expected.Identity -or
-            [string]$actual.ResultSha256 -cne [string]$expected.ResultSha256) {
+            [string]$actual.OwnerSid -cne [string]$expected.OwnerSid -or
+            [string]$actual.AccessSddl -cne [string]$expected.AccessSddl -or
+            [string]$actual.SecurityMode -cne [string]$expected.SecurityMode -or
+            [string]$actual.ResultSha256 -cne [string]$expected.ResultSha256 -or
+            [string]$actual.ResultIdentity -cne [string]$expected.ResultIdentity -or
+            [string]$actual.ResultOwnerSid -cne [string]$expected.ResultOwnerSid -or
+            [string]$actual.ResultAccessSddl -cne
+                [string]$expected.ResultAccessSddl -or
+            [string]$actual.ResultSecurityMode -cne
+                [string]$expected.ResultSecurityMode) {
             throw 'Git transaction terminal journal binding changed before retirement.'
         }
     }
@@ -11801,6 +11924,7 @@ $parentAttempt = @(& __POWERSHELL_PATH__ @parentHelperArguments)
             install_id = $terminalInstallId
             user_account = [string]$identity.Name
             user_sid = $testUserSid
+            sandbox_group_sid = $testSandboxSid
             worker_sha256 = 'e' * 64
             powershell_sha256 = 'f' * 64
             request_root = $terminalRequests
@@ -11828,10 +11952,70 @@ $parentAttempt = @(& __POWERSHELL_PATH__ @parentHelperArguments)
             ($terminalId + '.journal.json')
         $terminalResultPath = Join-Path $terminalResults `
             ($terminalId + '.result.json')
-        Write-JsonAtomic -Path $terminalJournalPath `
-            -Document $terminalJournal -Security $fileSecurity
-        Write-JsonAtomic -Path $terminalResultPath `
-            -Document $terminalResult -Security $fileSecurity
+        $terminalSecondId = [Guid]::NewGuid().ToString('N')
+        $terminalSecondOutput = [ordered]@{}
+        foreach ($entry in $terminalOutput.GetEnumerator()) {
+            $terminalSecondOutput[$entry.Key] = $entry.Value
+        }
+        $terminalSecondOutput.transaction_id = $terminalSecondId
+        $terminalSecondJournal = [ordered]@{}
+        foreach ($entry in $terminalJournal.GetEnumerator()) {
+            $terminalSecondJournal[$entry.Key] = $entry.Value
+        }
+        $terminalSecondJournal.request_id = $terminalSecondId
+        $terminalSecondJournal.alternate_index_path = Join-Path `
+            $terminalTransactions ($terminalSecondId + '.index')
+        $terminalSecondJournal.backup_index_path = Join-Path `
+            (Join-Path $terminalRoot '.git') `
+            ('.rayman-git-local-commit-' + $terminalSecondId + '.backup')
+        $terminalSecondJournal.output = $terminalSecondOutput
+        $terminalSecondResult = [ordered]@{}
+        foreach ($entry in $terminalResult.GetEnumerator()) {
+            $terminalSecondResult[$entry.Key] = $entry.Value
+        }
+        $terminalSecondResult.request_id = $terminalSecondId
+        $terminalSecondResult.output = $terminalSecondOutput
+        $terminalSecondJournalPath = Join-Path $terminalTransactions `
+            ($terminalSecondId + '.journal.json')
+        $terminalSecondResultPath = Join-Path $terminalResults `
+            ($terminalSecondId + '.result.json')
+        $terminalPairs = @(
+            [pscustomobject]@{
+                JournalPath = $terminalJournalPath
+                Journal = $terminalJournal
+                ResultPath = $terminalResultPath
+                Result = $terminalResult
+            },
+            [pscustomobject]@{
+                JournalPath = $terminalSecondJournalPath
+                Journal = $terminalSecondJournal
+                ResultPath = $terminalSecondResultPath
+                Result = $terminalSecondResult
+            }
+        )
+        foreach ($pair in $terminalPairs) {
+            Write-JsonAtomic -Path ([string]$pair.JournalPath) `
+                -Document $pair.Journal
+            Write-JsonAtomic -Path ([string]$pair.ResultPath) `
+                -Document $pair.Result
+        }
+        $inheritedSnapshots = [Collections.Generic.List[object]]::new()
+        foreach ($pair in $terminalPairs) {
+            $inheritedSnapshots.Add((Get-BrokerFileSnapshot `
+                -Path ([string]$pair.JournalPath) `
+                -Label 'Production-inherited terminal journal simulation'))
+            $inheritedSnapshots.Add((Get-BrokerFileSnapshot `
+                -Path ([string]$pair.ResultPath) `
+                -Label 'Production-inherited terminal result simulation'))
+        }
+        foreach ($snapshot in $inheritedSnapshots) {
+            if ([bool]$snapshot.AccessRulesProtected -or
+                -not (Test-BrokerExactInheritedFileSecurity `
+                    -AccessSddl ([string]$snapshot.AccessSddl) `
+                    -Expected $fileSecurity)) {
+                throw 'Production-inherited terminal artifact simulation did not reproduce the worker ACL shape.'
+            }
+        }
         $terminalState = Get-GitTransactionOperationalState `
             -Path $terminalTransactions -Root $terminalRoot `
             -Receipt $terminalReceipt -FileSecurity $fileSecurity `
@@ -11844,10 +12028,16 @@ $parentAttempt = @(& __POWERSHELL_PATH__ @parentHelperArguments)
                 -FileSecurity $fileSecurity -UserSid $testUserSid `
                 -RepositoryRoot $terminalRoot
         } finally { $terminalGuard.Dispose() }
-        if ($retiredCount -ne 1 -or
-            (Test-Path -LiteralPath $terminalJournalPath) -or
-            -not (Test-Path -LiteralPath $terminalResultPath -PathType Leaf)) {
-            throw 'Terminal journal self-test did not retire only the verified journal.'
+        $remainingTerminalJournals = @($terminalPairs | Where-Object {
+            Test-Path -LiteralPath ([string]$_.JournalPath)
+        })
+        $missingTerminalResults = @($terminalPairs | Where-Object {
+            -not (Test-Path -LiteralPath ([string]$_.ResultPath) -PathType Leaf)
+        })
+        if ($retiredCount -ne 2 -or
+            $remainingTerminalJournals.Count -ne 0 -or
+            $missingTerminalResults.Count -ne 0) {
+            throw 'Terminal journal self-test did not retire exactly two verified inherited journals while preserving both results.'
         }
         Write-JsonAtomic -Path $terminalJournalPath `
             -Document $terminalJournal -Security $fileSecurity
@@ -11877,6 +12067,42 @@ $parentAttempt = @(& __POWERSHELL_PATH__ @parentHelperArguments)
         } 'nonterminal journal retirement'
         if (-not (Test-Path -LiteralPath $terminalJournalPath -PathType Leaf)) {
             throw 'Nonterminal journal self-test removed recovery evidence.'
+        }
+
+        $terminalJournal.phase = 'verified'
+        Write-JsonAtomic -Path $terminalJournalPath `
+            -Document $terminalJournal -Replace
+        Write-JsonAtomic -Path $terminalResultPath `
+            -Document $terminalResult -Replace
+        $journalAclDrift = Get-Acl -LiteralPath $terminalJournalPath
+        Add-ManagedRule -Security $journalAclDrift -Sid 'S-1-5-32-545' `
+            -Rights ([Security.AccessControl.FileSystemRights]::ReadData)
+        Set-Acl -LiteralPath $terminalJournalPath -AclObject $journalAclDrift
+        & $assertRejected {
+            [void](Get-GitTransactionOperationalState `
+                -Path $terminalTransactions -Root $terminalRoot `
+                -Receipt $terminalReceipt -FileSecurity $fileSecurity `
+                -UserSid $testUserSid -RepositoryRoot $terminalRoot)
+        } 'terminal inherited journal with explicit ACL drift'
+        if (-not (Test-Path -LiteralPath $terminalJournalPath -PathType Leaf)) {
+            throw 'Journal ACL-drift self-test removed recovery evidence.'
+        }
+
+        Write-JsonAtomic -Path $terminalJournalPath `
+            -Document $terminalJournal -Replace
+        $resultAclDrift = Get-Acl -LiteralPath $terminalResultPath
+        Add-ManagedRule -Security $resultAclDrift -Sid 'S-1-5-32-545' `
+            -Rights ([Security.AccessControl.FileSystemRights]::ReadData)
+        Set-Acl -LiteralPath $terminalResultPath -AclObject $resultAclDrift
+        & $assertRejected {
+            [void](Get-GitTransactionOperationalState `
+                -Path $terminalTransactions -Root $terminalRoot `
+                -Receipt $terminalReceipt -FileSecurity $fileSecurity `
+                -UserSid $testUserSid -RepositoryRoot $terminalRoot)
+        } 'terminal inherited result with explicit ACL drift'
+        if (-not (Test-Path -LiteralPath $terminalJournalPath -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $terminalResultPath -PathType Leaf)) {
+            throw 'Result ACL-drift self-test removed terminal evidence.'
         }
         Remove-Item -LiteralPath $terminalRoot -Recurse -Force
 
