@@ -686,6 +686,14 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
     assert!(codex_broker.contains("function Read-GitCapabilityReady"));
     assert!(codex_broker.contains("function Open-BrokerWorkerLock"));
     assert!(codex_broker.contains("Broker worker lock acquisition failed"));
+    assert!(codex_broker.contains("function Remove-PublishedGitTransactionJournal"));
+    assert!(
+        codex_broker.contains("Terminal Git journal does not match the published success result.")
+    );
+    assert!(codex_broker.contains("terminal Git journal mismatched result"));
+    assert!(codex_broker.contains("public static SafeFileHandle OpenDeleteHandle"));
+    assert!(codex_broker.contains("cannot mark exact journal handle for deletion"));
+    assert!(codex_broker.contains("Terminal Git journal exact-delete binding drifted."));
     assert!(!codex_broker.contains("catch [IO.IOException] { return }"));
     assert!(codex_broker.contains("requires info/attributes to remain absent"));
     assert!(codex_broker.contains("index backup cannot prove the replaced live index"));
@@ -826,6 +834,17 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
     assert!(!codex_broker_installer.contains("$manifest.rayman"));
     assert!(!codex_broker_installer.contains("boundFiles['rayman']"));
     assert!(codex_broker_installer.contains("function Open-GitTransactionGuard"));
+    assert!(codex_broker_installer.contains("function Get-GitTransactionOperationalState"));
+    assert!(
+        codex_broker_installer.contains("function Remove-TerminalGitTransactionJournalsForUpgrade")
+    );
+    assert!(
+        codex_broker_installer
+            .contains("Terminal journal self-test did not retire only the verified journal.")
+    );
+    assert!(
+        codex_broker_installer.contains("Nonterminal journal self-test removed recovery evidence.")
+    );
     assert!(
         codex_broker_installer
             .contains("function Assert-GitTransactionDirectorySafeForInstallerCleanup")

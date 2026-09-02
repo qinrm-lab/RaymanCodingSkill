@@ -66,6 +66,8 @@ $script:GitCapabilityReadyName = 'git-local-commit-v1.ready.json'
 $script:GitTransactionDirectoryName = 'git-local-commit-transactions'
 $script:GitSelfTestFaultPhase = $null
 $script:GitSelfTestBeforeAddAction = $null
+$script:GitSelfTestBeforeTerminalJournalRetireAction = $null
+$script:GitSelfTestTerminalJournalBytes = $null
 
 function Invoke-BrokerPortableStaticSelfTest {
     $parseErrors = $null
@@ -237,6 +239,11 @@ namespace Rayman {
             public uint ReparseTag;
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        struct FILE_DISPOSITION_INFO {
+            [MarshalAs(UnmanagedType.Bool)] public bool DeleteFile;
+        }
+
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         public static extern SafeFileHandle CreateFileW(
             string path,
@@ -256,6 +263,11 @@ namespace Rayman {
         static extern bool GetFileInformationByHandleEx(
             SafeFileHandle hFile, int fileInformationClass,
             out FILE_ATTRIBUTE_TAG_INFO fileInformation, uint dwBufferSize);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool SetFileInformationByHandle(
+            SafeFileHandle hFile, int fileInformationClass,
+            ref FILE_DISPOSITION_INFO fileInformation, uint dwBufferSize);
 
         [DllImport("kernel32.dll", SetLastError = true)]
         static extern bool CreatePipe(
@@ -416,6 +428,28 @@ namespace Rayman {
                 if (handle.IsInvalid) ThrowLast("cannot open strong-identity target");
                 return GetStrongFileIdentity(handle);
             }
+        }
+
+        public static SafeFileHandle OpenDeleteHandle(string path) {
+            const uint GENERIC_READ = 0x80000000;
+            const uint DELETE = 0x00010000;
+            const uint FILE_READ_ATTRIBUTES = 0x00000080;
+            const uint SHARE_ALL = 0x00000007;
+            return OpenNonReparseHeld(path, false,
+                GENERIC_READ | DELETE | FILE_READ_ATTRIBUTES, SHARE_ALL);
+        }
+
+        public static string StrongIdentity(SafeFileHandle handle) {
+            if (handle == null || handle.IsInvalid || handle.IsClosed)
+                throw new ArgumentException("strong identity handle is invalid");
+            return GetStrongFileIdentity(handle);
+        }
+
+        public static void MarkDelete(SafeFileHandle handle) {
+            var information = new FILE_DISPOSITION_INFO { DeleteFile = true };
+            if (!SetFileInformationByHandle(handle, 4, ref information,
+                (uint)Marshal.SizeOf<FILE_DISPOSITION_INFO>()))
+                ThrowLast("cannot mark exact journal handle for deletion");
         }
 
         public static HeldRegularFile ReadBoundedRegularFileTreeHeld(
@@ -3012,6 +3046,164 @@ function Remove-GitTransactionScratch {
     }
 }
 
+function Get-ComparableJsonText {
+    param([Parameter(Mandatory = $true)]$Document)
+
+    return ($Document | ConvertTo-Json -Depth 16 -Compress)
+}
+
+function Remove-PublishedGitTransactionJournal {
+    param(
+        [Parameter(Mandatory = $true)]$Paths,
+        [Parameter(Mandatory = $true)]$Receipt,
+        [Parameter(Mandatory = $true)]$Identity,
+        [Parameter(Mandatory = $true)][string]$RequestId,
+        [Parameter(Mandatory = $true)][string]$RequestSha256,
+        [Parameter(Mandatory = $true)]$ExpectedOutput
+    )
+
+    if ($RequestId -notmatch '^[0-9a-f]{32}$' -or
+        $RequestSha256 -notmatch '^[0-9a-f]{64}$') {
+        throw 'Terminal Git journal retirement identity is invalid.'
+    }
+    $journalPath = Assert-ChildPath `
+        -Child (Join-Path $Paths.Transactions ($RequestId + '.journal.json')) `
+        -Parent $Paths.Transactions -Label 'Terminal Git journal'
+    $resultPath = Assert-ChildPath `
+        -Child (Join-Path $Paths.Results ($RequestId + $script:ResultSuffix)) `
+        -Parent $Paths.Results -Label 'Terminal Git result'
+    if (-not (Test-Path -LiteralPath $journalPath -PathType Leaf)) {
+        return $false
+    }
+
+    $transactionLock = [IO.FileStream]::new(
+        $Paths.GitTransactionLock, [IO.FileMode]::Open,
+        [IO.FileAccess]::ReadWrite, [IO.FileShare]::None
+    )
+    try {
+        if ($null -ne $script:GitSelfTestBeforeTerminalJournalRetireAction) {
+            & $script:GitSelfTestBeforeTerminalJournalRetireAction `
+                $journalPath $resultPath
+        }
+        if (-not (Test-Path -LiteralPath $journalPath -PathType Leaf)) {
+            return $false
+        }
+        $manifest = Read-GitCapabilityManifest -Paths $Paths -Receipt $Receipt
+        $journal = Read-GitJournal -Path $journalPath `
+            -Paths $Paths -Manifest $manifest
+        $journalBytes = [Text.UTF8Encoding]::new($false, $true).GetBytes(
+            (Get-ComparableJsonText -Document $journal)
+        )
+        $journalSha256 = Get-BytesSha256 -Bytes $journalBytes
+        $journalIdentity = Get-StrongPathIdentity `
+            -Path $journalPath -Directory $false
+        $journalSecurity = Get-IndexSecurityFingerprint -Path $journalPath
+        if ((Get-FileSha256 -Path $journalPath) -cne $journalSha256) {
+            throw 'Terminal Git journal bytes are not canonical or changed during validation.'
+        }
+        $result = Read-StrictJsonDocument -Path $resultPath `
+            -MaximumBytes 256KB -Label 'Terminal Git result'
+        Assert-ExactProperties -Document $result -Label 'Terminal Git result' -Expected @(
+            'error', 'error_code', 'executor_account', 'executor_sid', 'exit_code',
+            'finished_at_utc', 'install_id', 'operation', 'output',
+            'powershell_sha256', 'request_id', 'request_sha256',
+            'schema_version', 'started_at_utc', 'status', 'worker_sha256'
+        )
+        Assert-ExactProperties -Document $result.output `
+            -Label 'Terminal Git result output' -Expected @(
+            'child_process_policy', 'changed_path_count', 'changed_paths',
+            'changed_paths_digest', 'commit_message_sha256', 'commit_oid',
+            'git_sha256', 'head_after', 'head_before', 'hooks_disabled',
+            'index_after_sha256', 'index_before_sha256', 'mutation_phase',
+            'network_operation', 'other_refs_sha256', 'parent', 'post_clean',
+            'recovery_state', 'ref', 'remote_refs_sha256', 'repository_id',
+            'transaction_id', 'tree_oid'
+        )
+        if ([string]$journal.phase -cne 'verified' -or
+            $null -eq $journal.output -or
+            [string]$journal.install_id -cne [string]$Receipt.install_id -or
+            [string]$journal.request_id -cne $RequestId -or
+            [string]$journal.request_sha256 -cne $RequestSha256 -or
+            [int]$result.schema_version -ne $script:SchemaVersion -or
+            [string]$result.install_id -cne [string]$Receipt.install_id -or
+            [string]$result.request_id -cne $RequestId -or
+            [string]$result.operation -cne $script:GitCapabilityId -or
+            [string]$result.status -cne 'success' -or
+            [int]$result.exit_code -ne 0 -or
+            [string]$result.executor_account -cne [string]$Identity.Account -or
+            [string]$result.executor_sid -cne [string]$Identity.Sid -or
+            [string]$result.worker_sha256 -cne [string]$Receipt.worker_sha256 -or
+            [string]$result.powershell_sha256 -cne
+                [string]$Receipt.powershell_sha256 -or
+            [string]$result.request_sha256 -cne $RequestSha256 -or
+            -not [string]::IsNullOrEmpty([string]$result.error_code) -or
+            -not [string]::IsNullOrEmpty([string]$result.error) -or
+            [string]$result.output.transaction_id -cne $RequestId -or
+            [string]$result.output.commit_oid -cne [string]$journal.commit_oid -or
+            [string]$result.output.tree_oid -cne [string]$journal.tree_oid -or
+            [string]$result.output.head_before -cne [string]$journal.head_before -or
+            [string]$result.output.mutation_phase -cne 'verified' -or
+            [string]$result.output.recovery_state -cne 'none' -or
+            [bool]$result.output.post_clean -ne $true -or
+            [bool]$result.output.network_operation -ne $false -or
+            (Get-ComparableJsonText -Document $journal.output) -cne
+                (Get-ComparableJsonText -Document $result.output) -or
+            (Get-ComparableJsonText -Document $ExpectedOutput) -cne
+                (Get-ComparableJsonText -Document $result.output)) {
+            throw 'Terminal Git journal does not match the published success result.'
+        }
+        foreach ($scratch in @(
+            [string]$journal.alternate_index_path,
+            [string]$journal.backup_index_path,
+            [string]$journal.stage_index_path
+        )) {
+            if (-not [string]::IsNullOrEmpty($scratch) -and
+                (Test-Path -LiteralPath $scratch)) {
+                throw 'Terminal Git journal still has transaction scratch.'
+            }
+        }
+        $deleteHandle =
+            [Rayman.CodexBrokerNative]::OpenDeleteHandle($journalPath)
+        $deleteStream = $null
+        try {
+            $deleteStream = [IO.FileStream]::new(
+                $deleteHandle, [IO.FileAccess]::Read
+            )
+            $deleteHandle = $null
+            $sha = [Security.Cryptography.SHA256]::Create()
+            try {
+                $heldSha256 = [BitConverter]::ToString(
+                    $sha.ComputeHash($deleteStream)
+                ).Replace('-', '').ToLowerInvariant()
+            } finally { $sha.Dispose() }
+            $heldIdentity = [Rayman.CodexBrokerNative]::StrongIdentity(
+                $deleteStream.SafeFileHandle
+            )
+            $currentSecurity = Get-IndexSecurityFingerprint -Path $journalPath
+            if ($heldSha256 -cne $journalSha256 -or
+                $heldIdentity -cne $journalIdentity -or
+                [string]$currentSecurity.Owner -cne
+                    [string]$journalSecurity.Owner -or
+                [string]$currentSecurity.Access -cne
+                    [string]$journalSecurity.Access) {
+                throw 'Terminal Git journal exact-delete binding drifted.'
+            }
+            [Rayman.CodexBrokerNative]::MarkDelete(
+                $deleteStream.SafeFileHandle
+            )
+        } finally {
+            if ($null -ne $deleteStream) { $deleteStream.Dispose() }
+            elseif ($null -ne $deleteHandle) { $deleteHandle.Dispose() }
+        }
+        if (Test-Path -LiteralPath $journalPath) {
+            throw 'Terminal Git journal retirement did not remove the exact journal.'
+        }
+        return $true
+    } finally {
+        $transactionLock.Dispose()
+    }
+}
+
 function Invoke-GitLocalCommitOperation {
     param(
         [Parameter(Mandatory = $true)]$Request,
@@ -3405,8 +3597,17 @@ function Invoke-WorkerCycle {
                     -Path $resultPath -MaximumBytes 256KB `
                     -Label 'Existing broker replay result'
                 if ([string]$existingResult.request_id -cne $requestId -or
-                    [string]$existingResult.request_sha256 -notmatch '^[0-9a-f]{64}$') {
+                    [string]$existingResult.request_sha256 -cne $requestHash) {
                     throw 'Existing broker replay result has an invalid protected identity.'
+                }
+                if ([string]$existingResult.operation -ceq $script:GitCapabilityId -and
+                    [string]$existingResult.status -ceq 'success' -and
+                    $null -ne $existingResult.output -and
+                    [string]$existingResult.output.mutation_phase -ceq 'verified') {
+                    [void](Remove-PublishedGitTransactionJournal `
+                        -Paths $Paths -Receipt $Receipt -Identity $Identity `
+                        -RequestId $requestId -RequestSha256 $requestHash `
+                        -ExpectedOutput $existingResult.output)
                 }
                 $resultPublished = $true
                 $processed++
@@ -3434,6 +3635,14 @@ function Invoke-WorkerCycle {
                     -RequestSha256 $requestHash -Status 'success' -ExitCode 0 `
                     -Output $output -ErrorCode $null -ErrorMessage $null `
                     -StartedAt $started
+                if ($operationName -ceq $script:GitCapabilityId -and
+                    $null -ne $output -and
+                    [string]$output.mutation_phase -ceq 'verified') {
+                    [void](Remove-PublishedGitTransactionJournal `
+                        -Paths $Paths -Receipt $Receipt -Identity $Identity `
+                        -RequestId $requestId -RequestSha256 $requestHash `
+                        -ExpectedOutput $output)
+                }
                 $resultPublished = $true
             } catch {
                 if ($operationName -ceq $script:GitCapabilityId -and
@@ -4448,6 +4657,14 @@ function Invoke-SelfTest {
             -Paths $paths -OperationName $script:GitCapabilityId `
             -Created $now -Expires $now.AddSeconds(120) -Payload $gitPayload `
             -InstallId $installId
+        $script:GitSelfTestTerminalJournalBytes = $null
+        $script:GitSelfTestBeforeTerminalJournalRetireAction = {
+            param([string]$JournalPath, [string]$ResultPath)
+            if ($null -eq $script:GitSelfTestTerminalJournalBytes) {
+                $script:GitSelfTestTerminalJournalBytes =
+                    [IO.File]::ReadAllBytes($JournalPath)
+            }
+        }
         $workerCulture = [Globalization.CultureInfo]::CurrentCulture
         try {
             [Globalization.CultureInfo]::CurrentCulture =
@@ -4455,7 +4672,10 @@ function Invoke-SelfTest {
             [void](Invoke-WorkerCycle -Paths $paths -Receipt $receipt -Identity $identity)
         } finally {
             [Globalization.CultureInfo]::CurrentCulture = $workerCulture
+            $script:GitSelfTestBeforeTerminalJournalRetireAction = $null
         }
+        $gitJournalPath = Join-Path $paths.Transactions `
+            ($gitRequestId + '.journal.json')
         $gitResult = Read-StrictJsonDocument `
             -Path (Join-Path $paths.Results ($gitRequestId + $script:ResultSuffix)) `
             -MaximumBytes 256KB -Label 'Self-test Git commit result'
@@ -4466,6 +4686,34 @@ function Invoke-SelfTest {
             [bool]$gitResult.output.network_operation -ne $false) {
             throw "git_local_commit_v1 positive self-test failed: $($gitResult.error)"
         }
+        if ((Test-Path -LiteralPath $gitJournalPath) -or
+            $null -eq $script:GitSelfTestTerminalJournalBytes) {
+            throw 'git_local_commit_v1 did not retire its published terminal journal.'
+        }
+        [IO.File]::WriteAllBytes(
+            $gitJournalPath, [byte[]]$script:GitSelfTestTerminalJournalBytes
+        )
+        $gitResultPath = Join-Path $paths.Results `
+            ($gitRequestId + $script:ResultSuffix)
+        $gitResultBytes = [IO.File]::ReadAllBytes($gitResultPath)
+        $mismatchedResult = Read-StrictJsonDocument `
+            -Path $gitResultPath -MaximumBytes 256KB `
+            -Label 'Self-test terminal Git result'
+        $mismatchedResult.request_sha256 = '0' * 64
+        Write-JsonAtomic -Path $gitResultPath -Document $mismatchedResult -Replace
+        & $assertRejected {
+            [void](Remove-PublishedGitTransactionJournal `
+                -Paths $paths -Receipt $receipt -Identity $identity `
+                -RequestId $gitRequestId `
+                -RequestSha256 ([string]$gitResult.request_sha256) `
+                -ExpectedOutput $gitResult.output)
+        } 'terminal Git journal mismatched result'
+        if (-not (Test-Path -LiteralPath $gitJournalPath -PathType Leaf)) {
+            throw 'Terminal Git journal mismatch self-test removed recovery evidence.'
+        }
+        [IO.File]::WriteAllBytes($gitResultPath, $gitResultBytes)
+        Remove-Item -LiteralPath $gitJournalPath -Force
+        $script:GitSelfTestTerminalJournalBytes = $null
 
         [IO.File]::WriteAllText(
             (Join-Path $fixtureRoot 'tracked.txt'), "commit-two`r`n",

@@ -5325,6 +5325,262 @@ function Get-GitTransactionCleanupLockPath {
     return [string]$entries[0].FullName
 }
 
+function Get-InstallerComparableJsonText {
+    param([Parameter(Mandatory = $true)]$Document)
+
+    return ($Document | ConvertTo-Json -Depth 16 -Compress)
+}
+
+function Get-TerminalGitTransactionJournalBinding {
+    param(
+        [Parameter(Mandatory = $true)][string]$JournalPath,
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)]$Receipt,
+        [Parameter(Mandatory = $true)]
+        [Security.AccessControl.FileSecurity]$FileSecurity,
+        [Parameter(Mandatory = $true)][string]$UserSid,
+        [string]$RepositoryRoot = $script:RepositoryRoot
+    )
+
+    $fileName = [IO.Path]::GetFileName($JournalPath)
+    if ($fileName -notmatch '^([0-9a-f]{32})\.journal\.json$') {
+        throw 'Git transaction journal name is not a fixed request identity.'
+    }
+    $requestId = [string]$Matches[1]
+    Assert-ExactSecurity -Path $JournalPath -Expected $FileSecurity `
+        -ExpectedOwnerSid $UserSid -Label 'Terminal Git transaction journal'
+    $journalSnapshot = Get-BrokerFileSnapshot -Path $JournalPath `
+        -Label 'Terminal Git transaction journal' -MaximumBytes 512KB
+    $journal = ConvertFrom-StrictJsonBytes -Bytes $journalSnapshot.Bytes `
+        -Label 'Terminal Git transaction journal'
+    Assert-ExactProperties -Document $journal `
+        -Label 'Terminal Git transaction journal' -Expected @(
+        'alternate_index_path', 'alternate_index_sha256', 'backup_index_path',
+        'commit_bytes_base64', 'commit_message_sha256', 'commit_oid',
+        'created_at_utc', 'head_before', 'head_tree_before', 'index_before_sha256',
+        'index_path', 'install_id', 'output', 'phase', 'remote_refs_before_sha256',
+        'other_refs_before_sha256', 'request_id', 'request_sha256',
+        'schema_version', 'stage_index_path', 'tree_oid', 'updated_at_utc'
+    )
+    Assert-ExactProperties -Document $journal.output `
+        -Label 'Terminal Git transaction journal output' -Expected @(
+        'child_process_policy', 'changed_path_count', 'changed_paths',
+        'changed_paths_digest', 'commit_message_sha256', 'commit_oid',
+        'git_sha256', 'head_after', 'head_before', 'hooks_disabled',
+        'index_after_sha256', 'index_before_sha256', 'mutation_phase',
+        'network_operation', 'other_refs_sha256', 'parent', 'post_clean',
+        'recovery_state', 'ref', 'remote_refs_sha256', 'repository_id',
+        'transaction_id', 'tree_oid'
+    )
+    $gitDirectory = Join-Path $RepositoryRoot '.git'
+    if ([int]$journal.schema_version -ne 1 -or
+        [string]$journal.install_id -cne [string]$Receipt.install_id -or
+        [string]$journal.request_id -cne $requestId -or
+        [string]$journal.request_sha256 -notmatch '^[0-9a-f]{64}$' -or
+        [string]$journal.phase -cne 'verified' -or
+        [string]$journal.commit_oid -notmatch '^[0-9a-f]{40}$' -or
+        [string]$journal.tree_oid -notmatch '^[0-9a-f]{40}$' -or
+        [string]$journal.output.transaction_id -cne $requestId -or
+        [string]$journal.output.commit_oid -cne [string]$journal.commit_oid -or
+        [string]$journal.output.tree_oid -cne [string]$journal.tree_oid -or
+        [string]$journal.output.head_before -cne [string]$journal.head_before -or
+        [string]$journal.output.parent -cne [string]$journal.head_before -or
+        [string]$journal.output.head_after -cne [string]$journal.commit_oid -or
+        [string]$journal.output.index_before_sha256 -cne
+            [string]$journal.index_before_sha256 -or
+        [string]$journal.output.commit_message_sha256 -cne
+            [string]$journal.commit_message_sha256 -or
+        [string]$journal.output.remote_refs_sha256 -cne
+            [string]$journal.remote_refs_before_sha256 -or
+        [string]$journal.output.other_refs_sha256 -cne
+            [string]$journal.other_refs_before_sha256 -or
+        [string]$journal.index_path -cne (Join-Path $gitDirectory 'index') -or
+        [string]$journal.alternate_index_path -cne
+            (Join-Path (Split-Path -Parent $JournalPath) ($requestId + '.index')) -or
+        [string]$journal.stage_index_path -cne
+            (Join-Path $gitDirectory 'index.lock') -or
+        [string]$journal.backup_index_path -cne
+            (Join-Path $gitDirectory (
+                '.rayman-git-local-commit-' + $requestId + '.backup'
+            )) -or
+        [string]$journal.output.mutation_phase -cne 'verified' -or
+        [string]$journal.output.recovery_state -cne 'none' -or
+        [bool]$journal.output.post_clean -ne $true -or
+        [bool]$journal.output.network_operation -ne $false) {
+        throw 'Git transaction journal is not a terminal verified commit.'
+    }
+
+    $expectedResultsRoot = Join-Path $Root 'results'
+    $expectedRequestsRoot = Join-Path $Root 'requests'
+    if ([string]$Receipt.result_root -cne $expectedResultsRoot -or
+        [string]$Receipt.request_root -cne $expectedRequestsRoot) {
+        throw 'Terminal Git transaction receipt roots drifted.'
+    }
+    $resultPath = Assert-ChildPath `
+        -Child (Join-Path $expectedResultsRoot ($requestId + '.result.json')) `
+        -Parent $expectedResultsRoot -Label 'Terminal Git transaction result'
+    Assert-ExactSecurity -Path $resultPath -Expected $FileSecurity `
+        -ExpectedOwnerSid $UserSid -Label 'Terminal Git transaction result'
+    $resultSnapshot = Get-BrokerFileSnapshot -Path $resultPath `
+        -Label 'Terminal Git transaction result' -MaximumBytes 256KB
+    $result = ConvertFrom-StrictJsonBytes -Bytes $resultSnapshot.Bytes `
+        -Label 'Terminal Git transaction result'
+    Assert-ExactProperties -Document $result `
+        -Label 'Terminal Git transaction result' -Expected @(
+        'error', 'error_code', 'executor_account', 'executor_sid', 'exit_code',
+        'finished_at_utc', 'install_id', 'operation', 'output',
+        'powershell_sha256', 'request_id', 'request_sha256',
+        'schema_version', 'started_at_utc', 'status', 'worker_sha256'
+    )
+    Assert-ExactProperties -Document $result.output `
+        -Label 'Terminal Git transaction result output' -Expected @(
+        'child_process_policy', 'changed_path_count', 'changed_paths',
+        'changed_paths_digest', 'commit_message_sha256', 'commit_oid',
+        'git_sha256', 'head_after', 'head_before', 'hooks_disabled',
+        'index_after_sha256', 'index_before_sha256', 'mutation_phase',
+        'network_operation', 'other_refs_sha256', 'parent', 'post_clean',
+        'recovery_state', 'ref', 'remote_refs_sha256', 'repository_id',
+        'transaction_id', 'tree_oid'
+    )
+    if ([int]$result.schema_version -ne $script:SchemaVersion -or
+        [string]$result.install_id -cne [string]$Receipt.install_id -or
+        [string]$result.request_id -cne $requestId -or
+        [string]$result.operation -cne $script:GitCapabilityId -or
+        [string]$result.status -cne 'success' -or
+        [int]$result.exit_code -ne 0 -or
+        [string]$result.executor_account -cne [string]$Receipt.user_account -or
+        [string]$result.executor_sid -cne [string]$Receipt.user_sid -or
+        [string]$result.worker_sha256 -cne [string]$Receipt.worker_sha256 -or
+        [string]$result.powershell_sha256 -cne [string]$Receipt.powershell_sha256 -or
+        [string]$result.request_sha256 -cne [string]$journal.request_sha256 -or
+        -not [string]::IsNullOrEmpty([string]$result.error_code) -or
+        -not [string]::IsNullOrEmpty([string]$result.error) -or
+        (Get-InstallerComparableJsonText -Document $result.output) -cne
+            (Get-InstallerComparableJsonText -Document $journal.output)) {
+        throw 'Terminal Git transaction result does not match its verified journal.'
+    }
+    if (Test-Path -LiteralPath (
+            Join-Path ([string]$Receipt.request_root) ($requestId + '.request.json')
+        )) {
+        throw 'Terminal Git transaction still has a live request.'
+    }
+    foreach ($scratch in @(
+        [string]$journal.alternate_index_path,
+        [string]$journal.backup_index_path,
+        [string]$journal.stage_index_path
+    )) {
+        if (-not [string]::IsNullOrEmpty($scratch) -and
+            (Test-Path -LiteralPath $scratch)) {
+            throw 'Terminal Git transaction still has journal-owned scratch.'
+        }
+    }
+    return [pscustomobject]@{
+        Path = [string]$journalSnapshot.Path
+        Sha256 = [string]$journalSnapshot.Sha256
+        Identity = [string]$journalSnapshot.Identity
+        OwnerSid = [string]$journalSnapshot.OwnerSid
+        AccessSddl = [string]$journalSnapshot.AccessSddl
+        RequestId = $requestId
+        ResultSha256 = [string]$resultSnapshot.Sha256
+    }
+}
+
+function Get-GitTransactionOperationalState {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)]$Receipt,
+        [Parameter(Mandatory = $true)]
+        [Security.AccessControl.FileSecurity]$FileSecurity,
+        [Parameter(Mandatory = $true)][string]$UserSid,
+        [string]$RepositoryRoot = $script:RepositoryRoot
+    )
+
+    [void](Assert-RealDirectory -Path $Path -Label 'Git transaction operational root')
+    $entries = @(Get-ChildItem -LiteralPath $Path -Force -ErrorAction Stop)
+    if ($entries.Count -lt 1 -or $entries.Count -gt 129) {
+        throw 'Git transaction operational root has an invalid entry count.'
+    }
+    $locks = @($entries | Where-Object {
+        [string]$_.Name -ceq 'transaction.lock'
+    })
+    if ($locks.Count -ne 1 -or $locks[0].PSIsContainer -or
+        ($locks[0].Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+        $locks[0].Length -ne 0) {
+        throw 'Git transaction operational lock is missing or invalid.'
+    }
+    $journalEntries = @($entries | Where-Object {
+        [string]$_.Name -cne 'transaction.lock'
+    })
+    foreach ($entry in $journalEntries) {
+        if ($entry.PSIsContainer -or
+            ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+            [string]$entry.Name -notmatch '^[0-9a-f]{32}\.journal\.json$') {
+            throw 'Git transaction operational root contains unknown recovery state.'
+        }
+    }
+    $journalNames = [string[]]@($journalEntries | ForEach-Object Name)
+    [Array]::Sort($journalNames, [StringComparer]::Ordinal)
+    $bindings = [Collections.Generic.List[object]]::new()
+    foreach ($name in $journalNames) {
+        $bindings.Add((Get-TerminalGitTransactionJournalBinding `
+            -JournalPath (Join-Path $Path $name) -Root $Root `
+            -Receipt $Receipt -FileSecurity $FileSecurity -UserSid $UserSid `
+            -RepositoryRoot $RepositoryRoot))
+    }
+    return [pscustomobject]@{
+        LockPath = [string]$locks[0].FullName
+        Journals = @($bindings)
+    }
+}
+
+function Remove-TerminalGitTransactionJournalsForUpgrade {
+    param(
+        [Parameter(Mandatory = $true)]$ExpectedState,
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)]$Receipt,
+        [Parameter(Mandatory = $true)]
+        [Security.AccessControl.FileSecurity]$FileSecurity,
+        [Parameter(Mandatory = $true)][string]$UserSid,
+        [string]$RepositoryRoot = $script:RepositoryRoot
+    )
+
+    $current = Get-GitTransactionOperationalState -Path $Path -Root $Root `
+        -Receipt $Receipt -FileSecurity $FileSecurity -UserSid $UserSid `
+        -RepositoryRoot $RepositoryRoot
+    $expectedBindings = @($ExpectedState.Journals)
+    $currentBindings = @($current.Journals)
+    if ([string]$current.LockPath -cne [string]$ExpectedState.LockPath -or
+        $currentBindings.Count -ne $expectedBindings.Count) {
+        throw 'Git transaction terminal journal set changed before retirement.'
+    }
+    for ($index = 0; $index -lt $expectedBindings.Count; $index++) {
+        $expected = $expectedBindings[$index]
+        $actual = $currentBindings[$index]
+        if ([string]$actual.Path -cne [string]$expected.Path -or
+            [string]$actual.Sha256 -cne [string]$expected.Sha256 -or
+            [string]$actual.Identity -cne [string]$expected.Identity -or
+            [string]$actual.ResultSha256 -cne [string]$expected.ResultSha256) {
+            throw 'Git transaction terminal journal binding changed before retirement.'
+        }
+    }
+    foreach ($binding in $expectedBindings) {
+        [void](Remove-BrokerFileExact -Path ([string]$binding.Path) `
+            -ExpectedSha256 ([string]$binding.Sha256) `
+            -ExpectedIdentity ([string]$binding.Identity) `
+            -ExpectedOwnerSid ([string]$binding.OwnerSid) `
+            -ExpectedAccessSddl ([string]$binding.AccessSddl) `
+            -Label 'Terminal Git transaction journal retirement' `
+            -MaximumBytes 512KB)
+    }
+    if ((Get-GitTransactionCleanupLockPath -Path $Path) -cne
+        [string]$ExpectedState.LockPath) {
+        throw 'Git transaction root did not converge to its protected lock.'
+    }
+    return $expectedBindings.Count
+}
+
 function Assert-GitTransactionDirectorySafeForInstallerCleanup {
     param([Parameter(Mandatory = $true)][string]$Path)
 
@@ -7832,7 +8088,10 @@ function Upgrade-BrokerCurrentSchema {
     $receiptPath = Join-Path $Root $script:ReceiptName
     Wait-BrokerReceiptReplaceReady -Path $receiptPath -TimeoutMilliseconds 5000
     $transactions = Join-Path $Root $script:GitTransactionDirectoryName
-    $transactionLock = Get-GitTransactionCleanupLockPath -Path $transactions
+    $transactionState = Get-GitTransactionOperationalState `
+        -Path $transactions -Root $Root -Receipt $Previous `
+        -FileSecurity $FileSecurity -UserSid $UserSid
+    $transactionLock = [string]$transactionState.LockPath
     $hooks = Join-Path $Root 'empty-hooks'
     $manifestPath = Join-Path $Root $script:GitCapabilityManifestName
     $readyPath = Join-Path $Root $script:GitCapabilityReadyName
@@ -7901,6 +8160,9 @@ function Upgrade-BrokerCurrentSchema {
     try {
         $guardState.Stream = Open-GitTransactionGuard `
             -Path $transactionLock
+        [void](Remove-TerminalGitTransactionJournalsForUpgrade `
+            -ExpectedState $transactionState -Path $transactions -Root $Root `
+            -Receipt $Previous -FileSecurity $FileSecurity -UserSid $UserSid)
         if ((Get-GitTransactionCleanupLockPath -Path $transactions) -cne
             $transactionLock) {
             throw 'Current-schema transaction lock changed during staging.'
@@ -11456,6 +11718,168 @@ $parentAttempt = @(& __POWERSHELL_PATH__ @parentHelperArguments)
         } 'transaction recovery evidence cleanup'
         Remove-Item -LiteralPath $journalProbe -Force
         Remove-Item -LiteralPath $guardRoot -Recurse -Force
+
+        $terminalRoot = Join-Path $testRoot 'terminal-journal-self-test'
+        [void](New-ManagedDirectory -Path $terminalRoot `
+            -Security $readOnlySecurity -OwnerSid $testUserSid `
+            -Label 'Terminal journal self-test root')
+        $terminalTransactions = Join-Path $terminalRoot `
+            $script:GitTransactionDirectoryName
+        $terminalResults = Join-Path $terminalRoot 'results'
+        $terminalRequests = Join-Path $terminalRoot 'requests'
+        foreach ($directory in @(
+            $terminalTransactions, $terminalResults, $terminalRequests
+        )) {
+            [void](New-ManagedDirectory -Path $directory `
+                -Security $readOnlySecurity -OwnerSid $testUserSid `
+                -Label 'Terminal journal self-test directory')
+        }
+        $terminalLock = Join-Path $terminalTransactions 'transaction.lock'
+        Write-BytesAtomic -Path $terminalLock -Bytes ([byte[]]::new(0)) `
+            -Security $fileSecurity
+        $terminalId = [Guid]::NewGuid().ToString('N')
+        $terminalInstallId = [Guid]::NewGuid().ToString('N')
+        $terminalRequestHash = '1' * 64
+        $terminalHead = '2' * 40
+        $terminalTree = '3' * 40
+        $terminalCommit = '4' * 40
+        $terminalOutput = [ordered]@{
+            transaction_id = $terminalId
+            repository_id = '5' * 32
+            ref = 'refs/heads/main'
+            parent = $terminalHead
+            head_before = $terminalHead
+            commit_oid = $terminalCommit
+            tree_oid = $terminalTree
+            head_after = $terminalCommit
+            changed_paths = @('tracked.txt')
+            changed_paths_digest = '6' * 64
+            changed_path_count = 1
+            commit_message_sha256 = '7' * 64
+            index_before_sha256 = '8' * 64
+            index_after_sha256 = '9' * 64
+            mutation_phase = 'verified'
+            recovery_state = 'none'
+            git_sha256 = 'a' * 64
+            remote_refs_sha256 = 'b' * 64
+            other_refs_sha256 = 'c' * 64
+            hooks_disabled = $true
+            child_process_policy = 'single_process'
+            network_operation = $false
+            post_clean = $true
+        }
+        $terminalJournal = [ordered]@{
+            schema_version = 1
+            install_id = $terminalInstallId
+            request_id = $terminalId
+            request_sha256 = $terminalRequestHash
+            phase = 'verified'
+            created_at_utc = [DateTimeOffset]::UtcNow.ToString('o')
+            updated_at_utc = [DateTimeOffset]::UtcNow.ToString('o')
+            head_before = $terminalHead
+            head_tree_before = 'd' * 40
+            index_path = Join-Path (Join-Path $terminalRoot '.git') 'index'
+            index_before_sha256 = '8' * 64
+            alternate_index_path = Join-Path $terminalTransactions `
+                ($terminalId + '.index')
+            alternate_index_sha256 = '9' * 64
+            stage_index_path = Join-Path (Join-Path $terminalRoot '.git') `
+                'index.lock'
+            backup_index_path = Join-Path (Join-Path $terminalRoot '.git') `
+                ('.rayman-git-local-commit-' + $terminalId + '.backup')
+            remote_refs_before_sha256 = 'b' * 64
+            other_refs_before_sha256 = 'c' * 64
+            tree_oid = $terminalTree
+            commit_oid = $terminalCommit
+            commit_bytes_base64 = [Convert]::ToBase64String(
+                [Text.Encoding]::UTF8.GetBytes('commit')
+            )
+            commit_message_sha256 = '7' * 64
+            output = $terminalOutput
+        }
+        $terminalReceipt = [pscustomobject]@{
+            install_id = $terminalInstallId
+            user_account = [string]$identity.Name
+            user_sid = $testUserSid
+            worker_sha256 = 'e' * 64
+            powershell_sha256 = 'f' * 64
+            request_root = $terminalRequests
+            result_root = $terminalResults
+        }
+        $terminalResult = [ordered]@{
+            schema_version = $script:SchemaVersion
+            install_id = $terminalInstallId
+            request_id = $terminalId
+            operation = $script:GitCapabilityId
+            status = 'success'
+            exit_code = 0
+            started_at_utc = [DateTimeOffset]::UtcNow.ToString('o')
+            finished_at_utc = [DateTimeOffset]::UtcNow.ToString('o')
+            executor_account = [string]$identity.Name
+            executor_sid = $testUserSid
+            worker_sha256 = 'e' * 64
+            powershell_sha256 = 'f' * 64
+            request_sha256 = $terminalRequestHash
+            output = $terminalOutput
+            error_code = ''
+            error = ''
+        }
+        $terminalJournalPath = Join-Path $terminalTransactions `
+            ($terminalId + '.journal.json')
+        $terminalResultPath = Join-Path $terminalResults `
+            ($terminalId + '.result.json')
+        Write-JsonAtomic -Path $terminalJournalPath `
+            -Document $terminalJournal -Security $fileSecurity
+        Write-JsonAtomic -Path $terminalResultPath `
+            -Document $terminalResult -Security $fileSecurity
+        $terminalState = Get-GitTransactionOperationalState `
+            -Path $terminalTransactions -Root $terminalRoot `
+            -Receipt $terminalReceipt -FileSecurity $fileSecurity `
+            -UserSid $testUserSid -RepositoryRoot $terminalRoot
+        $terminalGuard = Open-GitTransactionGuard -Path $terminalLock
+        try {
+            $retiredCount = Remove-TerminalGitTransactionJournalsForUpgrade `
+                -ExpectedState $terminalState -Path $terminalTransactions `
+                -Root $terminalRoot -Receipt $terminalReceipt `
+                -FileSecurity $fileSecurity -UserSid $testUserSid `
+                -RepositoryRoot $terminalRoot
+        } finally { $terminalGuard.Dispose() }
+        if ($retiredCount -ne 1 -or
+            (Test-Path -LiteralPath $terminalJournalPath) -or
+            -not (Test-Path -LiteralPath $terminalResultPath -PathType Leaf)) {
+            throw 'Terminal journal self-test did not retire only the verified journal.'
+        }
+        Write-JsonAtomic -Path $terminalJournalPath `
+            -Document $terminalJournal -Security $fileSecurity
+        $terminalResult.request_sha256 = '0' * 64
+        Write-JsonAtomic -Path $terminalResultPath `
+            -Document $terminalResult -Replace -Security $fileSecurity
+        & $assertRejected {
+            [void](Get-GitTransactionOperationalState `
+                -Path $terminalTransactions -Root $terminalRoot `
+                -Receipt $terminalReceipt -FileSecurity $fileSecurity `
+                -UserSid $testUserSid -RepositoryRoot $terminalRoot)
+        } 'terminal journal mismatched result'
+        if (-not (Test-Path -LiteralPath $terminalJournalPath -PathType Leaf)) {
+            throw 'Terminal journal mismatch self-test removed recovery evidence.'
+        }
+        $terminalResult.request_sha256 = $terminalRequestHash
+        Write-JsonAtomic -Path $terminalResultPath `
+            -Document $terminalResult -Replace -Security $fileSecurity
+        $terminalJournal.phase = 'index_published'
+        Write-JsonAtomic -Path $terminalJournalPath `
+            -Document $terminalJournal -Replace -Security $fileSecurity
+        & $assertRejected {
+            [void](Get-GitTransactionOperationalState `
+                -Path $terminalTransactions -Root $terminalRoot `
+                -Receipt $terminalReceipt -FileSecurity $fileSecurity `
+                -UserSid $testUserSid -RepositoryRoot $terminalRoot)
+        } 'nonterminal journal retirement'
+        if (-not (Test-Path -LiteralPath $terminalJournalPath -PathType Leaf)) {
+            throw 'Nonterminal journal self-test removed recovery evidence.'
+        }
+        Remove-Item -LiteralPath $terminalRoot -Recurse -Force
+
         [void](New-ManagedDirectory -Path $stagedHooks `
             -Security $readOnlySecurity -OwnerSid $testUserSid `
             -Label 'Incomplete interrupted upgrade self-test hooks')

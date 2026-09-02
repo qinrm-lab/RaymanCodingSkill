@@ -439,6 +439,27 @@ the new receipt and Task, proves a fresh heartbeat, releases the transaction
 guard, and compare-and-swaps the old ready marker to the new worker binding as
 the final commit point.
 
+`git_local_commit_v1` keeps its recovery journal through ref/index publication
+and postcondition verification. Only after the immutable success result has
+been published does the worker reacquire the protected transaction lock,
+re-read the journal and result, require their complete request/install/worker
+identity and output to match, require all journal-owned scratch to be absent,
+and exact-delete that terminal journal. A crash in this narrow window leaves
+the request, success result and verified journal together so replay can perform
+the same retirement. A missing result, nonterminal phase, mismatched result,
+remaining scratch or unknown entry preserves the journal and fails closed.
+Result history is never deleted by terminal-journal retirement.
+
+For compatibility with an older schema-v3 worker that retained terminal
+verified journals after a successful commit, current-schema upgrade first
+classifies every extra transaction-root entry. While holding the exclusive
+transaction lock it exact-deletes only journals whose protected ACL, strict
+schema, install/request identity, verified output and immutable success result
+all agree and whose request and scratch are absent. It then requires the
+transaction root to contain only the same zero-byte lock before creating any
+upgrade staging. A held lock, unresolved journal, mismatched result, reparse,
+directory or unknown filename remains recovery evidence and blocks upgrade.
+
 Current-schema crash recovery commits forward only when the new receipt, Task,
 ready marker and heartbeat all agree. Before that commit point it restores the
 exact prior receipt, ready marker and Task, restarts and re-proves the prior
