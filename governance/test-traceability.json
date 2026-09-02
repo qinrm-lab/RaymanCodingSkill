@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 5,
+    "generation": 6,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 4,
-      "sha256": "77c9748b6c6be30288247b4c787a30ad9145d1f61f5cb9928f027d909aaa14b8"
+      "generation": 5,
+      "sha256": "a59fa9cc0f9acfc940a86d32af91f846fa2923de05d413ccca0437ba9ad94148"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "9c088a6d8cf90348c485006260bda27f5ba78aa0c5dffed9abee6478f40a8c6e"
+    "sha256": "5d7490dcd317decba01af2331e46d9f921aa02217b7181c260c9c3bdf420fba0"
   },
   "sources": [
     {
@@ -88,12 +88,28 @@
     },
     {
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
-      "status": "active",
+      "status": "retired",
       "kind": "internal_contract",
       "title": "Codex fixed local Git commit capability contract",
       "path": "docs/CODEX_POWERSHELL_BROKER.md",
       "sha256": "6aa796e003befff6cb5ad985effb17e99a4c8fb1544f88152cb2ae73b9534875",
       "valid_until": "2027-09-01",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "The request contract now makes canonical path ordering explicitly ordinal and locale-independent.",
+        "replaced_by": [
+          "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R6"
+        ]
+      }
+    },
+    {
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R6",
+      "status": "active",
+      "kind": "internal_contract",
+      "title": "Codex fixed local Git commit capability contract",
+      "path": "docs/CODEX_POWERSHELL_BROKER.md",
+      "sha256": "e0f31e9ccec5c9bedb3ca21289e78ffda350bebbd13de93f40876ed3d3df7668",
+      "valid_until": "2027-09-02",
       "retirement": null
     },
     {
@@ -1122,11 +1138,33 @@
     },
     {
       "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER-R5",
-      "status": "active",
+      "status": "retired",
       "kind": "powershell_self_test",
       "title": "PowerShell self-test: scripts/codex-powershell-broker.ps1",
       "path": "scripts/codex-powershell-broker.ps1",
       "sha256": "60597f8c0a093c3ad9e66aaf5b4f8ec96a25751b55413618c41167e6f8e50fc2",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "target_matrix": [
+        "windows",
+        "linux",
+        "other_unix"
+      ],
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Broker SelfTest bytes changed for the ordinal mixed-case path regression.",
+        "replaced_by": [
+          "GATE-PS-CODEX-POWERSHELL-BROKER-R6"
+        ]
+      }
+    },
+    {
+      "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER-R6",
+      "status": "active",
+      "kind": "powershell_self_test",
+      "title": "PowerShell self-test: scripts/codex-powershell-broker.ps1",
+      "path": "scripts/codex-powershell-broker.ps1",
+      "sha256": "b002f39e034b036bcbe79ab2b64cab43af6a20dd548e577c88451b2971de0fda",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "target_matrix": [
@@ -1362,13 +1400,31 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-AUTHORIZATION-SOURCE-R5",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
       "rule_id": "RULE-CODEX-GIT-AUTHORIZATION",
       "relation": "defines",
       "review": {
         "reviewed_at": "2026-09-01",
         "valid_until": "2027-03-01"
+      },
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed source bytes advanced to the ordinal path-order contract.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-AUTHORIZATION-SOURCE-R6"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-AUTHORIZATION-SOURCE-R6",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R6",
+      "rule_id": "RULE-CODEX-GIT-AUTHORIZATION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
       },
       "retirement": null
     },
@@ -1392,13 +1448,31 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-DIAGNOSTIC-BOUNDARY-SOURCE-R5",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
       "rule_id": "RULE-CODEX-GIT-DIAGNOSTIC-BOUNDARY",
       "relation": "defines",
       "review": {
         "reviewed_at": "2026-09-01",
         "valid_until": "2027-03-01"
+      },
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed source bytes advanced to the ordinal path-order contract.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-DIAGNOSTIC-BOUNDARY-SOURCE-R6"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-DIAGNOSTIC-BOUNDARY-SOURCE-R6",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R6",
+      "rule_id": "RULE-CODEX-GIT-DIAGNOSTIC-BOUNDARY",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
       },
       "retirement": null
     },
@@ -1422,13 +1496,31 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-EXECUTION-SOURCE-R5",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
       "rule_id": "RULE-CODEX-GIT-EXECUTION",
       "relation": "defines",
       "review": {
         "reviewed_at": "2026-09-01",
         "valid_until": "2027-03-01"
+      },
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed source bytes advanced to the ordinal path-order contract.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-EXECUTION-SOURCE-R6"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-EXECUTION-SOURCE-R6",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R6",
+      "rule_id": "RULE-CODEX-GIT-EXECUTION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
       },
       "retirement": null
     },
@@ -1452,13 +1544,31 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-INSTALLATION-SERIALIZATION-SOURCE-R5",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
       "rule_id": "RULE-CODEX-GIT-INSTALLATION-SERIALIZATION",
       "relation": "defines",
       "review": {
         "reviewed_at": "2026-09-01",
         "valid_until": "2027-03-01"
+      },
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed source bytes advanced to the ordinal path-order contract.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-INSTALLATION-SERIALIZATION-SOURCE-R6"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-INSTALLATION-SERIALIZATION-SOURCE-R6",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R6",
+      "rule_id": "RULE-CODEX-GIT-INSTALLATION-SERIALIZATION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
       },
       "retirement": null
     },
@@ -1482,13 +1592,31 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-INSTALLER-CLEANUP-SOURCE-R5",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
       "rule_id": "RULE-CODEX-GIT-INSTALLER-CLEANUP",
       "relation": "defines",
       "review": {
         "reviewed_at": "2026-09-01",
         "valid_until": "2027-03-01"
+      },
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed source bytes advanced to the ordinal path-order contract.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-INSTALLER-CLEANUP-SOURCE-R6"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-INSTALLER-CLEANUP-SOURCE-R6",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R6",
+      "rule_id": "RULE-CODEX-GIT-INSTALLER-CLEANUP",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
       },
       "retirement": null
     },
@@ -1512,13 +1640,31 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-RECOVERY-SOURCE-R5",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
       "rule_id": "RULE-CODEX-GIT-RECOVERY",
       "relation": "defines",
       "review": {
         "reviewed_at": "2026-09-01",
         "valid_until": "2027-03-01"
+      },
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed source bytes advanced to the ordinal path-order contract.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-RECOVERY-SOURCE-R6"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-RECOVERY-SOURCE-R6",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R6",
+      "rule_id": "RULE-CODEX-GIT-RECOVERY",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
       },
       "retirement": null
     },
@@ -1542,13 +1688,31 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-REGISTRATION-SOURCE-R5",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
       "rule_id": "RULE-CODEX-GIT-REGISTRATION",
       "relation": "defines",
       "review": {
         "reviewed_at": "2026-09-01",
         "valid_until": "2027-03-01"
+      },
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed source bytes advanced to the ordinal path-order contract.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-REGISTRATION-SOURCE-R6"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-REGISTRATION-SOURCE-R6",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R6",
+      "rule_id": "RULE-CODEX-GIT-REGISTRATION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
       },
       "retirement": null
     },
@@ -1572,13 +1736,31 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-REQUEST-SOURCE-R5",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
       "rule_id": "RULE-CODEX-GIT-REQUEST",
       "relation": "defines",
       "review": {
         "reviewed_at": "2026-09-01",
         "valid_until": "2027-03-01"
+      },
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed source bytes advanced to the ordinal path-order contract.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-REQUEST-SOURCE-R6"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-REQUEST-SOURCE-R6",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R6",
+      "rule_id": "RULE-CODEX-GIT-REQUEST",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
       },
       "retirement": null
     },
@@ -1602,13 +1784,31 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-STAGING-RECOVERY-SOURCE-R5",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
       "rule_id": "RULE-CODEX-GIT-STAGING-RECOVERY",
       "relation": "defines",
       "review": {
         "reviewed_at": "2026-09-01",
         "valid_until": "2027-03-01"
+      },
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed source bytes advanced to the ordinal path-order contract.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-STAGING-RECOVERY-SOURCE-R6"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-STAGING-RECOVERY-SOURCE-R6",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R6",
+      "rule_id": "RULE-CODEX-GIT-STAGING-RECOVERY",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
       },
       "retirement": null
     },
@@ -1632,13 +1832,31 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-TRANSACTION-SOURCE-R5",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
       "rule_id": "RULE-CODEX-GIT-TRANSACTION",
       "relation": "defines",
       "review": {
         "reviewed_at": "2026-09-01",
         "valid_until": "2027-03-01"
+      },
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed source bytes advanced to the ordinal path-order contract.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-TRANSACTION-SOURCE-R6"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-TRANSACTION-SOURCE-R6",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R6",
+      "rule_id": "RULE-CODEX-GIT-TRANSACTION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
       },
       "retirement": null
     },
@@ -1662,13 +1880,31 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-UPGRADE-AUTHORITY-SOURCE-R5",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
       "rule_id": "RULE-CODEX-GIT-UPGRADE-AUTHORITY",
       "relation": "defines",
       "review": {
         "reviewed_at": "2026-09-01",
         "valid_until": "2027-03-01"
+      },
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed source bytes advanced to the ordinal path-order contract.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-UPGRADE-AUTHORITY-SOURCE-R6"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-UPGRADE-AUTHORITY-SOURCE-R6",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R6",
+      "rule_id": "RULE-CODEX-GIT-UPGRADE-AUTHORITY",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
       },
       "retirement": null
     },
@@ -1692,13 +1928,31 @@
     },
     {
       "link_id": "LINK-CODEX-GIT-UPGRADE-SOURCE-R5",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R5",
       "rule_id": "RULE-CODEX-GIT-UPGRADE",
       "relation": "defines",
       "review": {
         "reviewed_at": "2026-09-01",
         "valid_until": "2027-03-01"
+      },
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Reviewed source bytes advanced to the ordinal path-order contract.",
+        "replaced_by": [
+          "LINK-CODEX-GIT-UPGRADE-SOURCE-R6"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CODEX-GIT-UPGRADE-SOURCE-R6",
+      "status": "active",
+      "source_id": "SRC-CODEX-GIT-LOCAL-COMMIT-CONTRACT-R6",
+      "rule_id": "RULE-CODEX-GIT-UPGRADE",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
       },
       "retirement": null
     },
@@ -29961,7 +30215,7 @@
     },
     {
       "binding_id": "BIND-CASE-99CAAA63DECFF0D9-R5",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3"
       ],
@@ -29978,6 +30232,33 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "5ad287b4e23e87ba7e6eefdc4d8a62e886cf3e4ab3f06d2e5e141f1a3e6e4f14",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Source, gate, or executable selector advanced for the ordinal path-order repair.",
+        "replaced_by": [
+          "BIND-CASE-99CAAA63DECFF0D9-R6"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-99CAAA63DECFF0D9-R6",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-61C6537DDEBC-R6"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER-R6",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "176b6779b9d4c9322bca20e87400e0fc01e60ca45a75bcc673052e512a338878",
       "retirement": null
     },
     {
@@ -46376,7 +46657,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-AUTHORIZATION-R5",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-AUTHORIZATION-SOURCE-R5"
       ],
@@ -46394,6 +46675,34 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "d958098b8b9ed28f6daf085c7711f51a7516cb09e892d087d56eebcf06698dc0",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Source, gate, or executable selector advanced for the ordinal path-order repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-AUTHORIZATION-R6"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-AUTHORIZATION-R6",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-AUTHORIZATION-SOURCE-R6"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-AUTHORIZATION",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "d2064840224022dba660b7a41206f54d93de02c3c25b3cdff633e7731da6aec9",
       "retirement": null
     },
     {
@@ -46426,7 +46735,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-DIAGNOSTIC-BOUNDARY-R5",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-DIAGNOSTIC-BOUNDARY-SOURCE-R5"
       ],
@@ -46444,6 +46753,34 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "e3385f373b85361e0b43f048c3925b60f65bbcb1c1cdf94931f288ceb5a3c675",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Source, gate, or executable selector advanced for the ordinal path-order repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-DIAGNOSTIC-BOUNDARY-R6"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-DIAGNOSTIC-BOUNDARY-R6",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-DIAGNOSTIC-BOUNDARY-SOURCE-R6"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-DIAGNOSTIC-BOUNDARY",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "cbe62cfb09f9785d2fcf17a2a31facc0e7705857aff73d8c2d54c080f1dd5841",
       "retirement": null
     },
     {
@@ -46476,7 +46813,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-EXECUTION-R5",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-EXECUTION-SOURCE-R5"
       ],
@@ -46494,6 +46831,34 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "7e65d8e01c448af54372f6368bc413e765823e788f456db8670fd4d8a545ecdd",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Source, gate, or executable selector advanced for the ordinal path-order repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-EXECUTION-R6"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-EXECUTION-R6",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-EXECUTION-SOURCE-R6"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-61C6537DDEBC-R6"
+      ],
+      "rule_id": "RULE-CODEX-GIT-EXECUTION",
+      "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER-R6",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "96cf40a6f415fa83713b12c6151f04ad4988b7fc12b6c287c63413452cf1e16d",
       "retirement": null
     },
     {
@@ -46526,7 +46891,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-EXPLICIT-CONFIRMATION-R5",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-AUTHORIZATION-SOURCE-R5"
       ],
@@ -46544,6 +46909,34 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "c87f247ba5b07d9afb600d1ba6ec414f026e751d23b49e131433c72df8eedf63",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Source, gate, or executable selector advanced for the ordinal path-order repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-EXPLICIT-CONFIRMATION-R6"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-EXPLICIT-CONFIRMATION-R6",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-AUTHORIZATION-SOURCE-R6"
+      ],
+      "test_ids": [
+        "TEST-RUST-CODEX-POWERSHELL-BROKER-PRODUCTION-REJECTS-EXPLI-E36B74A06220"
+      ],
+      "rule_id": "RULE-CODEX-GIT-AUTHORIZATION",
+      "gate_id": "GATE-CARGO-ROOT-WINDOWS-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "e74164007236d57f04619f196ff2976a444e18dae578672f82a580362cb9ff97",
       "retirement": null
     },
     {
@@ -46576,7 +46969,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-INSTALLATION-SERIALIZATION-R5",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-INSTALLATION-SERIALIZATION-SOURCE-R5"
       ],
@@ -46594,6 +46987,34 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "ebc3d9b0cf24c20044a90e166564af29ea93459c2ff60db860428c988403613a",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Source, gate, or executable selector advanced for the ordinal path-order repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-INSTALLATION-SERIALIZATION-R6"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-INSTALLATION-SERIALIZATION-R6",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-INSTALLATION-SERIALIZATION-SOURCE-R6"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-INSTALLATION-SERIALIZATION",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "1253a440f0b7e2da7bf6e7b22b19ee763458f1381ee9f80612c88e27054bef68",
       "retirement": null
     },
     {
@@ -46626,7 +47047,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-INSTALLER-CLEANUP-R5",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-INSTALLER-CLEANUP-SOURCE-R5"
       ],
@@ -46644,6 +47065,34 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "c0e5aa55003b4a7211c520dbafa7f7dc600661a418a41882747a3ba6f5311147",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Source, gate, or executable selector advanced for the ordinal path-order repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-INSTALLER-CLEANUP-R6"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-INSTALLER-CLEANUP-R6",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-INSTALLER-CLEANUP-SOURCE-R6"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-INSTALLER-CLEANUP",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "ddbcc41449ca0d0a6b3cd6ede43652f200e7002c03cdea83ab273db98bb7d7b5",
       "retirement": null
     },
     {
@@ -46676,7 +47125,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-RECOVERY-R5",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-RECOVERY-SOURCE-R5"
       ],
@@ -46694,6 +47143,34 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "4c1497b7da3a215663d7abf95fae217cc0ca4df52e90db0122b3a7de83398da8",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Source, gate, or executable selector advanced for the ordinal path-order repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-RECOVERY-R6"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-RECOVERY-R6",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-RECOVERY-SOURCE-R6"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-61C6537DDEBC-R6"
+      ],
+      "rule_id": "RULE-CODEX-GIT-RECOVERY",
+      "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER-R6",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "33887591e8060472125a0a8e0804d17df456d72115de180fa21f786bd524dcde",
       "retirement": null
     },
     {
@@ -46726,7 +47203,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-REGISTRATION-R5",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-REGISTRATION-SOURCE-R5"
       ],
@@ -46744,6 +47221,34 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "0b301dd5a8329264d1a61c84e451639fadf02c8ecca26666ae4254383bda8acc",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Source, gate, or executable selector advanced for the ordinal path-order repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-REGISTRATION-R6"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-REGISTRATION-R6",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-REGISTRATION-SOURCE-R6"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-REGISTRATION",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "5536becf796e7da2c8af103d03a999715516cffac01b42e9fec70236793b7597",
       "retirement": null
     },
     {
@@ -46776,7 +47281,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-REQUEST-R5",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-REQUEST-SOURCE-R5"
       ],
@@ -46794,6 +47299,34 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "2efcac638ca1910a7277415ba98f815c0752f8450776b52ad2fee973301736fc",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Source, gate, or executable selector advanced for the ordinal path-order repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-REQUEST-R6"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-REQUEST-R6",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-REQUEST-SOURCE-R6"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-61C6537DDEBC-R6"
+      ],
+      "rule_id": "RULE-CODEX-GIT-REQUEST",
+      "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER-R6",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "5b1f9083a807e884d0d70aa1c24dfae8068f041f37bd32ceca04f25bdb5e3489",
       "retirement": null
     },
     {
@@ -46826,7 +47359,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-STAGING-RECOVERY-R5",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-STAGING-RECOVERY-SOURCE-R5"
       ],
@@ -46844,6 +47377,34 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "6e9e21351d92ccc600942e1af2a6577240f2259ed2adb2ff116579b7929fb2a8",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Source, gate, or executable selector advanced for the ordinal path-order repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-STAGING-RECOVERY-R6"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-STAGING-RECOVERY-R6",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-STAGING-RECOVERY-SOURCE-R6"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-STAGING-RECOVERY",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "3c6fcaed2fef774a0f41c23a098a81a617abd9bc69edbd2c6a84ea8abd4f2121",
       "retirement": null
     },
     {
@@ -46876,7 +47437,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-TRANSACTION-R5",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-TRANSACTION-SOURCE-R5"
       ],
@@ -46894,6 +47455,34 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "ceb5e0464936d0a082357e66c82b340494396629c8532543b94b70d2f0b1b173",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Source, gate, or executable selector advanced for the ordinal path-order repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-TRANSACTION-R6"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-TRANSACTION-R6",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-TRANSACTION-SOURCE-R6"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-61C6537DDEBC-R6"
+      ],
+      "rule_id": "RULE-CODEX-GIT-TRANSACTION",
+      "gate_id": "GATE-PS-CODEX-POWERSHELL-BROKER-R6",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "e0a427efb8fe63475afbf2006712550f2da87675494e6fb274727bb8b437ac36",
       "retirement": null
     },
     {
@@ -46954,7 +47543,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-UPGRADE-AUTHORITY-R5",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-UPGRADE-AUTHORITY-SOURCE-R5"
       ],
@@ -46972,11 +47561,39 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "67616fae79d97249112650fe5d7cda6f4b1dacc8c8352fb906d3846d89a6b629",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Source, gate, or executable selector advanced for the ordinal path-order repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-UPGRADE-AUTHORITY-R6"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-UPGRADE-AUTHORITY-R6",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-UPGRADE-AUTHORITY-SOURCE-R6"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-UPGRADE-AUTHORITY",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "a7eb596dda31978149f7263d164cd63b9a2d0eef9d54bcb3387d88ed81d965b6",
       "retirement": null
     },
     {
       "binding_id": "BIND-CODEX-GIT-UPGRADE-R5",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-UPGRADE-SOURCE-R5"
       ],
@@ -46994,6 +47611,34 @@
         "valid_until": "2027-03-01"
       },
       "semantic_sha256": "a6ae7d0cfc0488e24780145e9ea2a9e0797a80a1b4af215db4324fc6c759ad81",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Source, gate, or executable selector advanced for the ordinal path-order repair.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-UPGRADE-R6"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-UPGRADE-R6",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-UPGRADE-SOURCE-R6"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R4"
+      ],
+      "rule_id": "RULE-CODEX-GIT-UPGRADE",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R4",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-02",
+        "valid_until": "2027-03-02"
+      },
+      "semantic_sha256": "7c483ab2348473bb835e676aa9e2be8a7935f7e5de5951c09c229492180d8856",
       "retirement": null
     }
   ]

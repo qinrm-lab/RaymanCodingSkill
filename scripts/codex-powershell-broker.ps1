@@ -881,6 +881,18 @@ function Open-ExclusiveRequest {
     }
 }
 
+function Get-OrdinalSortedStrings {
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [string[]]$Values
+    )
+
+    $sorted = [string[]]@($Values)
+    [Array]::Sort($sorted, [StringComparer]::Ordinal)
+    return $sorted
+}
+
 function Assert-ExactProperties {
     param(
         [Parameter(Mandatory = $true)]$Document,
@@ -889,12 +901,10 @@ function Assert-ExactProperties {
     )
 
     if ($Document -isnot [pscustomobject]) { throw "$Label must be a JSON object." }
-    $actual = @(
-        $Document.PSObject.Properties |
-            ForEach-Object { $_.Name } |
-            Sort-Object
-    )
-    $wanted = @($Expected | Sort-Object)
+    $actual = @(Get-OrdinalSortedStrings -Values @(
+        $Document.PSObject.Properties | ForEach-Object { $_.Name }
+    ))
+    $wanted = @(Get-OrdinalSortedStrings -Values $Expected)
     if (($actual -join "`n") -cne ($wanted -join "`n")) {
         throw "$Label has unexpected properties. Expected=$($wanted -join ',') Actual=$($actual -join ',')"
     }
@@ -2194,14 +2204,14 @@ function Get-OtherRefsSha256 {
 
     $result = Invoke-FixedGit -Manifest $Manifest -Paths $Paths `
         -FixedCommand for-each-all-refs
-    $lines = @(
+    $lines = @(Get-OrdinalSortedStrings -Values @(
         $result.StandardOutput.Split(
             @("`r`n", "`n"), [StringSplitOptions]::RemoveEmptyEntries
         ) | Where-Object {
             $ref = ($_ -split ' ', 2)[0]
             $ref -cne [string]$Manifest.allowed_ref
-        } | Sort-Object
-    )
+        }
+    ))
     return Get-BytesSha256 -Bytes (
         [Text.UTF8Encoding]::new($false, $true).GetBytes($lines -join "`n")
     )
@@ -2426,10 +2436,17 @@ function Get-GitTrackedChangeSnapshot {
                     -Bytes $held.Bytes
             })
         }
-        $sorted = @($changes | Sort-Object { [string]$_.path })
-        if ((@($changes | ForEach-Object { [string]$_.path }) -join "`n") -cne
-            (@($sorted | ForEach-Object { [string]$_.path }) -join "`n")) {
-            throw 'git_local_commit_v1 requires Git status paths in canonical sorted order.'
+        $sorted = @($changes | ForEach-Object { $_ })
+        $previousStatusPath = $null
+        foreach ($change in $sorted) {
+            $statusPath = [string]$change.path
+            if ($null -ne $previousStatusPath -and
+                [StringComparer]::Ordinal.Compare(
+                    [string]$previousStatusPath, $statusPath
+                ) -ge 0) {
+                throw 'git_local_commit_v1 requires Git status paths in canonical ordinal order.'
+            }
+            $previousStatusPath = $statusPath
         }
         $indexPath = Join-Path ([string]$Manifest.git_dir) 'index'
         return [pscustomobject]@{
@@ -2441,7 +2458,7 @@ function Get-GitTrackedChangeSnapshot {
             OtherRefsSha256 = Get-OtherRefsSha256 -Manifest $Manifest -Paths $Paths
             Changes = $sorted
             IndexEntries = @(
-                $tracked.Keys | Sort-Object | ForEach-Object {
+                Get-OrdinalSortedStrings -Values @($tracked.Keys) | ForEach-Object {
                     [ordered]@{
                         path = [string]$_
                         mode = [string]$tracked[$_].Mode
@@ -2924,10 +2941,12 @@ function Test-GitTransactionOutput {
     }
     $changedPathOutput = (Invoke-FixedGit -Manifest $Manifest -Paths $Paths `
         -FixedCommand diff-tree -ObjectId $head).StandardOutput
-    $actualPaths = @($changedPathOutput.Split(
+    $actualPaths = @(Get-OrdinalSortedStrings -Values @($changedPathOutput.Split(
         [char]0, [StringSplitOptions]::RemoveEmptyEntries
-    ) | Sort-Object)
-    $expectedPaths = @($Payload.changes | ForEach-Object { [string]$_.path } | Sort-Object)
+    )))
+    $expectedPaths = @(Get-OrdinalSortedStrings -Values @(
+        $Payload.changes | ForEach-Object { [string]$_.path }
+    ))
     if (($actualPaths -join "`n") -cne ($expectedPaths -join "`n")) {
         throw 'git_local_commit_v1 commit path set differs from the request snapshot.'
     }
@@ -4081,6 +4100,18 @@ function Invoke-SelfTest {
             (Join-Path $fixtureRoot 'unchanged.txt'), "stable`n",
             [Text.UTF8Encoding]::new($false)
         )
+        $mixedUpperPath = Join-Path $fixtureRoot 'README.md'
+        $mixedLowerRoot = Join-Path $fixtureRoot 'crates'
+        $mixedLowerPath = Join-Path $mixedLowerRoot 'lower.txt'
+        New-Item -ItemType Directory -Path $mixedLowerRoot | Out-Null
+        [IO.File]::WriteAllText(
+            $mixedUpperPath, "upper-before`n",
+            [Text.UTF8Encoding]::new($false)
+        )
+        [IO.File]::WriteAllText(
+            $mixedLowerPath, "lower-before`n",
+            [Text.UTF8Encoding]::new($false)
+        )
         & $fixtureGit -C $fixtureRoot add -- .
         if ($LASTEXITCODE -ne 0) { throw 'git_local_commit_v1 fixture add failed.' }
         & $fixtureGit -C $fixtureRoot -c 'user.name=rayman' `
@@ -4307,6 +4338,14 @@ function Invoke-SelfTest {
             (Join-Path $fixtureRoot 'tracked.txt'), "commit-one`r`n",
             [Text.UTF8Encoding]::new($false)
         )
+        [IO.File]::WriteAllText(
+            $mixedUpperPath, "upper-after`n",
+            [Text.UTF8Encoding]::new($false)
+        )
+        [IO.File]::WriteAllText(
+            $mixedLowerPath, "lower-after`n",
+            [Text.UTF8Encoding]::new($false)
+        )
         $directHead = (& $fixtureGit -C $fixtureRoot rev-parse HEAD).Trim()
         & $fixtureGit -C $fixtureRoot update-ref refs/heads/selftest-target $directHead
         if ($LASTEXITCODE -ne 0) {
@@ -4346,8 +4385,15 @@ function Invoke-SelfTest {
         [void]$gitAcl.AddAccessRule($denyCreate)
         Set-Acl -LiteralPath $fixtureGitDir -AclObject $gitAcl
         try {
-            $gitPayload = New-GitCommitPayload -Paths $paths -Receipt $receipt `
-                -Message 'test: fixed local commit'
+            $clientCulture = [Globalization.CultureInfo]::CurrentCulture
+            try {
+                [Globalization.CultureInfo]::CurrentCulture =
+                    [Globalization.CultureInfo]::GetCultureInfo('zh-CN')
+                $gitPayload = New-GitCommitPayload -Paths $paths -Receipt $receipt `
+                    -Message 'test: fixed local commit'
+            } finally {
+                [Globalization.CultureInfo]::CurrentCulture = $clientCulture
+            }
             if (Test-Path -LiteralPath (Join-Path $fixtureGitDir 'index.lock')) {
                 throw 'git_local_commit_v1 client snapshot created index.lock under a read-only Git directory.'
             }
@@ -4359,10 +4405,35 @@ function Invoke-SelfTest {
         if ($null -eq $gitPayload) {
             throw 'git_local_commit_v1 read-only client snapshot returned no payload.'
         }
+        $mixedPaths = @($gitPayload.changes | ForEach-Object { [string]$_.path })
+        $expectedMixedPaths = @('README.md', 'crates/lower.txt', 'tracked.txt')
+        if (($mixedPaths -join "`n") -cne ($expectedMixedPaths -join "`n")) {
+            throw "git_local_commit_v1 mixed-case ordinal self-test returned: $($mixedPaths -join ',')"
+        }
+        $unsortedChanges = @($gitPayload.changes | ForEach-Object { $_ })
+        [Array]::Reverse($unsortedChanges)
+        & $assertRejected {
+            Assert-GitCommitPayload -Receipt $receipt -Payload ([ordered]@{
+                capability_manifest_sha256 = $gitPayload.capability_manifest_sha256
+                expected_head_oid = $gitPayload.expected_head_oid
+                changes = $unsortedChanges
+                commit_message_utf8 = $gitPayload.commit_message_utf8
+            })
+        } 'non-ordinal request path order'
+        & $assertRejected {
+            Assert-GitCommitPayload -Receipt $receipt -Payload ([ordered]@{
+                capability_manifest_sha256 = $gitPayload.capability_manifest_sha256
+                expected_head_oid = $gitPayload.expected_head_oid
+                changes = @($gitPayload.changes[0], $gitPayload.changes[0])
+                commit_message_utf8 = $gitPayload.commit_message_utf8
+            })
+        } 'duplicate request path'
         $rawCrlfOid = Get-GitBlobOid -Bytes (
             [Text.UTF8Encoding]::new($false).GetBytes("commit-one`r`n")
         )
-        $crlfChanges = @($gitPayload.changes)
+        $crlfChanges = @($gitPayload.changes | Where-Object {
+            [string]$_.path -ceq 'tracked.txt'
+        })
         $crlfPath = if ($crlfChanges.Count -eq 0) { '' } else {
             [string]$crlfChanges[0].path
         }
@@ -4377,7 +4448,14 @@ function Invoke-SelfTest {
             -Paths $paths -OperationName $script:GitCapabilityId `
             -Created $now -Expires $now.AddSeconds(120) -Payload $gitPayload `
             -InstallId $installId
-        [void](Invoke-WorkerCycle -Paths $paths -Receipt $receipt -Identity $identity)
+        $workerCulture = [Globalization.CultureInfo]::CurrentCulture
+        try {
+            [Globalization.CultureInfo]::CurrentCulture =
+                [Globalization.CultureInfo]::GetCultureInfo('zh-CN')
+            [void](Invoke-WorkerCycle -Paths $paths -Receipt $receipt -Identity $identity)
+        } finally {
+            [Globalization.CultureInfo]::CurrentCulture = $workerCulture
+        }
         $gitResult = Read-StrictJsonDocument `
             -Path (Join-Path $paths.Results ($gitRequestId + $script:ResultSuffix)) `
             -MaximumBytes 256KB -Label 'Self-test Git commit result'

@@ -93,7 +93,10 @@ fail-closed and requires a reviewed reinstall or upgrade.
 
 The caller supplies only a one-line 1–200 character NFC commit message, the
 expected 40-hex HEAD, the installed manifest hash, and a strictly sorted exact
-list of tracked modifications/deletions. The sandbox-side caller treats the
+list of tracked modifications/deletions. Canonical path ordering is explicit
+.NET ordinal ordering and is therefore identical in the sandbox-side caller
+and protected worker regardless of the Windows user locale. The sandbox-side
+caller treats the
 registered `.git` directory as read-only: fixed `ls-files --stage` output must
 be a complete stage-0 mode/OID bijection with fixed recursive `ls-tree HEAD`
 output. It never runs `write-tree` against the live index, creates
@@ -301,6 +304,7 @@ pwsh -NoProfile -File .\scripts\install-codex-powershell-broker.ps1 -SelfTest
 
 The broker self-test uses an isolated temporary Git repository. It covers a
 read-only client snapshot while `.git` file creation is denied, a real
+mixed-uppercase/lowercase ordinal path commit under `zh-CN`, a real
 CRLF-to-filtered-index commit, exact output, absent `info/attributes`,
 direct-ref enforcement, arbitrary-field rejection, duplicate JSON keys,
 untracked and pre-staged refusal, held-ancestor rename denial, junction-backed

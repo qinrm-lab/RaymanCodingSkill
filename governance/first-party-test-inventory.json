@@ -20,11 +20,11 @@
     ]
   },
   "revision": {
-    "generation": 5,
+    "generation": 6,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 4,
-      "sha256": "a477be30b052c95079e9ab35b7b93b54a75d188c946c9ee3b0642d605d06854b"
+      "generation": 5,
+      "sha256": "9c088a6d8cf90348c485006260bda27f5ba78aa0c5dffed9abee6478f40a8c6e"
     }
   },
   "tests": [
@@ -983,13 +983,32 @@
     },
     {
       "test_id": "TEST-PS-SELFTEST-61C6537DDEBC-R5",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/codex-powershell-broker.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/codex-powershell-broker.ps1",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "selector_sha256": "60597f8c0a093c3ad9e66aaf5b4f8ec96a25751b55413618c41167e6f8e50fc2",
+      "cfg": "all",
+      "owner": "",
+      "retirement": {
+        "retired_at": "2026-09-02",
+        "reason": "Broker SelfTest now proves locale-independent ordinal mixed-case path commits.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-61C6537DDEBC-R6"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-PS-SELFTEST-61C6537DDEBC-R6",
+      "status": "active",
+      "identity": "powershell::powershell_self_test::scripts/codex-powershell-broker.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/codex-powershell-broker.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "b002f39e034b036bcbe79ab2b64cab43af6a20dd548e577c88451b2971de0fda",
       "cfg": "all",
       "owner": "",
       "retirement": null
