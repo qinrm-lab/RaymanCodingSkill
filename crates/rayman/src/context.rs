@@ -65,6 +65,7 @@ pub struct ContextIndex {
 
 pub const CONTEXT_DELIVERY_SCHEMA: &str = "rayman.context-delivery.v1";
 const CONTEXT_DELIVERY_CURSOR_PREFIX: &str = "rayman-context-cursor-v1";
+pub use crate::build_context_delivery_page;
 
 /// Machine contract shared by future budgeted context-navigation commands.
 ///
@@ -191,7 +192,7 @@ impl ContextDeliveryCursorBinding {
         }
     }
 
-    fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<()> {
         if self.schema != CONTEXT_DELIVERY_SCHEMA {
             bail!("unsupported context delivery schema: {}", self.schema);
         }
@@ -255,11 +256,22 @@ impl ContextDeliveryV1 {
     /// cursor first, then this method either emits the complete document or
     /// rejects it as over budget.
     pub fn encode_json(&mut self) -> Result<Vec<u8>> {
+        let bytes = self.stabilized_json()?;
+        if bytes.len() > self.budget_bytes {
+            bail!(
+                "context delivery output exceeds UTF-8 budget: {} > {}",
+                bytes.len(),
+                self.budget_bytes
+            );
+        }
+        Ok(bytes)
+    }
+
+    pub(crate) fn stabilized_json(&mut self) -> Result<Vec<u8>> {
         self.validate_semantics()?;
         for _ in 0..8 {
             let bytes = serde_json::to_vec(self)?;
             if self.output_bytes == bytes.len() {
-                self.validate()?;
                 return Ok(bytes);
             }
             self.output_bytes = bytes.len();
@@ -391,6 +403,12 @@ impl ContextDeliveryV1 {
         }
         Ok(())
     }
+}
+
+/// Hash a canonical JSON identity used for snapshot, normalized-query, and
+/// deterministic-sort bindings. This is an identity helper, never authority.
+pub fn context_delivery_identity<T: Serialize>(value: &T) -> Result<String> {
+    Ok(sha256_bytes(&serde_json::to_vec(value)?))
 }
 
 fn is_lower_sha256(value: &str) -> bool {

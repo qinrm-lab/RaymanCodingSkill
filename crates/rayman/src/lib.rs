@@ -31,7 +31,170 @@ pub mod timefmt;
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
+
+/// Build one deterministic, advancing page of complete context-delivery
+/// records. `limit` and `budget_bytes` are page controls rather than query
+/// identity, so a caller may retry the same bound cursor with a larger page.
+/// The producer never cuts a record and never returns a non-advancing cursor.
+pub fn build_context_delivery_page(
+    records: &[context::ContextDeliveryRecord],
+    snapshot_sha256: String,
+    query_sha256: String,
+    sort_sha256: String,
+    cursor: Option<&str>,
+    limit: usize,
+    budget_bytes: usize,
+) -> Result<context::ContextDeliveryV1> {
+    use context::{
+        CONTEXT_DELIVERY_SCHEMA, ContextDeliveryAuthority, ContextDeliveryCoverage,
+        ContextDeliveryCoverageStatus, ContextDeliveryCursorBinding, ContextDeliveryRecord,
+        ContextDeliveryV1,
+    };
+
+    if limit == 0 {
+        bail!("context delivery limit must be positive");
+    }
+    if budget_bytes == 0 {
+        bail!("context delivery budget_bytes must be positive");
+    }
+    let binding = ContextDeliveryCursorBinding::v1(snapshot_sha256, query_sha256, sort_sha256);
+    binding.validate()?;
+    let offset = match cursor {
+        Some(cursor) => binding.decode_cursor(cursor)?,
+        None => 0,
+    };
+    if offset > records.len() {
+        bail!("context delivery cursor position exceeds the bound result set");
+    }
+
+    let resolved_total = records
+        .iter()
+        .filter(|record| matches!(record, ContextDeliveryRecord::Resolved(_)))
+        .count();
+    let unresolved_total = records.len() - resolved_total;
+    let maximum = limit.min(records.len() - offset);
+    let mut record_bytes = Vec::with_capacity(maximum + 1);
+    let mut resolved_prefix = Vec::with_capacity(maximum + 1);
+    record_bytes.push(0usize);
+    resolved_prefix.push(0usize);
+    for record in &records[offset..offset + maximum] {
+        let encoded = serde_json::to_vec(record)?.len();
+        record_bytes.push(
+            record_bytes
+                .last()
+                .copied()
+                .unwrap_or(0)
+                .checked_add(encoded)
+                .context("context delivery record byte count overflow")?,
+        );
+        resolved_prefix.push(
+            resolved_prefix.last().copied().unwrap_or(0)
+                + usize::from(matches!(record, ContextDeliveryRecord::Resolved(_))),
+        );
+    }
+    for returned in (0..=maximum).rev() {
+        let omitted = records.len() - offset - returned;
+        if returned == 0 && omitted > 0 {
+            continue;
+        }
+        let resolved_returned = resolved_prefix[returned];
+        let unresolved_returned = returned - resolved_returned;
+        let truncated = omitted > 0;
+        let next_cursor = if truncated {
+            Some(binding.encode_cursor(offset + returned)?)
+        } else {
+            None
+        };
+        let incomplete = truncated || unresolved_total > 0;
+        let mut envelope = ContextDeliveryV1 {
+            schema: CONTEXT_DELIVERY_SCHEMA.into(),
+            authority: ContextDeliveryAuthority::NavigationOnly,
+            snapshot_sha256: binding.snapshot_sha256.clone(),
+            query_sha256: binding.query_sha256.clone(),
+            sort_sha256: binding.sort_sha256.clone(),
+            offset,
+            budget_bytes,
+            output_bytes: 0,
+            total: records.len(),
+            returned,
+            omitted,
+            truncated,
+            next_cursor,
+            records: Vec::new(),
+            coverage: ContextDeliveryCoverage {
+                status: if incomplete {
+                    ContextDeliveryCoverageStatus::Partial
+                } else {
+                    ContextDeliveryCoverageStatus::Complete
+                },
+                resolved_total,
+                resolved_returned,
+                unresolved_total,
+                unresolved_returned,
+                omitted_items: omitted,
+                detail: incomplete.then(|| {
+                    "projection is incomplete because records remain paginated or unresolved".into()
+                }),
+            },
+        };
+        let payload_bytes = record_bytes[returned]
+            .checked_add(returned.saturating_sub(1))
+            .context("context delivery array byte count overflow")?;
+        let mut encoded_len = 0usize;
+        let mut stabilized = false;
+        for _ in 0..8 {
+            let skeleton_len = serde_json::to_vec(&envelope)?.len();
+            encoded_len = skeleton_len
+                .checked_add(payload_bytes)
+                .context("context delivery output byte count overflow")?;
+            if envelope.output_bytes == encoded_len {
+                stabilized = true;
+                break;
+            }
+            envelope.output_bytes = encoded_len;
+        }
+        if !stabilized {
+            bail!("context delivery output byte count did not stabilize");
+        }
+        if encoded_len <= budget_bytes {
+            envelope.records = records[offset..offset + returned].to_vec();
+            let bytes = envelope.encode_json()?;
+            if bytes.len() != encoded_len {
+                bail!("context delivery page length projection drifted");
+            }
+            return Ok(envelope);
+        }
+    }
+
+    let reason = if offset < records.len() {
+        "the next complete record does not fit; action=split_required"
+    } else {
+        "the empty envelope does not fit"
+    };
+    bail!("context_delivery_error=budget_too_small; budget_bytes={budget_bytes}; {reason}");
+}
+
+/// Return the verified in-memory context index together with the exact raw
+/// index-file SHA-256 used as a continuation snapshot input. Semantic equality
+/// is checked after the handle-bound read so formatting-only or timestamp-only
+/// index changes invalidate cursors without replacing the verified object.
+pub fn verified_context_index_with_raw_sha256(
+    root: &Path,
+) -> Result<(context::ContextIndex, String)> {
+    let index = context::verified_index(root)?;
+    let bytes = state_paths::read_managed_state_file(
+        root,
+        Path::new("context/index.json"),
+        "verified context index snapshot",
+    )?;
+    let observed = serde_json::from_slice::<context::ContextIndex>(&bytes)
+        .context("verified context index snapshot is not valid JSON")?;
+    if observed != index {
+        bail!("context index changed between semantic verification and raw snapshot capture");
+    }
+    Ok((index, hash::sha256_bytes(&bytes)))
+}
 
 /// 工作区根：从当前目录向上查找含 `.RaymanCodingSkill/` 或 `.git` 的最近祖先，
 /// 找不到则回退到当前目录。修复“从子目录运行会另建一份状态、分裂工作区”的问题。
@@ -62,6 +225,112 @@ mod tests {
     use super::*;
     use crate::context::*;
     use std::collections::BTreeMap;
+
+    #[test]
+    fn context_delivery_page_builder_enforces_complete_budgeted_progress_and_cursor_binding() {
+        let records = (0..3)
+            .map(|index| {
+                ContextDeliveryRecord::Unresolved(ContextDeliveryUnresolved {
+                    reference: format!("missing::{index}"),
+                    reason: "not present in the captured snapshot".into(),
+                    provenance: vec![ContextDeliveryProvenance {
+                        kind: "fixture".into(),
+                        evidence: format!("record {index}"),
+                        source_path: None,
+                        source_sha256: None,
+                    }],
+                })
+            })
+            .collect::<Vec<_>>();
+        let snapshot = "a".repeat(64);
+        let query = "b".repeat(64);
+        let sort = "c".repeat(64);
+
+        let mut first = build_context_delivery_page(
+            &records,
+            snapshot.clone(),
+            query.clone(),
+            sort.clone(),
+            None,
+            1,
+            4096,
+        )
+        .unwrap();
+        let bytes = first.encode_json().unwrap();
+        assert_eq!(bytes.len(), first.output_bytes);
+        assert_eq!(first.returned, 1);
+        assert_eq!(first.omitted, 2);
+        assert!(first.truncated);
+        let cursor = first.next_cursor.clone().unwrap();
+
+        let second = build_context_delivery_page(
+            &records,
+            snapshot.clone(),
+            query.clone(),
+            sort,
+            Some(&cursor),
+            2,
+            8192,
+        )
+        .unwrap();
+        assert_eq!(second.offset, 1);
+        assert_eq!(second.returned, 2);
+        assert!(!second.truncated);
+        assert!(
+            build_context_delivery_page(
+                &records,
+                snapshot,
+                "d".repeat(64),
+                second.sort_sha256.clone(),
+                Some(&cursor),
+                2,
+                8192,
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("invalidated")
+        );
+        let error = build_context_delivery_page(
+            &records,
+            second.snapshot_sha256,
+            query,
+            second.sort_sha256,
+            None,
+            1,
+            32,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("budget_too_small"), "{error}");
+        assert!(error.contains("split_required"), "{error}");
+
+        let many = (0..4096)
+            .map(|index| {
+                ContextDeliveryRecord::Unresolved(ContextDeliveryUnresolved {
+                    reference: format!("large::{index:04}"),
+                    reason: "bounded producer complexity fixture".into(),
+                    provenance: vec![ContextDeliveryProvenance {
+                        kind: "fixture".into(),
+                        evidence: "pre-serialized once".into(),
+                        source_path: None,
+                        source_sha256: None,
+                    }],
+                })
+            })
+            .collect::<Vec<_>>();
+        let bounded = build_context_delivery_page(
+            &many,
+            "e".repeat(64),
+            "f".repeat(64),
+            "0".repeat(64),
+            None,
+            usize::MAX,
+            4096,
+        )
+        .unwrap();
+        assert!(bounded.returned > 0 && bounded.returned < many.len());
+        assert!(bounded.truncated);
+    }
 
     #[test]
     fn workspace_marker_rejects_an_invalid_state_root() {

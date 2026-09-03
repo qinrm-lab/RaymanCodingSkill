@@ -20,11 +20,11 @@
     ]
   },
   "revision": {
-    "generation": 9,
+    "generation": 10,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 8,
-      "sha256": "9787004c63f1a03248614b6f135f7c79aec2df8271a4fe46fb4ecd258e470cd4"
+      "generation": 9,
+      "sha256": "f97bf772b8f2e5c1af6c8ed3afb392b4f054216b91f30b0da195f55b1ae3a533"
     }
   },
   "tests": [
@@ -2284,6 +2284,32 @@
       "retirement": null
     },
     {
+      "test_id": "TEST-RUST-BUDGETED-GOAL-NAVIGATION-PAGES-WITHOUT-BASELINES-49B490791841",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/tests/cli.rs::budgeted_goal_navigation_pages_without_baselines_and_preserves_legacy_shapes",
+      "role": "root_cargo",
+      "path": "crates/rayman/tests/cli.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "budgeted_goal_navigation_pages_without_baselines_and_preserves_legacy_shapes",
+      "selector_sha256": "87e714555886b38698e469f69a68bbf998c342ba2082defcb3f5fa24398b12b8",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
+      "test_id": "TEST-RUST-BUDGETED-MAP-QUERIES-SCOPE-FIELDS-DEPTH-AND-CURS-CB3F7B826C94",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/tests/cli.rs::budgeted_map_queries_scope_fields_depth_and_cursor_drift_fail_closed",
+      "role": "root_cargo",
+      "path": "crates/rayman/tests/cli.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "budgeted_map_queries_scope_fields_depth_and_cursor_drift_fail_closed",
+      "selector_sha256": "efbabbd2be5e136f8c8db40c7ef4fbb999f3cc5107eed2cb2363e786c8df66d9",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
       "test_id": "TEST-RUST-BUILD-ENTRY-REFUSES-A-NON-FILE-READ-TARGET-458B838794EA",
       "status": "active",
       "identity": "rust::root_cargo::crates/rayman/src/context.rs::build_entry_refuses_a_non_file_read_target",
@@ -3442,6 +3468,19 @@
       "selector_kind": "rust_test_fn",
       "selector": "context_delivery_cursor_invalidates_schema_snapshot_query_or_sort_drift",
       "selector_sha256": "2d0c49903f042397022f860eecf63df5b9be6f1b77ec20784bd6933f3cbc09e8",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
+      "test_id": "TEST-RUST-CONTEXT-DELIVERY-PAGE-BUILDER-ENFORCES-COMPLETE-BDAAED16BC59",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/lib.rs::context_delivery_page_builder_enforces_complete_budgeted_progress_and_cursor_binding",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/lib.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "context_delivery_page_builder_enforces_complete_budgeted_progress_and_cursor_binding",
+      "selector_sha256": "aeea34e4ab9512a50e600f7a275f1af656d92af4799d173707b55efd978f0a49",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -7531,7 +7570,7 @@
     },
     {
       "test_id": "TEST-RUST-PARSES-MAP-IMPACT-74C9EFB1EA64",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/cli.rs::parses_map_impact",
       "role": "root_cargo",
       "path": "crates/rayman/src/cli.rs",
@@ -7540,17 +7579,55 @@
       "selector_sha256": "172a89616a11ae8df6c80790211aeb609f03c81e3969464d5bdf16686d995224",
       "cfg": "all",
       "owner": null,
+      "retirement": {
+        "retired_at": "2026-09-03",
+        "reason": "The CLI parser shape gained reviewed budgeted navigation options.",
+        "replaced_by": [
+          "TEST-RUST-PARSES-MAP-IMPACT-74C9EFB1EA64-R10"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-PARSES-MAP-IMPACT-74C9EFB1EA64-R10",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/cli.rs::parses_map_impact",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/cli.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "parses_map_impact",
+      "selector_sha256": "247cd8b5ac26841ac76ff50a2f1731a53ad22e210184b27bd6ca53d0a371bd64",
+      "cfg": "all",
+      "owner": null,
       "retirement": null
     },
     {
       "test_id": "TEST-RUST-PARSES-MAP-PLAN-CHECK-971091BC8B30",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/cli.rs::parses_map_plan_check",
       "role": "root_cargo",
       "path": "crates/rayman/src/cli.rs",
       "selector_kind": "rust_test_fn",
       "selector": "parses_map_plan_check",
       "selector_sha256": "bf0d389717dbc51cccab47af6cc43107b589e31d519c206aee044594125ba833",
+      "cfg": "all",
+      "owner": null,
+      "retirement": {
+        "retired_at": "2026-09-03",
+        "reason": "The CLI parser shape gained reviewed budgeted navigation options.",
+        "replaced_by": [
+          "TEST-RUST-PARSES-MAP-PLAN-CHECK-971091BC8B30-R10"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-PARSES-MAP-PLAN-CHECK-971091BC8B30-R10",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/cli.rs::parses_map_plan_check",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/cli.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "parses_map_plan_check",
+      "selector_sha256": "30a87c69141e5ee9cdce751aea8cc48cb919e62c62c40bd67bf67e11b05ab933",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -12835,6 +12912,15 @@
       }
     },
     {
+      "asset_id": "ASSET-FILE-R10-D5F204364472",
+      "status": "active",
+      "path": "crates/rayman/tests/cli.rs",
+      "sha256": "d5f204364472420904f95a48e8ef0b769991d7beb59b0235ecc3934daf41bf32",
+      "kind": "dedicated_file",
+      "cleanup_policy": "delete_on_last_reference",
+      "retirement": null
+    },
+    {
       "asset_id": "ASSET-FILE-R3-9184A69725FE",
       "status": "retired",
       "path": "crates/rayman/tests/audit_script.rs",
@@ -12920,12 +13006,18 @@
     },
     {
       "asset_id": "ASSET-FILE-R9-54487AFA36CC",
-      "status": "active",
+      "status": "retired",
       "path": "crates/rayman/tests/cli.rs",
       "sha256": "54487afa36cc3547d50294637924c3f749fab4f85c7cd449b7f6072cdd852e95",
       "kind": "dedicated_file",
       "cleanup_policy": "delete_on_last_reference",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-03",
+        "reason": "Dedicated CLI integration bytes gained budgeted Goal and Map navigation coverage.",
+        "replaced_by": [
+          "ASSET-FILE-R10-D5F204364472"
+        ]
+      }
     }
   ]
 }

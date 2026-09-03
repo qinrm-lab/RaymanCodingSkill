@@ -26,11 +26,11 @@ Operational runtime/task state is local under `.RaymanCodingSkill/` and normally
 
 ## Context delivery v1
 
-`rayman.context-delivery.v1` is the machine contract for future budgeted
-context-navigation commands. The Rust contract lives in
-`crates/rayman/src/context.rs`. This revision establishes and tests the
-contract only; it does not add a context query, excerpt, pack, or goal-brief
-command.
+`rayman.context-delivery.v1` is the machine contract for budgeted
+context-navigation commands. The envelope types live in
+`crates/rayman/src/context.rs`; the shared complete-record page producer lives
+at the crate root. Goal brief/list/package queries and opt-in Map projections
+now use that one contract rather than defining command-specific pagination.
 
 ### Authority boundary
 
@@ -100,6 +100,61 @@ and current-page resolved/unresolved counts plus omitted records, and declares
 `complete`, `partial`, or `unknown`.
 `complete` permits neither omissions nor unresolved records; `partial`
 requires at least one; `unknown` requires an explanatory detail.
+
+### Budgeted Goal and Map producers
+
+`goal brief <id>` returns only the compact recovery projection: overview, full
+text for open requirements, the package DAG, fresh goal-baseline delta, the
+five most recent progress receipts, missing current validation, frontier, and
+an explicit next-command record. It hashes the complete inputs but never emits
+the baseline file map. Goal members are read from stable no-follow handles,
+must pass the complete current Goal contract after deserialization, and are
+captured again with the workspace/frontier before output. The next command is
+ordered by that same frontier, plan, package, current validation, review, and
+authority state, so it never recommends close/finish across a visible gap.
+The brief snapshot includes the raw signature of every Goal document because a
+replacement-authority decision can depend on goals other than the selected one;
+legacy-shaped records remain available through the legacy full/compact commands
+but appear unresolved in current-contract budgeted navigation.
+`goal package list <goal>` and `goal package show
+<goal> <package>` split package, requirement, progress, and child records at
+record boundaries. `goal list` keeps its legacy compact-array shape when
+called without new options; `--lifecycle`, `--status`, `--limit`, `--cursor`,
+or `--budget-bytes` selects the budgeted envelope. Same-field filter values are
+ORed, lifecycle and status are ANDed, and corrupt Goal members remain explicit
+unresolved records rather than disappearing.
+
+The legacy output shapes of `map symbol`, `map file`, `map impact`, and `map
+plan` likewise remain unchanged until a new navigation option is supplied.
+Budgeted symbol lookup supports `--exact`, `--path-prefix`, and `--package`;
+file supports `--max-depth`; impact and plan support path/package scoping and
+`--max-depth`. All four support `--fields`, `--limit`, `--cursor`, and
+`--budget-bytes`. Paths are normalized workspace-relative filters, unknown
+fields and packages fail closed, and graph depth is capped at 64. `--fields`
+projects only optional `attributes`; path, SHA-256, line range, selection
+reason, and provenance remain mandatory. A new navigation option defaults to
+100 records and 32768 bytes. JSON is emitted as the canonical compact document
+with no trailing newline in both UI formats so the actual stdout byte count is
+exactly `output_bytes`. Map snapshot identity includes every verified context
+entry and content digest, the exact raw context-index file SHA-256, and the
+derived map, so content-only or formatting-only index drift invalidates a cursor
+even when symbols and dependency edges do not change.
+`--package` requires one unique package-name identity; duplicate names fail
+closed with their manifests and callers can omit it in favor of
+`--path-prefix`.
+
+Page size and byte budget are retry controls, not query identity. A caller may
+continue the same cursor with a larger limit or budget, but any goal/context
+snapshot, normalized filter, field set, exact-match mode, package/path scope,
+depth, sort, or cursor-position change fails closed. These projections remain
+navigation/advisory data even when they display validation or frontier facts;
+they never become Goal validation, finish, repository, release, or installation
+authority.
+The shared page producer serializes every candidate record once, keeps prefix
+byte/count tables, and evaluates only compact envelope metadata while selecting
+the largest fitting prefix. Its worst-case producer work is linear in the
+bounded result set rather than repeatedly copying and serializing shrinking
+vectors.
 
 ### Context refresh metrics
 
@@ -324,11 +379,11 @@ rayman context refresh          # strong-hash every current file; report hash wo
 rayman context status           # cheap stat-only UI probe; not proof for map/check readiness
 rayman map refresh              # rebuild the project map from the current index
 rayman map summary              # project structure summary from the current index
-rayman map file <path>          # symbols/dependencies/tests/risks for one file
-rayman map symbol <name>        # find indexed symbols by name
+rayman map file <path> [--max-depth N] [--fields ...] [--limit N] [--cursor ...] [--budget-bytes N]
+rayman map symbol <name> [--exact] [--path-prefix <path>] [--package <name>] [--fields ...] [page options]
 rayman map topology             # Cargo package/path-dependency topology
-rayman map impact <file>        # one file only; directories fail with a map-plan migration
-rayman map plan <paths...> [--check] # multi-file change plan; --check blocks unscoped broad edits
+rayman map impact <file> [--path-prefix <path>] [--package <name>] [--max-depth N] [page options]
+rayman map plan <paths...> [--check] [--path-prefix <path>] [--package <name>] [--max-depth N] [page options]
 rayman map quality [--profile standard|strict] [--check] # findings retain severity and report source roles
 rayman check                    # workspace health only unless a goal is explicitly required
 rayman check --goal <id>        # workspace_ready + task_ready bound to one exact goal
@@ -346,10 +401,14 @@ rayman temp pytest-lease <label> | pytest-probe <id> | pytest-release <id>
 rayman state audit [--check]    # read-only v2/retired-state + recursive-temp audit; audit/traversal errors fail --check
 
 rayman goal start "<title>" --must "<req>" [--should "<req>"]
-rayman goal list | show <id> | summary <id>
+rayman goal list [--lifecycle current] [--status active] [--limit N] [--cursor ...] [--budget-bytes N]
+rayman goal show <id> | summary <id>
+rayman goal brief <id> [--limit N] [--cursor ...] [--budget-bytes 32768]
 rayman goal plan <id> <paths...> --check [--extend]
 rayman goal review <id> --reviewer <name> -m "<review>"
 rayman goal package add <id> <package> "<title>" [--parent <package>] [--req <req_id>] [--optional]
+rayman goal package list <id> [--limit N] [--cursor ...] [--budget-bytes N]
+rayman goal package show <id> <package> [--limit N] [--cursor ...] [--budget-bytes N]
 rayman goal progress <id> --package <package> -m "<stage evidence>" --command "<direct command>"
 rayman goal package complete <id> <package> --progress <progress_id>
 rayman goal lane open <id> <lane> --mode advisory-read-only|writer|final-reviewer [--allow <path>]
@@ -385,7 +444,7 @@ Every command accepts `--format json` for machine-readable output.
 Text mode is UTF-8 and locale-aware. `--language auto` checks `RAYMAN_LANG`, `LC_ALL`, `LC_MESSAGES`, `LANG`, then the Windows user locale; explicit `--language` wins. Chinese, English, Unicode workspace paths, and safe Unicode scratch labels round-trip without lossy decoding. JSON keys, enum/status values, and schema are identical in every language.
 
 `goal start` records a per-file SHA256 baseline. A baseline-less current v2 goal is never gate-ready; preserve completed history with `archive`, or replace unfinished work with a new baseline-bound goal and `supersede`. Work that was simply abandoned — most often a goal opened before the code existed, whose baseline no longer resembles the tree — is retired by stating the real outcome and then filing it: `goal close <id> --status partial` (or `blocked`) followed by `goal archive <id> --reason "<why>"`. Archiving asserts nothing about completion, and every consumer of an archived record additionally requires success, so a retired partial can never stand in for evidence. An `active` goal still cannot be archived: closing it first is what makes the outcome an honest record rather than a disappearance. For multi-file work, `goal plan` must be written while the workspace still matches that baseline. `--extend` keeps the base receipt immutable and appends a cumulative hash-chained snapshot only when prior delta is already planned and newly added paths still equal the baseline. Paths/checks can only widen and review priority can only rise. Actual additions, edits, and deletions are recomputed from the baseline, so validation and close reject unplanned delta. A high-priority effective plan also needs `goal review` bound to the final source fingerprint.
-Plans covering 12 or more paths require required work packages that collectively bind every must requirement before success; an empty package or warning alone is not enough. Required packages can only complete from a same-package progress receipt bound to the source snapshot and direct command output, but progress is always `authoritative=false` and never substitutes `goal validate`. JSON `goal list` and both forms of `goal current` emit the typed `rayman.goal-compact.v1` projection without full baselines or receipts; `goal summary` emits stage counts, and `goal show <id>` is the explicit complete record. Lane close recomputes the opening-baseline delta: advisory/final-reviewer lanes reject every write, while writer lanes reject paths outside their exact allowlist; lane evidence is coordination-only. A read-only/final-reviewer lane is thus a zero-write bracket over the whole workspace, not a reviewer running concurrently with writers to the same tree; once it observes drift it cannot be closed cleanly, so recover by reverting the drift or by discharging the goal with `supersede`/`archive`.
+Plans covering 12 or more paths require required work packages that collectively bind every must requirement before success; an empty package or warning alone is not enough. Required packages can only complete from a same-package progress receipt bound to the source snapshot and direct command output, but progress is always `authoritative=false` and never substitutes `goal validate`. Bare JSON `goal list` and both forms of `goal current` retain the typed `rayman.goal-compact.v1` projection without full baselines or receipts; filtered/paged `goal list`, `goal brief`, and package list/show use `rayman.context-delivery.v1`. `goal summary` emits stage counts, and `goal show <id>` remains the explicit complete record. Lane close recomputes the opening-baseline delta: advisory/final-reviewer lanes reject every write, while writer lanes reject paths outside their exact allowlist; lane evidence is coordination-only. A read-only/final-reviewer lane is thus a zero-write bracket over the whole workspace, not a reviewer running concurrently with writers to the same tree; once it observes drift it cannot be closed cleanly, so recover by reverting the drift or by discharging the goal with `supersede`/`archive`.
 `check` without a goal remains a workspace-health result and reports `workspace_ready`; it must not be presented as proof that a user task is complete. `check --goal <id>` additionally reports task evidence readiness. `finish --goal <id>` is stricter: it first requires an authority validation that ran the same project gate at least twice without changing the final workspace fingerprint, then refreshes and checks the exact closed goal. Every check also reports Git/source state when available.
 
 An explicit user pause or shutdown request is represented as an immediate,

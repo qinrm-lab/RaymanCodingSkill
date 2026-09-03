@@ -164,6 +164,17 @@ pub fn managed_state_file(root: &Path, relative: &Path, create_parents: bool) ->
     Ok(path)
 }
 
+/// Read one existing managed-state file from a stable no-follow file handle.
+/// Path validation alone is not a read capability: the final component can be
+/// replaced after validation. The handle-bound reader rechecks strong identity
+/// and bytes before returning, so callers never validate one Goal member and
+/// then silently read a substituted link/reparse target.
+pub fn read_managed_state_file(root: &Path, relative: &Path, label: &str) -> Result<Vec<u8>> {
+    let path = managed_state_file(root, relative, false)?;
+    let (bytes, _) = crate::file_io::read_handle_bound_file(&path, label)?;
+    Ok(bytes)
+}
+
 /// Check an already-created directory immediately before a state transaction.
 pub fn ensure_real_directory(path: &Path) -> Result<()> {
     crate::file_io::ensure_real_directory_labeled(path, "受管状态目录")

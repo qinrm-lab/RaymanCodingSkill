@@ -5926,13 +5926,36 @@ const MESSAGE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     ("新建目标", "Create a goal"),
     ("must 需求（可重复）", "Must requirement (repeatable)"),
     ("should 需求（可重复）", "Should requirement (repeatable)"),
-    ("列出目标", "List goals"),
+    (
+        "列出目标；带任一过滤或分页参数时返回 budgeted context-delivery",
+        "List goals; any filter or paging option returns budgeted context-delivery",
+    ),
+    (
+        "lifecycle 过滤，同字段多值为 OR，可重复",
+        "Lifecycle filter; repeat values for OR within this field",
+    ),
+    (
+        "status 过滤，同字段多值为 OR，可重复",
+        "Status filter; repeat values for OR within this field",
+    ),
     ("查看单个目标", "Show one goal"),
     (
         "紧凑显示需求、计划、工作包和收据计数，不输出完整 baseline",
         "Compact requirement, plan, package, and receipt counts without the full baseline",
     ),
+    (
+        "预算化显示恢复工作所需的 Goal frontier，永不输出完整 baseline",
+        "Budgeted Goal frontier needed to resume work; never emits the full baseline",
+    ),
     ("管理分层 work package", "Manage hierarchical work packages"),
+    (
+        "预算化列出一个 Goal 的 package DAG",
+        "List one Goal package DAG with a byte budget",
+    ),
+    (
+        "预算化显示一个 Goal 内的 package、需求和 progress",
+        "Show a Goal package, requirements, and progress with a byte budget",
+    ),
     (
         "管理源码绑定的并发 lane 台账",
         "Manage source-bound concurrency lanes",
@@ -6100,6 +6123,42 @@ const MESSAGE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "Show modules, symbols, dependencies, tests, and risks for one file",
     ),
     ("按名称查找符号", "Find symbols by name"),
+    (
+        "每页最多返回的完整记录数；必须大于零",
+        "Maximum complete records per page; must be positive",
+    ),
+    (
+        "上一页返回的绑定游标",
+        "Bound cursor returned by the previous page",
+    ),
+    (
+        "canonical compact JSON 的 UTF-8 字节上限；导航模式默认 32768",
+        "UTF-8 byte ceiling for canonical compact JSON; navigation defaults to 32768",
+    ),
+    (
+        "只保留这些可选 attributes 字段，逗号分隔或重复提供",
+        "Keep only these optional attribute fields; comma-separate or repeat",
+    ),
+    (
+        "依赖和被依赖关系的最大遍历深度；导航模式默认 1",
+        "Maximum dependency and dependent traversal depth; navigation defaults to 1",
+    ),
+    (
+        "按大小写敏感的完整符号名匹配，而不是默认的不区分大小写子串匹配",
+        "Match the complete case-sensitive symbol name instead of the default case-insensitive substring",
+    ),
+    (
+        "只返回该 workspace-relative 路径或其后代",
+        "Return only this workspace-relative path or its descendants",
+    ),
+    (
+        "只返回归属该 package 的符号",
+        "Return only symbols owned by this package",
+    ),
+    (
+        "只返回归属该 package 的路径记录",
+        "Return only path records owned by this package",
+    ),
     (
         "查看 Cargo package / path-dependency 拓扑",
         "Show Cargo package and path-dependency topology",

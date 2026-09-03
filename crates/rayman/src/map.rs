@@ -1,9 +1,13 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
+use serde_json::Value;
 
-use crate::context::{self, ContextIndex, FileEntry};
+use crate::context::{
+    self, ContextDeliveryItem, ContextDeliveryLineRange, ContextDeliveryProvenance,
+    ContextDeliveryRecord, ContextDeliveryUnresolved, ContextDeliveryV1, ContextIndex, FileEntry,
+};
 use crate::file_io::write_json;
 use crate::state_paths;
 use crate::timefmt::now_iso;
@@ -48,28 +52,17 @@ pub fn build(root: &Path) -> Result<ProjectMap> {
 }
 
 pub fn build_readonly(root: &Path) -> Result<ProjectMap> {
-    // Map conclusions are used by standard/release planning, so a stat-only ready
-    // result is insufficient. `verified_index` returns the same in-memory index
-    // object whose full entries were compared; never validate and reopen the
-    // cache because that permits an unverified replacement between the calls.
     let index = context::verified_index(root)?;
     build_from_index(root, &index, MapFileSource::Live)
 }
 
-/// Build from the exact cached index object already verified by a caller-owned
-/// readiness capture. The map may reopen individual source files with their
-/// recorded hash contract, but it never performs another full workspace walk.
+/// Build from one caller-verified index without reopening its cache.
 pub fn build_from_verified_index(root: &Path, index: &ContextIndex) -> Result<ProjectMap> {
     build_from_index(root, index, MapFileSource::Live)
 }
 
-/// Build source and heuristic-manifest conclusions from the exact bytes held
-/// by the caller's readiness capture. Cargo topology remains a live external
-/// observation: it runs with `--locked`, and its returned workspace/package/
-/// path-dependency manifests must all bind to the validated captured manifest
-/// set. A surrounding readiness round must bracket that observation with a
-/// terminal capture. Missing captured bytes are never replaced by a named
-/// reopen.
+/// Build from caller-captured bytes. Cargo metadata remains a live `--locked`
+/// observation bound to the captured manifest set; missing bytes never reopen.
 pub fn build_from_capture(
     root: &Path,
     index: &ContextIndex,
@@ -226,6 +219,271 @@ pub fn topology_is_authoritative(root: &Path, map: &ProjectMap) -> bool {
 fn topology_provenance_is_authoritative(root: &Path, provenance: &str) -> bool {
     let _ = root;
     matches!(provenance, "cargo_metadata" | "no_cargo_manifest")
+}
+
+fn normalize_delivery_options(
+    map: &ProjectMap,
+    mut options: MapDeliveryOptions,
+) -> Result<MapDeliveryOptions> {
+    if options.limit == 0 {
+        bail!("map delivery --limit must be positive");
+    }
+    if options.budget_bytes == 0 {
+        bail!("map delivery --budget-bytes must be positive");
+    }
+    if options.max_depth > 64 {
+        bail!("map delivery --max-depth must not exceed 64");
+    }
+    options.fields = options
+        .fields
+        .into_iter()
+        .map(|field| field.trim().to_string())
+        .filter(|field| !field.is_empty())
+        .collect();
+    options.fields.sort();
+    options.fields.dedup();
+    if let Some(field) = options
+        .fields
+        .iter()
+        .find(|field| !MAP_DELIVERY_FIELDS.contains(&field.as_str()))
+    {
+        bail!(
+            "unknown map delivery field `{field}`; available fields: {}",
+            MAP_DELIVERY_FIELDS.join(",")
+        );
+    }
+    options.path_prefix = options
+        .path_prefix
+        .map(|path| normalized_delivery_prefix(&path))
+        .transpose()?;
+    options.package = options
+        .package
+        .map(|package| package.trim().to_string())
+        .filter(|package| !package.is_empty());
+    if let Some(package) = options.package.as_deref() {
+        let mut manifests = map
+            .packages
+            .iter()
+            .filter(|entry| entry.name == package)
+            .map(|entry| entry.manifest_path.clone())
+            .collect::<Vec<_>>();
+        manifests.sort();
+        manifests.dedup();
+        if manifests.is_empty() {
+            bail!("map delivery package does not exist: {package}");
+        }
+        if manifests.len() > 1 {
+            bail!(
+                "map delivery package name is ambiguous: {package}; manifests={}; omit --package and use --path-prefix instead",
+                manifests.join(",")
+            );
+        }
+    }
+    Ok(options)
+}
+
+fn normalized_delivery_prefix(raw: &str) -> Result<String> {
+    let path = raw.trim().trim_end_matches('/');
+    if path.is_empty()
+        || path.starts_with('/')
+        || path.contains('\\')
+        || path.contains(':')
+        || path
+            .split('/')
+            .any(|component| component.is_empty() || component == "." || component == "..")
+    {
+        bail!("map delivery --path-prefix must be normalized and workspace-relative: {raw}");
+    }
+    Ok(path.to_string())
+}
+
+fn path_matches_prefix(path: &str, prefix: &str) -> bool {
+    path == prefix
+        || path
+            .strip_prefix(prefix)
+            .is_some_and(|suffix| suffix.starts_with('/'))
+}
+
+fn delivery_record_path(record: &ContextDeliveryRecord) -> &str {
+    match record {
+        ContextDeliveryRecord::Resolved(item) => &item.path,
+        ContextDeliveryRecord::Unresolved(item) => &item.reference,
+    }
+}
+
+fn package_name_for_path<'a>(map: &'a ProjectMap, path: &str) -> Option<&'a str> {
+    package_for_path(map, path).map(|package| package.name.as_str())
+}
+
+fn apply_delivery_scope(
+    map: &ProjectMap,
+    options: &MapDeliveryOptions,
+    records: &mut Vec<ContextDeliveryRecord>,
+) {
+    records.retain(|record| {
+        let path = delivery_record_path(record);
+        options
+            .path_prefix
+            .as_deref()
+            .is_none_or(|prefix| path_matches_prefix(path, prefix))
+            && options
+                .package
+                .as_deref()
+                .is_none_or(|package| package_name_for_path(map, path) == Some(package))
+    });
+}
+
+fn project_delivery_fields(fields: &[String], attributes: &mut BTreeMap<String, Value>) {
+    if fields.is_empty() {
+        return;
+    }
+    attributes.retain(|field, _| fields.binary_search(field).is_ok());
+}
+
+fn delivery_record(
+    index: &ContextIndex,
+    path: &str,
+    line: Option<usize>,
+    reason: impl Into<String>,
+    provenance_kind: &str,
+    evidence: impl Into<String>,
+    attributes: BTreeMap<String, Value>,
+) -> ContextDeliveryRecord {
+    let evidence = evidence.into();
+    let Some(entry) = index.files.iter().find(|entry| entry.path == path) else {
+        return ContextDeliveryRecord::Unresolved(ContextDeliveryUnresolved {
+            reference: path.to_string(),
+            reason: "path is absent from the verified context snapshot".into(),
+            provenance: vec![ContextDeliveryProvenance {
+                kind: provenance_kind.into(),
+                evidence,
+                source_path: None,
+                source_sha256: None,
+            }],
+        });
+    };
+    let start = line.unwrap_or(1).max(1);
+    let end = line.unwrap_or(entry.lines.max(1)).max(start);
+    ContextDeliveryRecord::Resolved(ContextDeliveryItem {
+        path: entry.path.clone(),
+        sha256: entry.sha256.clone(),
+        line_range: ContextDeliveryLineRange { start, end },
+        reason: reason.into(),
+        provenance: vec![ContextDeliveryProvenance {
+            kind: provenance_kind.into(),
+            evidence,
+            source_path: Some(entry.path.clone()),
+            source_sha256: Some(entry.sha256.clone()),
+        }],
+        attributes,
+    })
+}
+
+fn map_delivery_snapshot(
+    index: &ContextIndex,
+    raw_index_sha256: &str,
+    map: &ProjectMap,
+) -> Result<String> {
+    let mut value = serde_json::to_value(map)?;
+    let object = value
+        .as_object_mut()
+        .context("project map serialization must be an object")?;
+    object.remove("generated_at");
+    object.remove("workspace");
+    context::context_delivery_identity(&(
+        value,
+        index.schema_version,
+        &index.workspace_identity,
+        &index.files,
+        raw_index_sha256,
+    ))
+}
+
+fn finish_map_delivery(
+    index: &ContextIndex,
+    raw_index_sha256: &str,
+    map: &ProjectMap,
+    options: MapDeliveryOptions,
+    query: Value,
+    sort: &str,
+    mut records: Vec<ContextDeliveryRecord>,
+) -> Result<ContextDeliveryV1> {
+    apply_delivery_scope(map, &options, &mut records);
+    let mut keyed_records = records
+        .into_iter()
+        .map(|record| Ok((serde_json::to_vec(&record)?, record)))
+        .collect::<Result<Vec<_>>>()?;
+    keyed_records.sort_by(|left, right| left.0.cmp(&right.0));
+    let records = keyed_records
+        .into_iter()
+        .map(|(_, record)| record)
+        .collect::<Vec<_>>();
+    context::build_context_delivery_page(
+        &records,
+        map_delivery_snapshot(index, raw_index_sha256, map)?,
+        context::context_delivery_identity(&query)?,
+        context::context_delivery_identity(&sort)?,
+        options.cursor.as_deref(),
+        options.limit,
+        options.budget_bytes,
+    )
+}
+
+#[derive(Debug, Clone)]
+struct TraversalEdge {
+    dependency: Dependency,
+    direction: &'static str,
+    depth: usize,
+}
+
+fn dependency_neighborhood(
+    map: &ProjectMap,
+    seeds: &[String],
+    max_depth: usize,
+) -> Vec<TraversalEdge> {
+    let mut found = BTreeMap::<(String, String, String, String), TraversalEdge>::new();
+    for direction in ["dependency", "dependent"] {
+        let mut queue = VecDeque::new();
+        let mut seen = BTreeSet::new();
+        for seed in seeds {
+            queue.push_back((seed.clone(), 0usize));
+            seen.insert(seed.clone());
+        }
+        while let Some((path, depth)) = queue.pop_front() {
+            if depth >= max_depth {
+                continue;
+            }
+            for dependency in map.dependencies.iter().filter(|dependency| {
+                if direction == "dependency" {
+                    dependency.from_path == path
+                } else {
+                    dependency.to_path == path
+                }
+            }) {
+                let next = if direction == "dependency" {
+                    dependency.to_path.clone()
+                } else {
+                    dependency.from_path.clone()
+                };
+                let edge_depth = depth + 1;
+                let key = (
+                    direction.into(),
+                    dependency.from_path.clone(),
+                    dependency.to_path.clone(),
+                    dependency.kind.clone(),
+                );
+                found.entry(key).or_insert_with(|| TraversalEdge {
+                    dependency: dependency.clone(),
+                    direction,
+                    depth: edge_depth,
+                });
+                if seen.insert(next.clone()) {
+                    queue.push_back((next, edge_depth));
+                }
+            }
+        }
+    }
+    found.into_values().collect()
 }
 
 pub fn impact_report(map: &ProjectMap, path: &str) -> Result<ImpactReport> {

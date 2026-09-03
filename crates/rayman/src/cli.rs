@@ -343,6 +343,40 @@ pub struct MapCmd {
     pub action: MapAction,
 }
 
+#[derive(Args, Debug, Clone, Default)]
+pub struct ContextPageArgs {
+    /// 每页最多返回的完整记录数；必须大于零
+    #[arg(long)]
+    pub limit: Option<usize>,
+    /// 上一页返回的绑定游标
+    #[arg(long)]
+    pub cursor: Option<String>,
+    /// canonical compact JSON 的 UTF-8 字节上限；导航模式默认 32768
+    #[arg(long = "budget-bytes")]
+    pub budget_bytes: Option<usize>,
+}
+
+impl ContextPageArgs {
+    pub fn requested(&self) -> bool {
+        self.limit.is_some() || self.cursor.is_some() || self.budget_bytes.is_some()
+    }
+}
+
+#[derive(Args, Debug, Clone, Default)]
+pub struct MapProjectionArgs {
+    /// 只保留这些可选 attributes 字段，逗号分隔或重复提供
+    #[arg(long, value_delimiter = ',')]
+    pub fields: Vec<String>,
+    #[command(flatten)]
+    pub page: ContextPageArgs,
+}
+
+impl MapProjectionArgs {
+    pub fn requested(&self) -> bool {
+        !self.fields.is_empty() || self.page.requested()
+    }
+}
+
 #[derive(Subcommand)]
 pub enum MapAction {
     /// 从当前 context 索引重建项目地图
@@ -350,13 +384,46 @@ pub enum MapAction {
     /// 输出项目规模、模块、符号、依赖和风险摘要
     Summary,
     /// 查看单个文件的模块、符号、依赖、测试和风险
-    File { path: String },
+    File {
+        path: String,
+        /// 依赖和被依赖关系的最大遍历深度；导航模式默认 1
+        #[arg(long = "max-depth")]
+        max_depth: Option<usize>,
+        #[command(flatten)]
+        projection: MapProjectionArgs,
+    },
     /// 按名称查找符号
-    Symbol { name: String },
+    Symbol {
+        name: String,
+        /// 按大小写敏感的完整符号名匹配，而不是默认的不区分大小写子串匹配
+        #[arg(long)]
+        exact: bool,
+        /// 只返回该 workspace-relative 路径或其后代
+        #[arg(long = "path-prefix")]
+        path_prefix: Option<String>,
+        /// 只返回归属该 package 的符号
+        #[arg(long)]
+        package: Option<String>,
+        #[command(flatten)]
+        projection: MapProjectionArgs,
+    },
     /// 查看 Cargo package / path-dependency 拓扑
     Topology,
     /// 分析某个文件变更会影响的依赖方、测试和建议验证命令
-    Impact { path: String },
+    Impact {
+        path: String,
+        /// 只返回该 workspace-relative 路径或其后代
+        #[arg(long = "path-prefix")]
+        path_prefix: Option<String>,
+        /// 只返回归属该 package 的路径记录
+        #[arg(long)]
+        package: Option<String>,
+        /// 依赖和被依赖关系的最大遍历深度；导航模式默认 1
+        #[arg(long = "max-depth")]
+        max_depth: Option<usize>,
+        #[command(flatten)]
+        projection: MapProjectionArgs,
+    },
     /// 聚合多个变更路径，生成大型变更的文件分组、风险和验证计划
     Plan {
         /// 计划触碰的文件路径（可重复）
@@ -364,6 +431,17 @@ pub enum MapAction {
         /// 计划存在阻塞项时退出 1
         #[arg(long)]
         check: bool,
+        /// 只返回该 workspace-relative 路径或其后代
+        #[arg(long = "path-prefix")]
+        path_prefix: Option<String>,
+        /// 只返回归属该 package 的路径记录
+        #[arg(long)]
+        package: Option<String>,
+        /// 依赖和被依赖关系的最大遍历深度；导航模式默认 1
+        #[arg(long = "max-depth")]
+        max_depth: Option<usize>,
+        #[command(flatten)]
+        projection: MapProjectionArgs,
     },
     /// 汇总项目可维护性质量信号；--check 会在 error 级问题上非零退出
     Quality {
@@ -460,12 +538,27 @@ pub enum GoalAction {
         #[arg(long = "should")]
         should: Vec<String>,
     },
-    /// 列出目标
-    List,
+    /// 列出目标；带任一过滤或分页参数时返回 budgeted context-delivery
+    List {
+        /// lifecycle 过滤，同字段多值为 OR，可重复
+        #[arg(long)]
+        lifecycle: Vec<String>,
+        /// status 过滤，同字段多值为 OR，可重复
+        #[arg(long)]
+        status: Vec<String>,
+        #[command(flatten)]
+        page: ContextPageArgs,
+    },
     /// 查看单个目标
     Show { id: String },
     /// 紧凑显示需求、计划、工作包和收据计数，不输出完整 baseline
     Summary { id: String },
+    /// 预算化显示恢复工作所需的 Goal frontier，永不输出完整 baseline
+    Brief {
+        id: String,
+        #[command(flatten)]
+        page: ContextPageArgs,
+    },
     /// Manage a commit-bound release handoff contract.
     Handoff(Box<HandoffCmd>),
     /// Persist a pre-mutation plan receipt bound to the goal baseline.
@@ -611,6 +704,19 @@ pub struct WorkPackageCmd {
 
 #[derive(Subcommand)]
 pub enum WorkPackageAction {
+    /// 预算化列出一个 Goal 的 package DAG
+    List {
+        goal: String,
+        #[command(flatten)]
+        page: ContextPageArgs,
+    },
+    /// 预算化显示一个 Goal 内的 package、需求和 progress
+    Show {
+        goal: String,
+        id: String,
+        #[command(flatten)]
+        page: ContextPageArgs,
+    },
     /// 新增一个 package；父节点必须已存在
     Add {
         goal: String,
@@ -892,7 +998,7 @@ mod tests {
         let cli = Cli::try_parse_from(["rayman", "map", "impact", "src/lib.rs"]).unwrap();
         match cli.command {
             Command::Map(MapCmd {
-                action: MapAction::Impact { path },
+                action: MapAction::Impact { path, .. },
             }) => assert_eq!(path, "src/lib.rs"),
             _ => panic!("unexpected command"),
         }
@@ -922,7 +1028,7 @@ mod tests {
         .unwrap();
         match cli.command {
             Command::Map(MapCmd {
-                action: MapAction::Plan { paths, check },
+                action: MapAction::Plan { paths, check, .. },
             }) => {
                 assert_eq!(
                     paths,

@@ -10,6 +10,7 @@ mod state_audit_cli;
 mod task_workflow;
 mod update_cli;
 
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command as ProcessCommand;
 
@@ -577,11 +578,14 @@ const SOURCE_FRESH_VERIFIER: &str = "scripts/verify-release-contract.ps1 -Requir
 fn run_map(root: &std::path::Path, json: bool, cmd: MapCmd) -> Result<()> {
     // Queries must remain read-only. Only the explicit `map refresh` action persists
     // a derived cache; every other map command builds an ephemeral current view.
-    let project_map = if matches!(&cmd.action, MapAction::Refresh) {
-        map::build(root)?
-    } else {
-        map::build_readonly(root)?
-    };
+    let (project_map, verified_index, raw_index_sha256) =
+        if matches!(&cmd.action, MapAction::Refresh) {
+            (map::build(root)?, None, None)
+        } else {
+            let (index, raw_sha256) = rayman::verified_context_index_with_raw_sha256(root)?;
+            let project_map = map::build_from_verified_index(root, &index)?;
+            (project_map, Some(index), Some(raw_sha256))
+        };
     match cmd.action {
         MapAction::Refresh => {
             let summary = map::summary(&project_map);
@@ -610,17 +614,52 @@ fn run_map(root: &std::path::Path, json: bool, cmd: MapCmd) -> Result<()> {
                 print_map_summary(&summary);
             }
         }
-        MapAction::File { path } => {
+        MapAction::File {
+            path,
+            max_depth,
+            projection,
+        } => {
             let report = map::file_report(&project_map, &path)?;
-            if json {
+            if max_depth.is_some() || projection.requested() {
+                emit_context_delivery(map::file_delivery(
+                    verified_index
+                        .as_ref()
+                        .expect("read-only map has verified index"),
+                    raw_index_sha256
+                        .as_deref()
+                        .expect("read-only map has raw index identity"),
+                    &project_map,
+                    &path,
+                    map_delivery_options(projection, None, None, max_depth),
+                )?)?;
+            } else if json {
                 print(&serde_json::to_value(&report)?);
             } else {
                 print_file_report(&report);
             }
         }
-        MapAction::Symbol { name } => {
+        MapAction::Symbol {
+            name,
+            exact,
+            path_prefix,
+            package,
+            projection,
+        } => {
             let report = map::symbol_report(&project_map, &name);
-            if json {
+            if exact || path_prefix.is_some() || package.is_some() || projection.requested() {
+                emit_context_delivery(map::symbol_delivery(
+                    verified_index
+                        .as_ref()
+                        .expect("read-only map has verified index"),
+                    raw_index_sha256
+                        .as_deref()
+                        .expect("read-only map has raw index identity"),
+                    &project_map,
+                    &name,
+                    exact,
+                    map_delivery_options(projection, path_prefix, package, None),
+                )?)?;
+            } else if json {
                 print(&serde_json::to_value(&report)?);
             } else {
                 print_symbol_report(&report);
@@ -634,17 +673,62 @@ fn run_map(root: &std::path::Path, json: bool, cmd: MapCmd) -> Result<()> {
                 print_topology_report(&report);
             }
         }
-        MapAction::Impact { path } => {
+        MapAction::Impact {
+            path,
+            path_prefix,
+            package,
+            max_depth,
+            projection,
+        } => {
             let report = map::impact_report(&project_map, &path)?;
-            if json {
+            if path_prefix.is_some()
+                || package.is_some()
+                || max_depth.is_some()
+                || projection.requested()
+            {
+                emit_context_delivery(map::impact_delivery(
+                    verified_index
+                        .as_ref()
+                        .expect("read-only map has verified index"),
+                    raw_index_sha256
+                        .as_deref()
+                        .expect("read-only map has raw index identity"),
+                    &project_map,
+                    &path,
+                    map_delivery_options(projection, path_prefix, package, max_depth),
+                )?)?;
+            } else if json {
                 print(&serde_json::to_value(&report)?);
             } else {
                 print_impact_report(&report);
             }
         }
-        MapAction::Plan { paths, check } => {
+        MapAction::Plan {
+            paths,
+            check,
+            path_prefix,
+            package,
+            max_depth,
+            projection,
+        } => {
             let report = map::change_plan(&project_map, &paths)?;
-            if json {
+            if path_prefix.is_some()
+                || package.is_some()
+                || max_depth.is_some()
+                || projection.requested()
+            {
+                emit_context_delivery(map::plan_delivery(
+                    verified_index
+                        .as_ref()
+                        .expect("read-only map has verified index"),
+                    raw_index_sha256
+                        .as_deref()
+                        .expect("read-only map has raw index identity"),
+                    &project_map,
+                    &report,
+                    map_delivery_options(projection, path_prefix, package, max_depth),
+                )?)?;
+            } else if json {
                 print(&serde_json::to_value(&report)?);
             } else {
                 print_change_plan(&report);
@@ -666,6 +750,38 @@ fn run_map(root: &std::path::Path, json: bool, cmd: MapCmd) -> Result<()> {
             }
         }
     }
+    Ok(())
+}
+
+const DEFAULT_CONTEXT_PAGE_LIMIT: usize = 100;
+const DEFAULT_CONTEXT_BUDGET_BYTES: usize = 32_768;
+
+fn map_delivery_options(
+    projection: cli::MapProjectionArgs,
+    path_prefix: Option<String>,
+    package: Option<String>,
+    max_depth: Option<usize>,
+) -> map::MapDeliveryOptions {
+    map::MapDeliveryOptions {
+        path_prefix,
+        package,
+        fields: projection.fields,
+        max_depth: max_depth.unwrap_or(1),
+        limit: projection.page.limit.unwrap_or(DEFAULT_CONTEXT_PAGE_LIMIT),
+        cursor: projection.page.cursor,
+        budget_bytes: projection
+            .page
+            .budget_bytes
+            .unwrap_or(DEFAULT_CONTEXT_BUDGET_BYTES),
+    }
+}
+
+fn emit_context_delivery(mut envelope: context::ContextDeliveryV1) -> Result<()> {
+    let bytes = envelope.encode_json()?;
+    std::io::stdout()
+        .lock()
+        .write_all(&bytes)
+        .context("failed to write canonical context-delivery JSON")?;
     Ok(())
 }
 
@@ -804,23 +920,32 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 );
             }
         }
-        GoalAction::List => {
-            let goals = store.list()?;
-            if json {
-                print(&compact_goal_list(&goals));
-            } else if goals.is_empty() {
-                println!("暂无目标。");
-            } else {
-                for goal in goals {
-                    println!(
-                        "{}  [{}/{}]  {}",
-                        goal.id, goal.lifecycle, goal.status, goal.title
-                    );
+        GoalAction::List {
+            lifecycle,
+            status,
+            page,
+        } => {
+            if lifecycle.is_empty() && status.is_empty() && !page.requested() {
+                let goals = store.list()?;
+                if json {
+                    print(&compact_goal_list(&goals));
+                } else if goals.is_empty() {
+                    println!("暂无目标。");
+                } else {
+                    for goal in goals {
+                        println!(
+                            "{}  [{}/{}]  {}",
+                            goal.id, goal.lifecycle, goal.status, goal.title
+                        );
+                    }
                 }
+            } else {
+                goal_cli::run_budgeted_list(root, lifecycle, status, page)?;
             }
         }
         GoalAction::Show { id } => goal_cli::run_show(&store, json, id)?,
         GoalAction::Summary { id } => goal_cli::run_summary(&store, json, id)?,
+        GoalAction::Brief { id, page } => goal_cli::run_brief(root, id, page)?,
         GoalAction::Handoff(command) => match command.action {
             HandoffAction::Start { from_goal, commit } => {
                 let goal = store.start_handoff(&from_goal, &commit)?;
@@ -848,7 +973,7 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
             reviewer,
             message,
         } => goal_cli::run_review(&store, json, id, reviewer, message)?,
-        GoalAction::Package(command) => goal_cli::run_package(&store, json, *command)?,
+        GoalAction::Package(command) => goal_cli::run_package(root, &store, json, *command)?,
         GoalAction::Lane(command) => goal_cli::run_lane(&store, json, *command)?,
         GoalAction::Progress {
             id,
