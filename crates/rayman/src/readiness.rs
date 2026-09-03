@@ -671,8 +671,12 @@ fn render_check(
         print_source_state(&evaluation.source);
         if let Some(refresh) = &once.refresh_report {
             println!(
-                "  context refresh: total={} reused={} rehashed={} removed={}",
-                refresh.total, refresh.reused, refresh.rehashed, refresh.removed
+                "  context refresh: files_hashed={} bytes_hashed={} content_unchanged={} content_changed={} removed={}",
+                refresh.files_hashed,
+                refresh.bytes_hashed,
+                refresh.content_unchanged,
+                refresh.content_changed,
+                refresh.removed
             );
         }
         // The hint is framework text, not user content, so it must not ride

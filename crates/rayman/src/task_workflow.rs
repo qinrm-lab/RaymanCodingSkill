@@ -304,8 +304,12 @@ fn run_prepare_with_phase_hook(
             None => println!("  checkpoint: none"),
         }
         println!(
-            "  context: total={} reused={} rehashed={} removed={}",
-            refresh.total, refresh.reused, refresh.rehashed, refresh.removed
+            "  context: files_hashed={} bytes_hashed={} content_unchanged={} content_changed={} removed={}",
+            refresh.files_hashed,
+            refresh.bytes_hashed,
+            refresh.content_unchanged,
+            refresh.content_changed,
+            refresh.removed
         );
         println!(
             "  plan: covered={} recorded={} required={} actual={} planned={}",

@@ -2,6 +2,15 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use clap::ValueEnum;
 pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
+    "context refresh 的两轮强内容捕获不一致；工作区在刷新期间发生变化",
+    "context 索引",
+    "context 索引包含不安全路径: {}",
+    "context 索引包含无效 sha256: {}",
+    "context 索引包含无效文件类型: {}",
+    "context 索引文件类型与路径不一致: {}",
+    "context 索引与当前相同内容的派生字段不一致: {}",
+    "{label} 包含重复路径: {path}",
+    "当前 workspace capture",
     "无法读取 agent contract 路径: {}",
     "bundle_sha256 与 skill 委托的 contract bundle 当前内容不一致",
     "缺少 bundle_sha256（运行 workspace rebind --yes 迁移）",
@@ -453,7 +462,7 @@ pub const AUTHORED_MESSAGE_TEMPLATES: &[&str] = &[
     "maintenance cycle rebind 未精确绑定 archived command 的 flag/value",
     "maintenance cycle rebind 路径不得经过 symlink/junction/reparse: {}",
     "只有 current-schema active/current 目标可以记录 progress receipt",
-    "索引已刷新: 共 {} 个文件（复用 {}，重算 {}，移除 {}）",
+    "索引已刷新: 哈希 {} 个文件 / {} 字节（内容未变 {}，内容变化或新增 {}，移除 {}）",
     "goal {} package {} progress receipt {} 已记录（non-authoritative）",
     "historical goal {} lifecycle={} 已保留但不参与当前 readiness{}",
     "validation 不覆盖 {}；需要同一条当前成功 receipt 绑定 {}",
@@ -2641,6 +2650,36 @@ const MESSAGE_PREFIX_CATALOG: &[(&str, &str)] = &[
 // have been extracted. Short entries are therefore safe: user titles, paths, and
 // evidence text are reinserted byte-for-byte after the static template is translated.
 const TEMPLATE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
+    (
+        "context refresh 的两轮强内容捕获不一致；工作区在刷新期间发生变化",
+        "the two strong context refresh captures differ; the workspace changed during refresh",
+    ),
+    (
+        "context 索引包含不安全路径: {}",
+        "context index contains an unsafe path: {}",
+    ),
+    (
+        "context 索引包含无效 sha256: {}",
+        "context index contains an invalid sha256: {}",
+    ),
+    (
+        "context 索引包含无效文件类型: {}",
+        "context index contains an invalid file kind: {}",
+    ),
+    (
+        "context 索引文件类型与路径不一致: {}",
+        "context index file kind does not match its path: {}",
+    ),
+    (
+        "context 索引与当前相同内容的派生字段不一致: {}",
+        "context index derived fields disagree with current identical content: {}",
+    ),
+    (
+        "{label} 包含重复路径: {path}",
+        "{label} contains duplicate path: {path}",
+    ),
+    ("当前 workspace capture", "current workspace capture"),
+    ("context 索引", "context index"),
     (
         "Cargo target lease manifest 与 validation session 不一致: {}",
         "Cargo target lease manifest does not match the validation session: {}",
@@ -6045,8 +6084,8 @@ const MESSAGE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
         "Stat-only freshness check (does not rebuild)",
     ),
     (
-        "刷新索引（只重算变更文件）",
-        "Refresh the index and rehash changed files",
+        "刷新索引（强哈希全部当前文件，并报告内容未变/变化）",
+        "Refresh the index by strongly hashing every current file and report content deltas",
     ),
     (
         "从当前 context 索引重建项目地图",
@@ -6280,8 +6319,10 @@ const MESSAGE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     ("提示，不阻塞", "advisory, non-blocking"),
     ("共 ", "total "),
     (" 个文件", " files"),
-    ("复用 ", "reused "),
-    ("重算 ", "rehashed "),
+    ("哈希 ", "hashed "),
+    (" 字节", " bytes"),
+    ("内容未变 ", "content unchanged "),
+    ("内容变化或新增 ", "content changed or added "),
     ("移除 ", "removed "),
     (
         "已保留但不参与当前 readiness",
@@ -6528,6 +6569,32 @@ mod tests {
                 ActiveLanguage::En,
             ),
             "Latest complete checkpoint: cp_1 (Complete, saved at 2026-07-24)"
+        );
+    }
+
+    #[test]
+    fn context_refresh_text_localizes_honest_hash_metrics_and_help() {
+        let output = localize_line_for(
+            "索引已刷新: 哈希 2 个文件 / 26 字节（内容未变 1，内容变化或新增 1，移除 0）".into(),
+            ActiveLanguage::En,
+            false,
+        );
+        assert!(!contains_han(&output), "{output}");
+        assert!(
+            output.contains("Index refreshed: hashed 2 files"),
+            "{output}"
+        );
+        assert!(output.contains("26 bytes"), "{output}");
+        assert!(output.contains("content unchanged 1"), "{output}");
+        assert!(output.contains("content changed or added 1"), "{output}");
+
+        assert_eq!(
+            localize_line_for(
+                "刷新索引（强哈希全部当前文件，并报告内容未变/变化）".into(),
+                ActiveLanguage::En,
+                false,
+            ),
+            "Refresh the index by strongly hashing every current file and report content deltas"
         );
     }
 

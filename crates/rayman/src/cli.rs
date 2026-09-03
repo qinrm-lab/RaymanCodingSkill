@@ -323,7 +323,7 @@ pub struct ContextCmd {
 pub enum ContextAction {
     /// stat-only 新鲜度检查（不重建）
     Status,
-    /// 刷新索引（只重算变更文件）
+    /// 刷新索引（强哈希全部当前文件，并报告内容未变/变化）
     Refresh,
     #[command(name = "os", hide = true)]
     LegacyOs {

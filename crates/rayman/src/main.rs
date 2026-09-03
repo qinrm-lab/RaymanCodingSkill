@@ -142,8 +142,12 @@ fn run(cli: Cli) -> Result<()> {
                     print(&serde_json::to_value(&report)?);
                 } else {
                     println!(
-                        "索引已刷新: 共 {} 个文件（复用 {}，重算 {}，移除 {}）",
-                        report.total, report.reused, report.rehashed, report.removed
+                        "索引已刷新: 哈希 {} 个文件 / {} 字节（内容未变 {}，内容变化或新增 {}，移除 {}）",
+                        report.files_hashed,
+                        report.bytes_hashed,
+                        report.content_unchanged,
+                        report.content_changed,
+                        report.removed
                     );
                 }
             }

@@ -6,7 +6,7 @@ local work to a stable finish. A separate, receipt-bound
 `rayman-update-worker` binary is confined to the signed update transaction.
 Together, the load-bearing surface is:
 
-- **Context index** — a content-proven map of the workspace (files, kinds, symbols). `context refresh` hashes indexed content and preserves read failures as blockers; the cheap `context status` command remains a stat-only UI probe, while map and readiness conclusions re-check content hashes.
+- **Context index** — a content-proven map of the workspace (files, kinds, symbols). Standalone `context refresh` publishes only after two consecutive full strong-hash captures agree, reports actual `files_hashed` / `bytes_hashed` work separately from content changes, and preserves read failures as blockers; the cheap `context status` command remains a stat-only UI probe, while map and readiness conclusions re-check content hashes. Future budgeted navigation commands share the tested [`rayman.context-delivery.v1`](#context-delivery-v1) envelope, whose authority is always `navigation_only`.
 - **Explicit activation** — `.RaymanCodingSkill/` by itself is only runtime state. `workspace activate` writes a canonical-skill path/SHA256, the delegated agent/workflow bundle SHA256, and the exact CLI contract/version; orphan state, any bundle-resource drift, and stale CLIs are inactive. The seven-field activation schema rejects duplicates, unknown fields, nesting, and malformed scalars; a legacy six-field contract is inactive and can only be migrated by an eligible `workspace rebind --yes`.
 - **Multilingual Unicode UI** — human-facing text supports Simplified Chinese and English through `--language auto|zh-CN|en` (or `RAYMAN_LANG`). Auto mode follows locale metadata and the Windows user locale, with a Chinese fail-safe when none exists. JSON output remains a locale-independent automation contract, and all captured CLI output must be valid UTF-8.
 - **Project map** — a derived architecture view (modules, symbols, local dependencies, Cargo/pyproject packages, entrypoints, heuristic test candidates, impact hints). Rust modules/tests and Python imports plus pytest filename conventions are modeled; unsupported ecosystems remain advisory for missing-test conclusions.
@@ -23,6 +23,102 @@ Together, the load-bearing surface is:
 Operational runtime/task state is local under `.RaymanCodingSkill/` and normally gitignored; `.RaymanCodingSkill/quality.json` is the one exact shared-policy exception. Its bytes are indexed and included in workspace fingerprints, so changing policy makes context/validation evidence stale exactly like changing source. Checkpoint archives and update preferences are deliberately different: unless overridden, they live in a user-level data directory, not in the repository. Current files and command output are the source of truth; there is no cross-project memory or LLM call. The Windows network surface is the bounded official-release notification/download transport described in [docs/UPDATE_CONTRACT.md](docs/UPDATE_CONTRACT.md); unsupported platforms do not substitute another client.
 
 > This is the v2 rewrite. It deliberately drops the previous framework's parallel LLM stack, HTTP API, research agents, and process-governance manifests in favor of the small load-bearing core above. See `SKILL.md` for the agent-facing usage contract.
+
+## Context delivery v1
+
+`rayman.context-delivery.v1` is the machine contract for future budgeted
+context-navigation commands. The Rust contract lives in
+`crates/rayman/src/context.rs`. This revision establishes and tests the
+contract only; it does not add a context query, excerpt, pack, or goal-brief
+command.
+
+### Authority boundary
+
+Every envelope fixes `authority` to `navigation_only`. A valid envelope can
+select material for an agent to inspect. It is never validation, completion,
+release, installation, source-fresh, or Git authority and cannot satisfy a
+Goal requirement or repository gate.
+
+### Identity and deterministic continuation
+
+Each envelope binds three lowercase SHA-256 identities:
+
+- `snapshot_sha256`: the exact context snapshot being queried;
+- `query_sha256`: the normalized query and filters;
+- `sort_sha256`: the deterministic ordering specification.
+
+The cursor seal includes the exact schema string, snapshot, query, sort, and
+next position. A continuation token is valid only for that complete tuple.
+Drift in any member, including position tampering, invalidates the cursor; a
+caller must restart from a fresh query rather than mixing pages from different
+source states. The cursor position is the zero-based `offset + returned` value,
+so a truncated response must advance by at least one complete item.
+
+The seal is an unkeyed deterministic SHA-256 binding, not a MAC or security
+credential. It detects stale or accidentally altered continuations; a party
+that can rewrite inputs can recompute it. This is acceptable only because the
+entire envelope remains `navigation_only` and carries no authority.
+
+### UTF-8 budget and counts
+
+`budget_bytes` is the maximum size of the canonical compact JSON document,
+measured as exact UTF-8 bytes with no trailing newline. `output_bytes` is the
+exact size of those emitted bytes. The serializer reaches a stable
+`output_bytes` value and then rejects a document that exceeds the budget.
+
+Counts obey this equation:
+
+```text
+total = offset + returned + omitted
+returned = records.length
+truncated = (omitted > 0)
+```
+
+`next_cursor` is present exactly when `truncated` is true. Output is truncated
+only between complete tagged records. Both resolved and unresolved records live
+in that one ordered stream, so unresolved evidence is budgeted and paginated by
+the same cursor rather than repeated as an unbounded side channel. If the
+envelope plus one record cannot fit,
+the producer must return a typed budget-too-small or split-required error; it
+must not issue a non-advancing cursor or silently discard a partial record.
+
+### Item provenance and coverage
+
+Every returned `records` entry is tagged `resolved` or `unresolved`. A resolved
+record contains:
+
+- a normalized workspace-relative `path` and exact content `sha256`;
+- a one-based inclusive `line_range`;
+- a non-empty selection `reason`;
+- one or more provenance records with machine-readable `kind` and `evidence`;
+- optional deterministic attributes.
+
+File-backed provenance carries `source_path` and `source_sha256` as an
+all-or-nothing pair. An unresolved record preserves the reference that could
+not be resolved, its reason, and provenance. `coverage` reports complete-query
+and current-page resolved/unresolved counts plus omitted records, and declares
+`complete`, `partial`, or `unknown`.
+`complete` permits neither omissions nor unresolved records; `partial`
+requires at least one; `unknown` requires an explanatory detail.
+
+### Context refresh metrics
+
+`context refresh` remains a strong content proof. The standalone command
+publishes only after two consecutive full content captures are equal, including
+same-size content whose mtime was restored; the capture-backed readiness path
+uses its already stable capture. Its report distinguishes actual work from
+content comparison:
+
+- `files_hashed` and `bytes_hashed` report actual hash operations and bytes, so
+  standalone refresh normally reports twice `total` files;
+- `content_unchanged` and `content_changed` compare those fresh hashes with the
+  previous compatible index;
+- `total`, `removed`, and `errors` retain their existing meanings.
+
+For one compatibility window, JSON also emits `reused = content_unchanged` and
+`rehashed = content_changed`. Those legacy names classify content only. They do
+not mean that unchanged files skipped hashing, and new consumers must use the
+explicit fields.
 
 ## Codex and Claude Code compatibility
 
@@ -224,7 +320,7 @@ rayman codex-hook status                       # inspect user-level Stop guard i
 rayman codex-hook install --yes                # merge managed handler; preserves other hooks
 rayman codex-hook uninstall --yes              # remove only Rayman managed handler
 rayman codex-hook stop                         # Codex host entrypoint; reads Stop JSON from stdin
-rayman context refresh          # rebuild index with content-hash proof; read failures block readiness
+rayman context refresh          # strong-hash every current file; report hash work and content deltas
 rayman context status           # cheap stat-only UI probe; not proof for map/check readiness
 rayman map refresh              # rebuild the project map from the current index
 rayman map summary              # project structure summary from the current index

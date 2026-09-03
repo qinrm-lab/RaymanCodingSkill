@@ -63,14 +63,449 @@ pub struct ContextIndex {
     pub files: Vec<FileEntry>,
 }
 
+pub const CONTEXT_DELIVERY_SCHEMA: &str = "rayman.context-delivery.v1";
+const CONTEXT_DELIVERY_CURSOR_PREFIX: &str = "rayman-context-cursor-v1";
+
+/// Machine contract shared by future budgeted context-navigation commands.
+///
+/// This type deliberately carries only navigation authority.  A successfully
+/// decoded envelope can help select source to inspect, but it can never satisfy
+/// a goal validation, completion, release, or installation requirement.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ContextDeliveryV1 {
+    pub schema: String,
+    pub authority: ContextDeliveryAuthority,
+    pub snapshot_sha256: String,
+    pub query_sha256: String,
+    pub sort_sha256: String,
+    /// Zero-based offset of the first item in this page.
+    pub offset: usize,
+    /// Exact UTF-8 byte ceiling for the canonical compact JSON document.
+    pub budget_bytes: usize,
+    /// Exact UTF-8 byte count of the canonical compact JSON document.
+    pub output_bytes: usize,
+    /// Total deterministic matches for the bound query and snapshot.
+    pub total: usize,
+    /// Complete records carried by this page.
+    pub returned: usize,
+    /// Matches remaining after this page.
+    pub omitted: usize,
+    pub truncated: bool,
+    pub next_cursor: Option<String>,
+    /// One deterministic page containing both resolved and unresolved records.
+    /// A single cursor therefore budgets every record; there is no unbounded
+    /// unresolved side channel.
+    pub records: Vec<ContextDeliveryRecord>,
+    pub coverage: ContextDeliveryCoverage,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ContextDeliveryAuthority {
+    NavigationOnly,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "state", content = "record", rename_all = "snake_case")]
+pub enum ContextDeliveryRecord {
+    Resolved(ContextDeliveryItem),
+    Unresolved(ContextDeliveryUnresolved),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ContextDeliveryItem {
+    /// Normalized workspace-relative path using `/` separators.
+    pub path: String,
+    pub sha256: String,
+    pub line_range: ContextDeliveryLineRange,
+    pub reason: String,
+    pub provenance: Vec<ContextDeliveryProvenance>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub attributes: BTreeMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ContextDeliveryLineRange {
+    /// One-based inclusive start line.
+    pub start: usize,
+    /// One-based inclusive end line.
+    pub end: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ContextDeliveryProvenance {
+    pub kind: String,
+    pub evidence: String,
+    /// When provenance names a file, path and hash are an all-or-nothing pair.
+    pub source_path: Option<String>,
+    pub source_sha256: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ContextDeliveryUnresolved {
+    pub reference: String,
+    pub reason: String,
+    pub provenance: Vec<ContextDeliveryProvenance>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ContextDeliveryCoverage {
+    pub status: ContextDeliveryCoverageStatus,
+    /// Totals cover the complete bound query, while returned counts cover only
+    /// this page's tagged records.
+    pub resolved_total: usize,
+    pub resolved_returned: usize,
+    pub unresolved_total: usize,
+    pub unresolved_returned: usize,
+    pub omitted_items: usize,
+    /// Required for `unknown`; optional explanatory text for other states.
+    pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ContextDeliveryCoverageStatus {
+    Complete,
+    Partial,
+    Unknown,
+}
+
+/// Identity that every continuation cursor is deterministically content-bound to.
+/// Changing the schema, snapshot, normalized query, or deterministic sort
+/// specification produces a different binding and invalidates the old cursor.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ContextDeliveryCursorBinding {
+    pub schema: String,
+    pub snapshot_sha256: String,
+    pub query_sha256: String,
+    pub sort_sha256: String,
+}
+
+impl ContextDeliveryCursorBinding {
+    pub fn v1(snapshot_sha256: String, query_sha256: String, sort_sha256: String) -> Self {
+        Self {
+            schema: CONTEXT_DELIVERY_SCHEMA.into(),
+            snapshot_sha256,
+            query_sha256,
+            sort_sha256,
+        }
+    }
+
+    fn validate(&self) -> Result<()> {
+        if self.schema != CONTEXT_DELIVERY_SCHEMA {
+            bail!("unsupported context delivery schema: {}", self.schema);
+        }
+        for (label, value) in [
+            ("snapshot_sha256", self.snapshot_sha256.as_str()),
+            ("query_sha256", self.query_sha256.as_str()),
+            ("sort_sha256", self.sort_sha256.as_str()),
+        ] {
+            if !is_lower_sha256(value) {
+                bail!("context delivery {label} must be a lowercase SHA-256 digest");
+            }
+        }
+        Ok(())
+    }
+
+    fn cursor_digest(&self, position: usize) -> Result<String> {
+        self.validate()?;
+        Ok(sha256_bytes(&serde_json::to_vec(&(self, position))?))
+    }
+
+    pub fn encode_cursor(&self, position: usize) -> Result<String> {
+        Ok(format!(
+            "{CONTEXT_DELIVERY_CURSOR_PREFIX}:{}:{position}",
+            self.cursor_digest(position)?
+        ))
+    }
+
+    pub fn decode_cursor(&self, cursor: &str) -> Result<usize> {
+        let parts = cursor.split(':').collect::<Vec<_>>();
+        if parts.len() != 3 || parts[0] != CONTEXT_DELIVERY_CURSOR_PREFIX {
+            bail!("malformed context delivery cursor");
+        }
+        let position = parts[2]
+            .parse::<usize>()
+            .context("malformed context delivery cursor position")?;
+        if position.to_string() != parts[2] {
+            bail!("context delivery cursor position is not canonical");
+        }
+        let expected = self.cursor_digest(position)?;
+        if parts[1] != expected {
+            bail!(
+                "context delivery cursor was invalidated by schema, snapshot, query, sort, or position drift"
+            );
+        }
+        Ok(position)
+    }
+}
+
+impl ContextDeliveryV1 {
+    pub fn cursor_binding(&self) -> ContextDeliveryCursorBinding {
+        ContextDeliveryCursorBinding {
+            schema: self.schema.clone(),
+            snapshot_sha256: self.snapshot_sha256.clone(),
+            query_sha256: self.query_sha256.clone(),
+            sort_sha256: self.sort_sha256.clone(),
+        }
+    }
+
+    /// Serialize the exact machine contract.  Budget enforcement never drops
+    /// a partial record: callers must construct truthful counts and a bound
+    /// cursor first, then this method either emits the complete document or
+    /// rejects it as over budget.
+    pub fn encode_json(&mut self) -> Result<Vec<u8>> {
+        self.validate_semantics()?;
+        for _ in 0..8 {
+            let bytes = serde_json::to_vec(self)?;
+            if self.output_bytes == bytes.len() {
+                self.validate()?;
+                return Ok(bytes);
+            }
+            self.output_bytes = bytes.len();
+        }
+        bail!("context delivery output byte count did not stabilize");
+    }
+
+    pub fn decode_json(bytes: &[u8]) -> Result<Self> {
+        let envelope =
+            serde_json::from_slice::<Self>(bytes).context("invalid context delivery v1 JSON")?;
+        envelope.validate()?;
+        if serde_json::to_vec(&envelope)? != bytes {
+            bail!("context delivery v1 JSON is not in canonical compact form");
+        }
+        Ok(envelope)
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        self.validate_semantics()?;
+        let actual = serde_json::to_vec(self)?.len();
+        if self.output_bytes != actual {
+            bail!(
+                "context delivery output_bytes mismatch: declared {} actual {actual}",
+                self.output_bytes
+            );
+        }
+        if actual > self.budget_bytes {
+            bail!(
+                "context delivery output exceeds UTF-8 budget: {actual} > {}",
+                self.budget_bytes
+            );
+        }
+        Ok(())
+    }
+
+    fn validate_semantics(&self) -> Result<()> {
+        self.cursor_binding().validate()?;
+        if self.authority != ContextDeliveryAuthority::NavigationOnly {
+            bail!("context delivery authority must be navigation_only");
+        }
+        if self.budget_bytes == 0 {
+            bail!("context delivery budget_bytes must be positive");
+        }
+        if self.returned != self.records.len() {
+            bail!("context delivery returned count does not match records");
+        }
+        let consumed = self
+            .offset
+            .checked_add(self.returned)
+            .and_then(|value| value.checked_add(self.omitted))
+            .context("context delivery counts overflow")?;
+        if self.total != consumed {
+            bail!("context delivery total must equal offset + returned + omitted");
+        }
+        if self.truncated != (self.omitted > 0) {
+            bail!("context delivery truncated must exactly reflect omitted items");
+        }
+        if self.truncated && self.returned == 0 {
+            bail!("context delivery cannot issue a non-advancing cursor");
+        }
+        match (&self.next_cursor, self.truncated) {
+            (Some(cursor), true) => {
+                let expected = self
+                    .offset
+                    .checked_add(self.returned)
+                    .context("context delivery cursor position overflow")?;
+                if self.cursor_binding().decode_cursor(cursor)? != expected {
+                    bail!("context delivery next_cursor position is inconsistent");
+                }
+            }
+            (None, false) => {}
+            _ => bail!("context delivery next_cursor presence must exactly reflect truncation"),
+        }
+        let mut resolved_returned = 0usize;
+        let mut unresolved_returned = 0usize;
+        for record in &self.records {
+            match record {
+                ContextDeliveryRecord::Resolved(item) => {
+                    resolved_returned += 1;
+                    validate_delivery_item(item)?;
+                }
+                ContextDeliveryRecord::Unresolved(unresolved) => {
+                    unresolved_returned += 1;
+                    if unresolved.reference.trim().is_empty()
+                        || unresolved.reason.trim().is_empty()
+                        || unresolved.provenance.is_empty()
+                    {
+                        bail!("context delivery unresolved entry is incomplete");
+                    }
+                    for provenance in &unresolved.provenance {
+                        validate_delivery_provenance(provenance)?;
+                    }
+                }
+            }
+        }
+        let coverage_total = self
+            .coverage
+            .resolved_total
+            .checked_add(self.coverage.unresolved_total)
+            .context("context delivery coverage total overflow")?;
+        if coverage_total != self.total
+            || resolved_returned > self.coverage.resolved_total
+            || unresolved_returned > self.coverage.unresolved_total
+            || self.coverage.resolved_returned != resolved_returned
+            || self.coverage.unresolved_returned != unresolved_returned
+            || resolved_returned + unresolved_returned != self.returned
+            || self.coverage.omitted_items != self.omitted
+        {
+            bail!("context delivery coverage counts are inconsistent");
+        }
+        let incomplete = self.omitted > 0 || self.coverage.unresolved_total > 0;
+        match self.coverage.status {
+            ContextDeliveryCoverageStatus::Complete if incomplete => {
+                bail!("complete context delivery coverage cannot omit or leave unresolved items")
+            }
+            ContextDeliveryCoverageStatus::Partial if !incomplete => {
+                bail!("partial context delivery coverage requires omitted or unresolved items")
+            }
+            ContextDeliveryCoverageStatus::Unknown
+                if self
+                    .coverage
+                    .detail
+                    .as_deref()
+                    .is_none_or(|detail| detail.trim().is_empty()) =>
+            {
+                bail!("unknown context delivery coverage requires detail")
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+}
+
+fn is_lower_sha256(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+fn validate_delivery_path(path: &str) -> Result<()> {
+    let bytes = path.as_bytes();
+    let windows_drive = bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':';
+    if path.is_empty()
+        || path.starts_with('/')
+        || path.contains('\\')
+        || path.contains(':')
+        || windows_drive
+        || std::path::Path::new(path)
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+        || path
+            .split('/')
+            .any(|component| component.is_empty() || component == "." || component == "..")
+    {
+        bail!("context delivery path must be normalized and workspace-relative: {path}");
+    }
+    Ok(())
+}
+
+fn validate_delivery_item(item: &ContextDeliveryItem) -> Result<()> {
+    validate_delivery_path(&item.path)?;
+    if !is_lower_sha256(&item.sha256) {
+        bail!("context delivery item sha256 is invalid: {}", item.path);
+    }
+    if item.line_range.start == 0 || item.line_range.end < item.line_range.start {
+        bail!("context delivery item line range is invalid: {}", item.path);
+    }
+    if item.reason.trim().is_empty() || item.provenance.is_empty() {
+        bail!(
+            "context delivery item requires reason and provenance: {}",
+            item.path
+        );
+    }
+    for provenance in &item.provenance {
+        validate_delivery_provenance(provenance)?;
+    }
+    Ok(())
+}
+
+fn validate_delivery_provenance(provenance: &ContextDeliveryProvenance) -> Result<()> {
+    if provenance.kind.trim().is_empty() || provenance.evidence.trim().is_empty() {
+        bail!("context delivery provenance requires kind and evidence");
+    }
+    match (&provenance.source_path, &provenance.source_sha256) {
+        (Some(path), Some(sha256)) => {
+            validate_delivery_path(path)?;
+            if !is_lower_sha256(sha256) {
+                bail!("context delivery provenance source_sha256 is invalid");
+            }
+        }
+        (None, None) => {}
+        _ => bail!("context delivery provenance source path and hash must be paired"),
+    }
+    Ok(())
+}
+
 /// 一次刷新的统计，用来向用户报告到底做了多少实际工作。
 #[derive(Debug, Clone, Serialize)]
 pub struct RefreshReport {
     pub total: usize,
+    /// Every current file was read through the strong hashing path.
+    pub files_hashed: usize,
+    pub bytes_hashed: u64,
+    pub content_unchanged: usize,
+    pub content_changed: usize,
+    /// Legacy JSON compatibility alias for `content_unchanged`.
     pub reused: usize,
+    /// Legacy JSON compatibility alias for `content_changed`; despite this old
+    /// name, all `files_hashed` files were hashed.
     pub rehashed: usize,
     pub removed: usize,
     pub errors: Vec<String>,
+}
+
+fn refresh_report(
+    files: &[FileEntry],
+    content_unchanged: usize,
+    removed: usize,
+    files_hashed: usize,
+    bytes_hashed: u64,
+) -> Result<RefreshReport> {
+    let content_changed = files
+        .len()
+        .checked_sub(content_unchanged)
+        .context("context refresh unchanged count exceeds current files")?;
+    Ok(RefreshReport {
+        total: files.len(),
+        files_hashed,
+        bytes_hashed,
+        content_unchanged,
+        content_changed,
+        reused: content_unchanged,
+        rehashed: content_changed,
+        removed,
+        errors: Vec::new(),
+    })
+}
+
+fn hash_work(files: &[FileEntry]) -> Result<(usize, u64)> {
+    let bytes = files.iter().try_fold(0u64, |total, entry| {
+        total
+            .checked_add(entry.size)
+            .context("context refresh byte count overflow")
+    })?;
+    Ok((files.len(), bytes))
 }
 
 /// 相对当前工作区状态的新鲜度，stat-only 计算，不做整树哈希。
@@ -116,6 +551,97 @@ fn load_cached(root: &Path) -> Result<Option<ContextIndex>> {
     // 只有文件确实不存在才视为首次运行。损坏、权限或其它 I/O 错误
     // 必须继续向上传递，避免 refresh 静默覆盖取证状态。
     read_json::<ContextIndex>(&index_path(root, false)?)
+}
+
+fn valid_sha256(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+fn validate_cached_entry(entry: &FileEntry) -> Result<()> {
+    let bytes = entry.path.as_bytes();
+    let windows_drive = bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':';
+    if entry.path.is_empty()
+        || entry.path.contains('\\')
+        || windows_drive
+        || Path::new(&entry.path)
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        bail!("context 索引包含不安全路径: {}", entry.path);
+    }
+    if !valid_sha256(&entry.sha256) {
+        bail!("context 索引包含无效 sha256: {}", entry.path);
+    }
+    if entry.read_error.is_some() {
+        bail!("context 索引包含读取失败条目: {}", entry.path);
+    }
+    if !matches!(
+        entry.kind.as_str(),
+        "source" | "test" | "docs" | "config" | "script" | "asset"
+    ) {
+        bail!("context 索引包含无效文件类型: {}", entry.path);
+    }
+    let extension = Path::new(&entry.path)
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if entry.kind != classify(&entry.path, &extension) {
+        bail!("context 索引文件类型与路径不一致: {}", entry.path);
+    }
+    Ok(())
+}
+
+fn validated_entries(entries: Vec<FileEntry>, label: &str) -> Result<BTreeMap<String, FileEntry>> {
+    let mut validated = BTreeMap::new();
+    for entry in entries {
+        validate_cached_entry(&entry)?;
+        let path = entry.path.clone();
+        if validated.insert(path.clone(), entry).is_some() {
+            bail!("{label} 包含重复路径: {path}");
+        }
+    }
+    Ok(validated)
+}
+
+fn cached_entries_for_refresh(
+    root: &Path,
+    cached: Option<ContextIndex>,
+) -> Result<BTreeMap<String, FileEntry>> {
+    let Some(index) = cached else {
+        return Ok(BTreeMap::new());
+    };
+    let compatible = index.schema_version == CONTEXT_SCHEMA_VERSION
+        && index.workspace_identity == workspace_identity(root);
+    let entries = validated_entries(index.files, "context 索引")?;
+    if !compatible {
+        return Ok(BTreeMap::new());
+    }
+    Ok(entries)
+}
+
+fn validate_unchanged_cached_derivations(
+    cached: &BTreeMap<String, FileEntry>,
+    current: &[FileEntry],
+) -> Result<()> {
+    for entry in current {
+        let Some(old) = cached.get(&entry.path) else {
+            continue;
+        };
+        if old.sha256 == entry.sha256
+            && (old.size != entry.size
+                || old.kind != entry.kind
+                || old.lines != entry.lines
+                || old.symbols != entry.symbols
+                || old.read_error != entry.read_error)
+        {
+            bail!("context 索引与当前相同内容的派生字段不一致: {}", entry.path);
+        }
+    }
+    Ok(())
 }
 
 /// 按工作区相对路径对文件分类；只吃相对路径，避免祖先目录含 "test" 造成整清单误判。
@@ -478,18 +1004,9 @@ pub(crate) fn refresh_from_capture(
     captured_cached: Result<Option<ContextIndex>>,
 ) -> Result<(ContextIndex, RefreshReport)> {
     let identity = workspace_identity(root);
-    let cached = captured_cached?
-        .filter(|index| {
-            index.schema_version == CONTEXT_SCHEMA_VERSION && index.workspace_identity == identity
-        })
-        .map(|index| {
-            index
-                .files
-                .into_iter()
-                .map(|entry| (entry.path.clone(), entry))
-                .collect::<BTreeMap<_, _>>()
-        })
-        .unwrap_or_default();
+    let cached = cached_entries_for_refresh(root, captured_cached?)?;
+    let _current = validated_entries(files.clone(), "当前 workspace capture")?;
+    validate_unchanged_cached_derivations(&cached, &files)?;
     let current_paths = files
         .iter()
         .map(|entry| entry.path.as_str())
@@ -506,13 +1023,8 @@ pub(crate) fn refresh_from_capture(
         .keys()
         .filter(|path| !current_paths.contains(path.as_str()))
         .count();
-    let report = RefreshReport {
-        total: files.len(),
-        reused,
-        rehashed: files.len().saturating_sub(reused),
-        removed,
-        errors: Vec::new(),
-    };
+    let (files_hashed, bytes_hashed) = hash_work(&files)?;
+    let report = refresh_report(&files, reused, removed, files_hashed, bytes_hashed)?;
     let index = ContextIndex {
         schema_version: CONTEXT_SCHEMA_VERSION,
         generated_at: now_iso(),
@@ -620,55 +1132,69 @@ pub(crate) fn read_verified_file(root: &Path, entry: &FileEntry) -> Result<Vec<u
     Ok(bytes)
 }
 
-/// 刷新索引：复用未变文件的指纹与符号，只重算变更文件。
-pub fn refresh(root: &Path) -> Result<(ContextIndex, RefreshReport)> {
-    let identity = workspace_identity(root);
-    let cached = load_cached(root)?
-        .filter(|index| {
-            index.schema_version == CONTEXT_SCHEMA_VERSION && index.workspace_identity == identity
-        })
-        .map(|index| {
-            index
-                .files
-                .into_iter()
-                .map(|entry| (entry.path.clone(), entry))
-                .collect::<BTreeMap<_, _>>()
-        })
-        .unwrap_or_default();
-
+fn capture_current_entries(root: &Path) -> Result<Vec<FileEntry>> {
     let mut files = Vec::new();
-    let mut reused = 0usize;
-    let mut rehashed = 0usize;
-    let mut present = std::collections::BTreeSet::new();
-
     for path in workspace_files_checked(root)? {
         let metadata = std::fs::metadata(&path)
             .with_context(|| format!("上下文索引无法读取文件元数据: {}", display_path(&path)))?;
-        let size = metadata.len();
-        let mtime = mtime_ns(&metadata);
-        let rel = relative_key(root, &path);
-        present.insert(rel.clone());
-        // 标准 refresh 为内容证明：即使攻击者保持 size/mtime 不变也必须重算 hash。
-        // cached entry 仅用于统计同内容复用，不作为跳过读取的依据。
-        let entry = build_entry(root, &path, size, mtime)?;
-        if cached.get(&rel).is_some_and(|old| {
+        files.push(build_entry(
+            root,
+            &path,
+            metadata.len(),
+            mtime_ns(&metadata),
+        )?);
+    }
+    Ok(files)
+}
+
+/// 刷新索引：对每个当前文件完成两个连续且相等的强内容捕获，再发布第二轮结果。
+/// 缓存只用于报告内容未变/变化数量；它从不跳过哈希。
+pub fn refresh(root: &Path) -> Result<(ContextIndex, RefreshReport)> {
+    refresh_with_between_capture(root, || {})
+}
+
+fn refresh_with_between_capture<F>(root: &Path, between: F) -> Result<(ContextIndex, RefreshReport)>
+where
+    F: FnOnce(),
+{
+    let identity = workspace_identity(root);
+    let cached = cached_entries_for_refresh(root, load_cached(root)?)?;
+
+    let first = capture_current_entries(root)?;
+    between();
+    let files = capture_current_entries(root)?;
+    if first != files {
+        bail!("context refresh 的两轮强内容捕获不一致；工作区在刷新期间发生变化");
+    }
+    validate_unchanged_cached_derivations(&cached, &files)?;
+
+    let mut content_unchanged = 0usize;
+    let mut present = std::collections::BTreeSet::new();
+    for entry in &files {
+        present.insert(entry.path.clone());
+        if cached.get(&entry.path).is_some_and(|old| {
             old.sha256 == entry.sha256 && old.read_error.is_none() && entry.read_error.is_none()
         }) {
-            reused += 1;
-        } else {
-            rehashed += 1;
+            content_unchanged += 1;
         }
-        files.push(entry);
     }
 
     let removed = cached.keys().filter(|key| !present.contains(*key)).count();
-    let report = RefreshReport {
-        total: files.len(),
-        reused,
-        rehashed,
+    let (first_files, first_bytes) = hash_work(&first)?;
+    let (terminal_files, terminal_bytes) = hash_work(&files)?;
+    let files_hashed = first_files
+        .checked_add(terminal_files)
+        .context("context refresh file count overflow")?;
+    let bytes_hashed = first_bytes
+        .checked_add(terminal_bytes)
+        .context("context refresh byte count overflow")?;
+    let report = refresh_report(
+        &files,
+        content_unchanged,
         removed,
-        errors: Vec::new(),
-    };
+        files_hashed,
+        bytes_hashed,
+    )?;
     let index = ContextIndex {
         schema_version: CONTEXT_SCHEMA_VERSION,
         generated_at: now_iso(),
@@ -993,7 +1519,7 @@ mod tests {
     }
 
     #[test]
-    fn refresh_reuses_unchanged_files_and_only_rehashes_changed() {
+    fn refresh_hashes_every_file_and_reports_content_deltas_honestly() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         touch(&root.join("src/a.rs"), "pub fn a() {}");
@@ -1001,19 +1527,124 @@ mod tests {
 
         let (_, first) = refresh(root).unwrap();
         assert_eq!(first.total, 2);
-        assert_eq!(first.rehashed, 2);
-        assert_eq!(first.reused, 0);
+        assert_eq!(first.files_hashed, 4);
+        assert_eq!(first.bytes_hashed, 52);
+        assert_eq!(first.content_changed, 2);
+        assert_eq!(first.content_unchanged, 0);
+        assert_eq!(first.rehashed, first.content_changed);
+        assert_eq!(first.reused, first.content_unchanged);
+        let first_json = serde_json::to_value(&first).unwrap();
+        assert_eq!(first_json["files_hashed"], 4);
+        assert_eq!(first_json["bytes_hashed"], 52);
+        assert_eq!(first_json["content_changed"], 2);
+        assert_eq!(first_json["content_unchanged"], 0);
+        assert_eq!(first_json["rehashed"], first_json["content_changed"]);
+        assert_eq!(first_json["reused"], first_json["content_unchanged"]);
 
-        // 不改任何文件：第二次全部复用，零重算。
+        // 不改任何文件：第二次仍完成两轮强哈希，但内容分类为全部未变。
         let (_, second) = refresh(root).unwrap();
-        assert_eq!(second.reused, 2, "未变文件应全部复用");
-        assert_eq!(second.rehashed, 0, "不应重算未变文件");
+        assert_eq!(second.files_hashed, 4);
+        assert_eq!(second.bytes_hashed, 52);
+        assert_eq!(second.content_unchanged, 2);
+        assert_eq!(second.content_changed, 0);
 
-        // 改一个文件：只有它被重算。
+        // 改一个文件：仍完成两轮全文件强哈希，内容分类只有一个变化。
         touch(&root.join("src/a.rs"), "pub fn a() { /* changed */ }");
         let (_, third) = refresh(root).unwrap();
-        assert_eq!(third.rehashed, 1);
-        assert_eq!(third.reused, 1);
+        assert_eq!(third.files_hashed, 4);
+        assert_eq!(third.content_changed, 1);
+        assert_eq!(third.content_unchanged, 1);
+        assert_eq!(third.rehashed, third.content_changed);
+        assert_eq!(third.reused, third.content_unchanged);
+    }
+
+    #[test]
+    fn compatible_cache_validation_rejects_semantic_corruption() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        touch(&root.join("src/a.rs"), "pub fn a() {}");
+        let index = refresh(root).unwrap().0;
+
+        let mut duplicate = index.files.clone();
+        duplicate.push(duplicate[0].clone());
+        assert!(validated_entries(duplicate, "cache").is_err());
+
+        let mut read_error = index.files.clone();
+        read_error[0].read_error = Some("forged failure".into());
+        assert!(validated_entries(read_error, "cache").is_err());
+
+        let mut unsafe_path = index.files.clone();
+        unsafe_path[0].path = "../outside.rs".into();
+        assert!(validated_entries(unsafe_path, "cache").is_err());
+
+        let mut bad_hash = index.files;
+        bad_hash[0].sha256 = "not-a-hash".into();
+        assert!(validated_entries(bad_hash, "cache").is_err());
+
+        let mut bad_kind = refresh(root).unwrap().0.files;
+        bad_kind[0].kind = "asset".into();
+        assert!(validated_entries(bad_kind, "cache").is_err());
+
+        let mut incompatible = refresh(root).unwrap().0;
+        incompatible.schema_version = 0;
+        incompatible.files[0].read_error = Some("must not be washed away".into());
+        assert!(cached_entries_for_refresh(root, Some(incompatible)).is_err());
+    }
+
+    #[test]
+    fn refresh_entrypoints_preserve_a_semantically_invalid_cache() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        touch(&root.join("src/a.rs"), "pub fn a() {}");
+        let (valid, _) = refresh(root).unwrap();
+        let mut forged = valid.clone();
+        forged.files.push(forged.files[0].clone());
+        let path = root.join(INDEX_RELATIVE_PATH);
+        write_json(&path, &forged).unwrap();
+        let before = fs::read(&path).unwrap();
+
+        assert!(refresh(root).is_err());
+        assert_eq!(fs::read(&path).unwrap(), before);
+
+        let current = capture_current_entries(root).unwrap();
+        assert!(refresh_from_capture(root, current, Ok(Some(forged))).is_err());
+        assert_eq!(fs::read(&path).unwrap(), before);
+
+        let mut forged_derivations = valid;
+        forged_derivations.files[0].lines = 0;
+        forged_derivations.files[0].symbols.clear();
+        write_json(&path, &forged_derivations).unwrap();
+        let before = fs::read(&path).unwrap();
+
+        assert!(refresh(root).is_err());
+        assert_eq!(fs::read(&path).unwrap(), before);
+
+        let current = capture_current_entries(root).unwrap();
+        assert!(refresh_from_capture(root, current, Ok(Some(forged_derivations))).is_err());
+        assert_eq!(fs::read(&path).unwrap(), before);
+    }
+
+    #[test]
+    fn refresh_rejects_same_stat_drift_between_strong_capture_rounds() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let path = root.join("src/a.rs");
+        touch(&path, "fn alpha() {}\n");
+        refresh(root).unwrap();
+        let index_path = root.join(INDEX_RELATIVE_PATH);
+        let before = fs::read(&index_path).unwrap();
+        let original = fs::metadata(&path).unwrap().modified().unwrap();
+
+        let error = refresh_with_between_capture(root, || {
+            fs::write(&path, "fn bravo() {}\n").unwrap();
+            let file = fs::File::options().write(true).open(&path).unwrap();
+            file.set_times(fs::FileTimes::new().set_modified(original))
+                .unwrap();
+        })
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("两轮强内容捕获不一致"), "{error}");
+        assert_eq!(fs::read(&index_path).unwrap(), before);
     }
 
     #[test]

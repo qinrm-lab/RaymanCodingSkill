@@ -20,11 +20,11 @@
     ]
   },
   "revision": {
-    "generation": 8,
+    "generation": 9,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 7,
-      "sha256": "12fc1180a10dba41a82fcdab4f1ade8126b7924c745a92ade46bb816ebed202a"
+      "generation": 8,
+      "sha256": "9787004c63f1a03248614b6f135f7c79aec2df8271a4fe46fb4ecd258e470cd4"
     }
   },
   "tests": [
@@ -3291,6 +3291,19 @@
       "retirement": null
     },
     {
+      "test_id": "TEST-RUST-COMPATIBLE-CACHE-VALIDATION-REJECTS-SEMANTIC-COR-8F79F991B0C6",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/context.rs::compatible_cache_validation_rejects_semantic_corruption",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/context.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "compatible_cache_validation_rejects_semantic_corruption",
+      "selector_sha256": "e65fa8f34ee93009e3008c037d98fe375493ec5e912053483b73190c638f27c4",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
       "test_id": "TEST-RUST-COMPILED-VERSION-IS-STABLE-SEMVER-7EDA0D513B2D",
       "status": "active",
       "identity": "rust::root_cargo::crates/rayman/src/update.rs::compiled_version_is_stable_semver",
@@ -3421,14 +3434,98 @@
       "retirement": null
     },
     {
-      "test_id": "TEST-RUST-CONTEXT-REFRESH-CACHES-FINGERPRINTS-AND-REUSES-U-42385C3F491C",
+      "test_id": "TEST-RUST-CONTEXT-DELIVERY-CURSOR-INVALIDATES-SCHEMA-SNAPS-ACA2F9FFE66F",
       "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/lib.rs::context_delivery_cursor_invalidates_schema_snapshot_query_or_sort_drift",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/lib.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "context_delivery_cursor_invalidates_schema_snapshot_query_or_sort_drift",
+      "selector_sha256": "2d0c49903f042397022f860eecf63df5b9be6f1b77ec20784bd6933f3cbc09e8",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
+      "test_id": "TEST-RUST-CONTEXT-DELIVERY-PAGES-UNRESOLVED-RECORDS-INSIDE-DD7BFA50FCF9",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/lib.rs::context_delivery_pages_unresolved_records_inside_the_same_budgeted_stream",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/lib.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "context_delivery_pages_unresolved_records_inside_the_same_budgeted_stream",
+      "selector_sha256": "a5b6c75dc5b24f47d0859e1bd6a145a48fef68c45294e8045ce93944459883e1",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
+      "test_id": "TEST-RUST-CONTEXT-DELIVERY-REJECTS-SILENT-TRUNCATION-AND-B-390CFF488489",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/lib.rs::context_delivery_rejects_silent_truncation_and_budget_overrun",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/lib.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "context_delivery_rejects_silent_truncation_and_budget_overrun",
+      "selector_sha256": "fd200897b80bae48f53541b625188a929ea998226c94644d9d8422b99a3dbcf6",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
+      "test_id": "TEST-RUST-CONTEXT-DELIVERY-V1-SERIALIZES-EXACT-UTF8-BUDGET-E2E7B049374C",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/lib.rs::context_delivery_v1_serializes_exact_utf8_budget_and_required_fields",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/lib.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "context_delivery_v1_serializes_exact_utf8_budget_and_required_fields",
+      "selector_sha256": "5d06d5604d1b0279b7db1b648a6321f10bccdced57f9839c9c8264c5fce4d63d",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
+      "test_id": "TEST-RUST-CONTEXT-REFRESH-CACHES-FINGERPRINTS-AND-REUSES-U-42385C3F491C",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/tests/cli.rs::context_refresh_caches_fingerprints_and_reuses_unchanged_files",
       "role": "root_cargo",
       "path": "crates/rayman/tests/cli.rs",
       "selector_kind": "rust_test_fn",
       "selector": "context_refresh_caches_fingerprints_and_reuses_unchanged_files",
       "selector_sha256": "aeb8bba3313d097db0f3039170f3e5223ee02517dc25a33910fae0b1b518450c",
+      "cfg": "all",
+      "owner": null,
+      "retirement": {
+        "retired_at": "2026-09-03",
+        "reason": "Misleading cache/reuse wording was replaced by a test of two strong-hash rounds and explicit legacy content aliases.",
+        "replaced_by": [
+          "TEST-RUST-CONTEXT-REFRESH-REPORTS-FULL-HASHING-AND-LEGACY-76AF9A296F56"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-CONTEXT-REFRESH-REPORTS-FULL-HASHING-AND-LEGACY-76AF9A296F56",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/tests/cli.rs::context_refresh_reports_full_hashing_and_legacy_content_aliases",
+      "role": "root_cargo",
+      "path": "crates/rayman/tests/cli.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "context_refresh_reports_full_hashing_and_legacy_content_aliases",
+      "selector_sha256": "bef1aab95a59aa7cf54f231940860f78299bc9ec2d611fce0eaa70ba2a13d9fd",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
+      "test_id": "TEST-RUST-CONTEXT-REFRESH-TEXT-LOCALIZES-HONEST-HASH-METRI-C7B3BAF209CB",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/i18n.rs::context_refresh_text_localizes_honest_hash_metrics_and_help",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/i18n.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "context_refresh_text_localizes_honest_hash_metrics_and_help",
+      "selector_sha256": "dae70b2840fdb212a241ea59d07c0b2f990172739875f885141ced5dafec2943",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -9200,6 +9297,32 @@
       "retirement": null
     },
     {
+      "test_id": "TEST-RUST-REFRESH-ENTRYPOINTS-PRESERVE-A-SEMANTICALLY-INVA-26EFE8BAAB11",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/context.rs::refresh_entrypoints_preserve_a_semantically_invalid_cache",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/context.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "refresh_entrypoints_preserve_a_semantically_invalid_cache",
+      "selector_sha256": "c74dfedcba05495095e77bebbe9133999187067ca3994fb01a063ad395ce4f82",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
+      "test_id": "TEST-RUST-REFRESH-HASHES-EVERY-FILE-AND-REPORTS-CONTENT-DE-69057ACD4D48",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/context.rs::refresh_hashes_every_file_and_reports_content_deltas_honestly",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/context.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "refresh_hashes_every_file_and_reports_content_deltas_honestly",
+      "selector_sha256": "879046923a3d98424b9445e9add4a57bb55927d72d5501be749cc786f13b79fc",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
       "test_id": "TEST-RUST-REFRESH-REFUSES-INCOMPLETE-WORKSPACE-WALK-2B284BE244DE",
       "status": "active",
       "identity": "rust::root_cargo::crates/rayman/src/context.rs::refresh_refuses_incomplete_workspace_walk",
@@ -9213,8 +9336,21 @@
       "retirement": null
     },
     {
-      "test_id": "TEST-RUST-REFRESH-REUSES-UNCHANGED-FILES-AND-ONLY-REHASHES-72972123076C",
+      "test_id": "TEST-RUST-REFRESH-REJECTS-SAME-STAT-DRIFT-BETWEEN-STRONG-C-B2D71848018F",
       "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/context.rs::refresh_rejects_same_stat_drift_between_strong_capture_rounds",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/context.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "refresh_rejects_same_stat_drift_between_strong_capture_rounds",
+      "selector_sha256": "dc24106e5cd8af76d33276d115f068722c948ee6b0a11a8243ce30d7380ee820",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
+      "test_id": "TEST-RUST-REFRESH-REUSES-UNCHANGED-FILES-AND-ONLY-REHASHES-72972123076C",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/context.rs::refresh_reuses_unchanged_files_and_only_rehashes_changed",
       "role": "root_cargo",
       "path": "crates/rayman/src/context.rs",
@@ -9223,7 +9359,13 @@
       "selector_sha256": "b903322e9bcddd85611cd58f7ae1a9dee9fed43a36bc7921da656f0c65d24f61",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-03",
+        "reason": "Misleading rehash/reuse semantics were replaced by a test that proves every file is strongly hashed before content classification.",
+        "replaced_by": [
+          "TEST-RUST-REFRESH-HASHES-EVERY-FILE-AND-REPORTS-CONTENT-DE-69057ACD4D48"
+        ]
+      }
     },
     {
       "test_id": "TEST-RUST-REFRESH-TOLERATES-NON-UTF8-FILES-EFDD8983CB29",
@@ -12709,12 +12851,18 @@
     },
     {
       "asset_id": "ASSET-FILE-R3-ABDF95A0F020",
-      "status": "active",
+      "status": "retired",
       "path": "crates/rayman/tests/cli.rs",
       "sha256": "9a7b9bfd9547dc272fe8b3081ecb98ba250867cc252bf157c4fc06e6197909c2",
       "kind": "dedicated_file",
       "cleanup_policy": "delete_on_last_reference",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-03",
+        "reason": "Dedicated CLI integration asset bytes changed for honest full-hash refresh reporting.",
+        "replaced_by": [
+          "ASSET-FILE-R9-54487AFA36CC"
+        ]
+      }
     },
     {
       "asset_id": "ASSET-FILE-R4-9BDB5C4AB657",
@@ -12766,6 +12914,15 @@
       "status": "active",
       "path": "crates/rayman/tests/audit_script.rs",
       "sha256": "60811facd1c2bfff65fada6ca8e10059307012c1878acbe4276bd41313c44eee",
+      "kind": "dedicated_file",
+      "cleanup_policy": "delete_on_last_reference",
+      "retirement": null
+    },
+    {
+      "asset_id": "ASSET-FILE-R9-54487AFA36CC",
+      "status": "active",
+      "path": "crates/rayman/tests/cli.rs",
+      "sha256": "54487afa36cc3547d50294637924c3f749fab4f85c7cd449b7f6072cdd852e95",
       "kind": "dedicated_file",
       "cleanup_policy": "delete_on_last_reference",
       "retirement": null

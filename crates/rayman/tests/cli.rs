@@ -1236,7 +1236,7 @@ fn language_selection_preserves_utf8_unicode_paths_and_json_contract() {
 }
 
 #[test]
-fn context_refresh_caches_fingerprints_and_reuses_unchanged_files() {
+fn context_refresh_reports_full_hashing_and_legacy_content_aliases() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     write(root, "src/a.rs", "pub fn a() {}");
@@ -1244,17 +1244,30 @@ fn context_refresh_caches_fingerprints_and_reuses_unchanged_files() {
 
     let first = run_json(root, &["context", "refresh"]);
     assert_eq!(first["total"], 2);
+    assert_eq!(first["files_hashed"], 4);
+    assert_eq!(first["bytes_hashed"], 52);
+    assert_eq!(first["content_changed"], 2);
+    assert_eq!(first["content_unchanged"], 0);
+    // Legacy names remain content-classification aliases for one migration
+    // window. They are not evidence that a strong-hash round was skipped.
     assert_eq!(first["rehashed"], 2);
     assert_eq!(first["reused"], 0);
 
-    // 不改文件：第二次全部复用，零重算——这是核心性能保证。
+    // Unchanged content still receives both strong-hash capture rounds.
     let second = run_json(root, &["context", "refresh"]);
+    assert_eq!(second["files_hashed"], 4);
+    assert_eq!(second["bytes_hashed"], 52);
+    assert_eq!(second["content_unchanged"], 2);
+    assert_eq!(second["content_changed"], 0);
     assert_eq!(second["reused"], 2);
     assert_eq!(second["rehashed"], 0);
 
-    // 改一个文件：只有它被重算。
+    // One changed file changes only the content classification, not hash work.
     write(root, "src/a.rs", "pub fn a() { /* changed */ }");
     let third = run_json(root, &["context", "refresh"]);
+    assert_eq!(third["files_hashed"], 4);
+    assert_eq!(third["content_changed"], 1);
+    assert_eq!(third["content_unchanged"], 1);
     assert_eq!(third["rehashed"], 1);
     assert_eq!(third["reused"], 1);
 }
