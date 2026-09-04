@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 11,
+    "generation": 12,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 10,
-      "sha256": "2ace0fded964b1f178690f9946c9ecd738c40e8d20a825d0872c4facce79a58d"
+      "generation": 11,
+      "sha256": "94a3e5289d83ae12efbe93247891c7d98165c416ad694cbb6e91d6cb9194e690"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "e5168c327a7987ab34f0e16b437e9fb782f6f8319b3fc4a435313bd726e59736"
+    "sha256": "df51172797144dcfe15e54e608f39304b7e21e3c67e9903f9b3a5ea61b58a5bf"
   },
   "sources": [
     {
@@ -50892,7 +50892,7 @@
     },
     {
       "binding_id": "BIND-R10-CONTEXT-REFRESH-METRICS-CLI",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CONTEXT-REFRESH-METRICS-SOURCE-R10"
       ],
@@ -50909,7 +50909,13 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "890b6477cd69b4e6b97fe4efd53bb1fa9a297241e877578ae6e0dab40910dbe3",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-CONTEXT-REFRESH-METRICS-CLI"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-CONTEXT-REFRESH-METRICS-TEXT",
@@ -50976,7 +50982,7 @@
     },
     {
       "binding_id": "BIND-R10-GOAL-BUDGETED-NAVIGATION",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GOAL-BUDGETED-NAVIGATION-SOURCE-R10"
       ],
@@ -50993,11 +50999,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "950260483d5c928ad0eef9c87c575bbd0520503f19fca8be4da9bb8ecfb03f4a",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-GOAL-BUDGETED-NAVIGATION"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-MAP-BUDGETED-NAVIGATION",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-MAP-BUDGETED-NAVIGATION-SOURCE-R10"
       ],
@@ -51014,11 +51026,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "8a976fa281103a047af4d6ac668822462621e5a8a04c76ea0eaa408fab1a14e0",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-MAP-BUDGETED-NAVIGATION"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-01199B5D819FDD07-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51035,11 +51053,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "262b7c7911740e4c02db1fc1552075e171a76ee27986b5aa908783bbd9554c84",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-01199B5D819FDD07-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-0A7570D4143E1BA1-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51056,11 +51080,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "a20447661e587b9888896a55fe5d1f3f7b85c43059ba2deef4f968b99831e6ec",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-0A7570D4143E1BA1-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-0A8065DB935CB8DD-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51077,11 +51107,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "e9911c4bb449614208a766afd350952f524f148ede91531ad42bcbc1e0ea34a4",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-0A8065DB935CB8DD-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-0B305EF230F9F045-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51098,11 +51134,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "2eb3b4dfe245f715e6f4d01642f441633d553795eb9bd5481dcc4f80bb40cf61",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-0B305EF230F9F045-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-0FDA60E45F9E1DAB-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51119,11 +51161,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "5828f9e0437a1af50411222be9b2eb85fefad7c96ec2c71a8c6a00bbc6971ff6",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-0FDA60E45F9E1DAB-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-109D7EDADA3D8DDD-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51140,11 +51188,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "1bc4a8b1fb3bf6276e79825d7373c08bf70248eaba228a3373401b3c6807f122",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-109D7EDADA3D8DDD-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-115C90345001F56A-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51161,11 +51215,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "997959008518153968ca57317bd2c169eb854680d805831ede174592cd68c3a4",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-115C90345001F56A-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-13C5F00F2121607A-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51182,11 +51242,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "776d380abd6fc08f087849bfb706316035d41703f9c0a3f5edc0b424c2c34631",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-13C5F00F2121607A-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-1606260DC02D714F-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51203,11 +51269,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "efbb2b627bb87359ecf8310a1fe3884338b4ec980762a915ca1cb198ed14e2ac",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-1606260DC02D714F-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-164E3989141A1422-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51224,11 +51296,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "7afaabdc45c537741c380659fdbfdcb5bf64a69fe597d5d97fdb5a50532a252d",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-164E3989141A1422-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-173A6052709F7911-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51245,11 +51323,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "fb70fc5be90134ec7bd2e85df312212b7a330fed770085fe4c4e839d1c6fb277",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-173A6052709F7911-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-17C75897C65D8F8C-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51266,11 +51350,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "2d959c03f41eae3362f931e739ecc001393c0c908551740ba58769153e03336d",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-17C75897C65D8F8C-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-1AEEEE86676DDBE9-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51287,11 +51377,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "9f3fb3e22fa9d79400b478e52c3d0a70baa3d234b709f2d94f5cf08cb988b3dd",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-1AEEEE86676DDBE9-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-1D8E007C0F1F6C0A-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51308,11 +51404,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "36a2df73985ced2e55bfd28b8282ab221f7aefd356eea8d3d2b90654c32ca198",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-1D8E007C0F1F6C0A-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-1DF80FF40831B531-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51329,11 +51431,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "9e0793c72ba2f176cb24bf36cb24e38d68505dc0a81c85df2e7cf1b139fe5d2a",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-1DF80FF40831B531-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-1E3C151E0BD3A9AD-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51350,11 +51458,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "a89091d800268fc76968f061a85caf741919af097c4ed45ee3a180c116a23ace",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-1E3C151E0BD3A9AD-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-1E86CE4FAEB0DDBF-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51371,11 +51485,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "d28886c9a4f716cce616b1c46dbc78cda95af11c7105c0acea196efdb6f807f8",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-1E86CE4FAEB0DDBF-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-1F0D8DC4777685FF-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51392,11 +51512,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "961f792199b6a1b6fdfd751ca67961092949a36eba3411e0898966bd474f5fab",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-1F0D8DC4777685FF-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-1F2BD69C97BBFB7C-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51413,11 +51539,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "f70032ae6fd0565aa143057654ab9ab9fee2e389bf6b5961a360ebb17bf38766",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-1F2BD69C97BBFB7C-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-1F58BF0D63CA8FEC-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51434,11 +51566,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "a80e388ff0e55cb3d7db3be777db4da385d6b7396757e5672ce212a66483d2ba",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-1F58BF0D63CA8FEC-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-243915FE858CBFB6-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51455,11 +51593,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "8f23a65e3e86242bf1a73b2248e3429142f2b51e7bf9643ea67e00411f76804e",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-243915FE858CBFB6-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-27976E43FCC6BCD0-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51476,11 +51620,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "1a3e2e3e630a45f48094ecafcb5c0a077f74b1545bfd760b107cc3debdf433fc",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-27976E43FCC6BCD0-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-2882F9D7AC2EB4BD-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51497,11 +51647,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "5988af2b08c19725a03baff9c315384ed30fff88e94801d0f88f22cedbf27f81",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-2882F9D7AC2EB4BD-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-29665CE6B346ED71-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51518,11 +51674,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "66a2f927b2cd3e8459e7c662fde193fbd3108b3568dd4e5b30c73b5b717ed580",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-29665CE6B346ED71-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-2A210C7CB1D5C904-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51539,11 +51701,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "b51cb687914e96b96ba83ed10533a1d346789afa5a1f72c69494cd1a7129c41a",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-2A210C7CB1D5C904-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-2E325167FF65230C-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51560,11 +51728,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "7c539470946dc9f1c159d6cb1afffb7d3574d44695eabc4ae9ae6dc306daed0d",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-2E325167FF65230C-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-2E547A1614F2A0AB-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51581,11 +51755,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "04eb9339792c9e0ba13ca5dc2890b7f356f6108e068df96612991e7e3800b0c2",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-2E547A1614F2A0AB-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-31539ADB6E2B866E-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51602,11 +51782,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "9a2473c3ee5c92f95ff651133406048c2d1342e4af2560f091cb6b79896dfcf4",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-31539ADB6E2B866E-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-31CBC1804209F826-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51623,11 +51809,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "fe2c8398812fd7f871493d1cdc91ab0e1836379448efb21468a1ce3775c77947",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-31CBC1804209F826-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-3218A93B0BED0079-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51644,11 +51836,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "3628ef114b38306f46fc5aed052c8572e9fa5de87f10ce657785b2484e0b3d3e",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-3218A93B0BED0079-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-324C83D63A136D16-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51665,11 +51863,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "e8f082991127a48f548c683f55912912526cf71444efe37d03fc959cf39a36ae",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-324C83D63A136D16-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-32A909389CADA644-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51686,11 +51890,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "135ef6a3d34b25ded1cadd0e8b83aa02d7b587d08b67fd0ee628a76d4fbdb5a8",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-32A909389CADA644-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-3D1118AD6C8551D9-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51707,11 +51917,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "1416875a77bf26e98f4c93eef69916007a42dcd6301754b5e8b4a3f98b82e909",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-3D1118AD6C8551D9-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-3E60C84B192316CD-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51728,11 +51944,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "1d07066ec7c06bb10abaef9518b8987334d1869309edc5ad7f9dd57fe2bf3432",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-3E60C84B192316CD-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-41D072CB08E23F79-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51749,11 +51971,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "9e7499d2517f3d22180768333d84b2ec06924a9c938522d1c3b6119c905ae707",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-41D072CB08E23F79-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-42453CD476329E77-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51770,11 +51998,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "0cfab4706f0a84bcd8a8f3a6157bfb61d183b69ec4663dd07f0496b368587580",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-42453CD476329E77-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-42EE214FC0724204-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51791,11 +52025,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "8233f7c240eb53a318618ce5d5748d64a50d488857104466fdf7c4d88a1c6553",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-42EE214FC0724204-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-4404DB12BD89CF2A-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51812,11 +52052,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "6241163680337c238d68b7fe638a5ac30f6cb106da8300e558b00995ec3ad73c",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-4404DB12BD89CF2A-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-493F65D075E6C5A5-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51833,11 +52079,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "ef130a45835e84673c3fb80f17ebd5ba30ea39cbcf030718103439bbcc6bb702",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-493F65D075E6C5A5-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-4BAABC1AC8282E0D-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51854,11 +52106,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "865234218b5bf815eb24efcb623d55ce11d197eab8c6b3b48d671a0e04b72871",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-4BAABC1AC8282E0D-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-5296CCE440653742-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51875,11 +52133,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "8c7eaa32ac90250c955a09f8d41eb4026138b6aab6111a8b608b16d31212a69d",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-5296CCE440653742-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-55E312E63B379D92-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51896,11 +52160,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "d95a5d50141376c086b471df17ea00839cf7fe7cc957ca96a5a63f9cc4686f7a",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-55E312E63B379D92-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-5883729A9B41BB61-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51917,11 +52187,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "d62fc2a534d641c09f47fad7ac0b9d173af640a8bb28130424dc89c4591cfd1b",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-5883729A9B41BB61-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-5B8829EC43084A92-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51938,11 +52214,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "99cf513d34b651228114ef00ac65dc0654a13568a5d104542f0211650397b633",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-5B8829EC43084A92-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-5B9BB56006D15D65-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51959,11 +52241,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "bd75bdc8673c5888e741d27eac949124ce088aa3baca0b2a19b715004e50a134",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-5B9BB56006D15D65-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-5D55369A6A362F52-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -51980,11 +52268,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "93a8d41db8f532f4bc7afa67aca1731ce4fb3d43bd9743f5b527ac2f61e53387",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-5D55369A6A362F52-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-61CC36F1850A4CD1-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52001,11 +52295,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "44479332fe76fe146accb65be122bcf1646799d6919b19cdae3556e8f9705110",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-61CC36F1850A4CD1-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-68AFB863815A447B-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52022,11 +52322,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "dca73b278d5ddc1b6cb599f4f5645fc7e9ef344e6a33330fc2b65773bc3ea4d8",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-68AFB863815A447B-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-6AE1435C9C5F221C-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52043,11 +52349,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "f9ca3f9e3c884e8c09e55fc94caa10ca2fffb8f7b101716d7532b3b726607485",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-6AE1435C9C5F221C-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-6B008F9EE3E20C77-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52064,11 +52376,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "db752d903d4cfa57da0ade451268067d3d30868a5e2c37cfff5f0177300f8adc",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-6B008F9EE3E20C77-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-6B139B94F1AF9818-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52085,11 +52403,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "724c5d22ab5db6eadd1da007db7a08822e53da47c9fe9dd8eec5b1e6587c4641",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-6B139B94F1AF9818-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-6CD898DDF4CAA8BC-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52106,11 +52430,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "8f31281ae0bfa5f04a01d226b374a9dd226e5e9cf1990e6100274df7f5374892",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-6CD898DDF4CAA8BC-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-6EE0889CC2782CA9-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52127,11 +52457,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "f6c056c2a0b33cd7141f078ec924568d1fc0619c415226ec661d33efb33858f7",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-6EE0889CC2782CA9-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-6F5E53376259F6C8-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52148,11 +52484,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "a1978079fcf4522e1ebb2c48f7bfa7e2a5b208ae6a96b4b77036860af015f556",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-6F5E53376259F6C8-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-73C55EB143430B35-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52169,11 +52511,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "850f12f8afe06aafc3316a156dc62d5b60a038994e15d842f0e8df814290dd79",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-73C55EB143430B35-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-78A4332D8F9B69C5-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52190,11 +52538,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "1cd6697c3feb70ee2b54cf03eeb4136431bbe2a26eedb707584f0cf92952b6eb",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-78A4332D8F9B69C5-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-7DBBC726CB4ACE5A-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52211,11 +52565,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "01711e33f9bd0b5f0bb8441ee6c6994b649fe156ed45d1d632c4a1e57dceeed5",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-7DBBC726CB4ACE5A-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-7E97BE7431AF695E-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52232,11 +52592,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "cc1ba0d95398f541995d38f5ba92910c956e3e022cbd8ec2a0c817a473361576",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-7E97BE7431AF695E-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-7F84AF057FF69C9E-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52253,11 +52619,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "e7db7695f91eec3d22f7673d0b4fa08f65836062ff382b3b20e483fef997d5be",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-7F84AF057FF69C9E-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-7FC197F2DC8C6B6A-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52274,11 +52646,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "79f9a0521bbbf6bb6143c929067622c71b4fae835d276e70796e7139db08c965",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-7FC197F2DC8C6B6A-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-850A3EEAF0963D60-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52295,11 +52673,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "e584620c4029fcd804aaef14ec3f4fac250114776bd8c03c3772ebbca86febe0",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-850A3EEAF0963D60-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-8A9381B406A5FB52-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52316,11 +52700,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "91c3b70cf0a50ec02a1be653340ed1f90de113ff0b86a9b523f005874134ef3b",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-8A9381B406A5FB52-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-8B7ED0F691C10FB6-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52337,11 +52727,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "9b3ec9b3ee9192337d24d72724cf553ee65d6c7d31565b0e764886994250a5aa",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-8B7ED0F691C10FB6-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-8DC492328424A5CF-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52358,11 +52754,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "f23d13d2a5e75acb9d150e601569e800d0973ad1f049d87cd2823114f55cae10",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-8DC492328424A5CF-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-8E3F24855EFF5719-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52379,11 +52781,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "25d263006cde42df5e04906f7f1b60f18b39df24ab73592a293130216f702293",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-8E3F24855EFF5719-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-8E80A7553EF4497D-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52400,11 +52808,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "ea1dea0d4f7e92b3d3251fd7fba47eba3531fb487d80d4f09fdcc1b6470c52d1",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-8E80A7553EF4497D-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-8F2A82E0E596F08F-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52421,11 +52835,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "b68a9f20909807e903c9b93e2250614daa83d63303b06921f1426956f2d802bc",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-8F2A82E0E596F08F-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-9164BE0A385D2420-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52442,11 +52862,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "5d58d938278bea767251acc033be736201a0f890904b2aaa83a244df1504db2e",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-9164BE0A385D2420-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-944767952C16BA6B-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52463,11 +52889,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "9232aabcfc880c7ca4168a0c458a65eae5818ca98667977baa3f3c2ba6927ed1",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-944767952C16BA6B-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-94564B4A4699C5B2-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52484,11 +52916,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "4859d93b22ba72b982a6d6b6026182a4addfc3af7f5afc4fe3c125f47fa0457c",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-94564B4A4699C5B2-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-969310C0898438EE-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52505,11 +52943,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "0c549081910d0f42bc5f4e1acbf6e3bcd31af7e39950bb4d4516a55b15a270a1",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-969310C0898438EE-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-98434DD6EB4C2CCD-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52526,11 +52970,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "5cdbc25777bf4307997d3d55a63b96979a61d11a12029a42b67b483e7fd6975f",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-98434DD6EB4C2CCD-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-988FD6FFCF2CEE17-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52547,11 +52997,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "cc1ce9d9bfbbf84e37c6d0e55722b54c1716de3d58db1d4f5abb01f1c88d1027",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-988FD6FFCF2CEE17-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-9C1D406744CE7F7B-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52568,11 +53024,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "e39c38930c1113c6aa1c8a9a2dbe247168496846b1e4a66be46cc6e23d3e61fc",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-9C1D406744CE7F7B-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-9D49F0E282A6AB03-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52589,11 +53051,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "fa3b11c62d3274b4e9150711f802a753d5250e27dcdb37076ef251eb06e84c31",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-9D49F0E282A6AB03-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-9F81E065666657DB-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52610,11 +53078,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "5cea58aebe0840acd3e744c67109d641770bbbdf8c553cc2a9a22341cfdc6686",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-9F81E065666657DB-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-A118EF8DD3150F6F-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52631,11 +53105,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "e5ec3c3601094a8fa58f5d2b81fc4be270960d5ca09b9df3f982a322c6a2188d",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-A118EF8DD3150F6F-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-A287277A211BFABF-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52652,11 +53132,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "d7793c2d09da219c6a6c2f23a5d6f8ad45fcb1fd81bba40cb686298784b92cbd",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-A287277A211BFABF-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-A322EDE8B46F0EA2-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52673,11 +53159,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "bd03a4c172f1422711781de99ae63e124aaf48e367344532b5729cab2971440e",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-A322EDE8B46F0EA2-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-A77B6952FA4E3070-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52694,11 +53186,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "21f3fab0c6baac9c82148d12d83729d214213a6fccfba2a7d67dfd04c304f38b",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-A77B6952FA4E3070-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-A84053F3B9B95660-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52715,11 +53213,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "a7fd1e78f034efd6dd0f2b27dac2fb74963bdbca2e95ac741e8a9e1b10967c63",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-A84053F3B9B95660-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-A895E3E91B0E7B89-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52736,11 +53240,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "0484187be7ed8e025cbb6b4463fab670e023844835cde8c4085386cf83fe557b",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-A895E3E91B0E7B89-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-AC1FA8A2F677CFE1-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52757,11 +53267,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "027d7d3ec052f0f9a9306483bd2f1979f51a94bfc5ea1b063ca1787a21e064d2",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-AC1FA8A2F677CFE1-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-ACCC0FD4E85FFACE-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52778,11 +53294,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "ad8bb81fbb3ba853d00acc3718be91806c75f32953c8631115ce1df6157f8509",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-ACCC0FD4E85FFACE-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-AFBAA42E69E59C5A-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52799,11 +53321,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "0655cb9dc4d053b5fd17b1b4fe1dcc80e9ea40ee71887d1af1569538fdedc484",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-AFBAA42E69E59C5A-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-B02ADBF21660836D-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52820,11 +53348,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "b5913193cf8f51332692cd7f687cf816c718b9816cd401b9d6bfbe7dabe0c58b",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-B02ADBF21660836D-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-B0D4C5CA94A7120F-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52841,11 +53375,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "6a57bdd183b1bfe888959b87b155095d63518e48df3976434771a58b4964b384",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-B0D4C5CA94A7120F-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-B0DC4856ACFCBD5C-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52862,11 +53402,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "d10f952ba919a07758edc13ff882a41a8a3e0445f7637c139fe3f3406dc32d84",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-B0DC4856ACFCBD5C-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-B106AE898D163E65-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52883,11 +53429,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "5327e5ae9830caf3a502998c002927e162da5ca8d35e4d44fda0e10dbad271c7",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-B106AE898D163E65-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-B26A75D8ED475AAD-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52904,11 +53456,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "99272cf25bd5183922aaaf37926194dcf2da9bc6d766f1ebf1ce44eb1e89dab5",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-B26A75D8ED475AAD-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-B26EEB7B7B4033D3-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52925,11 +53483,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "53b49dfafab9507fc1cfa376ed4ff2c4e7748245ba27d48652f131f0f02159c9",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-B26EEB7B7B4033D3-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-B6793D77ACDFCE7D-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52946,11 +53510,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "744c1c5692a11d73dea5bf974ac6d68b87375e3ba29da30319b2408e17d922bb",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-B6793D77ACDFCE7D-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-B74FC2FE0D7667F8-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52967,11 +53537,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "e40ec2813b91261d6fa337223127e263e679626cf87504f1b08a0856d5650e94",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-B74FC2FE0D7667F8-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-B9E84C91A52EBFFF-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -52988,11 +53564,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "7f8ce511c9e1e421e0565b266affbd663081ff3a376e53ccf64f2a03eab01364",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-B9E84C91A52EBFFF-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-BD5E59E7239C587C-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53009,11 +53591,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "6667b4c1e9ba3325ad082eb675a26ef500d8943db430afc10212b921e3e6f416",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-BD5E59E7239C587C-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-BDD8783165B762A9-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53030,11 +53618,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "ed668231495134865de3c7068deb89e7869f6d746cfc8ac407fcde38db9ed5d9",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Binding received the repository-gate typed authority test and dedicated CLI asset successor.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-BDD8783165B762A9-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-BE1B22A0FAB7E8F0-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53051,11 +53645,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "fa9307a84ef12fbcaf79b6f77a0cfe2764a12d8b979df004550aaf6147f2d82d",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-BE1B22A0FAB7E8F0-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-BF1454547102297F-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53072,11 +53672,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "60a7bc664640a4465f91d6e65c591401431a3228623c5d05c3bc47d334c8101d",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-BF1454547102297F-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-C0915382044B3CAD-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53093,11 +53699,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "547b10fee3e86222a8e8c7ba0fbc5cfb1baad1bc2ee3cb4d149de729397051ce",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-C0915382044B3CAD-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-C52A08A248298B15-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53114,11 +53726,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "d7a5a70b3a2d3075e4500ee9f9c837ab9784254d0b7f8fc5ea946a63fa02bf5a",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-C52A08A248298B15-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-CC0085D7B325F1E2-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53135,11 +53753,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "577378c6b88aa06afd0dbd878504633398d44ece330496ddee99b2b0bb132479",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-CC0085D7B325F1E2-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-CD133A2E981285A0-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53156,11 +53780,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "f60d6c7a724b98461e1a2dabeba0fa0f115cb2a819a1864e1d9b1d8c8c580202",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-CD133A2E981285A0-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-CD7B274B2C547BF6-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53177,11 +53807,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "41b260e22c2bb317d80601d4b9273e1c3ed62c9d3e5d9cd74ef246bd9de06815",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-CD7B274B2C547BF6-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-D2E51D4217B8BA9F-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53198,11 +53834,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "25b11e5576eba97d75acd2022daefa02c8abb491db6ba1f5424e18d813ba46e4",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-D2E51D4217B8BA9F-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-D3A9DDFFF176DBE3-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53219,11 +53861,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "57172b247cb436184bce2c1441d48767fc38e0bc43a8eaaac38fa6b51a7068ad",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-D3A9DDFFF176DBE3-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-D72E0D6C2B2BED3D-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53240,11 +53888,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "dc7d569c0cb2e77b3e69113117a9b0bf1d708ec82f806a95ef57c90bf82c1348",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-D72E0D6C2B2BED3D-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-D7BA232F19790D3F-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53261,11 +53915,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "d7e32309a417aa1fb70d6b1744831227347d921b3cc4d44adda2c813a9e053fd",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-D7BA232F19790D3F-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-D84D264EE29947A6-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53282,11 +53942,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "00f644e430e75acb99bd56168d8943f4984fef07a572a84c8d43f12e643a657a",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-D84D264EE29947A6-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-DB997D8943FD24CB-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53303,11 +53969,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "0de3c6e8c22f9e1d1e3e693570955ff8c84808a33dc2f030bc79f34e99c9524b",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-DB997D8943FD24CB-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-DF9EE89E3A32EA87-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53324,11 +53996,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "5257d196bf32ff7737cf5641699257bf52d5750ff43371ccca6d09a5ba30d556",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-DF9EE89E3A32EA87-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-E075A9DBE83E88EB-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53345,11 +54023,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "688eb31bd23430a6ca0baa84cfb7584908da566fec9bc741d50ee0e732616372",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-E075A9DBE83E88EB-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-E20C5DF410E56F49-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53366,11 +54050,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "70adb1f50437c73f7d31a77425cae7fe02f068e2777913ed155c1c29db24f6ae",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-E20C5DF410E56F49-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-E57CAC8E4A0C40D1-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53387,11 +54077,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "99705e8f5bcfae0a8ca93ce5132709472a76d44f782eed43c5ed85bc96a346b6",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-E57CAC8E4A0C40D1-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-E5FB79ADE74DBD5B-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53408,11 +54104,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "49be0d4b408bc24661b79ceb8c576679dc1376a22cbf1ba936ed1d9f7dd7efc6",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-E5FB79ADE74DBD5B-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-EB3516B5F4E6923D-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53429,11 +54131,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "08937c44e591c8416377d553fc58bdec90ef64cdb2caabe74065265239eaa02d",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-EB3516B5F4E6923D-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-EBA3DFCA65C76B9A-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53450,11 +54158,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "372b9678cbe9dcd2005a8caedc8fe7eacd4ea94e2b2f174f76d095627228fa10",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-EBA3DFCA65C76B9A-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-EC16CC62728E24BA-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53471,11 +54185,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "a4d46b8bc5a461f505717d947116839de5e2e25cab94c56e2d6c078b1fc19635",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-EC16CC62728E24BA-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-EC4E34F765B6B4EA-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53492,11 +54212,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "4415e30cd1af374954097f67dd2dfd846a23eda713f372694970111566a18ce7",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-EC4E34F765B6B4EA-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-EC76E8E3D81D1D7D-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53513,11 +54239,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "f5407709db99aa7e6707eea48e9753ad741131975fa54e1ee6768f2d54a99047",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-EC76E8E3D81D1D7D-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-ED55F3E9F63CA718-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53534,11 +54266,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "1f6a1531e4a89fef7f5c3d4af460cb8d676d1a5fb6d34ed1905af43f08345c22",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-ED55F3E9F63CA718-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-F3FA7B7ACDE0E235-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53555,11 +54293,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "3c79fc410658616c22175d7944b66f65e3360ae35c88ab2073727260eaafb888",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-F3FA7B7ACDE0E235-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-F92959730FE70DE9-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53576,11 +54320,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "4bf2d596976c352777bb18ba944286dd037356ea038a0814f08f53991fa30f5d",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-F92959730FE70DE9-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-FB0B257FE27922BE-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53597,11 +54347,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "0aec991b13e393df169f3107dcd6153e7f9812814f43fad885c87d3b0b89edf3",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-FB0B257FE27922BE-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-FB4437CCFDB29B6A-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53618,11 +54374,17 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "be6c561828c5d1535b2d0055cd756022e1725d6febd28acb102c079330998e3a",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-FB4437CCFDB29B6A-R3"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R10-R9-CLI-CASE-FBDE544D2A720EDE-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
       ],
@@ -53639,6 +54401,2721 @@
         "valid_until": "2027-03-03"
       },
       "semantic_sha256": "aa67f60c652ff7335d4a5c237749411aa923b44189ceaebe4613df95001b2daa",
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration asset advanced for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "BIND-R11-R10-R9-CLI-CASE-FBDE544D2A720EDE-R3"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-R11-CLI-CASE-EB82442BBB15",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-REPOSITORY-GATE-TYPED-MUST-ACCEPTS-SELECTOR-FREE-EB82442BBB15"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "37dadb86cc3cd0b9485b119df2ac8ef969dad42a783a3707244cc3802b2df64a",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-CONTEXT-REFRESH-METRICS-CLI",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CONTEXT-REFRESH-METRICS-SOURCE-R10"
+      ],
+      "test_ids": [
+        "TEST-RUST-CONTEXT-REFRESH-REPORTS-FULL-HASHING-AND-LEGACY-76AF9A296F56"
+      ],
+      "rule_id": "RULE-CONTEXT-REFRESH-METRICS",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "379df6e1baccd9f36680691404d499f49c29c109d1f948d527070fa01f5cea58",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-GOAL-BUDGETED-NAVIGATION",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GOAL-BUDGETED-NAVIGATION-SOURCE-R10"
+      ],
+      "test_ids": [
+        "TEST-RUST-BUDGETED-GOAL-NAVIGATION-PAGES-WITHOUT-BASELINES-49B490791841"
+      ],
+      "rule_id": "RULE-GOAL-BUDGETED-NAVIGATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "7beb96f0e9af98059a3ec66362c00cb96a9072b513c28a8fec39b3c8a3d77bca",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-MAP-BUDGETED-NAVIGATION",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-MAP-BUDGETED-NAVIGATION-SOURCE-R10"
+      ],
+      "test_ids": [
+        "TEST-RUST-BUDGETED-MAP-QUERIES-SCOPE-FIELDS-DEPTH-AND-CURS-CB3F7B826C94"
+      ],
+      "rule_id": "RULE-MAP-BUDGETED-NAVIGATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "37184b89a0501ae3e86958970eee6777cf44d13086ecb8b99a3e467717c14386",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-01199B5D819FDD07-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-WORKSPACE-ROOT-IS-DISCOVERED-FROM-A-SUBDIRECTORY-B9584041B96F"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "ec0c55d25f63538e755e6a5ef66ada895351f852f43ba2f5c9477f37499f7e95",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-0A7570D4143E1BA1-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-WORKSPACE-ACTIVATION-IS-EXPLICIT-AND-ORPHAN-STAT-C8D21D1B30F7"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "70eaf084a4aab197a668335e33c7dcca3e9872c3cb515f08199904b9866f66fe",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-0A8065DB935CB8DD-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-GOAL-VALIDATE-SELF-HOSTED-GATE-USES-ONE-MANAGED-AA0052717469"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "5dda82eeeefc7f435587453fad0909a0a5a3c08a1c4a6f455c2422bfc503c0d9",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-0B305EF230F9F045-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-STANDARD-CHECK-READS-LEGACY-GOAL-SCHEMA-AND-BLOC-54855F85AA16"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "6957f9f1cbe31bf8299aa0cc3281f5272e4318acc8c87ad00023dc19ed3397fe",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-0FDA60E45F9E1DAB-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-MAP-IMPACT-REJECTS-DIRECTORY-INPUTS-INSTEAD-OF-R-4A8E915EF3E8"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "aa3dc4c047874ebc3a2965490f4cb61db179e1dbe915c683d9524e709ac97510",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-109D7EDADA3D8DDD-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-DOCTOR-REJECTS-AN-EARLIER-WINDOWS-PATH-WRAPPER-A7A7115E7B4D"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "0ec7b7ecc467ba13ab44e24ae4ac28483e75c729b81fb202253861eb52761c56",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-115C90345001F56A-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECK-BLOCKS-A-MULTI-FILE-DELTA-THAT-HAS-NO-PLAN-3315384BDC15"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "62ecdc0daf39331e2ce47abbec39ad74f5ef16d568ad90207e6f21a1523adf7c",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-13C5F00F2121607A-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-MAP-QUALITY-CHECK-BLOCKS-MULTI-SOURCE-PROJECT-WI-6A0961AA3383"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "9ffa732ae37731ebe94feb361973c00221b850608111b6deebe665b5d773240c",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-1606260DC02D714F-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-AN-UNMODELLED-LANGUAGE-STILL-REJECTS-A-SELF-EVID-18294DA9EE3E"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "8263f0e23b676e677c887b8475c84cbc896572c4fad7f524290249de97629a2f",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-164E3989141A1422-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-CONTEXT-STATUS-TRANSITIONS-MISSING-READY-STALE-A3A347759E14"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "5e840b79fa7cf4df5cb1ec33141c98fcfc9df54c08bdf1cbdf857f40f21e143c",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-173A6052709F7911-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-MAP-IMPACT-USES-MANIFEST-PATH-FOR-NESTED-PACKAGE-DE6A89789DA0"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "cf8a9e9febb20a141ff19c7dc2dbc2ff26ba4a3bf96f6c5d6cfb1669502feeca",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-17C75897C65D8F8C-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-STANDARD-CHECK-ACCEPTS-RUST-VALIDATION-FOR-CARGO-320D1DC24DAD"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "674b93d1a64c216366ae40ea53426ce8b4de692512f988786e14e8bdd35d2ab0",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-1AEEEE86676DDBE9-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-MAP-PLAN-CHECK-PASSES-BROAD-CHANGE-WITHOUT-SUPPO-E480890C4B12"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "a5c252b5c5568ed97760945f542ecd01a5b97e635f78b61e51d32eacac0dfeac",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-1D8E007C0F1F6C0A-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-STANDARD-CHECK-BLOCKS-IRRELEVANT-VALIDATION-FOR-065F065AF91B"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "e4876322784cb162e312afd30c2377ff27454e3d324b23b9897fd04f5c2efd58",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-1DF80FF40831B531-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-MAP-IMPACT-DOES-NOT-INFER-RELATED-TESTS-ACROSS-P-51DB055D120E"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "a5cbd470eb40694a96e6f187a961032cf6f61661b18ddbab2d02ebbd329cbed0",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-1E3C151E0BD3A9AD-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-LEGACY-SUCCESS-ARCHIVE-ENGLISH-MULTI-GAP-IS-FULL-5EDD17182F20"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "516576c4bcf2427164882190793ee82c4c856c86ed33be9368e76993cb76c4a6",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-1E86CE4FAEB0DDBF-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-STANDARD-CHECK-BLOCKS-INVALID-GOALS-STORE-PATH-AD50964AFDF3"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "dc67b2286024b883756ac29ccdbc63bece81992bad278d4ab2bfa2d12a7b440b",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-1F0D8DC4777685FF-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-STATE-AUDIT-STAYS-CLEAN-AFTER-THE-COMMANDS-THAT-A9E0EB4EA2AB"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "4fc8aeebf24ccb175b84d30ca6cadb93a4769a2c3e4798eb0d13151d98851f8b",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-1F2BD69C97BBFB7C-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-AUTHORITY-VALIDATION-REJECTS-A-GATE-THAT-MUTATES-61EF3655182B"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "5f7c9240e6cb8dd5f04fb366ceeaacc2f43cdfa4bf263155cb93fe80df795c0e",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-1F58BF0D63CA8FEC-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-HANDOFF-START-REJECTS-A-RETIRED-SOURCE-GOAL-9E9C1A8D8300"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "4fcaa5b97039b28e8abee700e260a10c97281c3e45f720a2791f79633f17a12e",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-243915FE858CBFB6-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-WORKSPACE-SNAPSHOT-REJECTS-REAL-DELTA-BEFORE-RUN-54B496669197"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "a8049ee0162a3b9dbd1c121e2782f3e3b6a989026ee83ce2e59baebaf6a6301a",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-27976E43FCC6BCD0-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-MAP-COMMANDS-REPORT-PROJECT-STRUCTURE-AND-IMPACT-1878B77F6A83"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "7339ac2c95c207582421475efbfac8774ef77eda68f6d0e3e953ff5f9a0cf0e7",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-2882F9D7AC2EB4BD-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-WORKSPACE-SNAPSHOT-AUTHORITY-RECORDS-A-ZERO-DELT-94D39FB9E0DF"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "8b7802da048c8aa74b7ba1e484950ba4908118e1f0bfd390be0342c9eedbe5a7",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-29665CE6B346ED71-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-ELIGIBLE-IDENTITY-DRIFT-REPORTS-RECOVERY-WITHOUT-8498F9AA322E"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "c1a5e2ffaf7b2c87ab6432b650f9ccd22ebb7d063bafd98ad7116b08fe9616b8",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-2A210C7CB1D5C904-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-PYTEST-VALIDATION-CHILD-CAN-RUN-NESTED-GOAL-VALI-E12A1048025B"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "f51a16f38f6c1d430282a3db9dcbe83664c4a1daf697f3885b6fc330b12bca60",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-2E325167FF65230C-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-UPDATE-STATUS-IS-ACTIVATION-EXEMPT-AND-READ-ONLY-9E452C4F4BFE"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "c9c2f26327843bc3cce364d4cbfe82b474e56e4e77dd0badf453fba16941cf8f",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-2E547A1614F2A0AB-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-ORDINARY-CHANGED-VALIDATION-KEEPS-THE-LEGACY-SCO-78A18B4BF545"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "fc83156fc0433d173571e5d9e6021f9ca063d17f26b46de2b66030cd9b35a53c",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-31539ADB6E2B866E-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-RELEASE-CHECK-DOES-NOT-WRITE-PROJECT-MAP-CACHE-E875DE2A15AC"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "a078b8d19fcb6628581bb6cbc97e5dec4587e0dc7163f56234ddaa9c07a9a97e",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-31CBC1804209F826-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-WORKSPACE-ENSURE-CURRENT-NEVER-SCANS-OR-REWRITES-CAD7F2773EC6"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "e13e5af55962bdfac413514628c79ff8a931156765db69e7cc001e27db530e2e",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-3218A93B0BED0079-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-MAP-TOPOLOGY-AND-IMPACT-INCLUDE-CARGO-PATH-DEPEN-066A4A8B5F6F"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "a79522611204e53561cf7968daf288dd4bef793834d8899e28b487e5b4347a5a",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-324C83D63A136D16-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-UNKNOWN-IDS-EXIT-NONZERO-ACROSS-EVERY-GOAL-SUBCO-19DDA31F67EA"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "979a4d78b3258737d19cb6ed2044e7219a3aeda86101f249eba252fc1aa0b503",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-32A909389CADA644-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-PENDING-RENDER-TEXT-IS-PROTOCOL-EXACT-UNDER-THE-E86072527B7F"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "31c58cb2b3704af8662f9a572b435b2c38f5f5992fb5e02d9daabc1ffdda4c3f",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-3D1118AD6C8551D9-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECK-BLOCKS-A-GOAL-WHOSE-BASELINE-MANIFEST-WAS-121FA4E9CA8E"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "dcb2f97d96c90d2e763b95a341f7fee3725f7ea0b6689d770b95e990b9c51a7c",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-3E60C84B192316CD-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-STANDARD-CHECK-DOES-NOT-CHANGE-STATE-TREE-0F7B4D656953"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "0979a2dc318572e6a3681f5e59039520f708fb63e17641e1f4b0805b3eebb9d9",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-41D072CB08E23F79-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-TEMP-SCRATCH-STATUS-AND-CLEANUP-56BC2AC3F80A"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "13c6320cb5b0a1c3fec61bd42c4bb7c3164ef1466c16c8907a2512a0382da58a",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-42453CD476329E77-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-WORKSPACE-ACTIVATION-REJECTS-THE-PREVIOUS-CLI-ID-D3400190E20A"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "07f88d1161d3f7120ffddbddfa3a4b23203d5dda1c1e95ef0d5ba983cabfe742",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-42EE214FC0724204-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-LANGUAGE-SELECTION-PRESERVES-UTF8-UNICODE-PATHS-412017639BAE"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "ed35c7dfd2246de15e3556501b0a35e650e9f6fb581a9c40d3a92b8cf315bd82",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-4404DB12BD89CF2A-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-RELEASE-CHECK-REPORTS-WORKSPACE-SCOPE-NOT-INSTAL-6C3DD6BD629F"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "370773e67762c39d1de1219733d3950f7ec1fcbed7020968cded3d5c19068bf7",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-493F65D075E6C5A5-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-WORKSPACE-INSTALL-BIND-IS-HIDDEN-CONFIRMED-AND-P-FE02E5A6104A"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "b340b14e808eeea5d6dcdd24378433a921d2376169705a17f43cde2d3ef004fe",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-4BAABC1AC8282E0D-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-PENDING-ITEMS-ROUNDTRIP-AND-BLOCK-CHECK-DDA545D001DE"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "681f13988d4e94836432c9803b8eb74f52281023fbf4f7a73cbeb0006b44f103",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-5296CCE440653742-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-GOAL-EVIDENCE-IS-REFUSED-AFTER-A-SUCCESS-CLOSURE-014B102EDADA"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "4969f5aea33b7d4c72f7f830b109915ae346c392fdf57649a0448caa89f18a0d",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-55E312E63B379D92-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-RELEASE-CHECK-FAILS-CLOSED-ON-CORRUPT-QUALITY-CO-3292F5366ED1"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "f5b31a2b035252a40a3290dd03dea303e864ba3a7a43712788918c513f85eaff",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-5883729A9B41BB61-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-CODEX-STOP-HOOK-BLOCKS-ACTIVE-GOAL-AND-INSTALLS-4CF1411C3E4F"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "9b5df95671199fa7052632a9ffcf544c5325600954dc7a9611f5fe729d95615b",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-5B8829EC43084A92-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-STANDARD-CHECK-DOES-NOT-WRITE-PROJECT-MAP-CACHE-DA6717A42C8D"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "aaa0854b17f04e7f96cc5eaabf3552fdef6abc4c7aa9527a3f5999714b9481b0",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-5B9BB56006D15D65-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-GENERIC-VALIDATION-CHILD-CAN-RUN-NESTED-GOAL-VAL-31640E17D04E"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "0f15d2eaa76ba1f51663a8855783c4f6615912c3675fbe2d9c19618ebf8fc0fc",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-5D55369A6A362F52-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-STANDARD-CHECK-REJECTS-AN-UNKNOWN-NONZERO-GOAL-S-79C3B5E9CAFB"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "dbd9c3c908f7b91dab01c2f503e23c031f8e6f25752892b8db6ed16786d9ddbe",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-61CC36F1850A4CD1-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-UNBOUND-STANDARD-CHECK-REPORTS-ACTIVE-GOAL-WITHO-E4536EE77072"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "6ff247758f96d8f334cda9db4514d1a77f39912c4f2f1ba606f6be821fe4e56b",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-68AFB863815A447B-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-LIFECYCLE-ONLY-REPLACEMENT-CLI-USES-EXACT-ARCHIV-215FB2932C07"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "5e11f6b9cad45e2ea698a0ecab6dc4cf4b89b8d5a1b3b368a63c5d3f9be7f79d",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-6AE1435C9C5F221C-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-DOCTOR-CHECK-REJECTS-AN-UNSATISFIED-UNTRUSTED-CO-F845F14258CA"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "a4ba1108e2740dc7c09afd03d2cb5f933f11179e9183568b02769ae64287841a",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-6B008F9EE3E20C77-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-NON-WINDOWS-UPDATE-CHECK-REPORTS-UNSUPPORTED-WIT-F5092810AE6A"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "dd29e24730a021f1af5c8c0ff14ae934df4c95a391a207bb59187a237cbcc883",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-6B139B94F1AF9818-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-LEGACY-GOAL-MUTATION-REMAINS-LEGACY-HISTORY-AFTE-CC15AA9C46B8"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "724920959cb184400e3b77a3db1d1ef49637fd4152669e2d46c222dd3d4b73bd",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-6CD898DDF4CAA8BC-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-TEMP-SCRATCH-PATHS-DO-NOT-LEAK-THE-WINDOWS-VERBA-3303231C1994"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "afe569e49cd9c310bbc5d3101c079799ab3f33053884b997bac5c2599d43ad6e",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-6EE0889CC2782CA9-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-TYPED-VALIDATED-CLAIM-CANNOT-REPLACE-AN-EXECUTED-24805FD6A0CD"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "1fd3b7265802d0e4745488bf94668ae8a0621213262a29326771a592e1703c7c",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-6F5E53376259F6C8-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-MAP-COMMANDS-FAIL-CLOSED-ON-MISSING-OR-STALE-CON-528F3BB458B9"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "e08a89b7c4317713a15278c4fac351ea3de974dfd3a7f86f405a3e2d26e8abc4",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-73C55EB143430B35-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-WORKSPACE-REBIND-IS-IDEMPOTENT-WHEN-ACTIVATION-I-648CE9FF0CAE"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "8f08fa217f103cc4f1626e7f851b54af9d1ce6daf9e46a84271fc056a94e93e6",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-78A4332D8F9B69C5-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-LEGACY-SUCCESS-CURRENT-CAN-BE-ARCHIVED-THROUGH-C-6F5D09A32FE9"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "24ac4d88c8d09e7ca4a3d05bcaaba233f588a7e447cb888b914208f9f3d8c71d",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-7DBBC726CB4ACE5A-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-GOAL-SUCCESS-CLOSE-IS-REFUSED-WITHOUT-MUST-EVIDE-FC4450BA4976"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "01b0ae57b9aa04a86f59d807f0e097cae00359fb56f9db70a46bb1e7e87cb772",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-7E97BE7431AF695E-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-DOCTOR-PROFILE-REQUIREMENT-USES-THE-TOKEN-PROFIL-98C56C0AC26E"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "4debf19137fe200da4877375fd0b6d1559b46e06826d1fcde06caab803924d10",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-7F84AF057FF69C9E-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-MAP-TOPOLOGY-INCLUDES-WORKSPACE-INHERITED-PATH-D-5149959F81F2"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "e0ed34c125431fe1726579ca87df36352dc2e1c02be2717092ab83b4599680e6",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-7FC197F2DC8C6B6A-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-GOAL-PLAN-AND-REVIEW-RECEIPTS-CLOSE-A-REAL-TWO-F-D343E104A8C4"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "3a7d2090a36b852bf80a9584d9128e47425874abaa5c1119ef056d7f8ae0d731",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-850A3EEAF0963D60-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-TYPED-RELEVANCE-CANNOT-BE-COMBINED-WITH-AN-UNSCO-F5B08F7D4E86"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "506a73dedb0b11b478170280d6b6bf32fc56fe7cbfe401e9e2cf2d35328835a4",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-8A9381B406A5FB52-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-WORKSPACE-REBIND-REJECTS-INELIGIBLE-CONTRACTS-WI-50A0557DC870"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "0ce11014aab827a35cfd209e1bf705f08aa6fc63da28758437625369f71c3625",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-8B7ED0F691C10FB6-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-WORKSPACE-ENSURE-CURRENT-FAILS-CLOSED-WITHOUT-AC-BCBBA3691021"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "60801a2f991deffc4693a5ab2aeccd01d67a567dc371036a9232daed7a4d516e",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-8DC492328424A5CF-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-SAVE-IS-LOSSLESS-BY-DEFAULT-AND-PRUNE-28EC6BC1FDBA"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "0d8980e54d7f3ba4dce1fb70ac49163977fe2ee5c2fd8b6732db03de22bc11f8",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-8E3F24855EFF5719-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-SOURCE-CHANGE-AFTER-RECEIPT-INVALIDATES-STANDARD-1307079617A2"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "ef3475d76bb2bd500b936b5a6f6a1338b120607431652cfcc392b288619844c1",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-8E80A7553EF4497D-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-WORKSPACE-INSPECT-REPORTS-GIT-HEAD-AND-DIRTY-PAT-9B2A06504146"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "1ffcca0566e07661dfd01de4dd2fa5e82f1357cd3329a23c20b83c8405e831b1",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-8F2A82E0E596F08F-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-GOAL-VALIDATE-REJECTS-FORGED-SHELL-AND-ZERO-TEST-A490743A9AE6"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "598ca034cb2074a09976824e21d56a3014cb5c8a621d507a117d31ca391c7ac4",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-9164BE0A385D2420-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-WORKSPACE-ACTIVATION-CONTRACT-REJECTS-DUPLICATE-B263E332E084"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "cd145a20d8d4b568c2d60765e46a5643378241045dd86a4a2adb589670bc16ae",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-944767952C16BA6B-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-STANDARD-CHECK-ACCEPTS-RUST-VALIDATION-FOR-CARGO-F591681309E1"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "03a82394d8dfaa5670cb2028688d472a92e5a8278dbbd510941a3f10e5e28036",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-94564B4A4699C5B2-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-MAP-IMPACT-USES-MANIFEST-PATH-FOR-DUPLICATE-WORK-BFDFA67DF0B5"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "596b307992e57857f637760889ec335cda308186aca921ed69982b161951c65a",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-969310C0898438EE-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-WORKSPACE-ENSURE-CURRENT-REPORTS-CURRENT-ACTIVAT-E7D4CB3A2DDC"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "c90de042d2d87122c4a2432757fecc3c4d6cd1da1bb37846fc1e22af87feaf0a",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-98434DD6EB4C2CCD-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-STANDARD-CHECK-BLOCKS-DONE-REQUIREMENT-WITHOUT-V-2E37E64509D1"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "1060340e7b22fa82072e002da0b001e8e60ad108fb88d3c38f655b67f261d1b4",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-988FD6FFCF2CEE17-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-STRICT-QUALITY-CONFIG-FAILS-CLOSED-ON-UNKNOWN-WA-6D450006CBD5"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "27131f4ce3c5ac0a523f9fdb801ff6e39f128303e6629af1c979c35f86b8e0b9",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-9C1D406744CE7F7B-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-STANDARD-CHECK-BLOCKS-UNREADABLE-GOAL-FILE-INSTE-DDD0B304639D"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "b29162e6ae8283cd8ede2a1d83e91e76d49ce55d5ea206d61227920fdd218f86",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-9D49F0E282A6AB03-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-STANDARD-CHECK-BLOCKS-LEGACY-GOAL-LEVEL-VERIFICA-9C9907AC2E6B"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "c88e816297f932e2e91c04630eedca211191487e0ab3cae4bf44141b223ba881",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-9F81E065666657DB-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-DISABLED-UPDATE-POLL-IS-ZERO-NETWORK-AND-DOES-NO-9D5B8585DD40"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "6bfa8df5e21d2141ffb91d0fa9367149a7d435d6a6a52b144735d902e2991ff1",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-A118EF8DD3150F6F-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-STANDARD-CHECK-BLOCKS-PARTIAL-GOAL-WITHOUT-STRUC-E5BAFF904F02"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "787406fe10adbf9088a27df5a49205e069548fdd01a79752fbfe7c1391be7913",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-A287277A211BFABF-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-GOAL-LIFECYCLE-PRESERVES-HISTORY-WITHOUT-HIDING-315F492F5462"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "f6f5130faaf404737340eed6b6b7a314e56554b4cb108b82372d718a568ae138",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-A322EDE8B46F0EA2-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECK-BLOCKS-A-HIGH-PRIORITY-PLAN-WHOSE-REVIEW-W-C4A4ADC19AC6"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "e8d62e8f0b474ac4ee3f5742c115586a324cf82f0ecf066bec0a353b094ad278",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-A77B6952FA4E3070-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-FRONTIER-REQUIRES-A-COMPLETE-SOLUTION-PACKAGE-BE-B928CACF2415"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "8e02092ada4cb4841e4cf71de1c6dd39c96b4ca16dc24be17ed3c70def40ded8",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-A84053F3B9B95660-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-WORKSPACE-ENSURE-CURRENT-ONLY-REBINDS-ELIGIBLE-I-549AA042C7AB"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "da2fc3b3e36913d7fe8ba7eca73c0241611ec5f9606d410fc5524e311f6205ee",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-A895E3E91B0E7B89-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECK-REJECTS-UNDECLARED-DRIFT-THAT-CLOSE-WOULD-76BBCF42548A"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "8f970f5a5a6c9e1c60957336584e914503549fe972cf318e61fcf55e4944c562",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-AC1FA8A2F677CFE1-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-VERIFY-STATE-AUDIT-AND-RECURSIVE-TEMP-693FAA9716BD"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "cce1765213f693b9e8f1c418f3256ba95ca88c6b401fd338fec5880ea80e684e",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-ACCC0FD4E85FFACE-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-STANDARD-CHECK-BLOCKS-ACTIVE-GOAL-EVEN-WITH-VALI-E63BD0E3BD45"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "8cf57e2b2b9b592ca053d1326f3ead7f2393062c9d77ebaea04fc72dd6ba78fc",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-AFBAA42E69E59C5A-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-GOAL-EVIDENCE-CHANGED-REQUIRES-VALIDATION-AND-ST-B1EFDFC20CD9"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "2d14337e231d17c7fc22ebc43253144da450d12d04982fa54f1eb7edde1aa857",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-B02ADBF21660836D-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-NON-WINDOWS-DUE-POLL-STAYS-UNSUPPORTED-EVEN-WITH-2F8774BB1242"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "8f167bc282790f101ea27bcc0abd6af9822efc8d80019eb40d603079808f8cd9",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-B0D4C5CA94A7120F-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-AUTOSAVE-IS-REACHABLE-AS-A-TOP-LEVEL-COMMAND-86D4B98DFBC6"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "5da1419782fd7de4f54a736d5803c3280d5125bede14a263cbae972bb2ff1dbf",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-B0DC4856ACFCBD5C-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-WORKSPACE-REBIND-REPAIRS-ONLY-HASH-AND-CLI-IDENT-25F37EA60524"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "b2bf290175c514528e41b5f04d99f4be81a42134adfc71161cb464a27ff8e5db",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-B106AE898D163E65-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHANGED-REPOSITORY-GATE-IS-REJECTED-BEFORE-EXECU-CDFE0D630733"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "a2c9f112802efd2ec7c37e2ef856b357804b439b45259fbd6e16fd254ece26c9",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-B26A75D8ED475AAD-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-GOAL-PACKAGE-PROGRESS-SUMMARY-AND-LANE-FAIL-CLOS-63058192BC18"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "cfeb1d1c4e58470f96a633e0303a9d747c091e36a72774ae91f81a5ead8dd612",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-B26EEB7B7B4033D3-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-UPDATE-CONFIGURE-REQUIRES-AN-EXACT-SELECTOR-AND-3BC7DEF80F98"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "ed214f4037bb0674445c501c12e268659c1e6b3d473773c7daffab9e004d542f",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-B6793D77ACDFCE7D-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-STANDARD-CHECK-BLOCKS-DONE-REQUIREMENT-WITHOUT-E-F149CF64C028"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "85ff3ca2283aa419ce49c54942f1a3a76fea8922120e86137619bb31a72d9177",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-B74FC2FE0D7667F8-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-RELEASE-CHECK-DOES-NOT-CHANGE-STATE-TREE-1206B9F2764F"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "beb5b2f41a892249b3e373c6bcf5d09519bcfda6cddc1d4ee0c864d02b118b3b",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-B9E84C91A52EBFFF-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-FRONTIER-REQUIRES-COMPLETE-BACKGROUND-AUTHORITY-8DFE2ADC7C9D"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "3243823016e9be34ad60a9464bbaf12398a96e65d3fe4d9dae08e84d2c0c9db6",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-BD5E59E7239C587C-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-MAP-PLAN-CHECK-ACCEPTS-PACKAGE-TEST-ANCHORS-FOR-CE8D0D22C75B"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "993722770d000ab76d99f33e14047834a99d2418d95cfcba2a59e7760dd0059f",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-BDD8783165B762A9-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-TYPED-MUST-PROOF-REQUIRES-A-MATCHING-VALIDATION-677FFEE741DA"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "302e26561c545d29e63a1770a40579b5ed80dc7e28196043b15bcbb952cd8176",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-BE1B22A0FAB7E8F0-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-GOAL-VALIDATE-PYTEST-FAILURES-CLEANUP-AND-NEVER-A1E23E4967E1"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "45e4fb15e7eca9790f8cb3d3dce7cdc2e1164025e0ee70d40745f51154b3a6f0",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-BF1454547102297F-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-STRICT-QUALITY-CONFIG-CAN-BLOCK-CONFIGURED-WARNI-4F520BE942AC"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "b5490c8f8515dd187bad4eefc03c50f5b1ab6e671aba3e16919fcf88f349c76a",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-C0915382044B3CAD-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-GOAL-PROGRESS-USES-AND-RELEASES-A-FRESH-VALIDATI-CBE45851A837"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "ad9e773d71b1d6ab3ac1571fe7a415f9ff48afa8aef1035566950afb61098213",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-C52A08A248298B15-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECK-BLOCKS-A-BASELINE-LESS-GOAL-INSTEAD-OF-REP-5DA9766B3C6C"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "d0d7c8ec6f92e3d1f4c08765836547ae46d7cd1916e2b896579dca13c2b68e4e",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-CC0085D7B325F1E2-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-GOAL-VALIDATE-FAILURE-NEVER-RECORDS-A-RECEIPT-8BF65286C5B3"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "0c9ede68596b09c758eb8c4144d777e47dbdbda551353cda1190304820e758b9",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-CD133A2E981285A0-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-TASK-BOUND-CHECK-PREPARE-AND-FINISH-DISTINGUISH-B73D0E5E8DB6"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "c9bb775a9a624807b7382af894eca5c3cdf6360a23aa6ffe670d87945a59db1c",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-CD7B274B2C547BF6-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-RETIRED-COMMANDS-FAIL-WITH-ACTIONABLE-MIGRATIONS-6FB0886D7469"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "10c21714f52bf91a7ba67c13fd6de1b11bb7ed2b5d06862338461a204f5fe942",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-D2E51D4217B8BA9F-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-SALVAGE-SAVE-CLI-WORKS-WITHOUT-ACTIVATION-BUT-NE-37C9DDB7D613"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "91f39ad602d8353c7fe328aef3c93d39a1363475497615dc392f17cf1b0a3874",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-D3A9DDFFF176DBE3-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-MAP-QUALITY-CHECK-PASSES-WITH-A-TEST-ANCHOR-15DDE9FE457B"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "cd982d40966e63cf01e5821019e11b7ceb044a8ceaf29be91501d5ab0f803725",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-D72E0D6C2B2BED3D-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-LIFECYCLE-ONLY-REPLACEMENT-CLI-REBINDS-ONLY-THE-759BD4FFA0E0"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "0ee5df0555f19baaff2dc14106f14762cf5955f92d166691264e09e857d7ae1a",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-D7BA232F19790D3F-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-PYTEST-LEASE-CLI-IS-MANIFEST-OWNED-AND-RELEASABL-8E96B6A3FED4"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "896ae25475f11a4adcea41057c2022d36ea066bf276e40343e76712635a3349c",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-D84D264EE29947A6-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-STANDARD-CHECK-REJECTS-A-FORGED-V2-SUCCESS-GOAL-28A9C676B495"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "8873699b44d5d0c6ce092b8e7d6c61dd70da8329054e37e3a3e2e5685f57ca8e",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-DB997D8943FD24CB-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-MAP-PLAN-CHECK-BLOCKS-BROAD-SOURCE-CHANGE-WITHOU-5774E7A33EFE"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "6d4ed28f8bc57490e7814955f50adbae3628e7e7603c8cfcedb65e0aeccb1c4b",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-DF9EE89E3A32EA87-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-GOAL-EVIDENCE-CHANGED-UNKNOWN-PATH-RECORDS-IMPAC-C5DAC103C2F5"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "9d47edeab86dcbc5b5cf8a04f14311553b3cec3933e633d01fbe688dd774591f",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-E075A9DBE83E88EB-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-CORRUPT-UPDATE-STATE-IS-PRESERVED-AND-NEVER-BECO-1F3801A1FCEC"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "1387d0398b77bf3b7f5cc6ba140c37dd5ebe5198e89b1dc09f5b72ba6e9dc626",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-E20C5DF410E56F49-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-A-SUCCESS-CLOSURE-CANNOT-BE-DOWNGRADED-TO-REOPEN-3A6792608F2A"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "76226680d5fc220ee92119815388c7ea00442f41706d35089fa0ebff6b3c640c",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-E57CAC8E4A0C40D1-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-HANDOFF-START-BINDS-SOURCE-GOAL-AUTHORITY-CLEAN-F5DDF2E86DE6"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "4cf977bb3f4f83edf257e0be807d0b6f38efa2e87e3a5e8955f06a14a7c9ac9e",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-E5FB79ADE74DBD5B-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-DOCTOR-AND-WORKSPACE-INSPECT-REPORT-DISTINCT-WRI-9970600D69FE"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "74ba7a0b6bb22dc52bf043a348e9ba3fdbebeb1abed1f8db45998e2d34b0d9b2",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-EB3516B5F4E6923D-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-WORKSPACE-REBIND-REQUIRES-YES-AND-PRESERVES-DRIF-BA666AD82187"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "d82419946a9b258b637c39237e42cf08d7a16a003f20304d768ece931c31e0d9",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-EBA3DFCA65C76B9A-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-GOAL-PLAN-EXTEND-IS-MONOTONIC-AND-REJECTS-POST-H-283B1F818EC1"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "5a9e960e82b610fb861fa1f2578ecdb59bd787accb27e004af67b1cbaae3f67b",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-EC16CC62728E24BA-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-DOCTOR-VERIFIES-INSTALLED-IDENTITY-IN-AN-ORDINAR-2CF5BD2BA2E2"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "d291af63ec9e224042fe3de9ce882505f70d72bd0f21019723fcdcf84cf3b79d",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-EC4E34F765B6B4EA-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-STANDARD-CHECK-ACCEPTS-DONE-REQUIREMENT-WITH-VAL-A40FEE4E1A44"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "e56e561a9775291f3e2b7841f11ae488560798f3b0903982d1bfe577d20d3291",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-EC76E8E3D81D1D7D-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-STRICT-QUALITY-CONFIG-FAILS-CLOSED-ON-UNKNOWN-FI-7A350CC6428F"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "b4a4320622be147d05b1ea980a81365343e082e41ffb32cda07daffef15ee965",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-ED55F3E9F63CA718-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-MAP-PLAN-CHECK-BLOCKS-PACKAGE-BROAD-CHANGE-WITHO-A5548D046EC5"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "50b0b987b5da9ce3a8e294b835b161026011f8b9f43a09ac821f9f8e1878d7bc",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-F3FA7B7ACDE0E235-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-MAP-TOPOLOGY-INCLUDES-DOTTED-WORKSPACE-INHERITED-4C94D6D5FD30"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "9e222806ac5a03070444e9c44863d5f379146f14538dc4a53f0a4f9208350a0d",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-F92959730FE70DE9-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-GOAL-VALIDATE-ISOLATES-EVERY-PYTEST-PROCESS-WITH-B89499E55261-R3"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "15a7be69bd187ffeb55af89bf1e232c5ae64b52b8f421f9eb4ec998f7c91a899",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-FB0B257FE27922BE-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-PENDING-RENDER-CURRENT-MATCHES-THE-WORKSPACE-AGG-E78BED78EF67"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "0837a323d0ff3b9f57c178057a4d4197555c668343a0cb883d4a5730b95925df",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-FB4437CCFDB29B6A-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-ASSETS-SCAN-REPORTS-OBSOLETE-AND-MARKERS-WITHOUT-AA282FF21581"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "17e1092edc49cf9721872888abb84ec26997277489f4240013129b32d00ee54d",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R11-R10-R9-CLI-CASE-FBDE544D2A720EDE-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECK-BLOCKS-A-CHANGE-OUTSIDE-THE-IMMUTABLE-PLAN-94824F966EE0"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-04",
+        "valid_until": "2027-03-04"
+      },
+      "semantic_sha256": "f6dd518951806bf4eadbf8e3f1784d8e7ead48bb6c4655cbbff4bc05107a47a3",
       "retirement": null
     },
     {

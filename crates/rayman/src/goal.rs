@@ -1927,7 +1927,10 @@ impl GoalStore {
             .ok_or_else(|| anyhow::anyhow!("需求不存在: {req_id}"))?
             .proof_kind;
         let actual_proof = validation_proof_kind(&self.root, &command)?;
-        if !proof_kind_matches(required_proof, actual_proof) {
+        let authority_satisfies_repository_gate =
+            required_proof == Some(ProofKind::RepositoryGate) && authority.is_some();
+        if !proof_kind_matches(required_proof, actual_proof) && !authority_satisfies_repository_gate
+        {
             bail!(
                 "validation proof kind mismatch: requirement={} command={}",
                 required_proof.unwrap_or_default().as_str(),

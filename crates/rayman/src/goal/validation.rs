@@ -424,6 +424,75 @@ pub fn proof_kind_matches(required: Option<ProofKind>, actual: ProofKind) -> boo
     matches!(required, None | Some(ProofKind::Generic)) || required == Some(actual)
 }
 
+fn validation_has_matching_stable_authority_receipt(
+    goal: &Goal,
+    root: &Path,
+    fingerprint: &str,
+    requirement_id: &str,
+    validation: &ValidationEvidence,
+) -> bool {
+    goal.authority_receipts.iter().any(|authority| {
+        authority.requirement_id == requirement_id
+            && authority.command == validation.command
+            && authority.impact_scopes == validation.impact_scopes
+            && authority.non_code == validation.non_code
+            && authority.workspace_snapshot == validation.workspace_snapshot
+            && direct_stable_authority_receipt_is_valid(goal, root, fingerprint, authority)
+    })
+}
+
+fn validation_has_matching_stable_authority_receipt_with_context(
+    goal: &Goal,
+    decision: &GoalDecisionContext<'_>,
+    requirement_id: &str,
+    validation: &ValidationEvidence,
+) -> bool {
+    goal.authority_receipts.iter().any(|authority| {
+        authority.requirement_id == requirement_id
+            && authority.command == validation.command
+            && authority.impact_scopes == validation.impact_scopes
+            && authority.non_code == validation.non_code
+            && authority.workspace_snapshot == validation.workspace_snapshot
+            && direct_stable_authority_receipt_is_valid_with_context(goal, decision, authority)
+    })
+}
+
+fn validation_satisfies_required_proof_kind(
+    goal: &Goal,
+    root: &Path,
+    fingerprint: &str,
+    requirement: &Requirement,
+    validation: &ValidationEvidence,
+    actual: ProofKind,
+) -> bool {
+    proof_kind_matches(requirement.proof_kind, actual)
+        || (requirement.proof_kind == Some(ProofKind::RepositoryGate)
+            && validation_has_matching_stable_authority_receipt(
+                goal,
+                root,
+                fingerprint,
+                &requirement.id,
+                validation,
+            ))
+}
+
+fn validation_satisfies_required_proof_kind_with_context(
+    goal: &Goal,
+    decision: &GoalDecisionContext<'_>,
+    requirement: &Requirement,
+    validation: &ValidationEvidence,
+    actual: ProofKind,
+) -> bool {
+    proof_kind_matches(requirement.proof_kind, actual)
+        || (requirement.proof_kind == Some(ProofKind::RepositoryGate)
+            && validation_has_matching_stable_authority_receipt_with_context(
+                goal,
+                decision,
+                &requirement.id,
+                validation,
+            ))
+}
+
 fn pytest_arguments(command: &ParsedValidationCommand) -> &[String] {
     let executable = executable_name(command);
     if (executable == "py" || executable.starts_with("python"))
@@ -1853,8 +1922,12 @@ fn goal_success_receipt_gaps_with_policy(
         if !requirement.validations.iter().any(|validation| {
             (!require_plan_contained
                 || validation_is_plan_contained_for_historical_legacy_success(goal, validation))
-                && proof_kind_matches(
-                    requirement.proof_kind,
+                && validation_satisfies_required_proof_kind(
+                    goal,
+                    root,
+                    fingerprint,
+                    requirement,
+                    validation,
                     validation_proof_kind(root, &validation.command)
                         .ok()
                         .unwrap_or_default(),
@@ -1957,8 +2030,11 @@ pub(super) fn goal_success_receipt_gaps_with_context(
             continue;
         };
         if !requirement.validations.iter().any(|validation| {
-            proof_kind_matches(
-                requirement.proof_kind,
+            validation_satisfies_required_proof_kind_with_context(
+                goal,
+                decision,
+                requirement,
+                validation,
                 validation_proof_kind_with_context(decision, &validation.command)
                     .ok()
                     .unwrap_or_default(),

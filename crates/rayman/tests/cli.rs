@@ -8090,6 +8090,87 @@ fn typed_must_proof_requires_a_matching_validation_command_kind() {
 }
 
 #[test]
+fn repository_gate_typed_must_accepts_selector_free_cargo_only_with_authority_receipt() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(
+        root,
+        "Cargo.toml",
+        "[package]\nname = \"typed-authority-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(
+        root,
+        "src/lib.rs",
+        "pub fn answer() -> i32 { 42 }\n#[test]\nfn answer_is_valid() { assert_eq!(answer(), 42); }\n",
+    );
+    generate_lockfile(root);
+    run_json(root, &["context", "refresh"]);
+    let started = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "selector-free cargo authority",
+            "--must-proof",
+            "repository_gate::prove the full workspace authority",
+        ],
+    );
+    let id = started["id"].as_str().unwrap();
+
+    let plain_test = run(
+        root,
+        &[
+            "goal",
+            "validate",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "plain workspace tests are still a test proof",
+            "--changed",
+            "src/lib.rs",
+            "--command",
+            "cargo test --locked --workspace --all-targets",
+        ],
+    );
+    assert_eq!(plain_test.status, 1);
+    assert!(
+        plain_test.stderr.contains("proof kind mismatch"),
+        "stderr={}",
+        plain_test.stderr
+    );
+
+    let authority = run(
+        root,
+        &[
+            "goal",
+            "validate",
+            id,
+            "--req",
+            "req_1",
+            "-m",
+            "selector-free workspace cargo authority",
+            "--changed",
+            "src/lib.rs",
+            "--authority",
+            "--repeat",
+            "2",
+            "--command",
+            "cargo test --locked --workspace --all-targets",
+        ],
+    );
+    assert_eq!(authority.status, 0, "stderr={}", authority.stderr);
+
+    let closed = run(
+        root,
+        &[
+            "goal", "close", id, "--status", "success", "--format", "json",
+        ],
+    );
+    assert_eq!(closed.status, 0, "stderr={}", closed.stderr);
+}
+
+#[test]
 fn handoff_start_binds_source_goal_authority_clean_head_and_structured_stages() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();

@@ -20,11 +20,11 @@
     ]
   },
   "revision": {
-    "generation": 11,
+    "generation": 12,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 10,
-      "sha256": "75466b05f7f14a1958aed4cf1d11b4a7fe36fd35801e4208e6d5515689039f83"
+      "generation": 11,
+      "sha256": "e5168c327a7987ab34f0e16b437e9fb782f6f8319b3fc4a435313bd726e59736"
     }
   },
   "tests": [
@@ -9692,6 +9692,19 @@
       "retirement": null
     },
     {
+      "test_id": "TEST-RUST-REPOSITORY-GATE-TYPED-MUST-ACCEPTS-SELECTOR-FREE-EB82442BBB15",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/tests/cli.rs::repository_gate_typed_must_accepts_selector_free_cargo_only_with_authority_receipt",
+      "role": "root_cargo",
+      "path": "crates/rayman/tests/cli.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "repository_gate_typed_must_accepts_selector_free_cargo_only_with_authority_receipt",
+      "selector_sha256": "64aee1b74dd5c9def4ada223f21567141941fcc820967b4a9e7fb8c72338bfbe",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
       "test_id": "TEST-RUST-REPOSITORY-QUALITY-CONSUMERS-REJECT-MALFORMED-TY-B97DE1372281",
       "status": "active",
       "identity": "rust::root_cargo::crates/rayman/tests/audit_script.rs::repository_quality_consumers_reject_malformed_types_and_ignore_stale_native_exit_codes",
@@ -12926,9 +12939,24 @@
     },
     {
       "asset_id": "ASSET-FILE-R10-D5F204364472",
-      "status": "active",
+      "status": "retired",
       "path": "crates/rayman/tests/cli.rs",
       "sha256": "d5f204364472420904f95a48e8ef0b769991d7beb59b0235ecc3934daf41bf32",
+      "kind": "dedicated_file",
+      "cleanup_policy": "delete_on_last_reference",
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration bytes changed for repository-gate typed authority coverage.",
+        "replaced_by": [
+          "ASSET-FILE-R11-D5604B5EDA88"
+        ]
+      }
+    },
+    {
+      "asset_id": "ASSET-FILE-R11-D5604B5EDA88",
+      "status": "active",
+      "path": "crates/rayman/tests/cli.rs",
+      "sha256": "d5604b5eda887a3d9ee46ff07e182d1b28ab2936571890b3de83e39333b8323e",
       "kind": "dedicated_file",
       "cleanup_policy": "delete_on_last_reference",
       "retirement": null
