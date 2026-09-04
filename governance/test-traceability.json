@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 10,
+    "generation": 11,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 9,
-      "sha256": "e4eb4f2c5cf8ba08ae55a6574c6064651725e4d3545680428ae195778bf297b5"
+      "generation": 10,
+      "sha256": "2ace0fded964b1f178690f9946c9ecd738c40e8d20a825d0872c4facce79a58d"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "75466b05f7f14a1958aed4cf1d11b4a7fe36fd35801e4208e6d5515689039f83"
+    "sha256": "e5168c327a7987ab34f0e16b437e9fb782f6f8319b3fc4a435313bd726e59736"
   },
   "sources": [
     {
@@ -142,6 +142,16 @@
       "path": "docs/CODEX_POWERSHELL_BROKER.md",
       "sha256": "3d5a4154992baa6084b7f0f0e8cf628716981eef177ac5273aae74e43c7f935f",
       "valid_until": "2027-09-02",
+      "retirement": null
+    },
+    {
+      "source_id": "SRC-CODEX-WAIT-ROUTE-GUARD-CONTRACT",
+      "status": "active",
+      "kind": "internal_contract",
+      "title": "Codex functions.wait route-guard contract",
+      "path": "docs/CODEX_WAIT_ROUTE_GUARD.md",
+      "sha256": "ee6ceffbdf96170b95b7be8a658b8e34a22e560337020dc259dc1c41b7c112d7",
+      "valid_until": "2027-09-03",
       "retirement": null
     },
     {
@@ -529,6 +539,26 @@
       "required_modes": [
         "integration",
         "behavioral_negative"
+      ],
+      "retirement": null
+    },
+    {
+      "rule_id": "RULE-CODEX-WAIT-ROUTE-CELL-AUTHORITY",
+      "status": "active",
+      "statement": "Only a same-session, same-turn, structurally correlated and recent functions.exec yielded-cell output can authorize functions.wait; mismatched, stale, completed, failed, malformed, prose-only, or not-found evidence is denied before dispatch with direct collaboration correction.",
+      "criticality": "release_blocking",
+      "required_modes": [
+        "integration"
+      ],
+      "retirement": null
+    },
+    {
+      "rule_id": "RULE-CODEX-WAIT-ROUTE-HOST-LIFECYCLE",
+      "status": "active",
+      "statement": "The project Hook is additive to the user Stop Hook, remains record-only until fresh canonical wait coverage is observed and human-trusted, reinjects routing context on supported lifecycle events, and binds every handler to the exact guard script bytes.",
+      "criticality": "release_blocking",
+      "required_modes": [
+        "integration"
       ],
       "retirement": null
     },
@@ -2609,6 +2639,30 @@
       "review": {
         "reviewed_at": "2026-09-02",
         "valid_until": "2027-03-02"
+      },
+      "retirement": null
+    },
+    {
+      "link_id": "LINK-CODEX-WAIT-ROUTE-CELL-SOURCE",
+      "status": "active",
+      "source_id": "SRC-CODEX-WAIT-ROUTE-GUARD-CONTRACT",
+      "rule_id": "RULE-CODEX-WAIT-ROUTE-CELL-AUTHORITY",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-03",
+        "valid_until": "2027-03-03"
+      },
+      "retirement": null
+    },
+    {
+      "link_id": "LINK-CODEX-WAIT-ROUTE-LIFECYCLE-SOURCE",
+      "status": "active",
+      "source_id": "SRC-CODEX-WAIT-ROUTE-GUARD-CONTRACT",
+      "rule_id": "RULE-CODEX-WAIT-ROUTE-HOST-LIFECYCLE",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-03",
+        "valid_until": "2027-03-03"
       },
       "retirement": null
     },
@@ -50330,6 +50384,48 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "17c1c637b31835052989dc2ebec32bc3017e5e2d3a15b732d89710538bf82d44",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-CODEX-WAIT-23424BDBA1276F3D",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-WAIT-ROUTE-LIFECYCLE-SOURCE"
+      ],
+      "test_ids": [
+        "TEST-RUST-CODEX-WAIT-ROUTE-GUARD-DETERMINISTIC-SUITE-1C4C3E5E90B7"
+      ],
+      "rule_id": "RULE-CODEX-WAIT-ROUTE-HOST-LIFECYCLE",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-03",
+        "valid_until": "2027-03-03"
+      },
+      "semantic_sha256": "329cea74cdb6ab5af42cece531ef27b5d70adc9f4183275cc8ec1011db75c292",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-CODEX-WAIT-4DEFB6F8C1520B0B",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-WAIT-ROUTE-CELL-SOURCE"
+      ],
+      "test_ids": [
+        "TEST-RUST-CODEX-WAIT-ROUTE-GUARD-DETERMINISTIC-SUITE-1C4C3E5E90B7"
+      ],
+      "rule_id": "RULE-CODEX-WAIT-ROUTE-CELL-AUTHORITY",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-03",
+        "valid_until": "2027-03-03"
+      },
+      "semantic_sha256": "ef57560ee51c87f16478b7f68e0cab979c7ad192ebf9973baa46d95577c66dd5",
       "retirement": null
     },
     {

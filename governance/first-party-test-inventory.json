@@ -20,11 +20,11 @@
     ]
   },
   "revision": {
-    "generation": 10,
+    "generation": 11,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 9,
-      "sha256": "f97bf772b8f2e5c1af6c8ed3afb392b4f054216b91f30b0da195f55b1ae3a533"
+      "generation": 10,
+      "sha256": "75466b05f7f14a1958aed4cf1d11b4a7fe36fd35801e4208e6d5515689039f83"
     }
   },
   "tests": [
@@ -3273,6 +3273,19 @@
       "selector_kind": "rust_test_fn",
       "selector": "codex_stop_hook_blocks_active_goal_and_installs_idempotently",
       "selector_sha256": "bf25e0273672a20d8a6e137c46839210225ebcaa8ea5850f242710883095921e",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
+      "test_id": "TEST-RUST-CODEX-WAIT-ROUTE-GUARD-DETERMINISTIC-SUITE-1C4C3E5E90B7",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/tests/codex_wait_route_guard.rs::codex_wait_route_guard_deterministic_suite",
+      "role": "root_cargo",
+      "path": "crates/rayman/tests/codex_wait_route_guard.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "codex_wait_route_guard_deterministic_suite",
+      "selector_sha256": "884fb891d2a19630c9808a058c00ce882b6cf1798e4510b3e1ed1d8fa5d7783a",
       "cfg": "all",
       "owner": null,
       "retirement": null

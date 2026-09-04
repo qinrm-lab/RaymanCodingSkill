@@ -1,0 +1,77 @@
+{
+  "description": "Project-scoped record-only coverage probe for deterministic functions.wait routing. It is additive and never replaces the user-level Rayman Stop Hook.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "^(?:startup|resume|clear|compact)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoLogo -NoProfile -NonInteractive -File scripts/codex-wait-route-guard.ps1 -Mode Observe -ExpectedScriptSha256 d0a796841a621d5c79ac6a6035af8139ec367f0827adc1805bd1bb4161bfce62",
+            "commandWindows": "C:\\PROGRA~1\\POWERS~1\\7\\pwsh.exe -NoLogo -NoProfile -NonInteractive -File E:\\rayman\\software\\AI\\RaymanCodingSkill\\scripts\\codex-wait-route-guard.ps1 -Mode Observe -ExpectedScriptSha256 d0a796841a621d5c79ac6a6035af8139ec367f0827adc1805bd1bb4161bfce62",
+            "statusMessage": "Injecting functions.wait routing context",
+            "additionalContextLimit": 800,
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "matcher": "^(?:manual|auto)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoLogo -NoProfile -NonInteractive -File scripts/codex-wait-route-guard.ps1 -Mode Observe -ExpectedScriptSha256 d0a796841a621d5c79ac6a6035af8139ec367f0827adc1805bd1bb4161bfce62",
+            "commandWindows": "C:\\PROGRA~1\\POWERS~1\\7\\pwsh.exe -NoLogo -NoProfile -NonInteractive -File E:\\rayman\\software\\AI\\RaymanCodingSkill\\scripts\\codex-wait-route-guard.ps1 -Mode Observe -ExpectedScriptSha256 d0a796841a621d5c79ac6a6035af8139ec367f0827adc1805bd1bb4161bfce62",
+            "statusMessage": "Reasserting functions.wait routing context",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoLogo -NoProfile -NonInteractive -File scripts/codex-wait-route-guard.ps1 -Mode Observe -ExpectedScriptSha256 d0a796841a621d5c79ac6a6035af8139ec367f0827adc1805bd1bb4161bfce62",
+            "commandWindows": "C:\\PROGRA~1\\POWERS~1\\7\\pwsh.exe -NoLogo -NoProfile -NonInteractive -File E:\\rayman\\software\\AI\\RaymanCodingSkill\\scripts\\codex-wait-route-guard.ps1 -Mode Observe -ExpectedScriptSha256 d0a796841a621d5c79ac6a6035af8139ec367f0827adc1805bd1bb4161bfce62",
+            "statusMessage": "Injecting subagent wait routing context",
+            "additionalContextLimit": 800,
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^(?:wait|functions\\.wait)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoLogo -NoProfile -NonInteractive -File scripts/codex-wait-route-guard.ps1 -Mode Observe -ExpectedScriptSha256 d0a796841a621d5c79ac6a6035af8139ec367f0827adc1805bd1bb4161bfce62",
+            "commandWindows": "C:\\PROGRA~1\\POWERS~1\\7\\pwsh.exe -NoLogo -NoProfile -NonInteractive -File E:\\rayman\\software\\AI\\RaymanCodingSkill\\scripts\\codex-wait-route-guard.ps1 -Mode Observe -ExpectedScriptSha256 d0a796841a621d5c79ac6a6035af8139ec367f0827adc1805bd1bb4161bfce62",
+            "statusMessage": "Recording functions.wait Hook coverage",
+            "additionalContextLimit": 800,
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^(?:wait|functions\\.wait)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoLogo -NoProfile -NonInteractive -File scripts/codex-wait-route-guard.ps1 -Mode Observe -ExpectedScriptSha256 d0a796841a621d5c79ac6a6035af8139ec367f0827adc1805bd1bb4161bfce62",
+            "commandWindows": "C:\\PROGRA~1\\POWERS~1\\7\\pwsh.exe -NoLogo -NoProfile -NonInteractive -File E:\\rayman\\software\\AI\\RaymanCodingSkill\\scripts\\codex-wait-route-guard.ps1 -Mode Observe -ExpectedScriptSha256 d0a796841a621d5c79ac6a6035af8139ec367f0827adc1805bd1bb4161bfce62",
+            "statusMessage": "Recording functions.wait completion state",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
