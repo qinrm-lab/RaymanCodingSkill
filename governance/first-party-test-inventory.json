@@ -20,11 +20,11 @@
     ]
   },
   "revision": {
-    "generation": 13,
+    "generation": 14,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 12,
-      "sha256": "df51172797144dcfe15e54e608f39304b7e21e3c67e9903f9b3a5ea61b58a5bf"
+      "generation": 13,
+      "sha256": "359169f8a9c1a58bfc0add1f045a61f3c99a269c91d7d1e9093d1b0a9aaac573"
     }
   },
   "tests": [
@@ -3877,6 +3877,19 @@
       "selector_kind": "rust_test_fn",
       "selector": "current_predecessor_may_advance_after_replacement_authorization",
       "selector_sha256": "5312728f32e8ab6a626ca08124e91c8f58206afb3b5777b3117a86c2bc89db3a",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
+      "test_id": "TEST-RUST-CURRENT-RECEIPT-VARIANTS-ACCEPT-MATCHING-STABLE-BD3622B72F4C",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/goal/validation.rs::current_receipt_variants_accept_matching_stable_authority_for_repository_gate_must",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/goal/validation.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "current_receipt_variants_accept_matching_stable_authority_for_repository_gate_must",
+      "selector_sha256": "5f52f8a7ff15ae18ce35d5a36ae99e433d5a98549f159fc63ad9550bd4e96150",
       "cfg": "all",
       "owner": null,
       "retirement": null

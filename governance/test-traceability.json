@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 13,
+    "generation": 14,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 12,
-      "sha256": "16116bec1168bc404aebc21067d97e92978c9ab46ffad551d35d092d50fb8003"
+      "generation": 13,
+      "sha256": "09892d977eb84ff3ee9fe12670b83b954ef07dfaea5011f62efae6aacdb7bcc6"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "359169f8a9c1a58bfc0add1f045a61f3c99a269c91d7d1e9093d1b0a9aaac573"
+    "sha256": "cde4a770bc7be32de40350a12e354f6c423b7357c22adda0726533547d2df182"
   },
   "sources": [
     {
@@ -61038,6 +61038,27 @@
         "valid_until": "2027-03-04"
       },
       "semantic_sha256": "bfde083132d17c7b9868c909ad667f78fc7575f887a1a2dfd7a1bd554f99ea89",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R13-CURRENT-RECEIPT-STABLE-AUTHORITY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-INTEGRATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-RUST-CURRENT-RECEIPT-VARIANTS-ACCEPT-MATCHING-STABLE-BD3622B72F4C"
+      ],
+      "rule_id": "RULE-REPO-CLI-INTEGRATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-05",
+        "valid_until": "2027-03-05"
+      },
+      "semantic_sha256": "cb04a1d8736a62f1c17e5051445ef17f19942ce87d76fe3a7373fc013526c74b",
       "retirement": null
     },
     {

@@ -582,8 +582,12 @@ pub fn validation_has_current_receipt(
     {
         return false;
     }
-    if !proof_kind_matches(
-        requirement.proof_kind,
+    if !validation_satisfies_required_proof_kind(
+        goal,
+        root,
+        current_fingerprint,
+        requirement,
+        validation,
         validation_proof_kind(root, &validation.command)
             .ok()
             .unwrap_or_default(),
@@ -615,8 +619,12 @@ pub fn validation_has_current_receipt_with_baseline(
     {
         return false;
     }
-    if !proof_kind_matches(
-        requirement.proof_kind,
+    if !validation_satisfies_required_proof_kind_with_baseline(
+        goal,
+        root,
+        current,
+        requirement,
+        validation,
         validation_proof_kind(root, &validation.command)
             .ok()
             .unwrap_or_default(),
@@ -650,8 +658,11 @@ pub(crate) fn validation_has_current_receipt_with_context(
     {
         return false;
     }
-    if !proof_kind_matches(
-        requirement.proof_kind,
+    if !validation_satisfies_required_proof_kind_with_context(
+        goal,
+        decision,
+        requirement,
+        validation,
         validation_proof_kind_with_context(decision, &validation.command)
             .ok()
             .unwrap_or_default(),

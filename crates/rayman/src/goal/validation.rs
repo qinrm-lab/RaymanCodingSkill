@@ -441,6 +441,25 @@ fn validation_has_matching_stable_authority_receipt(
     })
 }
 
+fn validation_has_matching_stable_authority_receipt_with_baseline(
+    goal: &Goal,
+    root: &Path,
+    current: &WorkspaceBaseline,
+    requirement_id: &str,
+    validation: &ValidationEvidence,
+) -> bool {
+    goal.authority_receipts.iter().any(|authority| {
+        authority.requirement_id == requirement_id
+            && authority.command == validation.command
+            && authority.impact_scopes == validation.impact_scopes
+            && authority.non_code == validation.non_code
+            && authority.workspace_snapshot == validation.workspace_snapshot
+            && direct_stable_authority_receipt_is_valid_with_baseline(
+                goal, root, current, authority,
+            )
+    })
+}
+
 fn validation_has_matching_stable_authority_receipt_with_context(
     goal: &Goal,
     decision: &GoalDecisionContext<'_>,
@@ -471,6 +490,25 @@ fn validation_satisfies_required_proof_kind(
                 goal,
                 root,
                 fingerprint,
+                &requirement.id,
+                validation,
+            ))
+}
+
+fn validation_satisfies_required_proof_kind_with_baseline(
+    goal: &Goal,
+    root: &Path,
+    current: &WorkspaceBaseline,
+    requirement: &Requirement,
+    validation: &ValidationEvidence,
+    actual: ProofKind,
+) -> bool {
+    proof_kind_matches(requirement.proof_kind, actual)
+        || (requirement.proof_kind == Some(ProofKind::RepositoryGate)
+            && validation_has_matching_stable_authority_receipt_with_baseline(
+                goal,
+                root,
+                current,
                 &requirement.id,
                 validation,
             ))
@@ -2054,4 +2092,239 @@ pub(super) fn goal_success_receipt_gaps_with_context(
         }
     }
     gaps
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::timefmt::now_iso;
+    use std::collections::BTreeMap;
+    use std::fs;
+
+    fn write(root: &Path, relative: &str, body: &str) {
+        let path = root.join(relative);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(path, body).unwrap();
+    }
+
+    fn repository_gate_requirement() -> Requirement {
+        Requirement {
+            id: "req_1".into(),
+            text: "prove repository gate".into(),
+            kind: RequirementKind::Must,
+            proof_kind: Some(ProofKind::RepositoryGate),
+            status: RequirementStatus::Done,
+            evidence: Some("selector-free authority".into()),
+            validations: Vec::new(),
+            impacts: Vec::new(),
+        }
+    }
+
+    fn authority_backed_test_validation(
+        root: &Path,
+        goal: &Goal,
+        requirement: &Requirement,
+        current: &WorkspaceBaseline,
+    ) -> (ValidationEvidence, AuthorityReceipt) {
+        let command = "cargo test --locked --workspace --all-targets";
+        let impacts = vec![ImpactEvidence {
+            changed_path: "src/lib.rs".into(),
+            package: Some("fixture".into()),
+            manifest_path: Some("Cargo.toml".into()),
+            direct_dependencies: Vec::new(),
+            direct_dependents: Vec::new(),
+            candidate_tests: Vec::new(),
+            recommended_checks: Vec::new(),
+            recommendation_basis: "unit fixture".into(),
+            recorded_at: now_iso(),
+        }];
+        let impact_paths = impacts
+            .iter()
+            .map(|impact| impact.changed_path.clone())
+            .collect::<Vec<_>>();
+        let impact_scopes = validation_scopes_for_impacts(&impacts);
+        let contract_sha256 = validation_contract_sha256(goal, &requirement.id).unwrap();
+        let validation = ValidationEvidence {
+            command: command.into(),
+            recorded_at: now_iso(),
+            impact_paths,
+            impact_scopes: impact_scopes.clone(),
+            non_code: false,
+            workspace_snapshot: false,
+            receipt: Some(ValidationReceipt {
+                exit_code: 0,
+                cwd: root.display().to_string(),
+                workspace_identity: workspace_identity(root),
+                workspace_fingerprint_before: current.workspace_fingerprint.clone(),
+                workspace_fingerprint_after: current.workspace_fingerprint.clone(),
+                stdout_sha256: "a".repeat(64),
+                stderr_sha256: "b".repeat(64),
+                invocation_sha256: validation_invocation_sha256_scoped(
+                    command,
+                    &impact_scopes,
+                    false,
+                ),
+                passed_tests: Some(1),
+                listed_tests: Some(1),
+                ignored_tests: Some(0),
+                list_stdout_sha256: Some("c".repeat(64)),
+                list_stderr_sha256: Some("d".repeat(64)),
+                contract_sha256: contract_sha256.clone(),
+            }),
+        };
+        let authority = AuthorityReceipt {
+            requirement_id: requirement.id.clone(),
+            command: command.into(),
+            recorded_at: now_iso(),
+            workspace_fingerprint: current.workspace_fingerprint.clone(),
+            repeat: 2,
+            impact_scopes: impact_scopes.clone(),
+            non_code: false,
+            workspace_snapshot: false,
+            invocation_sha256: authority_invocation_sha256(
+                command,
+                &requirement.id,
+                2,
+                &impact_scopes,
+                false,
+            ),
+            contract_sha256,
+            runs: (0..2)
+                .map(|_| AuthorityRunReceipt {
+                    exit_code: 0,
+                    workspace_fingerprint_before: current.workspace_fingerprint.clone(),
+                    workspace_fingerprint_after: current.workspace_fingerprint.clone(),
+                    stdout_sha256: "e".repeat(64),
+                    stderr_sha256: "f".repeat(64),
+                })
+                .collect(),
+        };
+        (validation, authority)
+    }
+
+    fn authority_backed_goal(
+        root: &Path,
+    ) -> (
+        Goal,
+        Requirement,
+        ValidationEvidence,
+        WorkspaceBaseline,
+        BTreeMap<String, Vec<u8>>,
+    ) {
+        let manifest = b"[package]\nname = \"fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n";
+        let source = b"pub fn answer() -> i32 { 42 }\n";
+        write(root, "Cargo.toml", std::str::from_utf8(manifest).unwrap());
+        write(root, "src/lib.rs", std::str::from_utf8(source).unwrap());
+        let current = workspace_baseline(root).unwrap();
+        let captured_files = BTreeMap::from([
+            ("Cargo.toml".to_string(), manifest.to_vec()),
+            ("src/lib.rs".to_string(), source.to_vec()),
+        ]);
+        let requirement = repository_gate_requirement();
+        let mut goal = Goal {
+            schema_version: GOAL_SCHEMA_VERSION,
+            id: "goal_test".into(),
+            title: "authority-backed test validation".into(),
+            status: GoalStatus::Success,
+            lifecycle: GoalLifecycle::Current,
+            lifecycle_reason: None,
+            superseded_by: None,
+            lifecycle_proof: None,
+            replacement_authority: None,
+            created_at: now_iso(),
+            updated_at: now_iso(),
+            baseline: Some(current.clone()),
+            plan_receipts: Vec::new(),
+            plan_publish_intent: None,
+            plan_publication_policy: None,
+            review_receipts: Vec::new(),
+            authority_receipts: Vec::new(),
+            work_packages: Vec::new(),
+            progress_receipts: Vec::new(),
+            lanes: Vec::new(),
+            handoff: None,
+            requirements: vec![requirement.clone()],
+            loaded_from_legacy: false,
+        };
+        let (validation, authority) =
+            authority_backed_test_validation(root, &goal, &requirement, &current);
+        goal.authority_receipts.push(authority);
+        goal.requirements[0].validations.push(validation.clone());
+        (goal, requirement, validation, current, captured_files)
+    }
+
+    #[test]
+    fn current_receipt_variants_accept_matching_stable_authority_for_repository_gate_must() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let (mut goal, requirement, validation, current, captured_files) =
+            authority_backed_goal(root);
+
+        assert_eq!(
+            validation_proof_kind(root, &validation.command).unwrap(),
+            ProofKind::Test
+        );
+        assert!(!proof_kind_matches(
+            requirement.proof_kind,
+            validation_proof_kind(root, &validation.command).unwrap(),
+        ));
+        assert!(validation_has_current_receipt(
+            &validation,
+            &goal,
+            &requirement,
+            root,
+            &current.workspace_fingerprint,
+        ));
+        assert!(validation_has_current_receipt_with_baseline(
+            &validation,
+            &goal,
+            &requirement,
+            root,
+            &current,
+        ));
+        let captured = GoalDecisionContext::captured(root, Some(&current), &captured_files);
+        assert!(validation_has_current_receipt_with_context(
+            &validation,
+            &goal,
+            &requirement,
+            &captured,
+        ));
+
+        goal.authority_receipts.clear();
+        assert!(!validation_has_current_receipt(
+            &validation,
+            &goal,
+            &requirement,
+            root,
+            &current.workspace_fingerprint,
+        ));
+        assert!(!validation_has_current_receipt_with_baseline(
+            &validation,
+            &goal,
+            &requirement,
+            root,
+            &current,
+        ));
+        assert!(!validation_has_current_receipt_with_context(
+            &validation,
+            &goal,
+            &requirement,
+            &captured,
+        ));
+
+        let mut mismatched = goal;
+        let (mut validation, authority) =
+            authority_backed_test_validation(root, &mismatched, &requirement, &current);
+        validation.impact_scopes[0].changed_path = "src/other.rs".into();
+        mismatched.authority_receipts.push(authority);
+        assert!(!validation_has_current_receipt(
+            &validation,
+            &mismatched,
+            &requirement,
+            root,
+            &current.workspace_fingerprint,
+        ));
+    }
 }
