@@ -20,11 +20,11 @@
     ]
   },
   "revision": {
-    "generation": 12,
+    "generation": 13,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 11,
-      "sha256": "e5168c327a7987ab34f0e16b437e9fb782f6f8319b3fc4a435313bd726e59736"
+      "generation": 12,
+      "sha256": "df51172797144dcfe15e54e608f39304b7e21e3c67e9903f9b3a5ea61b58a5bf"
     }
   },
   "tests": [
@@ -2279,6 +2279,19 @@
       "selector_kind": "rust_test_fn",
       "selector": "broad_goal_required_packages_cover_every_must_requirement",
       "selector_sha256": "a4445356f177780783d7d4a9f72ff71342f4eae5d4f6a91f47a4f96965305754",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
+      "test_id": "TEST-RUST-BUDGETED-CONTEXT-RETRIEVAL-COMMANDS-ARE-NAVIGATI-3528B287478C",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/tests/cli.rs::budgeted_context_retrieval_commands_are_navigation_only_and_stale_safe",
+      "role": "root_cargo",
+      "path": "crates/rayman/tests/cli.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "budgeted_context_retrieval_commands_are_navigation_only_and_stale_safe",
+      "selector_sha256": "ac6b8be50c3d4db6201a951f397c69d07d3146e8492eba69a9128409f4ad8465",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -12954,9 +12967,24 @@
     },
     {
       "asset_id": "ASSET-FILE-R11-D5604B5EDA88",
-      "status": "active",
+      "status": "retired",
       "path": "crates/rayman/tests/cli.rs",
       "sha256": "d5604b5eda887a3d9ee46ff07e182d1b28ab2936571890b3de83e39333b8323e",
+      "kind": "dedicated_file",
+      "cleanup_policy": "delete_on_last_reference",
+      "retirement": {
+        "retired_at": "2026-09-04",
+        "reason": "Dedicated CLI integration bytes gained budgeted Context retrieval command coverage.",
+        "replaced_by": [
+          "ASSET-FILE-R12-A47CDCF8FA23"
+        ]
+      }
+    },
+    {
+      "asset_id": "ASSET-FILE-R12-A47CDCF8FA23",
+      "status": "active",
+      "path": "crates/rayman/tests/cli.rs",
+      "sha256": "a47cdcf8fa2318595bffe944db9aa911c952f5cf29f83d02eea627b03833552e",
       "kind": "dedicated_file",
       "cleanup_policy": "delete_on_last_reference",
       "retirement": null

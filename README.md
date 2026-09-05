@@ -6,7 +6,7 @@ local work to a stable finish. A separate, receipt-bound
 `rayman-update-worker` binary is confined to the signed update transaction.
 Together, the load-bearing surface is:
 
-- **Context index** — a content-proven map of the workspace (files, kinds, symbols). Standalone `context refresh` publishes only after two consecutive full strong-hash captures agree, reports actual `files_hashed` / `bytes_hashed` work separately from content changes, and preserves read failures as blockers; the cheap `context status` command remains a stat-only UI probe, while map and readiness conclusions re-check content hashes. Future budgeted navigation commands share the tested [`rayman.context-delivery.v1`](#context-delivery-v1) envelope, whose authority is always `navigation_only`.
+- **Context index** — a content-proven map of the workspace (files, kinds, symbols). Standalone `context refresh` publishes only after two consecutive full strong-hash captures agree, reports actual `files_hashed` / `bytes_hashed` work separately from content changes, and preserves read failures as blockers; the cheap `context status` command remains a stat-only UI probe, while map and readiness conclusions re-check content hashes. Budgeted Goal, Map, and Context retrieval commands share the tested [`rayman.context-delivery.v1`](#context-delivery-v1) envelope, whose authority is always `navigation_only`.
 - **Explicit activation** — `.RaymanCodingSkill/` by itself is only runtime state. `workspace activate` writes a canonical-skill path/SHA256, the delegated agent/workflow bundle SHA256, and the exact CLI contract/version; orphan state, any bundle-resource drift, and stale CLIs are inactive. The seven-field activation schema rejects duplicates, unknown fields, nesting, and malformed scalars; a legacy six-field contract is inactive and can only be migrated by an eligible `workspace rebind --yes`.
 - **Multilingual Unicode UI** — human-facing text supports Simplified Chinese and English through `--language auto|zh-CN|en` (or `RAYMAN_LANG`). Auto mode follows locale metadata and the Windows user locale, with a Chinese fail-safe when none exists. JSON output remains a locale-independent automation contract, and all captured CLI output must be valid UTF-8.
 - **Project map** — a derived architecture view (modules, symbols, local dependencies, Cargo/pyproject packages, entrypoints, heuristic test candidates, impact hints). Rust modules/tests and Python imports plus pytest filename conventions are modeled; unsupported ecosystems remain advisory for missing-test conclusions.
@@ -100,6 +100,25 @@ and current-page resolved/unresolved counts plus omitted records, and declares
 `complete`, `partial`, or `unknown`.
 `complete` permits neither omissions nor unresolved records; `partial`
 requires at least one; `unknown` requires an explanatory detail.
+
+### Budgeted Context retrieval producers
+
+`context overview` pages over verified index entries, with optional `--kind`
+and `--path-prefix` filters. `context query <term>` searches indexed paths and
+symbols by default; `--path`, `--symbols`, and `--content` explicitly select
+the search modes, and content search reads only verified UTF-8 text from the
+current index. `context excerpt <path> --start <line> --end <line>` returns one
+verified inclusive line range, while `context pack <paths...>` returns complete
+verified UTF-8 file records. Missing paths and non-UTF-8 content are represented
+as budgeted unresolved records; stale context, unsafe paths, invalid line
+ranges, unknown fields, empty queries, and over-small budgets fail closed.
+
+All four commands emit the shared compact JSON envelope with no trailing
+newline. The mandatory record fields still carry source path, content SHA-256,
+line range, selection reason, provenance, coverage, pagination counts, and a
+cursor bound to the verified index plus the raw index-file SHA-256. Optional
+`--fields` only projects `attributes`; it cannot remove mandatory provenance or
+turn the output into validation authority.
 
 ### Budgeted Goal and Map producers
 
@@ -377,6 +396,10 @@ rayman codex-hook uninstall --yes              # remove only Rayman managed hand
 rayman codex-hook stop                         # Codex host entrypoint; reads Stop JSON from stdin
 rayman context refresh          # strong-hash every current file; report hash work and content deltas
 rayman context status           # cheap stat-only UI probe; not proof for map/check readiness
+rayman context overview [--kind source|test|docs|config|script|asset] [--path-prefix <path>] [--fields ...] [page options]
+rayman context query <term> [--path] [--symbols] [--content] [--kind ...] [--path-prefix <path>] [page options]
+rayman context excerpt <path> --start <line> --end <line> [--fields ...] [page options]
+rayman context pack <paths...> [--fields ...] [page options]
 rayman map refresh              # rebuild the project map from the current index
 rayman map summary              # project structure summary from the current index
 rayman map file <path> [--max-depth N] [--fields ...] [--limit N] [--cursor ...] [--budget-bytes N]

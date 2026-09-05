@@ -9,6 +9,7 @@ use std::time::UNIX_EPOCH;
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 
 use crate::file_io::is_link_or_reparse;
 use crate::file_io::{read_json, write_json};
@@ -66,7 +67,6 @@ pub struct ContextIndex {
 pub const CONTEXT_DELIVERY_SCHEMA: &str = "rayman.context-delivery.v1";
 const CONTEXT_DELIVERY_CURSOR_PREFIX: &str = "rayman-context-cursor-v1";
 pub use crate::build_context_delivery_page;
-
 /// Machine contract shared by future budgeted context-navigation commands.
 ///
 /// This type deliberately carries only navigation authority.  A successfully
@@ -409,6 +409,685 @@ impl ContextDeliveryV1 {
 /// deterministic-sort bindings. This is an identity helper, never authority.
 pub fn context_delivery_identity<T: Serialize>(value: &T) -> Result<String> {
     Ok(sha256_bytes(&serde_json::to_vec(value)?))
+}
+
+const CONTEXT_FILE_KINDS: &[&str] = &["source", "test", "docs", "config", "script", "asset"];
+const CONTEXT_DELIVERY_FIELDS: &[&str] = &[
+    "path",
+    "sha256",
+    "line_range",
+    "reason",
+    "provenance",
+    "record_type",
+    "kind",
+    "size",
+    "lines",
+    "symbol_count",
+    "symbols",
+    "name",
+    "symbol_kind",
+    "matched",
+    "match_line",
+    "text",
+    "encoding",
+    "start_line",
+    "end_line",
+    "requested_path",
+];
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ContextOverviewOptions {
+    pub kinds: Vec<String>,
+    pub path_prefix: Option<String>,
+    pub fields: Vec<String>,
+    #[serde(skip)]
+    pub limit: usize,
+    #[serde(skip)]
+    pub cursor: Option<String>,
+    #[serde(skip)]
+    pub budget_bytes: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ContextQueryOptions {
+    pub kinds: Vec<String>,
+    pub path_prefix: Option<String>,
+    pub fields: Vec<String>,
+    pub include_path: bool,
+    pub include_symbols: bool,
+    pub include_content: bool,
+    #[serde(skip)]
+    pub limit: usize,
+    #[serde(skip)]
+    pub cursor: Option<String>,
+    #[serde(skip)]
+    pub budget_bytes: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ContextTextOptions {
+    pub fields: Vec<String>,
+    #[serde(skip)]
+    pub limit: usize,
+    #[serde(skip)]
+    pub cursor: Option<String>,
+    #[serde(skip)]
+    pub budget_bytes: usize,
+}
+
+pub fn overview_delivery(
+    index: &ContextIndex,
+    raw_index_sha256: &str,
+    options: ContextOverviewOptions,
+) -> Result<ContextDeliveryV1> {
+    let options = normalize_overview_options(options)?;
+    let mut records = Vec::new();
+    for entry in index
+        .files
+        .iter()
+        .filter(|entry| entry_matches_scope(entry, &options.kinds, options.path_prefix.as_deref()))
+    {
+        records.push(entry_overview_record(entry, &options.fields)?);
+    }
+    finish_context_delivery(
+        index,
+        raw_index_sha256,
+        json!({"command":"context overview","options":options}),
+        "context-overview:context-record-canonical-json-asc:v1",
+        records,
+        options.limit,
+        options.cursor.as_deref(),
+        options.budget_bytes,
+    )
+}
+
+pub fn query_delivery(
+    root: &Path,
+    index: &ContextIndex,
+    raw_index_sha256: &str,
+    term: &str,
+    options: ContextQueryOptions,
+) -> Result<ContextDeliveryV1> {
+    let term = normalized_query_term(term)?;
+    let options = normalize_query_options(options)?;
+    let needle = term.to_lowercase();
+    let mut records = Vec::new();
+    for entry in index
+        .files
+        .iter()
+        .filter(|entry| entry_matches_scope(entry, &options.kinds, options.path_prefix.as_deref()))
+    {
+        if options.include_path && entry.path.to_lowercase().contains(&needle) {
+            records.push(entry_path_match_record(entry, &term, &options.fields)?);
+        }
+        if options.include_symbols {
+            for symbol in entry
+                .symbols
+                .iter()
+                .filter(|symbol| symbol.name.to_lowercase().contains(&needle))
+            {
+                records.push(entry_symbol_match_record(
+                    entry,
+                    symbol,
+                    &term,
+                    &options.fields,
+                )?);
+            }
+        }
+        if options.include_content && is_text_search_kind(entry) {
+            match read_verified_utf8_text(root, entry)? {
+                Some(text) => {
+                    for (line_index, line) in text.lines().enumerate() {
+                        if line.to_lowercase().contains(&needle) {
+                            records.push(entry_content_match_record(
+                                entry,
+                                line_index + 1,
+                                line,
+                                &term,
+                                &options.fields,
+                            )?);
+                        }
+                    }
+                }
+                None => records.push(unresolved_for_entry(
+                    entry,
+                    "file content is not valid UTF-8",
+                    "verified_context_content",
+                    format!("content query `{term}`"),
+                )),
+            }
+        }
+    }
+    finish_context_delivery(
+        index,
+        raw_index_sha256,
+        json!({"command":"context query","term":term,"options":options}),
+        "context-query:context-record-canonical-json-asc:v1",
+        records,
+        options.limit,
+        options.cursor.as_deref(),
+        options.budget_bytes,
+    )
+}
+
+pub fn excerpt_delivery(
+    root: &Path,
+    index: &ContextIndex,
+    raw_index_sha256: &str,
+    path: &str,
+    start: usize,
+    end: usize,
+    options: ContextTextOptions,
+) -> Result<ContextDeliveryV1> {
+    let path = normalized_context_path(path, "path")?;
+    let options = normalize_text_options(options)?;
+    if start == 0 || end < start {
+        bail!("context excerpt line range must be one-based and inclusive");
+    }
+    let record = if let Some(entry) = entry_for_path(index, &path) {
+        validate_line_range(entry, start, end)?;
+        match read_verified_utf8_text(root, entry)? {
+            Some(text) => entry_excerpt_record(entry, start, end, &text, &options.fields)?,
+            None => unresolved_for_entry(
+                entry,
+                "file content is not valid UTF-8",
+                "context_excerpt",
+                format!("{path}:{start}-{end}"),
+            ),
+        }
+    } else {
+        unresolved_reference(
+            path.clone(),
+            "path is absent from the verified context snapshot",
+            "context_excerpt",
+            format!("{path}:{start}-{end}"),
+        )
+    };
+    finish_context_delivery(
+        index,
+        raw_index_sha256,
+        json!({"command":"context excerpt","path":path,"start":start,"end":end,"options":options}),
+        "context-excerpt:context-record-canonical-json-asc:v1",
+        vec![record],
+        options.limit,
+        options.cursor.as_deref(),
+        options.budget_bytes,
+    )
+}
+
+pub fn pack_delivery(
+    root: &Path,
+    index: &ContextIndex,
+    raw_index_sha256: &str,
+    paths: &[String],
+    options: ContextTextOptions,
+) -> Result<ContextDeliveryV1> {
+    let paths = normalized_context_paths(paths)?;
+    let options = normalize_text_options(options)?;
+    let mut records = Vec::new();
+    for path in &paths {
+        if let Some(entry) = entry_for_path(index, path) {
+            match read_verified_utf8_text(root, entry)? {
+                Some(text) => records.push(entry_pack_record(entry, &text, &options.fields)?),
+                None => records.push(unresolved_for_entry(
+                    entry,
+                    "file content is not valid UTF-8",
+                    "context_pack",
+                    path.clone(),
+                )),
+            }
+        } else {
+            records.push(unresolved_reference(
+                path.clone(),
+                "path is absent from the verified context snapshot",
+                "context_pack",
+                path.clone(),
+            ));
+        }
+    }
+    finish_context_delivery(
+        index,
+        raw_index_sha256,
+        json!({"command":"context pack","paths":paths,"options":options}),
+        "context-pack:context-record-canonical-json-asc:v1",
+        records,
+        options.limit,
+        options.cursor.as_deref(),
+        options.budget_bytes,
+    )
+}
+
+fn normalize_overview_options(
+    mut options: ContextOverviewOptions,
+) -> Result<ContextOverviewOptions> {
+    normalize_page_controls(options.limit, options.budget_bytes, "context overview")?;
+    options.kinds = normalized_kinds(options.kinds)?;
+    options.path_prefix = options
+        .path_prefix
+        .map(|prefix| normalized_context_prefix(&prefix))
+        .transpose()?;
+    options.fields = normalized_fields(options.fields)?;
+    Ok(options)
+}
+
+fn normalize_query_options(mut options: ContextQueryOptions) -> Result<ContextQueryOptions> {
+    normalize_page_controls(options.limit, options.budget_bytes, "context query")?;
+    options.kinds = normalized_kinds(options.kinds)?;
+    options.path_prefix = options
+        .path_prefix
+        .map(|prefix| normalized_context_prefix(&prefix))
+        .transpose()?;
+    options.fields = normalized_fields(options.fields)?;
+    if !options.include_path && !options.include_symbols && !options.include_content {
+        options.include_path = true;
+        options.include_symbols = true;
+    }
+    Ok(options)
+}
+
+fn normalize_text_options(mut options: ContextTextOptions) -> Result<ContextTextOptions> {
+    normalize_page_controls(options.limit, options.budget_bytes, "context text")?;
+    options.fields = normalized_fields(options.fields)?;
+    Ok(options)
+}
+
+fn normalize_page_controls(limit: usize, budget_bytes: usize, command: &str) -> Result<()> {
+    if limit == 0 {
+        bail!("{command} --limit must be positive");
+    }
+    if budget_bytes == 0 {
+        bail!("{command} --budget-bytes must be positive");
+    }
+    Ok(())
+}
+
+fn normalized_kinds(kinds: Vec<String>) -> Result<Vec<String>> {
+    let mut normalized = kinds
+        .into_iter()
+        .map(|kind| kind.trim().to_ascii_lowercase())
+        .filter(|kind| !kind.is_empty())
+        .collect::<Vec<_>>();
+    normalized.sort();
+    normalized.dedup();
+    if let Some(kind) = normalized
+        .iter()
+        .find(|kind| !CONTEXT_FILE_KINDS.contains(&kind.as_str()))
+    {
+        bail!(
+            "unknown context kind `{kind}`; available kinds: {}",
+            CONTEXT_FILE_KINDS.join(",")
+        );
+    }
+    Ok(normalized)
+}
+
+fn normalized_fields(fields: Vec<String>) -> Result<Vec<String>> {
+    let mut normalized = fields
+        .into_iter()
+        .map(|field| field.trim().to_string())
+        .filter(|field| !field.is_empty())
+        .collect::<Vec<_>>();
+    normalized.sort();
+    normalized.dedup();
+    if let Some(field) = normalized
+        .iter()
+        .find(|field| !CONTEXT_DELIVERY_FIELDS.contains(&field.as_str()))
+    {
+        bail!(
+            "unknown context delivery field `{field}`; available fields: {}",
+            CONTEXT_DELIVERY_FIELDS.join(",")
+        );
+    }
+    Ok(normalized)
+}
+
+fn normalized_context_prefix(raw: &str) -> Result<String> {
+    let path = raw.trim().trim_end_matches('/');
+    if path.is_empty() {
+        bail!("context delivery --path-prefix must be normalized and workspace-relative: {raw}");
+    }
+    normalized_context_path(path, "--path-prefix").map_err(|_| {
+        anyhow::anyhow!(
+            "context delivery --path-prefix must be normalized and workspace-relative: {raw}"
+        )
+    })
+}
+
+fn normalized_context_path(raw: &str, label: &str) -> Result<String> {
+    let path = raw.trim();
+    validate_delivery_path(path).with_context(|| {
+        format!("context delivery {label} must be normalized and workspace-relative: {raw}")
+    })?;
+    Ok(path.to_string())
+}
+
+fn normalized_context_paths(paths: &[String]) -> Result<Vec<String>> {
+    if paths.is_empty() {
+        bail!("context pack requires at least one path");
+    }
+    let mut normalized = paths
+        .iter()
+        .map(|path| normalized_context_path(path, "path"))
+        .collect::<Result<Vec<_>>>()?;
+    normalized.sort();
+    normalized.dedup();
+    Ok(normalized)
+}
+
+fn normalized_query_term(term: &str) -> Result<String> {
+    let term = term.trim();
+    if term.is_empty() {
+        bail!("context query term must not be empty");
+    }
+    Ok(term.to_string())
+}
+
+fn entry_matches_scope(entry: &FileEntry, kinds: &[String], path_prefix: Option<&str>) -> bool {
+    (kinds.is_empty() || kinds.binary_search(&entry.kind).is_ok())
+        && path_prefix.is_none_or(|prefix| path_matches_prefix(&entry.path, prefix))
+}
+
+fn path_matches_prefix(path: &str, prefix: &str) -> bool {
+    path == prefix
+        || path
+            .strip_prefix(prefix)
+            .is_some_and(|suffix| suffix.starts_with('/'))
+}
+
+fn is_text_search_kind(entry: &FileEntry) -> bool {
+    matches!(
+        entry.kind.as_str(),
+        "source" | "test" | "docs" | "config" | "script"
+    )
+}
+
+fn entry_for_path<'a>(index: &'a ContextIndex, path: &str) -> Option<&'a FileEntry> {
+    index.files.iter().find(|entry| entry.path == path)
+}
+
+fn validate_line_range(entry: &FileEntry, start: usize, end: usize) -> Result<()> {
+    let max_line = entry.lines.max(1);
+    if start > max_line || end > max_line {
+        bail!(
+            "context excerpt line range exceeds indexed file length: {} has {} line(s)",
+            entry.path,
+            entry.lines
+        );
+    }
+    Ok(())
+}
+
+fn read_verified_utf8_text(root: &Path, entry: &FileEntry) -> Result<Option<String>> {
+    let bytes = read_verified_file(root, entry)?;
+    Ok(String::from_utf8(bytes).ok())
+}
+
+fn entry_line_range(entry: &FileEntry) -> ContextDeliveryLineRange {
+    ContextDeliveryLineRange {
+        start: 1,
+        end: entry.lines.max(1),
+    }
+}
+
+fn entry_overview_record(entry: &FileEntry, fields: &[String]) -> Result<ContextDeliveryRecord> {
+    let mut attributes = base_file_attributes(entry);
+    if fields
+        .binary_search_by(|candidate| candidate.as_str().cmp("symbols"))
+        .is_ok()
+    {
+        attributes.insert("symbols".into(), json!(&entry.symbols));
+    }
+    project_fields(fields, &mut attributes);
+    Ok(resolved_for_entry(
+        entry,
+        entry_line_range(entry),
+        "indexed context file",
+        "context_index",
+        entry.path.clone(),
+        attributes,
+    ))
+}
+
+fn entry_path_match_record(
+    entry: &FileEntry,
+    term: &str,
+    fields: &[String],
+) -> Result<ContextDeliveryRecord> {
+    let mut attributes = base_file_attributes(entry);
+    attributes.insert("matched".into(), json!("path"));
+    project_fields(fields, &mut attributes);
+    Ok(resolved_for_entry(
+        entry,
+        entry_line_range(entry),
+        "path contains query term",
+        "context_query_path",
+        term.to_string(),
+        attributes,
+    ))
+}
+
+fn entry_symbol_match_record(
+    entry: &FileEntry,
+    symbol: &Symbol,
+    term: &str,
+    fields: &[String],
+) -> Result<ContextDeliveryRecord> {
+    let mut attributes = base_file_attributes(entry);
+    attributes.insert("record_type".into(), json!("symbol_match"));
+    attributes.insert("matched".into(), json!("symbol"));
+    attributes.insert("name".into(), json!(symbol.name));
+    attributes.insert("symbol_kind".into(), json!(symbol.kind));
+    attributes.insert("match_line".into(), json!(symbol.line));
+    project_fields(fields, &mut attributes);
+    Ok(resolved_for_entry(
+        entry,
+        ContextDeliveryLineRange {
+            start: symbol.line,
+            end: symbol.line,
+        },
+        "symbol name contains query term",
+        "context_query_symbol",
+        term.to_string(),
+        attributes,
+    ))
+}
+
+fn entry_content_match_record(
+    entry: &FileEntry,
+    line: usize,
+    text: &str,
+    term: &str,
+    fields: &[String],
+) -> Result<ContextDeliveryRecord> {
+    let mut attributes = base_file_attributes(entry);
+    attributes.insert("record_type".into(), json!("content_match"));
+    attributes.insert("matched".into(), json!("content"));
+    attributes.insert("match_line".into(), json!(line));
+    attributes.insert("text".into(), json!(text));
+    attributes.insert("encoding".into(), json!("utf-8"));
+    project_fields(fields, &mut attributes);
+    Ok(resolved_for_entry(
+        entry,
+        ContextDeliveryLineRange {
+            start: line,
+            end: line,
+        },
+        "content line contains query term",
+        "context_query_content",
+        format!("{}:{line}:{term}", entry.path),
+        attributes,
+    ))
+}
+
+fn entry_excerpt_record(
+    entry: &FileEntry,
+    start: usize,
+    end: usize,
+    text: &str,
+    fields: &[String],
+) -> Result<ContextDeliveryRecord> {
+    let mut attributes = base_file_attributes(entry);
+    attributes.insert("record_type".into(), json!("excerpt"));
+    attributes.insert("start_line".into(), json!(start));
+    attributes.insert("end_line".into(), json!(end));
+    attributes.insert("text".into(), json!(line_slice(text, start, end)));
+    attributes.insert("encoding".into(), json!("utf-8"));
+    project_fields(fields, &mut attributes);
+    Ok(resolved_for_entry(
+        entry,
+        ContextDeliveryLineRange { start, end },
+        "explicit verified line excerpt",
+        "context_excerpt",
+        format!("{}:{start}-{end}", entry.path),
+        attributes,
+    ))
+}
+
+fn entry_pack_record(
+    entry: &FileEntry,
+    text: &str,
+    fields: &[String],
+) -> Result<ContextDeliveryRecord> {
+    let mut attributes = base_file_attributes(entry);
+    attributes.insert("record_type".into(), json!("pack_file"));
+    attributes.insert("start_line".into(), json!(1));
+    attributes.insert("end_line".into(), json!(entry.lines.max(1)));
+    attributes.insert("text".into(), json!(text));
+    attributes.insert("encoding".into(), json!("utf-8"));
+    project_fields(fields, &mut attributes);
+    Ok(resolved_for_entry(
+        entry,
+        entry_line_range(entry),
+        "explicit verified file pack",
+        "context_pack",
+        entry.path.clone(),
+        attributes,
+    ))
+}
+
+fn base_file_attributes(entry: &FileEntry) -> BTreeMap<String, Value> {
+    let mut attributes = BTreeMap::new();
+    attributes.insert("record_type".into(), json!("file_overview"));
+    attributes.insert("kind".into(), json!(entry.kind));
+    attributes.insert("size".into(), json!(entry.size));
+    attributes.insert("lines".into(), json!(entry.lines));
+    attributes.insert("symbol_count".into(), json!(entry.symbols.len()));
+    attributes
+}
+
+fn line_slice(text: &str, start: usize, end: usize) -> String {
+    if text.is_empty() {
+        return String::new();
+    }
+    text.split_inclusive('\n')
+        .skip(start - 1)
+        .take(end - start + 1)
+        .collect::<String>()
+}
+
+fn project_fields(fields: &[String], attributes: &mut BTreeMap<String, Value>) {
+    if fields.is_empty() {
+        return;
+    }
+    attributes.retain(|field, _| fields.binary_search(field).is_ok());
+}
+
+fn resolved_for_entry(
+    entry: &FileEntry,
+    line_range: ContextDeliveryLineRange,
+    reason: impl Into<String>,
+    provenance_kind: &str,
+    evidence: impl Into<String>,
+    attributes: BTreeMap<String, Value>,
+) -> ContextDeliveryRecord {
+    ContextDeliveryRecord::Resolved(ContextDeliveryItem {
+        path: entry.path.clone(),
+        sha256: entry.sha256.clone(),
+        line_range,
+        reason: reason.into(),
+        provenance: vec![ContextDeliveryProvenance {
+            kind: provenance_kind.into(),
+            evidence: evidence.into(),
+            source_path: Some(entry.path.clone()),
+            source_sha256: Some(entry.sha256.clone()),
+        }],
+        attributes,
+    })
+}
+
+fn unresolved_for_entry(
+    entry: &FileEntry,
+    reason: impl Into<String>,
+    provenance_kind: &str,
+    evidence: impl Into<String>,
+) -> ContextDeliveryRecord {
+    ContextDeliveryRecord::Unresolved(ContextDeliveryUnresolved {
+        reference: entry.path.clone(),
+        reason: reason.into(),
+        provenance: vec![ContextDeliveryProvenance {
+            kind: provenance_kind.into(),
+            evidence: evidence.into(),
+            source_path: Some(entry.path.clone()),
+            source_sha256: Some(entry.sha256.clone()),
+        }],
+    })
+}
+
+fn unresolved_reference(
+    reference: String,
+    reason: impl Into<String>,
+    provenance_kind: &str,
+    evidence: impl Into<String>,
+) -> ContextDeliveryRecord {
+    ContextDeliveryRecord::Unresolved(ContextDeliveryUnresolved {
+        reference,
+        reason: reason.into(),
+        provenance: vec![ContextDeliveryProvenance {
+            kind: provenance_kind.into(),
+            evidence: evidence.into(),
+            source_path: None,
+            source_sha256: None,
+        }],
+    })
+}
+
+fn finish_context_delivery(
+    index: &ContextIndex,
+    raw_index_sha256: &str,
+    query: Value,
+    sort: &str,
+    mut records: Vec<ContextDeliveryRecord>,
+    limit: usize,
+    cursor: Option<&str>,
+    budget_bytes: usize,
+) -> Result<ContextDeliveryV1> {
+    let mut keyed_records = records
+        .drain(..)
+        .map(|record| Ok((serde_json::to_vec(&record)?, record)))
+        .collect::<Result<Vec<_>>>()?;
+    keyed_records.sort_by(|left, right| left.0.cmp(&right.0));
+    let records = keyed_records
+        .into_iter()
+        .map(|(_, record)| record)
+        .collect::<Vec<_>>();
+    build_context_delivery_page(
+        &records,
+        context_delivery_snapshot(index, raw_index_sha256)?,
+        context_delivery_identity(&query)?,
+        context_delivery_identity(&sort)?,
+        cursor,
+        limit,
+        budget_bytes,
+    )
+}
+
+fn context_delivery_snapshot(index: &ContextIndex, raw_index_sha256: &str) -> Result<String> {
+    context_delivery_identity(&(
+        index.schema_version,
+        &index.workspace_identity,
+        &index.files,
+        raw_index_sha256,
+    ))
 }
 
 fn is_lower_sha256(value: &str) -> bool {

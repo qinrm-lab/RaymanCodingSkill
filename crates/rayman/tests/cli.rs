@@ -9393,3 +9393,256 @@ fn budgeted_map_queries_scope_fields_depth_and_cursor_drift_fail_closed() {
         ambiguous.stderr
     );
 }
+
+#[test]
+fn budgeted_context_retrieval_commands_are_navigation_only_and_stale_safe() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    write(
+        root,
+        "src/lib.rs",
+        "pub fn alpha() -> i32 {\n    helper()\n}\nfn helper() -> i32 { 1 }\n",
+    );
+    write(
+        root,
+        "src/parser.rs",
+        "pub fn parse_alpha(input: &str) -> bool {\n    input.contains(\"alpha\")\n}\n",
+    );
+    write(root, "README.md", "# fixture\nalpha docs\n");
+    run_json(root, &["context", "refresh"]);
+
+    let before = state_snapshot(root);
+    let overview = run(
+        root,
+        &[
+            "--format",
+            "json",
+            "context",
+            "overview",
+            "--kind",
+            "source",
+            "--path-prefix",
+            "src",
+            "--fields",
+            "record_type,kind,lines,symbol_count",
+            "--limit",
+            "1",
+            "--budget-bytes",
+            "4096",
+        ],
+    );
+    assert_eq!(overview.status, 0, "stderr={}", overview.stderr);
+    assert!(!overview.stdout.ends_with('\n'));
+    let overview_json: Value = serde_json::from_str(&overview.stdout).unwrap();
+    assert_eq!(overview_json["schema"], "rayman.context-delivery.v1");
+    assert_eq!(overview_json["authority"], "navigation_only");
+    assert_eq!(
+        overview_json["sort_sha256"],
+        rayman::context::context_delivery_identity(
+            &"context-overview:context-record-canonical-json-asc:v1"
+        )
+        .unwrap()
+    );
+    assert_eq!(overview_json["total"], 2);
+    assert_eq!(overview_json["returned"], 1);
+    assert!(overview_json["truncated"].as_bool().unwrap());
+    assert_eq!(
+        overview.stdout.len() as u64,
+        overview_json["output_bytes"].as_u64().unwrap()
+    );
+    let overview_cursor = overview_json["next_cursor"].as_str().unwrap().to_string();
+    let next_overview = run_json(
+        root,
+        &[
+            "context",
+            "overview",
+            "--kind",
+            "source",
+            "--path-prefix",
+            "src",
+            "--fields",
+            "record_type,kind,lines,symbol_count",
+            "--cursor",
+            &overview_cursor,
+            "--limit",
+            "100",
+            "--budget-bytes",
+            "8192",
+        ],
+    );
+    assert_eq!(next_overview["offset"], 1);
+
+    let query = run_json(
+        root,
+        &[
+            "context",
+            "query",
+            "alpha",
+            "--symbols",
+            "--content",
+            "--path-prefix",
+            "src",
+            "--fields",
+            "record_type,matched,name,symbol_kind,match_line,text,encoding",
+            "--budget-bytes",
+            "16384",
+        ],
+    );
+    let query_records = query["records"].as_array().unwrap();
+    assert!(query_records.iter().any(|record| {
+        record["record"]["attributes"]["record_type"] == "symbol_match"
+            && record["record"]["attributes"]["name"] == "alpha"
+    }));
+    assert!(query_records.iter().any(|record| {
+        record["record"]["attributes"]["record_type"] == "content_match"
+            && record["record"]["attributes"]["text"]
+                .as_str()
+                .unwrap()
+                .contains("alpha")
+    }));
+
+    let excerpt = run_json(
+        root,
+        &[
+            "context",
+            "excerpt",
+            "src/lib.rs",
+            "--start",
+            "1",
+            "--end",
+            "2",
+            "--budget-bytes",
+            "8192",
+        ],
+    );
+    assert_eq!(excerpt["total"], 1);
+    assert_eq!(excerpt["records"][0]["record"]["path"], "src/lib.rs");
+    assert_eq!(excerpt["records"][0]["record"]["line_range"]["start"], 1);
+    assert_eq!(excerpt["records"][0]["record"]["line_range"]["end"], 2);
+    assert!(
+        excerpt["records"][0]["record"]["sha256"]
+            .as_str()
+            .unwrap()
+            .len()
+            == 64
+    );
+    assert!(
+        excerpt["records"][0]["record"]["attributes"]["text"]
+            .as_str()
+            .unwrap()
+            .contains("helper()")
+    );
+
+    let pack = run_json(
+        root,
+        &[
+            "context",
+            "pack",
+            "src/lib.rs",
+            "README.md",
+            "missing.rs",
+            "--fields",
+            "record_type,text,encoding,kind",
+            "--budget-bytes",
+            "16384",
+        ],
+    );
+    assert_eq!(pack["total"], 3);
+    assert_eq!(pack["coverage"]["unresolved_total"], 1);
+    assert!(pack["records"].as_array().unwrap().iter().any(|record| {
+        record["state"] == "resolved"
+            && record["record"]["attributes"]["record_type"] == "pack_file"
+            && record["record"]["attributes"]["text"]
+                .as_str()
+                .unwrap()
+                .contains("alpha")
+    }));
+    assert!(pack["records"].as_array().unwrap().iter().any(|record| {
+        record["state"] == "unresolved" && record["record"]["reference"] == "missing.rs"
+    }));
+    assert_eq!(
+        state_snapshot(root),
+        before,
+        "context retrieval commands must be read-only"
+    );
+
+    let unknown_field = run(root, &["context", "overview", "--fields", "unknown-field"]);
+    assert_ne!(unknown_field.status, 0);
+    assert!(
+        unknown_field
+            .stderr
+            .contains("unknown context delivery field"),
+        "{}",
+        unknown_field.stderr
+    );
+    let unsafe_path = run(
+        root,
+        &[
+            "context",
+            "excerpt",
+            "../escape.rs",
+            "--start",
+            "1",
+            "--end",
+            "1",
+        ],
+    );
+    assert_ne!(unsafe_path.status, 0);
+    assert!(
+        unsafe_path.stderr.contains("workspace-relative"),
+        "{}",
+        unsafe_path.stderr
+    );
+    let empty_query = run(root, &["context", "query", "   "]);
+    assert_ne!(empty_query.status, 0);
+    assert!(
+        empty_query.stderr.contains("term must not be empty"),
+        "{}",
+        empty_query.stderr
+    );
+    let tiny_budget = run(
+        root,
+        &["context", "pack", "src/lib.rs", "--budget-bytes", "32"],
+    );
+    assert_ne!(tiny_budget.status, 0);
+    assert!(tiny_budget.stderr.contains("budget_too_small"));
+    assert!(tiny_budget.stderr.contains("split_required"));
+
+    write(
+        root,
+        "src/parser.rs",
+        "pub fn parse_alpha(input: &str) -> bool {\n    input.starts_with(\"alpha\")\n}\n",
+    );
+    run_json(root, &["context", "refresh"]);
+    let stale_cursor = run(
+        root,
+        &[
+            "--format",
+            "json",
+            "context",
+            "overview",
+            "--kind",
+            "source",
+            "--path-prefix",
+            "src",
+            "--fields",
+            "record_type,kind,lines,symbol_count",
+            "--cursor",
+            &overview_cursor,
+            "--budget-bytes",
+            "8192",
+        ],
+    );
+    assert_ne!(stale_cursor.status, 0);
+    assert!(stale_cursor.stderr.contains("invalidated"));
+
+    write(root, "src/new.rs", "pub fn beta() {}\n");
+    let stale_context = run(root, &["context", "overview", "--kind", "source"]);
+    assert_ne!(stale_context.status, 0);
+    assert!(
+        stale_context.stderr.contains("上下文索引不是 ready")
+            || stale_context.stderr.contains("context refresh"),
+        "{}",
+        stale_context.stderr
+    );
+}

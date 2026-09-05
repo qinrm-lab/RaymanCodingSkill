@@ -152,6 +152,67 @@ fn run(cli: Cli) -> Result<()> {
                     );
                 }
             }
+            ContextAction::Overview {
+                kinds,
+                path_prefix,
+                projection,
+            } => {
+                let (index, raw_index_sha256) =
+                    rayman::verified_context_index_with_raw_sha256(&root)?;
+                emit_context_delivery(context::overview_delivery(
+                    &index,
+                    &raw_index_sha256,
+                    context_overview_options(kinds, path_prefix, projection),
+                )?)?;
+            }
+            ContextAction::Query {
+                term,
+                path,
+                symbols,
+                content,
+                kinds,
+                path_prefix,
+                projection,
+            } => {
+                let (index, raw_index_sha256) =
+                    rayman::verified_context_index_with_raw_sha256(&root)?;
+                emit_context_delivery(context::query_delivery(
+                    &root,
+                    &index,
+                    &raw_index_sha256,
+                    &term,
+                    context_query_options(kinds, path_prefix, projection, path, symbols, content),
+                )?)?;
+            }
+            ContextAction::Excerpt {
+                path,
+                start,
+                end,
+                projection,
+            } => {
+                let (index, raw_index_sha256) =
+                    rayman::verified_context_index_with_raw_sha256(&root)?;
+                emit_context_delivery(context::excerpt_delivery(
+                    &root,
+                    &index,
+                    &raw_index_sha256,
+                    &path,
+                    start,
+                    end,
+                    context_text_options(projection),
+                )?)?;
+            }
+            ContextAction::Pack { paths, projection } => {
+                let (index, raw_index_sha256) =
+                    rayman::verified_context_index_with_raw_sha256(&root)?;
+                emit_context_delivery(context::pack_delivery(
+                    &root,
+                    &index,
+                    &raw_index_sha256,
+                    &paths,
+                    context_text_options(projection),
+                )?)?;
+            }
             ContextAction::LegacyOs { args } => {
                 let suffix = if args.is_empty() {
                     String::new()
@@ -755,6 +816,60 @@ fn run_map(root: &std::path::Path, json: bool, cmd: MapCmd) -> Result<()> {
 
 const DEFAULT_CONTEXT_PAGE_LIMIT: usize = 100;
 const DEFAULT_CONTEXT_BUDGET_BYTES: usize = 32_768;
+
+fn context_overview_options(
+    kinds: Vec<String>,
+    path_prefix: Option<String>,
+    projection: cli::ContextProjectionArgs,
+) -> context::ContextOverviewOptions {
+    context::ContextOverviewOptions {
+        kinds,
+        path_prefix,
+        fields: projection.fields,
+        limit: projection.page.limit.unwrap_or(DEFAULT_CONTEXT_PAGE_LIMIT),
+        cursor: projection.page.cursor,
+        budget_bytes: projection
+            .page
+            .budget_bytes
+            .unwrap_or(DEFAULT_CONTEXT_BUDGET_BYTES),
+    }
+}
+
+fn context_query_options(
+    kinds: Vec<String>,
+    path_prefix: Option<String>,
+    projection: cli::ContextProjectionArgs,
+    include_path: bool,
+    include_symbols: bool,
+    include_content: bool,
+) -> context::ContextQueryOptions {
+    context::ContextQueryOptions {
+        kinds,
+        path_prefix,
+        fields: projection.fields,
+        include_path,
+        include_symbols,
+        include_content,
+        limit: projection.page.limit.unwrap_or(DEFAULT_CONTEXT_PAGE_LIMIT),
+        cursor: projection.page.cursor,
+        budget_bytes: projection
+            .page
+            .budget_bytes
+            .unwrap_or(DEFAULT_CONTEXT_BUDGET_BYTES),
+    }
+}
+
+fn context_text_options(projection: cli::ContextProjectionArgs) -> context::ContextTextOptions {
+    context::ContextTextOptions {
+        fields: projection.fields,
+        limit: projection.page.limit.unwrap_or(DEFAULT_CONTEXT_PAGE_LIMIT),
+        cursor: projection.page.cursor,
+        budget_bytes: projection
+            .page
+            .budget_bytes
+            .unwrap_or(DEFAULT_CONTEXT_BUDGET_BYTES),
+    }
+}
 
 fn map_delivery_options(
     projection: cli::MapProjectionArgs,

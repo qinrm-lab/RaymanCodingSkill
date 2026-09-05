@@ -325,6 +325,56 @@ pub enum ContextAction {
     Status,
     /// 刷新索引（强哈希全部当前文件，并报告内容未变/变化）
     Refresh,
+    /// Budgeted file inventory from the verified context index.
+    Overview {
+        /// 只返回这些 context kind，逗号分隔或重复提供
+        #[arg(long = "kind", value_delimiter = ',')]
+        kinds: Vec<String>,
+        /// 只返回该 workspace-relative 路径或其后代
+        #[arg(long = "path-prefix")]
+        path_prefix: Option<String>,
+        #[command(flatten)]
+        projection: ContextProjectionArgs,
+    },
+    /// Budgeted search over indexed paths/symbols and optional verified content.
+    Query {
+        term: String,
+        /// 搜索 workspace-relative path；若未指定任何模式，默认启用 path 和 symbols
+        #[arg(long)]
+        path: bool,
+        /// 搜索索引中的 symbol 名称；若未指定任何模式，默认启用 path 和 symbols
+        #[arg(long)]
+        symbols: bool,
+        /// 搜索已验证 UTF-8 文件内容
+        #[arg(long)]
+        content: bool,
+        /// 只返回这些 context kind，逗号分隔或重复提供
+        #[arg(long = "kind", value_delimiter = ',')]
+        kinds: Vec<String>,
+        /// 只返回该 workspace-relative 路径或其后代
+        #[arg(long = "path-prefix")]
+        path_prefix: Option<String>,
+        #[command(flatten)]
+        projection: ContextProjectionArgs,
+    },
+    /// Return a verified UTF-8 line range from one indexed file.
+    Excerpt {
+        path: String,
+        /// One-based inclusive start line.
+        #[arg(long)]
+        start: usize,
+        /// One-based inclusive end line.
+        #[arg(long)]
+        end: usize,
+        #[command(flatten)]
+        projection: ContextProjectionArgs,
+    },
+    /// Return complete verified UTF-8 text for indexed files.
+    Pack {
+        paths: Vec<String>,
+        #[command(flatten)]
+        projection: ContextProjectionArgs,
+    },
     #[command(name = "os", hide = true)]
     LegacyOs {
         #[arg(allow_hyphen_values = true, trailing_var_arg = true)]
@@ -335,6 +385,15 @@ pub enum ContextAction {
         #[arg(allow_hyphen_values = true, trailing_var_arg = true)]
         args: Vec<String>,
     },
+}
+
+#[derive(Args, Debug, Clone, Default)]
+pub struct ContextProjectionArgs {
+    /// 只保留这些可选 attributes 字段，逗号分隔或重复提供
+    #[arg(long, value_delimiter = ',')]
+    pub fields: Vec<String>,
+    #[command(flatten)]
+    pub page: ContextPageArgs,
 }
 
 #[derive(Args)]
