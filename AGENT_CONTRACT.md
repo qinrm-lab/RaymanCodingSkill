@@ -23,6 +23,11 @@ contract.
 - Treat `rayman` as the shared deterministic workflow CLI. Before a
   non-trivial source change, inspect the workspace; after a change, run the
   relevant project checks and report their actual result.
+- Before any modification, state the evidence-backed root cause, intended
+  scope, and validation route. Land changes only after the narrowest practical
+  isolated simulation, dry run, or generated-output check has passed; if no
+  pre-landing simulation is available, record that limit and keep the change
+  uncommitted until focused validation is green.
 - A successful build only creates an artifact. Do not describe it as an
   installed or released CLI unless the supported installer and identity checks
   have completed.
@@ -59,6 +64,10 @@ contract.
 - Use `--must-proof KIND::TEXT` for atomic mandatory evidence and split
   compound claims. A typed requirement accepts only a matching validation
   command.
+- When the user requires phased delivery, each phase must use a separate
+  baseline-bound Goal, plan, validation, local commit, clean-tree proof, and
+  `finish --goal <id>` result. Do not start the next phase from stale receipts,
+  older checkpoints, or a dirty worktree.
 - Start release transfer with `goal handoff start --from-goal <id> --commit
   <sha>`. Do not hand off an uncommitted, dirty, authority-less, or
   source-stale implementation.
