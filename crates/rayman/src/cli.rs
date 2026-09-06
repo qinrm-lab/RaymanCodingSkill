@@ -467,7 +467,10 @@ pub enum MapAction {
         projection: MapProjectionArgs,
     },
     /// 查看 Cargo package / path-dependency 拓扑
-    Topology,
+    Topology {
+        #[command(flatten)]
+        projection: MapProjectionArgs,
+    },
     /// 分析某个文件变更会影响的依赖方、测试和建议验证命令
     Impact {
         path: String,
@@ -1068,7 +1071,7 @@ mod tests {
         let cli = Cli::try_parse_from(["rayman", "map", "topology"]).unwrap();
         match cli.command {
             Command::Map(MapCmd {
-                action: MapAction::Topology,
+                action: MapAction::Topology { .. },
             }) => {}
             _ => panic!("unexpected command"),
         }

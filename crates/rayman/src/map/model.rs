@@ -24,8 +24,13 @@ pub const MAP_DELIVERY_FIELDS: &[&str] = &[
     "module",
     "package",
     "manifest_path",
+    "root_path",
     "direction",
     "depth",
+    "from_package",
+    "from_root_path",
+    "to_package",
+    "to_root_path",
     "from_path",
     "to_path",
     "dependency_name",
@@ -281,6 +286,77 @@ fn traversal_records(
             ))
         })
         .collect()
+}
+
+pub fn topology_delivery(
+    index: &ContextIndex,
+    raw_index_sha256: &str,
+    map: &ProjectMap,
+    options: MapDeliveryOptions,
+) -> Result<ContextDeliveryV1> {
+    let options = normalize_delivery_options(map, options)?;
+    let report = super::topology_report(map);
+    let mut records = Vec::new();
+    for package in &report.packages {
+        records.push(delivery_record(
+            index,
+            &package.manifest_path,
+            None,
+            "Cargo package manifest",
+            "project_map_topology",
+            report.provenance.clone(),
+            delivery_attributes(
+                json!({
+                    "record_type":"package",
+                    "name":package.name,
+                    "package":package.name,
+                    "root_path":package.root_path,
+                    "manifest_path":package.manifest_path,
+                    "workspace_member":package.workspace_member,
+                    "source_files":package.source_files,
+                    "test_files":package.test_files,
+                    "provenance":report.provenance,
+                }),
+                &options.fields,
+            )?,
+        ));
+    }
+    for dependency in &report.package_dependencies {
+        records.push(delivery_record(
+            index,
+            &dependency.manifest_path,
+            None,
+            "package dependency edge",
+            "project_map_package_dependency",
+            dependency.evidence.clone(),
+            delivery_attributes(
+                json!({
+                    "record_type":"package_dependency",
+                    "direction":"dependency",
+                    "from_package":dependency.from_package,
+                    "from_root_path":dependency.from_root_path,
+                    "to_package":dependency.to_package,
+                    "to_root_path":dependency.to_root_path,
+                    "dependency_name":dependency.dependency_name,
+                    "kind":dependency.kind,
+                    "manifest_path":dependency.manifest_path,
+                    "evidence":dependency.evidence,
+                    "package":dependency.from_package,
+                    "provenance":report.provenance,
+                }),
+                &options.fields,
+            )?,
+        ));
+    }
+    finish_map_delivery(
+        index,
+        raw_index_sha256,
+        map,
+        options.clone(),
+        json!({"command":"map topology","options":options}),
+        "topology:context-record-canonical-json-asc:v1",
+        records,
+    )
 }
 
 pub fn symbol_delivery(

@@ -726,9 +726,20 @@ fn run_map(root: &std::path::Path, json: bool, cmd: MapCmd) -> Result<()> {
                 print_symbol_report(&report);
             }
         }
-        MapAction::Topology => {
+        MapAction::Topology { projection } => {
             let report = map::topology_report(&project_map);
-            if json {
+            if projection.requested() {
+                emit_context_delivery(map::topology_delivery(
+                    verified_index
+                        .as_ref()
+                        .expect("read-only map has verified index"),
+                    raw_index_sha256
+                        .as_deref()
+                        .expect("read-only map has raw index identity"),
+                    &project_map,
+                    map_delivery_options(projection, None, None, None),
+                )?)?;
+            } else if json {
                 print(&serde_json::to_value(&report)?);
             } else {
                 print_topology_report(&report);

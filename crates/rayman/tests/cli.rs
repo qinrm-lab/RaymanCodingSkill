@@ -9099,7 +9099,7 @@ fn budgeted_map_queries_scope_fields_depth_and_cursor_drift_fail_closed() {
     write(
         root,
         "Cargo.toml",
-        "[package]\nname = \"budget-map\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        "[package]\nname = \"budget-map\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nbudget-dep = { path = \"crates/budget-dep\" }\n\n[workspace]\nmembers = [\"crates/budget-dep\"]\nresolver = \"3\"\n",
     );
     write(
         root,
@@ -9114,13 +9114,47 @@ fn budgeted_map_queries_scope_fields_depth_and_cursor_drift_fail_closed() {
     write(root, "src/deep.rs", "pub fn value() -> i32 { 1 }\n");
     write(
         root,
+        "crates/budget-dep/Cargo.toml",
+        "[package]\nname = \"budget-dep\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(
+        root,
+        "crates/budget-dep/src/lib.rs",
+        "pub fn dep_value() -> i32 { 1 }\n",
+    );
+    write(
+        root,
         "tests/api.rs",
         "#[test]\nfn alpha_works() { assert_eq!(budget_map::alpha(), 1); }\n",
     );
+    generate_lockfile(root);
     run_json(root, &["context", "refresh"]);
 
     let legacy = run_json(root, &["map", "symbol", "alpha"]);
     assert!(legacy["matches"].is_array());
+    let legacy_topology = run_json(root, &["map", "topology"]);
+    assert!(legacy_topology.get("schema").is_none());
+    assert!(legacy_topology["packages"].is_array());
+    assert!(
+        legacy_topology["packages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|package| package["name"] == "budget-map" && package["root_path"] == "."),
+        "legacy_topology={legacy_topology}"
+    );
+    assert!(
+        legacy_topology["package_dependencies"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|dependency| {
+                dependency["from_package"] == "budget-map"
+                    && dependency["to_package"] == "budget-dep"
+                    && dependency["dependency_name"] == "budget-dep"
+            }),
+        "legacy_topology={legacy_topology}"
+    );
     let before = state_snapshot(root);
     let exact = run(
         root,
@@ -9266,11 +9300,137 @@ fn budgeted_map_queries_scope_fields_depth_and_cursor_drift_fail_closed() {
         rayman::context::context_delivery_identity(&"plan:context-record-canonical-json-asc:v1")
             .unwrap()
     );
+    let topology_fields = "record_type,name,package,root_path,manifest_path,workspace_member,source_files,test_files,from_package,from_root_path,to_package,to_root_path,dependency_name,kind,evidence";
+    let topology_page = run(
+        root,
+        &[
+            "--format",
+            "json",
+            "map",
+            "topology",
+            "--fields",
+            topology_fields,
+            "--limit",
+            "1",
+            "--budget-bytes",
+            "8192",
+        ],
+    );
+    assert_eq!(topology_page.status, 0, "stderr={}", topology_page.stderr);
+    assert!(!topology_page.stdout.ends_with('\n'));
+    let topology_page_json: Value = serde_json::from_str(&topology_page.stdout).unwrap();
+    assert_eq!(topology_page_json["schema"], "rayman.context-delivery.v1");
+    assert_eq!(topology_page_json["authority"], "navigation_only");
+    assert!(topology_page_json["truncated"].as_bool().unwrap());
+    assert_eq!(topology_page_json["returned"], 1);
+    assert_eq!(
+        topology_page_json["sort_sha256"],
+        rayman::context::context_delivery_identity(
+            &"topology:context-record-canonical-json-asc:v1"
+        )
+        .unwrap()
+    );
+    assert_eq!(
+        topology_page.stdout.len() as u64,
+        topology_page_json["output_bytes"].as_u64().unwrap()
+    );
+    let topology_cursor = topology_page_json["next_cursor"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let topology = run_json(
+        root,
+        &[
+            "map",
+            "topology",
+            "--fields",
+            topology_fields,
+            "--cursor",
+            &topology_cursor,
+            "--limit",
+            "100",
+            "--budget-bytes",
+            "32768",
+        ],
+    );
+    assert_eq!(topology["offset"], 1);
+    let topology_records = topology["records"].as_array().unwrap();
+    assert!(
+        topology_records
+            .iter()
+            .any(
+                |record| record["record"]["attributes"]["record_type"] == "package"
+                    && record["record"]["attributes"]["package"] == "budget-dep"
+                    && record["record"]["attributes"]["manifest_path"]
+                        == "crates/budget-dep/Cargo.toml"
+            ),
+        "topology={topology}"
+    );
+    assert!(
+        topology_records.iter().any(|record| {
+            record["record"]["attributes"]["record_type"] == "package_dependency"
+                && record["record"]["attributes"]["from_package"] == "budget-map"
+                && record["record"]["attributes"]["to_package"] == "budget-dep"
+                && record["record"]["attributes"]["dependency_name"] == "budget-dep"
+                && record["record"]["attributes"]["kind"] == "normal"
+        }),
+        "topology={topology}"
+    );
+    for record in topology_records {
+        let attributes = record["record"]["attributes"].as_object().unwrap();
+        assert!(
+            attributes
+                .keys()
+                .all(|field| topology_fields.split(',').any(|allowed| allowed == field)),
+            "unexpected projected attributes={attributes:?}"
+        );
+    }
     assert_eq!(
         state_snapshot(root),
         before,
         "map queries must be read-only"
     );
+
+    let field_drift = run(
+        root,
+        &[
+            "--format",
+            "json",
+            "map",
+            "file",
+            "src/lib.rs",
+            "--max-depth",
+            "2",
+            "--fields",
+            "record_type,direction,depth",
+            "--cursor",
+            &cursor,
+            "--budget-bytes",
+            "8192",
+        ],
+    );
+    assert_ne!(field_drift.status, 0);
+    assert!(field_drift.stderr.contains("invalidated"));
+    let filter_drift = run(
+        root,
+        &[
+            "--format",
+            "json",
+            "map",
+            "file",
+            "src/lib.rs",
+            "--max-depth",
+            "1",
+            "--fields",
+            "record_type,direction,depth,name",
+            "--cursor",
+            &cursor,
+            "--budget-bytes",
+            "8192",
+        ],
+    );
+    assert_ne!(filter_drift.status, 0);
+    assert!(filter_drift.stderr.contains("invalidated"));
 
     let index_path = root.join(".RaymanCodingSkill/context/index.json");
     let index_value: Value = serde_json::from_slice(&std::fs::read(&index_path).unwrap()).unwrap();
@@ -9319,6 +9479,13 @@ fn budgeted_map_queries_scope_fields_depth_and_cursor_drift_fail_closed() {
     );
     assert_ne!(unknown.status, 0);
     assert!(unknown.stderr.contains("unknown map delivery field"));
+    let unknown_topology = run(root, &["map", "topology", "--fields", "unknown-field"]);
+    assert_ne!(unknown_topology.status, 0);
+    assert!(
+        unknown_topology
+            .stderr
+            .contains("unknown map delivery field")
+    );
     let unsafe_prefix = run(
         root,
         &["map", "symbol", "alpha", "--path-prefix", "../escape"],

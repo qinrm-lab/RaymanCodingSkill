@@ -143,13 +143,15 @@ or `--budget-bytes` selects the budgeted envelope. Same-field filter values are
 ORed, lifecycle and status are ANDed, and corrupt Goal members remain explicit
 unresolved records rather than disappearing.
 
-The legacy output shapes of `map symbol`, `map file`, `map impact`, and `map
-plan` likewise remain unchanged until a new navigation option is supplied.
+The legacy output shapes of `map symbol`, `map file`, `map topology`, `map
+impact`, and `map plan` likewise remain unchanged until a new navigation
+option is supplied.
 Budgeted symbol lookup supports `--exact`, `--path-prefix`, and `--package`;
-file supports `--max-depth`; impact and plan support path/package scoping and
-`--max-depth`. All four support `--fields`, `--limit`, `--cursor`, and
-`--budget-bytes`. Paths are normalized workspace-relative filters, unknown
-fields and packages fail closed, and graph depth is capped at 64. `--fields`
+file supports `--max-depth`; topology emits package and path-dependency records;
+impact and plan support path/package scoping and `--max-depth`. All five
+support `--fields`, `--limit`, `--cursor`, and `--budget-bytes`. Paths are
+normalized workspace-relative filters, unknown fields and packages fail closed,
+and graph depth is capped at 64. `--fields`
 projects only optional `attributes`; path, SHA-256, line range, selection
 reason, and provenance remain mandatory. A new navigation option defaults to
 100 records and 32768 bytes. JSON is emitted as the canonical compact document
@@ -404,7 +406,7 @@ rayman map refresh              # rebuild the project map from the current index
 rayman map summary              # project structure summary from the current index
 rayman map file <path> [--max-depth N] [--fields ...] [--limit N] [--cursor ...] [--budget-bytes N]
 rayman map symbol <name> [--exact] [--path-prefix <path>] [--package <name>] [--fields ...] [page options]
-rayman map topology             # Cargo package/path-dependency topology
+rayman map topology [--fields ...] [page options] # Cargo package/path-dependency topology
 rayman map impact <file> [--path-prefix <path>] [--package <name>] [--max-depth N] [page options]
 rayman map plan <paths...> [--check] [--path-prefix <path>] [--package <name>] [--max-depth N] [page options]
 rayman map quality [--profile standard|strict] [--check] # findings retain severity and report source roles

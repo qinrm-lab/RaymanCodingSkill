@@ -20,11 +20,11 @@
     ]
   },
   "revision": {
-    "generation": 14,
+    "generation": 15,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 13,
-      "sha256": "359169f8a9c1a58bfc0add1f045a61f3c99a269c91d7d1e9093d1b0a9aaac573"
+      "generation": 14,
+      "sha256": "cde4a770bc7be32de40350a12e354f6c423b7357c22adda0726533547d2df182"
     }
   },
   "tests": [
@@ -2311,13 +2311,32 @@
     },
     {
       "test_id": "TEST-RUST-BUDGETED-MAP-QUERIES-SCOPE-FIELDS-DEPTH-AND-CURS-CB3F7B826C94",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/tests/cli.rs::budgeted_map_queries_scope_fields_depth_and_cursor_drift_fail_closed",
       "role": "root_cargo",
       "path": "crates/rayman/tests/cli.rs",
       "selector_kind": "rust_test_fn",
       "selector": "budgeted_map_queries_scope_fields_depth_and_cursor_drift_fail_closed",
       "selector_sha256": "efbabbd2be5e136f8c8db40c7ef4fbb999f3cc5107eed2cb2363e786c8df66d9",
+      "cfg": "all",
+      "owner": null,
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Budgeted Map navigation coverage expanded to include topology delivery.",
+        "replaced_by": [
+          "TEST-RUST-BUDGETED-MAP-QUERIES-SCOPE-FIELDS-DEPTH-AND-CURS-CB3F7B826C94-R13"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-BUDGETED-MAP-QUERIES-SCOPE-FIELDS-DEPTH-AND-CURS-CB3F7B826C94-R13",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/tests/cli.rs::budgeted_map_queries_scope_fields_depth_and_cursor_drift_fail_closed",
+      "role": "root_cargo",
+      "path": "crates/rayman/tests/cli.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "budgeted_map_queries_scope_fields_depth_and_cursor_drift_fail_closed",
+      "selector_sha256": "01523e542b3bdf837ba04535077db41dd4f8cf858836f477582e04e8385b9f44",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -7686,13 +7705,32 @@
     },
     {
       "test_id": "TEST-RUST-PARSES-MAP-TOPOLOGY-BAF1F90FA493",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/cli.rs::parses_map_topology",
       "role": "root_cargo",
       "path": "crates/rayman/src/cli.rs",
       "selector_kind": "rust_test_fn",
       "selector": "parses_map_topology",
       "selector_sha256": "bcc891890c64c97e3101f65c21945b5918c1bec92cd7ccb6bc2ba6cab70ad8c8",
+      "cfg": "all",
+      "owner": null,
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Map topology CLI parsing bytes changed when projection options were added.",
+        "replaced_by": [
+          "TEST-RUST-PARSES-MAP-TOPOLOGY-BAF1F90FA493-R13"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-PARSES-MAP-TOPOLOGY-BAF1F90FA493-R13",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/cli.rs::parses_map_topology",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/cli.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "parses_map_topology",
+      "selector_sha256": "ffb7118d1fa0345d042efc2bfb47ea1090c8ce455580a77e5ce8e5988fd8973f",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -12995,9 +13033,24 @@
     },
     {
       "asset_id": "ASSET-FILE-R12-A47CDCF8FA23",
-      "status": "active",
+      "status": "retired",
       "path": "crates/rayman/tests/cli.rs",
       "sha256": "a47cdcf8fa2318595bffe944db9aa911c952f5cf29f83d02eea627b03833552e",
+      "kind": "dedicated_file",
+      "cleanup_policy": "delete_on_last_reference",
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Dedicated CLI integration bytes changed for budgeted topology Map navigation coverage.",
+        "replaced_by": [
+          "ASSET-FILE-R13-72D82EBD3834"
+        ]
+      }
+    },
+    {
+      "asset_id": "ASSET-FILE-R13-72D82EBD3834",
+      "status": "active",
+      "path": "crates/rayman/tests/cli.rs",
+      "sha256": "72d82ebd3834c03f6330bd78999b2858354455f8fd6ea0832f602dd90f2b79a9",
       "kind": "dedicated_file",
       "cleanup_policy": "delete_on_last_reference",
       "retirement": null
