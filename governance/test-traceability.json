@@ -5,11 +5,11 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 16,
+    "generation": 17,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 15,
-      "sha256": "6b04a46b8baef2eafb040ee1d37ede0a62222d2457d84418823db5660c1ab5a4"
+      "generation": 16,
+      "sha256": "e0e6a37e7c9526d9fa8017445b5ea72e8156db02f124dc0a1f4f8afc6ea317f5"
     }
   },
   "inventory": {
@@ -204,11 +204,27 @@
     },
     {
       "source_id": "SRC-CONTEXT-DELIVERY-V1-R13",
-      "status": "active",
+      "status": "retired",
       "kind": "internal_contract",
       "title": "Budgeted context delivery plus concrete Goal, Map, topology, and Context retrieval producers",
       "path": "README.md",
       "sha256": "e7c6aa8f5bd5047818a77b6c275e36961841a12eba0d89ff9252d2ace3695333",
+      "valid_until": "2027-03-06",
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Reviewed context-delivery source bytes advanced for Rayman 2.12.4 release identity.",
+        "replaced_by": [
+          "SRC-CONTEXT-DELIVERY-V1-R14"
+        ]
+      }
+    },
+    {
+      "source_id": "SRC-CONTEXT-DELIVERY-V1-R14",
+      "status": "active",
+      "kind": "internal_contract",
+      "title": "Budgeted context delivery plus concrete Goal, Map, topology, and Context retrieval producers",
+      "path": "README.md",
+      "sha256": "524197a8ede87e26d364c01473a42b84db53e7e091002336c2ae64f644e7b4be",
       "valid_until": "2027-03-06",
       "retirement": null
     },
@@ -2796,8 +2812,26 @@
     },
     {
       "link_id": "LINK-CONTEXT-DELIVERY-CURSOR-SOURCE-R13",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CONTEXT-DELIVERY-V1-R13",
+      "rule_id": "RULE-CONTEXT-DELIVERY-CURSOR",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-06",
+        "valid_until": "2027-03-06"
+      },
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Reviewed context-delivery source bytes advanced for Rayman 2.12.4 release identity.",
+        "replaced_by": [
+          "LINK-CONTEXT-DELIVERY-CURSOR-SOURCE-R14"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CONTEXT-DELIVERY-CURSOR-SOURCE-R14",
+      "status": "active",
+      "source_id": "SRC-CONTEXT-DELIVERY-V1-R14",
       "rule_id": "RULE-CONTEXT-DELIVERY-CURSOR",
       "relation": "defines",
       "review": {
@@ -2862,8 +2896,26 @@
     },
     {
       "link_id": "LINK-CONTEXT-DELIVERY-ENVELOPE-SOURCE-R13",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CONTEXT-DELIVERY-V1-R13",
+      "rule_id": "RULE-CONTEXT-DELIVERY-ENVELOPE",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-06",
+        "valid_until": "2027-03-06"
+      },
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Reviewed context-delivery source bytes advanced for Rayman 2.12.4 release identity.",
+        "replaced_by": [
+          "LINK-CONTEXT-DELIVERY-ENVELOPE-SOURCE-R14"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CONTEXT-DELIVERY-ENVELOPE-SOURCE-R14",
+      "status": "active",
+      "source_id": "SRC-CONTEXT-DELIVERY-V1-R14",
       "rule_id": "RULE-CONTEXT-DELIVERY-ENVELOPE",
       "relation": "defines",
       "review": {
@@ -2910,8 +2962,26 @@
     },
     {
       "link_id": "LINK-CONTEXT-DELIVERY-PRODUCER-SOURCE-R13",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CONTEXT-DELIVERY-V1-R13",
+      "rule_id": "RULE-CONTEXT-DELIVERY-PRODUCER",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-06",
+        "valid_until": "2027-03-06"
+      },
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Reviewed context-delivery source bytes advanced for Rayman 2.12.4 release identity.",
+        "replaced_by": [
+          "LINK-CONTEXT-DELIVERY-PRODUCER-SOURCE-R14"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CONTEXT-DELIVERY-PRODUCER-SOURCE-R14",
+      "status": "active",
+      "source_id": "SRC-CONTEXT-DELIVERY-V1-R14",
       "rule_id": "RULE-CONTEXT-DELIVERY-PRODUCER",
       "relation": "defines",
       "review": {
@@ -2976,8 +3046,26 @@
     },
     {
       "link_id": "LINK-CONTEXT-REFRESH-METRICS-SOURCE-R13",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CONTEXT-DELIVERY-V1-R13",
+      "rule_id": "RULE-CONTEXT-REFRESH-METRICS",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-06",
+        "valid_until": "2027-03-06"
+      },
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Reviewed context-delivery source bytes advanced for Rayman 2.12.4 release identity.",
+        "replaced_by": [
+          "LINK-CONTEXT-REFRESH-METRICS-SOURCE-R14"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CONTEXT-REFRESH-METRICS-SOURCE-R14",
+      "status": "active",
+      "source_id": "SRC-CONTEXT-DELIVERY-V1-R14",
       "rule_id": "RULE-CONTEXT-REFRESH-METRICS",
       "relation": "defines",
       "review": {
@@ -3006,8 +3094,26 @@
     },
     {
       "link_id": "LINK-CONTEXT-RETRIEVAL-BUDGETED-NAVIGATION-SOURCE-R13",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CONTEXT-DELIVERY-V1-R13",
+      "rule_id": "RULE-CONTEXT-RETRIEVAL-BUDGETED-NAVIGATION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-06",
+        "valid_until": "2027-03-06"
+      },
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Reviewed context-delivery source bytes advanced for Rayman 2.12.4 release identity.",
+        "replaced_by": [
+          "LINK-CONTEXT-RETRIEVAL-BUDGETED-NAVIGATION-SOURCE-R14"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CONTEXT-RETRIEVAL-BUDGETED-NAVIGATION-SOURCE-R14",
+      "status": "active",
+      "source_id": "SRC-CONTEXT-DELIVERY-V1-R14",
       "rule_id": "RULE-CONTEXT-RETRIEVAL-BUDGETED-NAVIGATION",
       "relation": "defines",
       "review": {
@@ -3306,8 +3412,26 @@
     },
     {
       "link_id": "LINK-GOAL-BUDGETED-NAVIGATION-SOURCE-R13",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CONTEXT-DELIVERY-V1-R13",
+      "rule_id": "RULE-GOAL-BUDGETED-NAVIGATION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-06",
+        "valid_until": "2027-03-06"
+      },
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Reviewed context-delivery source bytes advanced for Rayman 2.12.4 release identity.",
+        "replaced_by": [
+          "LINK-GOAL-BUDGETED-NAVIGATION-SOURCE-R14"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-GOAL-BUDGETED-NAVIGATION-SOURCE-R14",
+      "status": "active",
+      "source_id": "SRC-CONTEXT-DELIVERY-V1-R14",
       "rule_id": "RULE-GOAL-BUDGETED-NAVIGATION",
       "relation": "defines",
       "review": {
@@ -3354,8 +3478,26 @@
     },
     {
       "link_id": "LINK-MAP-BUDGETED-NAVIGATION-SOURCE-R13",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CONTEXT-DELIVERY-V1-R13",
+      "rule_id": "RULE-MAP-BUDGETED-NAVIGATION-R13",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-06",
+        "valid_until": "2027-03-06"
+      },
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Reviewed context-delivery source bytes advanced for Rayman 2.12.4 release identity.",
+        "replaced_by": [
+          "LINK-MAP-BUDGETED-NAVIGATION-SOURCE-R14"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-MAP-BUDGETED-NAVIGATION-SOURCE-R14",
+      "status": "active",
+      "source_id": "SRC-CONTEXT-DELIVERY-V1-R14",
       "rule_id": "RULE-MAP-BUDGETED-NAVIGATION-R13",
       "relation": "defines",
       "review": {
@@ -73543,7 +73685,7 @@
     },
     {
       "binding_id": "BIND-R14-R12-CONTEXT-RETRIEVAL-BUDGETED-NAVIGATION",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CONTEXT-RETRIEVAL-BUDGETED-NAVIGATION-SOURCE-R13"
       ],
@@ -73560,11 +73702,17 @@
         "valid_until": "2027-03-06"
       },
       "semantic_sha256": "b2e61a56d115cc57e49049d53b0b7537968d799afdc5f9bdb58f086f45e9a58a",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Semantic review renewed for Rayman 2.12.4 README source bytes.",
+        "replaced_by": [
+          "BIND-R15-R12-CONTEXT-RETRIEVAL-BUDGETED-NAVIGATION"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R14-R12-R10-CONTEXT-DELIVERY-CURSOR",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CONTEXT-DELIVERY-CURSOR-SOURCE-R13"
       ],
@@ -73582,11 +73730,17 @@
         "valid_until": "2027-03-06"
       },
       "semantic_sha256": "dfc630c5eae07deb197fcc785cafeaf2ecf9e682fff012b5e3a69dc62f32cdd0",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Semantic review renewed for Rayman 2.12.4 README source bytes.",
+        "replaced_by": [
+          "BIND-R15-R12-R10-CONTEXT-DELIVERY-CURSOR"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R14-R12-R10-CONTEXT-DELIVERY-ENVELOPE-NEGATIVE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CONTEXT-DELIVERY-ENVELOPE-SOURCE-R13"
       ],
@@ -73603,11 +73757,17 @@
         "valid_until": "2027-03-06"
       },
       "semantic_sha256": "ed0477f3162468fdfd7db1b8ffb1b492b53d8385fd219ca067fd8833096fb5ea",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Semantic review renewed for Rayman 2.12.4 README source bytes.",
+        "replaced_by": [
+          "BIND-R15-R12-R10-CONTEXT-DELIVERY-ENVELOPE-NEGATIVE"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R14-R12-R10-CONTEXT-DELIVERY-ENVELOPE-POSITIVE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CONTEXT-DELIVERY-ENVELOPE-SOURCE-R13"
       ],
@@ -73624,11 +73784,17 @@
         "valid_until": "2027-03-06"
       },
       "semantic_sha256": "1d1c3446d12f1c2b1a6b4f4070e95a8926bf5aa19ad25677be0c76a284212f71",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Semantic review renewed for Rayman 2.12.4 README source bytes.",
+        "replaced_by": [
+          "BIND-R15-R12-R10-CONTEXT-DELIVERY-ENVELOPE-POSITIVE"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R14-R12-R10-CONTEXT-DELIVERY-PRODUCER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CONTEXT-DELIVERY-PRODUCER-SOURCE-R13"
       ],
@@ -73646,11 +73812,17 @@
         "valid_until": "2027-03-06"
       },
       "semantic_sha256": "54e3bdcaba1369bd516b59d73ab169b1c19006ebb5de7b06efd6fc628e815f66",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Semantic review renewed for Rayman 2.12.4 README source bytes.",
+        "replaced_by": [
+          "BIND-R15-R12-R10-CONTEXT-DELIVERY-PRODUCER"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R14-R12-R10-CONTEXT-DELIVERY-UNRESOLVED-PAGING",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CONTEXT-DELIVERY-ENVELOPE-SOURCE-R13"
       ],
@@ -73667,11 +73839,17 @@
         "valid_until": "2027-03-06"
       },
       "semantic_sha256": "e35688802b2d73eeacf6c0f55adf75d747142e21f4940f7be417c3b85c2d7814",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Semantic review renewed for Rayman 2.12.4 README source bytes.",
+        "replaced_by": [
+          "BIND-R15-R12-R10-CONTEXT-DELIVERY-UNRESOLVED-PAGING"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R14-R12-R10-CONTEXT-REFRESH-CACHE-VALIDATION",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CONTEXT-REFRESH-METRICS-SOURCE-R13"
       ],
@@ -73688,11 +73866,17 @@
         "valid_until": "2027-03-06"
       },
       "semantic_sha256": "1ebc24ed2dd8a667265c2e9786496b6d07a595ea01f5d2b01454279adf99106a",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Semantic review renewed for Rayman 2.12.4 README source bytes.",
+        "replaced_by": [
+          "BIND-R15-R12-R10-CONTEXT-REFRESH-CACHE-VALIDATION"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R14-R12-R10-CONTEXT-REFRESH-INVALID-CACHE-PRESERVATION",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CONTEXT-REFRESH-METRICS-SOURCE-R13"
       ],
@@ -73709,11 +73893,17 @@
         "valid_until": "2027-03-06"
       },
       "semantic_sha256": "89449582c3393ea75fe228b6bf2943affa42e8cf92446e3f7a124bb41cd6ebd9",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Semantic review renewed for Rayman 2.12.4 README source bytes.",
+        "replaced_by": [
+          "BIND-R15-R12-R10-CONTEXT-REFRESH-INVALID-CACHE-PRESERVATION"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R14-R12-R10-CONTEXT-REFRESH-METRICS-TEXT",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CONTEXT-REFRESH-METRICS-SOURCE-R13"
       ],
@@ -73730,11 +73920,17 @@
         "valid_until": "2027-03-06"
       },
       "semantic_sha256": "5271879cf242293a0df13d566444489148369ece7edfe244e455990b43af504b",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Semantic review renewed for Rayman 2.12.4 README source bytes.",
+        "replaced_by": [
+          "BIND-R15-R12-R10-CONTEXT-REFRESH-METRICS-TEXT"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R14-R12-R10-CONTEXT-REFRESH-METRICS-UNIT",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CONTEXT-REFRESH-METRICS-SOURCE-R13"
       ],
@@ -73751,11 +73947,17 @@
         "valid_until": "2027-03-06"
       },
       "semantic_sha256": "d7523446bca8887e37d881827c51b8659f7d1408782954e855b9cf29beef5f38",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Semantic review renewed for Rayman 2.12.4 README source bytes.",
+        "replaced_by": [
+          "BIND-R15-R12-R10-CONTEXT-REFRESH-METRICS-UNIT"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R14-R12-R10-CONTEXT-REFRESH-TERMINAL-CAPTURE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CONTEXT-REFRESH-METRICS-SOURCE-R13"
       ],
@@ -73772,7 +73974,13 @@
         "valid_until": "2027-03-06"
       },
       "semantic_sha256": "c1287c0cb99b760bac6e9f1f98e53bc1e9727716c6526489335cbdadba0180b7",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Semantic review renewed for Rayman 2.12.4 README source bytes.",
+        "replaced_by": [
+          "BIND-R15-R12-R10-CONTEXT-REFRESH-TERMINAL-CAPTURE"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R14-R12-R11-CLI-CASE-EB82442BBB15",
@@ -73797,7 +74005,7 @@
     },
     {
       "binding_id": "BIND-R14-R12-R11-R10-CONTEXT-REFRESH-METRICS-CLI",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CONTEXT-REFRESH-METRICS-SOURCE-R13"
       ],
@@ -73814,11 +74022,17 @@
         "valid_until": "2027-03-06"
       },
       "semantic_sha256": "8eb560f9e4be2f8a97d769113a54fd78fd004da7a43f6b81f47e44e690702660",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Semantic review renewed for Rayman 2.12.4 README source bytes.",
+        "replaced_by": [
+          "BIND-R15-R12-R11-R10-CONTEXT-REFRESH-METRICS-CLI"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R14-R12-R11-R10-GOAL-BUDGETED-NAVIGATION",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GOAL-BUDGETED-NAVIGATION-SOURCE-R13"
       ],
@@ -73835,11 +74049,17 @@
         "valid_until": "2027-03-06"
       },
       "semantic_sha256": "64f23c561ec198869d1224184430c023aae57b60b098c0967ea3a8c604fff299",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Semantic review renewed for Rayman 2.12.4 README source bytes.",
+        "replaced_by": [
+          "BIND-R15-R12-R11-R10-GOAL-BUDGETED-NAVIGATION"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R14-R12-R11-R10-MAP-BUDGETED-NAVIGATION",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-MAP-BUDGETED-NAVIGATION-SOURCE-R13"
       ],
@@ -73856,7 +74076,13 @@
         "valid_until": "2027-03-06"
       },
       "semantic_sha256": "a40ba420c64bd3abcdf9a8428f7d05ce601e200c14b387271ab141da7f60ae66",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-06",
+        "reason": "Semantic review renewed for Rayman 2.12.4 README source bytes.",
+        "replaced_by": [
+          "BIND-R15-R12-R11-R10-MAP-BUDGETED-NAVIGATION"
+        ]
+      }
     },
     {
       "binding_id": "BIND-R14-R12-R11-R10-R9-CLI-CASE-01199B5D819FDD07-R3",
@@ -76481,6 +76707,302 @@
         "valid_until": "2027-03-06"
       },
       "semantic_sha256": "da62d0d0e62d27b74e7c16bff51673ed43344d5f4ec176127e654686fb61f86f",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R15-R12-CONTEXT-RETRIEVAL-BUDGETED-NAVIGATION",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CONTEXT-RETRIEVAL-BUDGETED-NAVIGATION-SOURCE-R14"
+      ],
+      "test_ids": [
+        "TEST-RUST-BUDGETED-CONTEXT-RETRIEVAL-COMMANDS-ARE-NAVIGATI-3528B287478C"
+      ],
+      "rule_id": "RULE-CONTEXT-RETRIEVAL-BUDGETED-NAVIGATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-06",
+        "valid_until": "2027-03-06"
+      },
+      "semantic_sha256": "1296d2b4f3da54dbf568ef435b66b974249e05aad284a741d9f05587b2576a5f",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R15-R12-R10-CONTEXT-DELIVERY-CURSOR",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CONTEXT-DELIVERY-CURSOR-SOURCE-R14"
+      ],
+      "test_ids": [
+        "TEST-RUST-CONTEXT-DELIVERY-CURSOR-INVALIDATES-SCHEMA-SNAPS-ACA2F9FFE66F"
+      ],
+      "rule_id": "RULE-CONTEXT-DELIVERY-CURSOR",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "behavioral_positive",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-06",
+        "valid_until": "2027-03-06"
+      },
+      "semantic_sha256": "78d86cc16e4c82f2346de3ea7eaf8c95665f27d99778b6c057fb5165071f1ca8",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R15-R12-R10-CONTEXT-DELIVERY-ENVELOPE-NEGATIVE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CONTEXT-DELIVERY-ENVELOPE-SOURCE-R14"
+      ],
+      "test_ids": [
+        "TEST-RUST-CONTEXT-DELIVERY-REJECTS-SILENT-TRUNCATION-AND-B-390CFF488489"
+      ],
+      "rule_id": "RULE-CONTEXT-DELIVERY-ENVELOPE",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-06",
+        "valid_until": "2027-03-06"
+      },
+      "semantic_sha256": "4dbc1364490aaf3533645563bb5b644c32c926efcd339a7f3588855952250182",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R15-R12-R10-CONTEXT-DELIVERY-ENVELOPE-POSITIVE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CONTEXT-DELIVERY-ENVELOPE-SOURCE-R14"
+      ],
+      "test_ids": [
+        "TEST-RUST-CONTEXT-DELIVERY-V1-SERIALIZES-EXACT-UTF8-BUDGET-E2E7B049374C"
+      ],
+      "rule_id": "RULE-CONTEXT-DELIVERY-ENVELOPE",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "behavioral_positive"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-06",
+        "valid_until": "2027-03-06"
+      },
+      "semantic_sha256": "9cde142e3a83887efcd211b32fdaacd36cfb4db2ef03d06570f54dadf397b955",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R15-R12-R10-CONTEXT-DELIVERY-PRODUCER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CONTEXT-DELIVERY-PRODUCER-SOURCE-R14"
+      ],
+      "test_ids": [
+        "TEST-RUST-CONTEXT-DELIVERY-PAGE-BUILDER-ENFORCES-COMPLETE-BDAAED16BC59"
+      ],
+      "rule_id": "RULE-CONTEXT-DELIVERY-PRODUCER",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "behavioral_positive",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-06",
+        "valid_until": "2027-03-06"
+      },
+      "semantic_sha256": "61b6a01b3460f64a78c12a8c40539c2e730f1128fd5d8633d3a981f3de5b0cb6",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R15-R12-R10-CONTEXT-DELIVERY-UNRESOLVED-PAGING",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CONTEXT-DELIVERY-ENVELOPE-SOURCE-R14"
+      ],
+      "test_ids": [
+        "TEST-RUST-CONTEXT-DELIVERY-PAGES-UNRESOLVED-RECORDS-INSIDE-DD7BFA50FCF9"
+      ],
+      "rule_id": "RULE-CONTEXT-DELIVERY-ENVELOPE",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "behavioral_positive"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-06",
+        "valid_until": "2027-03-06"
+      },
+      "semantic_sha256": "d05e160c67a931ff4ad5ff09d34f4bdfe6b7023b63b829e659230e4035f99ee7",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R15-R12-R10-CONTEXT-REFRESH-CACHE-VALIDATION",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CONTEXT-REFRESH-METRICS-SOURCE-R14"
+      ],
+      "test_ids": [
+        "TEST-RUST-COMPATIBLE-CACHE-VALIDATION-REJECTS-SEMANTIC-COR-8F79F991B0C6"
+      ],
+      "rule_id": "RULE-CONTEXT-REFRESH-METRICS",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-06",
+        "valid_until": "2027-03-06"
+      },
+      "semantic_sha256": "4ee4f1bd24f926fe387d316354fa98f0b6ee21a2a74b1cf692734241b5bf62b9",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R15-R12-R10-CONTEXT-REFRESH-INVALID-CACHE-PRESERVATION",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CONTEXT-REFRESH-METRICS-SOURCE-R14"
+      ],
+      "test_ids": [
+        "TEST-RUST-REFRESH-ENTRYPOINTS-PRESERVE-A-SEMANTICALLY-INVA-26EFE8BAAB11"
+      ],
+      "rule_id": "RULE-CONTEXT-REFRESH-METRICS",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-06",
+        "valid_until": "2027-03-06"
+      },
+      "semantic_sha256": "4cc4434a5ed0590bbda036f9f5c9a13c89beb7982bc1d32304de0a37f14c4ade",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R15-R12-R10-CONTEXT-REFRESH-METRICS-TEXT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CONTEXT-REFRESH-METRICS-SOURCE-R14"
+      ],
+      "test_ids": [
+        "TEST-RUST-CONTEXT-REFRESH-TEXT-LOCALIZES-HONEST-HASH-METRI-C7B3BAF209CB"
+      ],
+      "rule_id": "RULE-CONTEXT-REFRESH-METRICS",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "structural"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-06",
+        "valid_until": "2027-03-06"
+      },
+      "semantic_sha256": "94248a0d4e2d7caf18040b0f7e7a828bb40432afc3586cf03a7118abc1d20a96",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R15-R12-R10-CONTEXT-REFRESH-METRICS-UNIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CONTEXT-REFRESH-METRICS-SOURCE-R14"
+      ],
+      "test_ids": [
+        "TEST-RUST-REFRESH-HASHES-EVERY-FILE-AND-REPORTS-CONTENT-DE-69057ACD4D48"
+      ],
+      "rule_id": "RULE-CONTEXT-REFRESH-METRICS",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "behavioral_positive"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-06",
+        "valid_until": "2027-03-06"
+      },
+      "semantic_sha256": "6d37015422e0d317c84fb73cb58156bd720e249228ebb9f61b15309bfc332713",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R15-R12-R10-CONTEXT-REFRESH-TERMINAL-CAPTURE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CONTEXT-REFRESH-METRICS-SOURCE-R14"
+      ],
+      "test_ids": [
+        "TEST-RUST-REFRESH-REJECTS-SAME-STAT-DRIFT-BETWEEN-STRONG-C-B2D71848018F"
+      ],
+      "rule_id": "RULE-CONTEXT-REFRESH-METRICS",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-06",
+        "valid_until": "2027-03-06"
+      },
+      "semantic_sha256": "dc5a6e24edf3b014aafe5b869fd2bd5773854a732771bb2420583fd7935fcc11",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R15-R12-R11-R10-CONTEXT-REFRESH-METRICS-CLI",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CONTEXT-REFRESH-METRICS-SOURCE-R14"
+      ],
+      "test_ids": [
+        "TEST-RUST-CONTEXT-REFRESH-REPORTS-FULL-HASHING-AND-LEGACY-76AF9A296F56"
+      ],
+      "rule_id": "RULE-CONTEXT-REFRESH-METRICS",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-06",
+        "valid_until": "2027-03-06"
+      },
+      "semantic_sha256": "e9d9d4ac0cd9b7d86cd06f33b0250a79c58a15319a5ed2c39950e4ab97087342",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R15-R12-R11-R10-GOAL-BUDGETED-NAVIGATION",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GOAL-BUDGETED-NAVIGATION-SOURCE-R14"
+      ],
+      "test_ids": [
+        "TEST-RUST-BUDGETED-GOAL-NAVIGATION-PAGES-WITHOUT-BASELINES-49B490791841"
+      ],
+      "rule_id": "RULE-GOAL-BUDGETED-NAVIGATION",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-06",
+        "valid_until": "2027-03-06"
+      },
+      "semantic_sha256": "48d50b0bff81d2f5fd5982ed2bc22686734e69ece2225185f6d259dadbc1624f",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R15-R12-R11-R10-MAP-BUDGETED-NAVIGATION",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-MAP-BUDGETED-NAVIGATION-SOURCE-R14"
+      ],
+      "test_ids": [
+        "TEST-RUST-BUDGETED-MAP-QUERIES-SCOPE-FIELDS-DEPTH-AND-CURS-CB3F7B826C94-R13"
+      ],
+      "rule_id": "RULE-MAP-BUDGETED-NAVIGATION-R13",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-06",
+        "valid_until": "2027-03-06"
+      },
+      "semantic_sha256": "26e15551f50d00926002a5e68ec2744defc3186f50654b317eb66a538fb320e4",
       "retirement": null
     },
     {

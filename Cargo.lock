@@ -595,7 +595,7 @@ dependencies = [
 
 [[package]]
 name = "rayman"
-version = "2.12.3"
+version = "2.12.4"
 dependencies = [
  "anyhow",
  "chrono",
@@ -979,7 +979,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "2.12.3"
+version = "2.12.4"
 
 [[package]]
 name = "zeroize"
