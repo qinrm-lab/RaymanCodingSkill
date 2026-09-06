@@ -24,6 +24,14 @@ host integration details.
 
 ## Standard workflow
 
+Before any source modification in this workflow, the acting agent must state
+the evidence-backed root cause, intended scope, and validation route. It may
+land changes in the primary worktree only after the narrowest practical
+isolated simulation, dry run, or generated-output check has passed; if no such
+pre-landing check is available, it must record that limit, keep the smallest
+reversible change uncommitted, and fail closed until focused validation and the
+phase authority gate are green.
+
 1. Confirm `workspace status`, then create a baseline-bound goal with
    `goal start` and run `prepare --goal <id>`. Prepare checks the current goal
    schema and reconciles the goal-start baseline delta against the effective
