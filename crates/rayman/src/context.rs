@@ -490,8 +490,7 @@ pub fn overview_delivery(
         records.push(entry_overview_record(entry, &options.fields)?);
     }
     finish_context_delivery(
-        index,
-        raw_index_sha256,
+        context_delivery_snapshot(index, raw_index_sha256)?,
         json!({"command":"context overview","options":options}),
         "context-overview:context-record-canonical-json-asc:v1",
         records,
@@ -559,8 +558,7 @@ pub fn query_delivery(
         }
     }
     finish_context_delivery(
-        index,
-        raw_index_sha256,
+        context_delivery_snapshot(index, raw_index_sha256)?,
         json!({"command":"context query","term":term,"options":options}),
         "context-query:context-record-canonical-json-asc:v1",
         records,
@@ -604,8 +602,7 @@ pub fn excerpt_delivery(
         )
     };
     finish_context_delivery(
-        index,
-        raw_index_sha256,
+        context_delivery_snapshot(index, raw_index_sha256)?,
         json!({"command":"context excerpt","path":path,"start":start,"end":end,"options":options}),
         "context-excerpt:context-record-canonical-json-asc:v1",
         vec![record],
@@ -646,8 +643,7 @@ pub fn pack_delivery(
         }
     }
     finish_context_delivery(
-        index,
-        raw_index_sha256,
+        context_delivery_snapshot(index, raw_index_sha256)?,
         json!({"command":"context pack","paths":paths,"options":options}),
         "context-pack:context-record-canonical-json-asc:v1",
         records,
@@ -1052,8 +1048,7 @@ fn unresolved_reference(
 }
 
 fn finish_context_delivery(
-    index: &ContextIndex,
-    raw_index_sha256: &str,
+    snapshot_sha256: String,
     query: Value,
     sort: &str,
     mut records: Vec<ContextDeliveryRecord>,
@@ -1072,7 +1067,7 @@ fn finish_context_delivery(
         .collect::<Vec<_>>();
     build_context_delivery_page(
         &records,
-        context_delivery_snapshot(index, raw_index_sha256)?,
+        snapshot_sha256,
         context_delivery_identity(&query)?,
         context_delivery_identity(&sort)?,
         cursor,
