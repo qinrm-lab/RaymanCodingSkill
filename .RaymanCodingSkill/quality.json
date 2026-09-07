@@ -191,6 +191,16 @@
       "path": "evals/tasks/large-repo-nav/fixture/src/util/strings.rs",
       "kind": "public_api_without_test_evidence",
       "reason": "This exact public helper is synthetic navigation fixture input; the eval grader validates it outside the fixture package."
+    },
+    {
+      "path": "crates/rayman/src/context.rs",
+      "kind": "large_file",
+      "reason": "Content-proven context indexing and budgeted delivery intentionally share the verified raw-index snapshot and path-contained read boundary. Same-stat drift, malformed cache, held-file identity, cursor binding, and overview/query/excerpt/pack integration tests exercise this shared hub; full workspace, MSRV and CLI coverage gates remain required. This exact-file exemption retains the size finding as information and grants no exemption to later files."
+    },
+    {
+      "path": "crates/rayman/src/goal/validation.rs",
+      "kind": "large_file",
+      "reason": "Validation command grammar, containment, typed-proof classification, scope relevance and test-output attestation form one fail-closed admission policy. Installation, Cargo/process/pytest isolation and receipt integrity are already delegated to focused child modules. Command-injection, selector narrowing, fake/no-op evidence, scope drift and cross-process authority tests plus full workspace, MSRV and coverage gates validate the shared policy together; the exact size finding remains visible as information."
     }
   ]
 }
