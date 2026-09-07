@@ -1,5 +1,5 @@
 {
-  "_comment": "Copy to backends.json (gitignored). Schema is strict: only base_url, model, wire, api_key_env, api_key, and max_tokens are accepted per backend. Remote endpoints must be HTTPS; plain HTTP is allowed only for localhost/loopback. Prefer one of the approved dedicated *_API_KEY environment variables. Inline api_key is rejected unless the operator also passes --unsafe-inline-api-key (and every real backend needs --unsafe-host-exec).",
+  "_comment": "Copy to backends.json (gitignored). Schema is strict: only base_url, model, wire, api_key_env, api_key, and optional max_tokens/max_output_tokens are accepted per backend. If omitted, no output cap is sent. Remote endpoints must be HTTPS; plain HTTP is allowed only for localhost/loopback. Prefer one of the approved dedicated *_API_KEY environment variables. Inline api_key is rejected unless the operator also passes --unsafe-inline-api-key (and every real backend needs --unsafe-host-exec).",
   "backends": {
     "deepseek": {
       "base_url": "https://api.deepseek.com/v1",

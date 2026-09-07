@@ -527,6 +527,13 @@ fn run_trial(
         rayman_invocations: 0,
         finished: false,
         error: None,
+        request_ids: Vec::new(),
+        response_ids: Vec::new(),
+        input_tokens: 0,
+        output_tokens: 0,
+        total_tokens: 0,
+        model_retries: 0,
+        latency_ms: 0,
     };
     let workspace = ctx
         .run_dir
@@ -578,6 +585,13 @@ fn run_trial(
     result.rayman_invocations = log.rayman_invocations;
     result.finished = log.finished;
     result.error = log.error;
+    result.request_ids = log.request_ids;
+    result.response_ids = log.response_ids;
+    result.input_tokens = log.input_tokens;
+    result.output_tokens = log.output_tokens;
+    result.total_tokens = log.total_tokens;
+    result.model_retries = log.model_retries;
+    result.latency_ms = log.latency_ms;
     // A wrapper can be created after the initial preflight. `run_shell` latches every rayman
     // command/wrapper it observes inside the trial workspace; the post-agent scan also catches a
     // wrapper written without a later shell call. Either way the control arm's availability is
@@ -1455,6 +1469,13 @@ mod tests {
             rayman_invocations: 0,
             finished: true,
             error: None,
+            request_ids: Vec::new(),
+            response_ids: Vec::new(),
+            input_tokens: 0,
+            output_tokens: 0,
+            total_tokens: 0,
+            model_retries: 0,
+            latency_ms: 0,
         };
         let graded = grade::GradeResult {
             outcome: GradeOutcome::InfrastructureError,

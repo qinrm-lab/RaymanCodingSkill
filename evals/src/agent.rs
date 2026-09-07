@@ -24,7 +24,7 @@ pub fn tool_defs() -> Value {
         {
             "name": "list_files",
             "description": "List all files in the workspace (relative paths).",
-            "input_schema": {"type": "object", "properties": {}}
+            "input_schema": {"type": "object", "properties": {}, "additionalProperties": false}
         },
         {
             "name": "read_file",
@@ -32,7 +32,8 @@ pub fn tool_defs() -> Value {
             "input_schema": {
                 "type": "object",
                 "properties": {"path": {"type": "string"}},
-                "required": ["path"]
+                "required": ["path"],
+                "additionalProperties": false
             }
         },
         {
@@ -41,7 +42,8 @@ pub fn tool_defs() -> Value {
             "input_schema": {
                 "type": "object",
                 "properties": {"path": {"type": "string"}, "content": {"type": "string"}},
-                "required": ["path", "content"]
+                "required": ["path", "content"],
+                "additionalProperties": false
             }
         },
         {
@@ -50,7 +52,8 @@ pub fn tool_defs() -> Value {
             "input_schema": {
                 "type": "object",
                 "properties": {"command": {"type": "string"}},
-                "required": ["command"]
+                "required": ["command"],
+                "additionalProperties": false
             }
         }
     ])
@@ -63,6 +66,17 @@ pub struct ToolCall {
     pub input: Value,
     /// arguments 解析失败时的原因（多为截断）；执行层直接把它作为错误 tool_result 回给模型。
     pub input_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ModelObservation {
+    pub request_id: Option<String>,
+    pub response_id: Option<String>,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub total_tokens: u64,
+    pub attempts: u32,
+    pub latency_ms: u64,
 }
 
 /// 后端响应被输出上限截断（stop_reason=max_tokens / finish_reason=length）：
@@ -84,6 +98,7 @@ pub struct Assistant {
     /// 原始 content 数组，直接作为 assistant 消息追加进对话。
     pub content: Value,
     pub tool_calls: Vec<ToolCall>,
+    pub observation: ModelObservation,
 }
 
 /// 可插拔模型后端。
@@ -111,6 +126,13 @@ pub struct AttemptLog {
     pub error: Option<String>,
     /// 用了几次 rayman 命令（用于观察技能是否真的被采纳）。
     pub rayman_invocations: usize,
+    pub request_ids: Vec<String>,
+    pub response_ids: Vec<String>,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub total_tokens: u64,
+    pub model_retries: u32,
+    pub latency_ms: u64,
 }
 
 fn system_prompt(cfg: &AgentConfig) -> String {
@@ -137,6 +159,13 @@ pub fn run_agent(model: &dyn Model, workspace: &Path, cfg: &AgentConfig) -> Atte
     let mut steps = 0usize;
     let mut tool_calls = 0usize;
     let mut rayman_invocations = 0usize;
+    let mut request_ids = Vec::new();
+    let mut response_ids = Vec::new();
+    let mut input_tokens = 0u64;
+    let mut output_tokens = 0u64;
+    let mut total_tokens = 0u64;
+    let mut model_retries = 0u32;
+    let mut latency_ms = 0u64;
 
     while steps < cfg.max_steps {
         steps += 1;
@@ -149,9 +178,28 @@ pub fn run_agent(model: &dyn Model, workspace: &Path, cfg: &AgentConfig) -> Atte
                     finished: false,
                     error: Some(format!("{error:#}")),
                     rayman_invocations,
+                    request_ids,
+                    response_ids,
+                    input_tokens,
+                    output_tokens,
+                    total_tokens,
+                    model_retries,
+                    latency_ms,
                 };
             }
         };
+        if let Some(id) = assistant.observation.request_id.clone() {
+            request_ids.push(id);
+        }
+        if let Some(id) = assistant.observation.response_id.clone() {
+            response_ids.push(id);
+        }
+        input_tokens = input_tokens.saturating_add(assistant.observation.input_tokens);
+        output_tokens = output_tokens.saturating_add(assistant.observation.output_tokens);
+        total_tokens = total_tokens.saturating_add(assistant.observation.total_tokens);
+        model_retries =
+            model_retries.saturating_add(assistant.observation.attempts.saturating_sub(1));
+        latency_ms = latency_ms.saturating_add(assistant.observation.latency_ms);
         if std::env::var_os("EVAL_DEBUG").is_some() {
             let names: Vec<&str> = assistant
                 .tool_calls
@@ -178,6 +226,37 @@ pub fn run_agent(model: &dyn Model, workspace: &Path, cfg: &AgentConfig) -> Atte
                 finished: true,
                 error: None,
                 rayman_invocations,
+                request_ids,
+                response_ids,
+                input_tokens,
+                output_tokens,
+                total_tokens,
+                model_retries,
+                latency_ms,
+            };
+        }
+
+        if assistant.tool_calls.len() > 1
+            && assistant
+                .tool_calls
+                .iter()
+                .any(|call| matches!(call.name.as_str(), "write_file" | "run"))
+        {
+            return AttemptLog {
+                steps,
+                tool_calls,
+                finished: false,
+                error: Some(
+                    "拒绝同一模型响应中的多个副作用工具调用；请关闭并行工具调用后重试".into(),
+                ),
+                rayman_invocations,
+                request_ids,
+                response_ids,
+                input_tokens,
+                output_tokens,
+                total_tokens,
+                model_retries,
+                latency_ms,
             };
         }
 
@@ -204,6 +283,13 @@ pub fn run_agent(model: &dyn Model, workspace: &Path, cfg: &AgentConfig) -> Atte
         finished: false,
         error: None,
         rayman_invocations,
+        request_ids,
+        response_ids,
+        input_tokens,
+        output_tokens,
+        total_tokens,
+        model_retries,
+        latency_ms,
     }
 }
 
@@ -279,6 +365,9 @@ fn exec_tool(workspace: &Path, call: &ToolCall, env: &EnvPolicy) -> (String, boo
             true,
         );
     }
+    if let Err(reason) = validate_tool_input(call) {
+        return (format!("工具参数无效: {reason}"), true);
+    }
     match call.name.as_str() {
         "list_files" => match list_files(workspace) {
             Ok(files) => (files, false),
@@ -309,6 +398,37 @@ fn exec_tool(workspace: &Path, call: &ToolCall, env: &EnvPolicy) -> (String, boo
         }
         other => (format!("未知工具: {other}"), true),
     }
+}
+
+fn validate_tool_input(call: &ToolCall) -> std::result::Result<(), String> {
+    let object = call
+        .input
+        .as_object()
+        .ok_or_else(|| "arguments 必须是 JSON object".to_string())?;
+    let allowed: &[&str] = match call.name.as_str() {
+        "list_files" => &[],
+        "read_file" => &["path"],
+        "write_file" => &["path", "content"],
+        "run" => &["command"],
+        other => return Err(format!("未知工具: {other}")),
+    };
+    if let Some(key) = object.keys().find(|key| !allowed.contains(&key.as_str())) {
+        return Err(format!("未知参数: {key}"));
+    }
+    for key in allowed {
+        if !object.contains_key(*key) {
+            return Err(format!("缺少必需参数: {key}"));
+        }
+        if !object[*key].is_string() {
+            return Err(format!("参数 {key} 必须是 string"));
+        }
+    }
+    if matches!(call.name.as_str(), "read_file" | "write_file" | "run")
+        && object[allowed[0]].as_str().is_some_and(str::is_empty)
+    {
+        return Err(format!("参数 {} 不能为空", allowed[0]));
+    }
+    Ok(())
 }
 
 fn str_arg<'a>(input: &'a Value, key: &str) -> &'a str {
@@ -587,11 +707,13 @@ impl Model for MockModel {
                 Ok(Assistant {
                     content: Value::Array(content),
                     tool_calls,
+                    observation: ModelObservation::default(),
                 })
             }
             None => Ok(Assistant {
                 content: json!([{"type": "text", "text": "done"}]),
                 tool_calls: Vec::new(),
+                observation: ModelObservation::default(),
             }),
         }
     }
@@ -632,6 +754,58 @@ mod tests {
             std::fs::read_to_string(workspace.join("hello.txt")).unwrap(),
             "hi"
         );
+    }
+
+    #[test]
+    fn tool_input_validation_rejects_missing_and_unknown_arguments() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = ToolCall {
+            id: "missing".into(),
+            name: "write_file".into(),
+            input: json!({"path": "x.txt"}),
+            input_error: None,
+        };
+        let (_, missing_error) = exec_tool(dir.path(), &missing, &EnvPolicy::default());
+        assert!(missing_error);
+        assert!(!dir.path().join("x.txt").exists());
+
+        let unknown = ToolCall {
+            id: "unknown".into(),
+            name: "read_file".into(),
+            input: json!({"path": "x.txt", "extra": true}),
+            input_error: None,
+        };
+        let (_, unknown_error) = exec_tool(dir.path(), &unknown, &EnvPolicy::default());
+        assert!(unknown_error);
+    }
+
+    #[test]
+    fn multiple_side_effect_calls_fail_closed_before_execution() {
+        let dir = tempfile::tempdir().unwrap();
+        let model = MockModel::new(
+            "mock",
+            vec![vec![
+                (
+                    "write_file".into(),
+                    json!({"path": "a.txt", "content": "a"}),
+                ),
+                (
+                    "write_file".into(),
+                    json!({"path": "b.txt", "content": "b"}),
+                ),
+            ]],
+        );
+        let cfg = AgentConfig {
+            system_base: "test".into(),
+            skill_text: None,
+            task_prompt: "do it".into(),
+            max_steps: MAX_STEPS,
+            env: EnvPolicy::default(),
+        };
+        let log = run_agent(&model, dir.path(), &cfg);
+        assert!(log.error.unwrap().contains("多个副作用工具调用"));
+        assert!(!dir.path().join("a.txt").exists());
+        assert!(!dir.path().join("b.txt").exists());
     }
 
     #[test]

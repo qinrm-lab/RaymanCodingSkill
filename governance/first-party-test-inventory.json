@@ -20,11 +20,11 @@
     ]
   },
   "revision": {
-    "generation": 16,
+    "generation": 17,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 15,
-      "sha256": "282ebf0ccda7aa1975c7ee0c999c98a73da45206eda6001d64fb7564066a73d4"
+      "generation": 16,
+      "sha256": "525c49675f9783f7e8e39ab9df8d176d4c9978da2d908ccf50cafc4312dc3964"
     }
   },
   "tests": [
@@ -1053,13 +1053,32 @@
     },
     {
       "test_id": "TEST-PS-SELFTEST-6209A42C1826-R3",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/check-update-freshness.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/check-update-freshness.ps1",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "selector_sha256": "c7c01cc9f819f521218e5fb76cb18f2a7c7d54eeca8f0e5b5d678c2a7cb9387c",
+      "cfg": "all",
+      "owner": "",
+      "retirement": {
+        "retired_at": "2026-09-07",
+        "reason": "Selector bytes changed to repair the pre-existing duplicate retired/replacement identity.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-6209A42C1826-R4"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-PS-SELFTEST-6209A42C1826-R4",
+      "status": "active",
+      "identity": "powershell::powershell_self_test::scripts/check-update-freshness.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/check-update-freshness.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "f7ea1333cbff284521005b83f493a74a0a78fe16406a87a7008a24c9c02cf312",
       "cfg": "all",
       "owner": "",
       "retirement": null
@@ -7108,6 +7127,19 @@
       "retirement": null
     },
     {
+      "test_id": "TEST-RUST-MAX-TOKENS-IS-OPTIONAL-AND-DOES-NOT-INVENT-A-LAR-EC42C3B6BF7A",
+      "status": "active",
+      "identity": "rust::eval_cargo::evals/src/openai.rs::max_tokens_is_optional_and_does_not_invent_a_large_default",
+      "role": "eval_cargo",
+      "path": "evals/src/openai.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "max_tokens_is_optional_and_does_not_invent_a_large_default",
+      "selector_sha256": "b520853b8fe5c0fe3128c1e51409caf42b656d75002ed567ce71d9fa2d196150",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
       "test_id": "TEST-RUST-MESSAGE-CATALOG-IS-COMPLETE-AND-PLACEHOLDER-COMP-8021D98EF291",
       "status": "active",
       "identity": "rust::root_cargo::crates/rayman/src/i18n.rs::message_catalog_is_complete_and_placeholder_compatible",
@@ -7220,6 +7252,19 @@
       "selector": "missing_windows_host_root_is_refused_without_path_based_bootstrap",
       "selector_sha256": "eadf37196bf19b0b85dc0453b01463900693470e328039b2be613dafded9a3fc",
       "cfg": "windows",
+      "owner": null,
+      "retirement": null
+    },
+    {
+      "test_id": "TEST-RUST-MULTIPLE-SIDE-EFFECT-CALLS-FAIL-CLOSED-BEFORE-EX-304A178DFDD1",
+      "status": "active",
+      "identity": "rust::eval_cargo::evals/src/agent.rs::multiple_side_effect_calls_fail_closed_before_execution",
+      "role": "eval_cargo",
+      "path": "evals/src/agent.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "multiple_side_effect_calls_fail_closed_before_execution",
+      "selector_sha256": "bd7bb10b3b9da84203ee7176de38988d4dd421071676350a5581350fe784487f",
+      "cfg": "all",
       "owner": null,
       "retirement": null
     },
@@ -9074,6 +9119,19 @@
       "retirement": null
     },
     {
+      "test_id": "TEST-RUST-READ-RESPONSES-REASSEMBLES-DELTA-ONLY-STREAM-F23A9E790104",
+      "status": "active",
+      "identity": "rust::eval_cargo::evals/src/openai.rs::read_responses_reassembles_delta_only_stream",
+      "role": "eval_cargo",
+      "path": "evals/src/openai.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "read_responses_reassembles_delta_only_stream",
+      "selector_sha256": "427700de6903f46ebef9c5e957ba8b337d0cbbf311d3f181e1afff40d97e9656",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
       "test_id": "TEST-RUST-READ-RESPONSES-REJECTS-INTERMEDIATE-SNAPSHOT-WIT-410AF5A35605",
       "status": "active",
       "identity": "rust::eval_cargo::evals/src/openai.rs::read_responses_rejects_intermediate_snapshot_without_completed",
@@ -9873,6 +9931,19 @@
       "retirement": null
     },
     {
+      "test_id": "TEST-RUST-RESPONSE-USAGE-IS-PRESERVED-FOR-OBSERVABILITY-EC716A81D070",
+      "status": "active",
+      "identity": "rust::eval_cargo::evals/src/openai.rs::response_usage_is_preserved_for_observability",
+      "role": "eval_cargo",
+      "path": "evals/src/openai.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "response_usage_is_preserved_for_observability",
+      "selector_sha256": "fc8e68d76609c9bd6d87ad3c08ab59b24703124932b14c13b000b7f23deceb31",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
       "test_id": "TEST-RUST-RESPONSES-HISTORY-AND-TOOLS-CONVERT-6C923CAC1EE1",
       "status": "active",
       "identity": "rust::eval_cargo::evals/src/openai.rs::responses_history_and_tools_convert",
@@ -9881,6 +9952,19 @@
       "selector_kind": "rust_test_fn",
       "selector": "responses_history_and_tools_convert",
       "selector_sha256": "6f6b0aeddde4096b88e1044bf4329563fe59604fecef4c7455a8c907784a3433",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
+      "test_id": "TEST-RUST-RESPONSES-HISTORY-PRESERVES-REASONING-ITEMS-031237E65863",
+      "status": "active",
+      "identity": "rust::eval_cargo::evals/src/openai.rs::responses_history_preserves_reasoning_items",
+      "role": "eval_cargo",
+      "path": "evals/src/openai.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "responses_history_preserves_reasoning_items",
+      "selector_sha256": "b6cbd3630f3d760ab21fbcd138b8cd8b9bb52512860cd3544b038231998797c0",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -10160,13 +10244,32 @@
     },
     {
       "test_id": "TEST-RUST-RUN-TRIAL-PRESERVES-GRADE-INFRASTRUCTURE-ERROR-W-8D79868A2645",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::eval_cargo::evals/src/main.rs::run_trial_preserves_grade_infrastructure_error_when_oracle_marker_is_absent",
       "role": "eval_cargo",
       "path": "evals/src/main.rs",
       "selector_kind": "rust_test_fn",
       "selector": "run_trial_preserves_grade_infrastructure_error_when_oracle_marker_is_absent",
       "selector_sha256": "ae05465c514e64f606b62449b6c6111ac1ea6182b736794153ff29d187f60756",
+      "cfg": "all",
+      "owner": null,
+      "retirement": {
+        "retired_at": "2026-09-07",
+        "reason": "Selector changed when the trial observation fields were added.",
+        "replaced_by": [
+          "TEST-RUST-RUN-TRIAL-PRESERVES-GRADE-INFRASTRUCTURE-ERROR-W-8D79868A2645-R2"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-RUN-TRIAL-PRESERVES-GRADE-INFRASTRUCTURE-ERROR-W-8D79868A2645-R2",
+      "status": "active",
+      "identity": "rust::eval_cargo::evals/src/main.rs::run_trial_preserves_grade_infrastructure_error_when_oracle_marker_is_absent",
+      "role": "eval_cargo",
+      "path": "evals/src/main.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "run_trial_preserves_grade_infrastructure_error_when_oracle_marker_is_absent",
+      "selector_sha256": "e5e77bc82b67c85618faf5cf12b3c14dd8d32640b659c9d1f3c4363fa64f4e02",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -11642,6 +11745,19 @@
       "selector_kind": "rust_test_fn",
       "selector": "tick_persists_failure_when_activation_is_broken",
       "selector_sha256": "7c885ea5287c0cd9465bbda1e6792d5fd7cbf7c62f92f8cdeb99473fd0edd348",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
+      "test_id": "TEST-RUST-TOOL-INPUT-VALIDATION-REJECTS-MISSING-AND-UNKNOW-027043EA0B2F",
+      "status": "active",
+      "identity": "rust::eval_cargo::evals/src/agent.rs::tool_input_validation_rejects_missing_and_unknown_arguments",
+      "role": "eval_cargo",
+      "path": "evals/src/agent.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "tool_input_validation_rejects_missing_and_unknown_arguments",
+      "selector_sha256": "c939e0ce0671202f49e20490b5e29285835b0ce7c62f4e49ab47c6c355229f3a",
       "cfg": "all",
       "owner": null,
       "retirement": null

@@ -186,6 +186,7 @@ function Get-VerifiedManifestAssetHashes {
 }
 
 function Invoke-SelfTest {
+    # Keep the self-test identity tied to the current reviewed implementation.
     $now = [DateTimeOffset]::Parse('2026-01-01T00:00:00Z')
     $fresh = [pscustomobject]@{
         version = '9.8.7'

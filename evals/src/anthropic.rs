@@ -9,7 +9,7 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 
-use crate::agent::{Assistant, Model, ToolCall, Truncated};
+use crate::agent::{Assistant, Model, ModelObservation, ToolCall, Truncated};
 
 /// 默认模型固定为这个精确 ID；不声称动态选择“最新”或“最强”模型。
 pub const DEFAULT_MODEL: &str = "claude-opus-4-8";
@@ -130,6 +130,7 @@ impl Model for AnthropicModel {
         Ok(Assistant {
             content,
             tool_calls,
+            observation: ModelObservation::default(),
         })
     }
 

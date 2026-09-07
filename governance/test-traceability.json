@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 19,
+    "generation": 20,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 18,
-      "sha256": "116c0db710c16c3708ba63344eb4d79c3a01d405545a1fd03df05022819a0f06"
+      "generation": 19,
+      "sha256": "45c8e713ece4a97abd09f12f8f0cf0a1bec0c471177c840bf3ac239e5beda16a"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "525c49675f9783f7e8e39ab9df8d176d4c9978da2d908ccf50cafc4312dc3964"
+    "sha256": "2f3e2218801081dfc7d2b6e36be376fd8b6db38b6191004a8a13979fdbca7d33"
   },
   "sources": [
     {
@@ -1372,11 +1372,33 @@
     },
     {
       "gate_id": "GATE-PS-CHECK-UPDATE-FRESHNESS-R3",
-      "status": "active",
+      "status": "retired",
       "kind": "powershell_self_test",
       "title": "PowerShell self-test: scripts/check-update-freshness.ps1",
       "path": "scripts/check-update-freshness.ps1",
       "sha256": "c7c01cc9f819f521218e5fb76cb18f2a7c7d54eeca8f0e5b5d678c2a7cb9387c",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "target_matrix": [
+        "windows",
+        "linux",
+        "other_unix"
+      ],
+      "retirement": {
+        "retired_at": "2026-09-07",
+        "reason": "Gate bytes changed in the reviewed current source.",
+        "replaced_by": [
+          "GATE-PS-CHECK-UPDATE-FRESHNESS-R4"
+        ]
+      }
+    },
+    {
+      "gate_id": "GATE-PS-CHECK-UPDATE-FRESHNESS-R4",
+      "status": "active",
+      "kind": "powershell_self_test",
+      "title": "PowerShell self-test: scripts/check-update-freshness.ps1",
+      "path": "scripts/check-update-freshness.ps1",
+      "sha256": "f7ea1333cbff284521005b83f493a74a0a78fe16406a87a7008a24c9c02cf312",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "target_matrix": [
@@ -37468,7 +37490,7 @@
     },
     {
       "binding_id": "BIND-CASE-90E6907AB7C5F37D-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-UPDATE-LIFECYCLE-SOURCE-R3"
       ],
@@ -37485,6 +37507,33 @@
         "valid_until": "2027-02-28"
       },
       "semantic_sha256": "f2c034eec565140cbe388c23b4b83584d9edf684a3aa12f59d92a72320b8975f",
+      "retirement": {
+        "retired_at": "2026-09-07",
+        "reason": "Selector bytes changed in the reviewed current source.",
+        "replaced_by": [
+          "BIND-CASE-90E6907AB7C5F37D-R3-R4-R5"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-90E6907AB7C5F37D-R3-R4-R5",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-UPDATE-LIFECYCLE-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6209A42C1826-R4"
+      ],
+      "rule_id": "RULE-REPO-UPDATE-LIFECYCLE",
+      "gate_id": "GATE-PS-CHECK-UPDATE-FRESHNESS-R4",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-07",
+        "valid_until": "2027-03-07"
+      },
+      "semantic_sha256": "8abb8bc1e75ae5f8266881a5f8271393f29fdd9bd1c23698245c031a6a7a6b84",
       "retirement": null
     },
     {
@@ -46896,7 +46945,7 @@
     },
     {
       "binding_id": "BIND-CASE-BC3EE952D4F375FE-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-EVAL-ORACLE-INTEGRITY-SOURCE"
       ],
@@ -46913,6 +46962,33 @@
         "valid_until": "2027-02-28"
       },
       "semantic_sha256": "fcbeef3a56d510095ff338af1bed583a58c9c9c6f56a92aba5f02465e5491952",
+      "retirement": {
+        "retired_at": "2026-09-07",
+        "reason": "Selector bytes changed in the reviewed current source.",
+        "replaced_by": [
+          "BIND-CASE-BC3EE952D4F375FE-R3-R4"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-BC3EE952D4F375FE-R3-R4",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-EVAL-ORACLE-INTEGRITY-SOURCE"
+      ],
+      "test_ids": [
+        "TEST-RUST-RUN-TRIAL-PRESERVES-GRADE-INFRASTRUCTURE-ERROR-W-8D79868A2645-R2"
+      ],
+      "rule_id": "RULE-EVAL-ORACLE-INTEGRITY",
+      "gate_id": "GATE-CARGO-EVALS-R3",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-07",
+        "valid_until": "2027-03-07"
+      },
+      "semantic_sha256": "4360c1283bad2881ba20726e4c9118433e4a42599c03bf7a86be49c08a175af1",
       "retirement": null
     },
     {
@@ -77588,6 +77664,132 @@
         "valid_until": "2027-03-07"
       },
       "semantic_sha256": "18d7a76d919261aa5bdd7624b1dd58270529a7e8018d747d3ee71da3c7d7235b",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R20-EVAL-01",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-EVAL-RUNTIME-SOURCE"
+      ],
+      "test_ids": [
+        "TEST-RUST-MULTIPLE-SIDE-EFFECT-CALLS-FAIL-CLOSED-BEFORE-EX-304A178DFDD1"
+      ],
+      "rule_id": "RULE-REPO-EVAL-RUNTIME",
+      "gate_id": "GATE-CARGO-EVALS-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-07",
+        "valid_until": "2027-03-07"
+      },
+      "semantic_sha256": "bbfaed489483f691fa5ab29b095b6f71c4194c2d88427ee17929a99269f87411",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R20-EVAL-02",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-EVAL-RUNTIME-SOURCE"
+      ],
+      "test_ids": [
+        "TEST-RUST-TOOL-INPUT-VALIDATION-REJECTS-MISSING-AND-UNKNOW-027043EA0B2F"
+      ],
+      "rule_id": "RULE-REPO-EVAL-RUNTIME",
+      "gate_id": "GATE-CARGO-EVALS-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-07",
+        "valid_until": "2027-03-07"
+      },
+      "semantic_sha256": "789ab3c8746bc7ad54637a32c069fda5a6f3c3bce9139cca974b237c3be88eb9",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R20-EVAL-03",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-EVAL-RUNTIME-SOURCE"
+      ],
+      "test_ids": [
+        "TEST-RUST-MAX-TOKENS-IS-OPTIONAL-AND-DOES-NOT-INVENT-A-LAR-EC42C3B6BF7A"
+      ],
+      "rule_id": "RULE-REPO-EVAL-RUNTIME",
+      "gate_id": "GATE-CARGO-EVALS-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-07",
+        "valid_until": "2027-03-07"
+      },
+      "semantic_sha256": "ff5f25ba1147401202d134c92160f1b42a48d8f64eac4b6ee469e3386e1bde19",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R20-EVAL-04",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-EVAL-RUNTIME-SOURCE"
+      ],
+      "test_ids": [
+        "TEST-RUST-RESPONSE-USAGE-IS-PRESERVED-FOR-OBSERVABILITY-EC716A81D070"
+      ],
+      "rule_id": "RULE-REPO-EVAL-RUNTIME",
+      "gate_id": "GATE-CARGO-EVALS-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-07",
+        "valid_until": "2027-03-07"
+      },
+      "semantic_sha256": "339d55662a8a70c1b8078d980858bf088c83ad8713f0099b985c887045d54b75",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R20-EVAL-05",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-EVAL-RUNTIME-SOURCE"
+      ],
+      "test_ids": [
+        "TEST-RUST-RESPONSES-HISTORY-PRESERVES-REASONING-ITEMS-031237E65863"
+      ],
+      "rule_id": "RULE-REPO-EVAL-RUNTIME",
+      "gate_id": "GATE-CARGO-EVALS-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-07",
+        "valid_until": "2027-03-07"
+      },
+      "semantic_sha256": "10a4765f4955dc6398b6073bb80d35d536ce4861a5e7b21580ad8dd8d665f415",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R20-EVAL-06",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-EVAL-RUNTIME-SOURCE"
+      ],
+      "test_ids": [
+        "TEST-RUST-READ-RESPONSES-REASSEMBLES-DELTA-ONLY-STREAM-F23A9E790104"
+      ],
+      "rule_id": "RULE-REPO-EVAL-RUNTIME",
+      "gate_id": "GATE-CARGO-EVALS-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-07",
+        "valid_until": "2027-03-07"
+      },
+      "semantic_sha256": "87c61266aff73d1ef3a7d70d045a161e74e5d35ef11d4f9f2209618fdf099a90",
       "retirement": null
     },
     {

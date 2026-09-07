@@ -127,6 +127,13 @@ pub struct TrialResult {
     pub rayman_invocations: usize,
     pub finished: bool,
     pub error: Option<String>,
+    pub request_ids: Vec<String>,
+    pub response_ids: Vec<String>,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub total_tokens: u64,
+    pub model_retries: u32,
+    pub latency_ms: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -636,6 +643,13 @@ mod tests {
             } else {
                 None
             },
+            request_ids: Vec::new(),
+            response_ids: Vec::new(),
+            input_tokens: 0,
+            output_tokens: 0,
+            total_tokens: 0,
+            model_retries: 0,
+            latency_ms: 0,
         }
     }
 

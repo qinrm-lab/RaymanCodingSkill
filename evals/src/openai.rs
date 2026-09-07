@@ -9,17 +9,17 @@
 use std::collections::BTreeMap;
 use std::net::IpAddr;
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use reqwest::Url;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::agent::{Assistant, Model, ToolCall, Truncated};
+use crate::agent::{Assistant, Model, ModelObservation, ToolCall, Truncated};
 
-const DEFAULT_MAX_TOKENS: u32 = 400000;
 const MAX_RETRIES: u32 = 3;
+const MAX_RETRY_DELAY: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -46,9 +46,10 @@ pub struct BackendCfg {
     /// 存放密钥的环境变量名，例如 DEEPSEEK_API_KEY。本地无密钥端点可省略。
     #[serde(default)]
     pub api_key_env: Option<String>,
-    /// 单次响应上限，默认 400000。注意：多数端点的实际输出上限远低于此
-    /// （如 DeepSeek 约 8192），端点若拒绝就在此调小。
+    /// 单次响应上限。省略时不发送上限，让 provider/model 自己选择安全默认值。
+    /// `max_output_tokens` 是 Responses 语义的别名，便于按线协议配置。
     #[serde(default)]
+    #[serde(alias = "max_output_tokens")]
     pub max_tokens: Option<u32>,
 }
 
@@ -76,7 +77,7 @@ pub struct OpenAiModel {
     url: String,
     model: String,
     api_key: Option<String>,
-    max_tokens: u32,
+    max_tokens: Option<u32>,
     wire: Wire,
     label: String,
 }
@@ -105,8 +106,7 @@ impl OpenAiModel {
             bail!("后端 {name} 的 model 不能为空");
         }
         let base = validate_base_url(name, &cfg.base_url)?;
-        let max_tokens = cfg.max_tokens.unwrap_or(DEFAULT_MAX_TOKENS);
-        if max_tokens == 0 {
+        if cfg.max_tokens == Some(0) {
             bail!("后端 {name} 的 max_tokens 必须大于 0");
         }
         let url = match wire {
@@ -119,12 +119,13 @@ impl OpenAiModel {
             url,
             model: model.to_string(),
             api_key,
-            max_tokens,
+            max_tokens: cfg.max_tokens,
             wire,
         })
     }
 
-    fn post(&self, body: &Value) -> Result<String> {
+    fn post(&self, body: &Value) -> Result<HttpResponse> {
+        let started = Instant::now();
         let mut attempt = 0;
         loop {
             attempt += 1;
@@ -138,20 +139,32 @@ impl OpenAiModel {
             match request.json(body).send() {
                 Ok(resp) => {
                     let status = resp.status();
+                    let request_id = response_request_id(&resp);
+                    let retry_after = retry_after_delay(&resp);
                     if status.is_success() {
-                        return resp.text().context("无法读取响应体");
+                        return Ok(HttpResponse {
+                            body: resp.text().context("无法读取响应体")?,
+                            request_id,
+                            attempts: attempt,
+                            latency_ms: started.elapsed().as_millis() as u64,
+                        });
                     }
-                    let retryable = status.as_u16() == 429 || status.as_u16() >= 500;
+                    let retryable =
+                        matches!(status.as_u16(), 408 | 409 | 429) || status.as_u16() >= 500;
                     let text = resp.text().unwrap_or_default();
                     if retryable && attempt < MAX_RETRIES {
-                        std::thread::sleep(Duration::from_secs(2 * attempt as u64));
+                        std::thread::sleep(retry_after.unwrap_or_else(|| retry_backoff(attempt)));
                         continue;
                     }
-                    bail!("端点返回错误状态 {status}: {text}");
+                    let request_suffix = request_id
+                        .as_deref()
+                        .map(|id| format!(", request_id={id}"))
+                        .unwrap_or_default();
+                    bail!("端点返回错误状态 {status}{request_suffix}: {}", head(&text));
                 }
                 Err(error) => {
                     if attempt < MAX_RETRIES {
-                        std::thread::sleep(Duration::from_secs(2 * attempt as u64));
+                        std::thread::sleep(retry_backoff(attempt));
                         continue;
                     }
                     return Err(error).context("请求失败");
@@ -159,6 +172,43 @@ impl OpenAiModel {
             }
         }
     }
+}
+
+#[derive(Debug)]
+struct HttpResponse {
+    body: String,
+    request_id: Option<String>,
+    attempts: u32,
+    latency_ms: u64,
+}
+
+fn response_request_id(response: &reqwest::blocking::Response) -> Option<String> {
+    response
+        .headers()
+        .get("x-request-id")
+        .or_else(|| response.headers().get("request-id"))
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string)
+}
+
+fn retry_after_delay(response: &reqwest::blocking::Response) -> Option<Duration> {
+    let seconds = response
+        .headers()
+        .get("retry-after")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.trim().parse::<u64>().ok())?;
+    Some(Duration::from_secs(seconds).min(MAX_RETRY_DELAY))
+}
+
+fn retry_backoff(attempt: u32) -> Duration {
+    let seconds = 2u64.saturating_pow(attempt.min(4));
+    Duration::from_secs(seconds).min(MAX_RETRY_DELAY)
+}
+
+fn attach_transport_observation(assistant: &mut Assistant, response: &HttpResponse) {
+    assistant.observation.request_id = response.request_id.clone();
+    assistant.observation.attempts = response.attempts;
+    assistant.observation.latency_ms = response.latency_ms;
 }
 
 fn resolve_key(name: &str, cfg: &BackendCfg, allow_inline_api_key: bool) -> Result<Option<String>> {
@@ -248,31 +298,44 @@ impl Model for OpenAiModel {
     fn respond(&self, system: &str, messages: &[Value], tools: &Value) -> Result<Assistant> {
         match self.wire {
             Wire::Chat => {
-                let body = json!({
+                let mut body = json!({
                     "model": self.model,
-                    "max_tokens": self.max_tokens,
                     "messages": messages_to_chat(system, messages),
                     "tools": tools_to_chat(tools),
                     "tool_choice": "auto",
+                    "parallel_tool_calls": false,
                 });
-                let text = self.post(&body)?;
-                let value: Value = serde_json::from_str(&text)
-                    .with_context(|| format!("chat/completions 响应不是 JSON: {}", head(&text)))?;
-                parse_chat(&value)
+                if let Some(max_tokens) = self.max_tokens {
+                    body["max_tokens"] = json!(max_tokens);
+                }
+                let response = self.post(&body)?;
+                let value: Value = serde_json::from_str(&response.body).with_context(|| {
+                    format!("chat/completions 响应不是 JSON: {}", head(&response.body))
+                })?;
+                let mut assistant = parse_chat(&value)?;
+                attach_transport_observation(&mut assistant, &response);
+                Ok(assistant)
             }
             Wire::Responses => {
                 // Codex 类中转的 /responses 只回流式 SSE，故 stream:true + 解析事件流。
-                let body = json!({
+                let mut body = json!({
                     "model": self.model,
-                    "max_output_tokens": self.max_tokens,
                     "instructions": system,
                     "input": messages_to_responses(messages),
                     "tools": tools_to_responses(tools),
                     "tool_choice": "auto",
+                    "parallel_tool_calls": false,
+                    "include": ["reasoning.encrypted_content"],
                     "store": false,
                     "stream": true,
                 });
-                read_responses(&self.post(&body)?)
+                if let Some(max_tokens) = self.max_tokens {
+                    body["max_output_tokens"] = json!(max_tokens);
+                }
+                let response = self.post(&body)?;
+                let mut assistant = read_responses(&response.body)?;
+                attach_transport_observation(&mut assistant, &response);
+                Ok(assistant)
             }
         }
     }
@@ -299,7 +362,8 @@ fn tools_to_chat(tools: &Value) -> Value {
                     "parameters": tool
                         .get("input_schema")
                         .cloned()
-                        .unwrap_or_else(|| json!({"type": "object", "properties": {}})),
+                        .unwrap_or_else(|| json!({"type": "object", "properties": {}, "additionalProperties": false})),
+                    "strict": true,
                 }
             })
         })
@@ -399,6 +463,7 @@ fn parse_chat(response: &Value) -> Result<Assistant> {
     Ok(Assistant {
         content: Value::Array(blocks),
         tool_calls,
+        observation: observation_from_value(response),
     })
 }
 
@@ -418,7 +483,8 @@ fn tools_to_responses(tools: &Value) -> Value {
                 "parameters": tool
                     .get("input_schema")
                     .cloned()
-                    .unwrap_or_else(|| json!({"type": "object", "properties": {}})),
+                    .unwrap_or_else(|| json!({"type": "object", "properties": {}, "additionalProperties": false})),
+                "strict": true,
             })
         })
         .collect();
@@ -450,21 +516,38 @@ fn messages_to_responses(messages: &[Value]) -> Vec<Value> {
                 }
             }
             "assistant" => {
-                let (text, tool_calls) = split_assistant(content);
-                if !text.is_empty() {
-                    input.push(json!({
-                        "type": "message",
-                        "role": "assistant",
-                        "content": [{"type": "output_text", "text": text}],
-                    }));
-                }
-                for (id, name, args) in tool_calls {
-                    input.push(json!({
-                        "type": "function_call",
-                        "call_id": id,
-                        "name": name,
-                        "arguments": args,
-                    }));
+                if let Some(blocks) = content.and_then(Value::as_array) {
+                    for block in blocks {
+                        match block.get("type").and_then(Value::as_str) {
+                            Some("responses_reasoning") => {
+                                if let Some(item) = block.get("item") {
+                                    input.push(item.clone());
+                                }
+                            }
+                            Some("text") => {
+                                input.push(json!({
+                                    "type": "message",
+                                    "role": "assistant",
+                                    "content": [{
+                                        "type": "output_text",
+                                        "text": block.get("text").and_then(Value::as_str).unwrap_or("")
+                                    }],
+                                }));
+                            }
+                            Some("tool_use") => {
+                                input.push(json!({
+                                    "type": "function_call",
+                                    "call_id": block.get("id"),
+                                    "name": block.get("name"),
+                                    "arguments": serde_json::to_string(
+                                        block.get("input").unwrap_or(&json!({}))
+                                    )
+                                    .unwrap_or_else(|_| "{}".into()),
+                                }));
+                            }
+                            _ => {}
+                        }
+                    }
                 }
             }
             _ => {}
@@ -473,15 +556,16 @@ fn messages_to_responses(messages: &[Value]) -> Vec<Value> {
     input
 }
 
-/// 读取 /responses 的响应体：非流式则整体是 JSON；流式则从 SSE 里取终态事件。
+/// 读取 /responses 的响应体：非流式整体解析；流式同时保留终态快照和增量事件。
 fn read_responses(text: &str) -> Result<Assistant> {
     // 非流式：整体就是一个 response 对象。
     if let Ok(value) = serde_json::from_str::<Value>(text) {
         return parse_response_snapshot(&value, text);
     }
-    // 流式 SSE：只认 response.completed / response.failed 终态；
-    // 中间快照（created/in_progress）带着空 output，绝不能当成功结果。
+    // 流式 SSE：终态是必须的，但不能假定 completed 一定携带完整 output 快照。
     let mut completed = None;
+    let mut saw_completed = false;
+    let mut streamed_items: Vec<Value> = Vec::new();
     for line in text.lines() {
         let Some(data) = line.trim_start().strip_prefix("data:") else {
             continue;
@@ -494,7 +578,73 @@ fn read_responses(text: &str) -> Result<Assistant> {
             continue;
         };
         match event.get("type").and_then(Value::as_str) {
+            Some("response.output_item.added") | Some("response.output_item.done") => {
+                if let Some(item) = event.get("item") {
+                    let index = stream_item_index(&event, &streamed_items);
+                    if index >= streamed_items.len() {
+                        streamed_items.resize(index + 1, Value::Null);
+                    }
+                    streamed_items[index] = item.clone();
+                }
+            }
+            Some("response.function_call_arguments.delta") => {
+                let index = ensure_stream_item(
+                    &event,
+                    &mut streamed_items,
+                    json!({
+                        "type": "function_call",
+                        "call_id": event.get("call_id"),
+                        "name": event.get("name"),
+                        "arguments": ""
+                    }),
+                );
+                let delta = event.get("delta").and_then(Value::as_str).unwrap_or("");
+                append_string_field(&mut streamed_items[index], "arguments", delta);
+            }
+            Some("response.function_call_arguments.done") => {
+                let index = ensure_stream_item(
+                    &event,
+                    &mut streamed_items,
+                    json!({
+                        "type": "function_call",
+                        "call_id": event.get("call_id"),
+                        "name": event.get("name"),
+                        "arguments": ""
+                    }),
+                );
+                if let Some(arguments) = event.get("arguments").and_then(Value::as_str) {
+                    streamed_items[index]["arguments"] = json!(arguments);
+                }
+            }
+            Some("response.output_text.delta") => {
+                let index = ensure_stream_item(
+                    &event,
+                    &mut streamed_items,
+                    json!({
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": ""}]
+                    }),
+                );
+                let delta = event.get("delta").and_then(Value::as_str).unwrap_or("");
+                append_output_text(&mut streamed_items[index], delta);
+            }
+            Some("response.output_text.done") => {
+                let index = ensure_stream_item(
+                    &event,
+                    &mut streamed_items,
+                    json!({
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": ""}]
+                    }),
+                );
+                if let Some(value) = event.get("text").and_then(Value::as_str) {
+                    set_output_text(&mut streamed_items[index], value);
+                }
+            }
             Some("response.completed") => {
+                saw_completed = true;
                 if let Some(response) = event.get("response") {
                     completed = Some(response.clone());
                 }
@@ -514,14 +664,79 @@ fn read_responses(text: &str) -> Result<Assistant> {
             bail!("responses 流内错误: {error}");
         }
     }
+    if !saw_completed {
+        bail!("responses 流没有 response.completed 终态: {}", head(text));
+    }
     match completed {
-        Some(response) => {
+        Some(mut response) => {
+            if response
+                .get("output")
+                .and_then(Value::as_array)
+                .is_none_or(Vec::is_empty)
+                && streamed_items.iter().any(|item| !item.is_null())
+            {
+                response["output"] = Value::Array(
+                    streamed_items
+                        .into_iter()
+                        .filter(|item| !item.is_null())
+                        .collect(),
+                );
+            }
             let assistant = parse_responses(&response)?;
             debug_empty(&response, &assistant);
             Ok(assistant)
         }
-        None => bail!("responses 流没有 response.completed 终态: {}", head(text)),
+        None if streamed_items.iter().any(|item| !item.is_null()) => parse_responses(&json!({
+            "status": "completed",
+            "output": streamed_items.into_iter().filter(|item| !item.is_null()).collect::<Vec<_>>()
+        })),
+        None => bail!(
+            "responses 流终态缺少 response 快照和 output item: {}",
+            head(text)
+        ),
     }
+}
+
+fn stream_item_index(event: &Value, items: &[Value]) -> usize {
+    if let Some(index) = event.get("output_index").and_then(Value::as_u64) {
+        return index as usize;
+    }
+    if let Some(item_id) = event.get("item_id").and_then(Value::as_str)
+        && let Some(index) = items
+            .iter()
+            .position(|item| item.get("id").and_then(Value::as_str) == Some(item_id))
+    {
+        return index;
+    }
+    items.len()
+}
+
+fn ensure_stream_item(event: &Value, items: &mut Vec<Value>, fallback: Value) -> usize {
+    let index = stream_item_index(event, items);
+    if index >= items.len() {
+        items.resize(index + 1, Value::Null);
+    }
+    if items[index].is_null() {
+        items[index] = fallback;
+    }
+    index
+}
+
+fn append_string_field(item: &mut Value, field: &str, suffix: &str) {
+    let current = item.get(field).and_then(Value::as_str).unwrap_or("");
+    item[field] = json!(format!("{current}{suffix}"));
+}
+
+fn append_output_text(item: &mut Value, suffix: &str) {
+    let current = item
+        .pointer("/content/0/text")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    item["content"] = json!([{"type": "output_text", "text": format!("{current}{suffix}")}]);
+}
+
+fn set_output_text(item: &mut Value, text: &str) {
+    item["content"] = json!([{"type": "output_text", "text": text}]);
 }
 
 /// 非流式 response 对象：完成态解析输出；failed/incomplete 显式报错，不把空 output 当成功。
@@ -600,6 +815,11 @@ fn parse_responses(response: &Value) -> Result<Assistant> {
     if let Some(output) = response.get("output").and_then(Value::as_array) {
         for item in output {
             match item.get("type").and_then(Value::as_str) {
+                Some("reasoning") => {
+                    // Preserve the raw reasoning item, including encrypted_content, so a
+                    // store=false multi-turn request can legally replay the model state.
+                    blocks.push(json!({"type": "responses_reasoning", "item": item}));
+                }
                 Some("message") => {
                     if let Some(parts) = item.get("content").and_then(Value::as_array) {
                         let mut text = String::new();
@@ -644,7 +864,39 @@ fn parse_responses(response: &Value) -> Result<Assistant> {
     Ok(Assistant {
         content: Value::Array(blocks),
         tool_calls,
+        observation: observation_from_value(response),
     })
+}
+
+fn observation_from_value(value: &Value) -> ModelObservation {
+    let usage = value.get("usage");
+    let input_tokens = usage
+        .and_then(|usage| {
+            usage
+                .get("input_tokens")
+                .or_else(|| usage.get("prompt_tokens"))
+        })
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let output_tokens = usage
+        .and_then(|usage| {
+            usage
+                .get("output_tokens")
+                .or_else(|| usage.get("completion_tokens"))
+        })
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let total_tokens = usage
+        .and_then(|usage| usage.get("total_tokens"))
+        .and_then(Value::as_u64)
+        .unwrap_or_else(|| input_tokens.saturating_add(output_tokens));
+    ModelObservation {
+        response_id: value.get("id").and_then(Value::as_str).map(str::to_string),
+        input_tokens,
+        output_tokens,
+        total_tokens,
+        ..ModelObservation::default()
+    }
 }
 
 // ---- 共享助手 ----
@@ -747,6 +999,25 @@ mod tests {
     }
 
     #[test]
+    fn responses_history_preserves_reasoning_items() {
+        let messages = vec![json!({
+            "role": "assistant",
+            "content": [
+                {"type": "responses_reasoning", "item": {
+                    "type": "reasoning",
+                    "id": "rs_1",
+                    "encrypted_content": "opaque"
+                }},
+                {"type": "tool_use", "id": "call_1", "name": "run", "input": {"command": "dir"}}
+            ]
+        })];
+        let input = messages_to_responses(&messages);
+        assert_eq!(input[0]["type"], "reasoning");
+        assert_eq!(input[0]["encrypted_content"], "opaque");
+        assert_eq!(input[1]["type"], "function_call");
+    }
+
+    #[test]
     fn parse_responses_extracts_text_and_tool_calls() {
         let response = json!({
             "output": [
@@ -773,6 +1044,19 @@ mod tests {
         let assistant = read_responses(sse).unwrap();
         assert_eq!(assistant.tool_calls.len(), 1);
         assert_eq!(assistant.tool_calls[0].id, "c9");
+    }
+
+    #[test]
+    fn read_responses_reassembles_delta_only_stream() {
+        let sse = concat!(
+            "data: {\"type\":\"response.output_item.added\",\"output_index\":0,\"item\":{\"type\":\"function_call\",\"call_id\":\"c10\",\"name\":\"run\",\"arguments\":\"\"}}\n\n",
+            "data: {\"type\":\"response.function_call_arguments.delta\",\"output_index\":0,\"delta\":\"{\\\"command\\\":\\\"ls\\\"}\"}\n\n",
+            "data: {\"type\":\"response.completed\"}\n\n",
+        );
+        let assistant = read_responses(sse).unwrap();
+        assert_eq!(assistant.tool_calls.len(), 1);
+        assert_eq!(assistant.tool_calls[0].id, "c10");
+        assert_eq!(assistant.tool_calls[0].input["command"], "ls");
     }
 
     #[test]
@@ -841,6 +1125,27 @@ mod tests {
             }
         }"#;
         assert!(serde_json::from_str::<BackendsConfig>(unknown_backend).is_err());
+    }
+
+    #[test]
+    fn max_tokens_is_optional_and_does_not_invent_a_large_default() {
+        let cfg: BackendCfg =
+            serde_json::from_str(r#"{"base_url":"https://api.example.test/v1","model":"model"}"#)
+                .unwrap();
+        let model = OpenAiModel::new("x", &cfg, None, false).unwrap();
+        assert_eq!(model.max_tokens, None);
+    }
+
+    #[test]
+    fn response_usage_is_preserved_for_observability() {
+        let response = json!({
+            "id": "resp_1",
+            "usage": {"input_tokens": 3, "output_tokens": 5, "total_tokens": 8},
+            "output": []
+        });
+        let assistant = parse_responses(&response).unwrap();
+        assert_eq!(assistant.observation.response_id.as_deref(), Some("resp_1"));
+        assert_eq!(assistant.observation.total_tokens, 8);
     }
 
     #[test]
