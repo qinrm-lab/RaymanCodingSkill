@@ -57,7 +57,7 @@ the platform-active selector multiset with the static inventory. A duplicate
 Cargo leaf selector fails closed until a full runtime identity can be proven.
 PowerShell uses the parser AST, proves each named case reachable from the
 public `-SelfTest` call graph, and verifies that every public suite is directly
-invoked by `scripts/check-repo.ps1 -SelfTest`.
+invoked with `-SelfTest` by `scripts/check-repo.ps1`.
 
 The fixed roots prune `.git`, `.RaymanCodingSkill`, every nested `target`, and
 generated `evals/.runs*` trees before recursion. Governed reparse entries,
@@ -124,6 +124,12 @@ old test ID and names a reviewed replacement.
 ## History and commands
 
 Each manifest revision binds predecessor schema, generation, and SHA-256.
+The two manifests must be UTF-8 without a BOM and use LF line endings before
+hashing or validation. The checker rejects noncanonical bytes before history
+lookup; it never normalizes bytes into acceptance. After generating JSON on
+Windows, normalize the output to LF before computing any dependent digest.
+Validate both the worktree and a clean Git checkout: Git's text filters can
+otherwise commit different bytes while still reporting a clean status.
 Delete/reintroduction, shallow history, unreadable Git state, and a missing
 reachable predecessor fail closed; they cannot restart lifecycle history at
 generation 1.

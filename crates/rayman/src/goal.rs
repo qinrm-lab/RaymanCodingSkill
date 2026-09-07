@@ -2410,9 +2410,9 @@ impl GoalStore {
     ///
     /// This is a one-way evidence downgrade, never a repair of the receipts.
     /// An already archived success retains its original historical fingerprint.
-    /// A current pre-publication-policy success may be atomically retired only
-    /// when retirement fixes its sole schema boundary and every trusted archive
-    /// or migration path still fails. The requirements and validation ledger
+    /// A complete current success with no pending work or open lane/package may
+    /// be atomically retired only when every trusted archive route fails.
+    /// Legacy plans retain their separate schema checks. The requirements and validation ledger
     /// remain untouched, and every replacement/supersession consumer rejects the
     /// quarantine policy.
     pub fn quarantine_invalid_history(&self, id: &str, reason: &str) -> Result<Goal> {
@@ -2421,9 +2421,11 @@ impl GoalStore {
         }
         let path = self.goal_path(id)?;
         let _lock = acquire_state_lock(&path)?;
-        let Some(mut goal) = Self::load_goal_file_for_update(&path)? else {
+        let Some(mut original_document) = read_json::<serde_json::Value>(&path)? else {
             bail!("目标不存在: {id}");
         };
+        let mut goal = parse_goal_value(original_document.clone())?;
+        ensure_plan_chronology_before_update(&goal)?;
         if goal.status != GoalStatus::Success
             || !matches!(
                 goal.lifecycle,
@@ -2435,9 +2437,118 @@ impl GoalStore {
             );
         }
 
+        // Acquire the goal lock before the pending lock, as checkpoint restore does.
+        // Keep the pending lock through the final history write so a new task
+        // boundary cannot disappear in a concurrent quarantine.
+        let _pending_guard = if goal.lifecycle == GoalLifecycle::Current {
+            Some(acquire_state_lock(
+                &crate::state_paths::managed_state_file(
+                    &self.root,
+                    Path::new("pending.json"),
+                    true,
+                )?,
+            )?)
+        } else {
+            None
+        };
+        if goal.lifecycle == GoalLifecycle::Current
+            && PendingStore::new(&self.root)
+                .list()?
+                .iter()
+                .any(|item| item.goal_id.is_none() || item.goal_id.as_deref() == Some(id))
+        {
+            bail!("Cannot quarantine current history with unresolved pending work");
+        }
+        if goal.lifecycle == GoalLifecycle::Current
+            && (goal
+                .lanes
+                .iter()
+                .any(|lane| lane.status == LaneStatus::Open)
+                || goal.work_packages.iter().any(|package| {
+                    package.required && package.status != WorkPackageStatus::Complete
+                }))
+        {
+            bail!("Cannot quarantine incomplete current history");
+        }
+
         let (proof_fingerprint, proof_error, proof_workspace_identity) = if goal.lifecycle
             == GoalLifecycle::Current
+            && goal.current_schema_error().is_none()
         {
+            if let Some(error) = goal.lifecycle_error() {
+                bail!("Invalid current history lifecycle: {error}");
+            }
+            let mut archived_view = goal.clone();
+            archived_view.lifecycle = GoalLifecycle::Archived;
+            archived_view.lifecycle_reason =
+                Some("completed current history quarantine candidate".into());
+            archived_view.superseded_by = None;
+            archived_view.lifecycle_proof = None;
+            if !integrity_quarantine_eligible(&archived_view)
+                || plan_chain_error(&archived_view).is_some()
+            {
+                bail!("Cannot quarantine incomplete current history");
+            }
+            let fingerprint = workspace_fingerprint(&self.root)?;
+            let gaps = goal_success_receipt_gaps(&goal, &self.root, &fingerprint);
+            if goal.replacement_authority.as_ref().is_some_and(|proof| {
+                replacement_authority_error(&goal, &self.root, &fingerprint).is_none()
+                    || replacement_authority_error(&goal, &self.root, &proof.workspace_fingerprint)
+                        .is_none()
+            }) {
+                bail!("Cannot quarantine a valid replacement authority");
+            }
+            let event_at = goal_event_timestamp(&goal)?;
+            let trusted_archive_at = |at: &str, policy: &str, migration: Option<&str>| {
+                let mut candidate = archived_view.clone();
+                candidate.updated_at = event_at.clone();
+                candidate.lifecycle_proof = Some(issue_lifecycle_proof_at(
+                    &candidate,
+                    at.to_owned(),
+                    migration.map(str::to_owned),
+                    Some(policy.to_owned()),
+                    event_at.clone(),
+                    Some(workspace_identity(&self.root)),
+                ));
+                candidate.current_schema_error().is_none()
+                    && candidate.lifecycle_proof_error(&self.root).is_none()
+            };
+            let trusted_current = historical_success_fingerprint(
+                &goal,
+                &self.root,
+                ReceiptValidationPolicy::CurrentV3,
+            )
+            .is_some_and(|at| trusted_archive_at(&at, RECEIPT_POLICY_V3, None));
+            let trusted_legacy = receipt_policy_v1_migration_eligible(&goal)
+                && historical_success_fingerprint(
+                    &goal,
+                    &self.root,
+                    ReceiptValidationPolicy::LegacyV1,
+                )
+                .is_some_and(|at| {
+                    trusted_archive_at(&at, RECEIPT_POLICY_V1, Some(RECEIPT_POLICY_V1_MIGRATION))
+                });
+            let trusted_unreceipted = pre_receipt_migration_eligible(&goal)
+                && trusted_archive_at(&fingerprint, RECEIPT_POLICY_V3, Some(PRE_RECEIPT_MIGRATION));
+            if (gaps.is_empty() && trusted_archive_at(&fingerprint, RECEIPT_POLICY_V3, None))
+                || trusted_current
+                || trusted_legacy
+                || trusted_unreceipted
+            {
+                bail!(
+                    "Current success has a trusted archive route; use ordinary archive or explicit legacy migration"
+                );
+            }
+            goal = archived_view;
+            (
+                fingerprint,
+                format!(
+                    "completed current success; success receipt proof invalid: {}",
+                    gaps.join("; ")
+                ),
+                workspace_identity(&self.root),
+            )
+        } else if goal.lifecycle == GoalLifecycle::Current {
             let Some(current_error) = goal.current_schema_error() else {
                 bail!(
                     "只允许隔离 proof 已失效的已归档 success，或无法生成可信归档 proof 的完整 current legacy success；有效或尚未结束的 current goal 不能隐藏"
@@ -2575,7 +2686,21 @@ impl GoalStore {
         if let Some(error) = goal.lifecycle_proof_error(&self.root) {
             bail!("隔离后的 lifecycle proof 无效: {error}");
         }
-        write_json(&path, &goal)?;
+        let updated_document = serde_json::to_value(&goal)?;
+        for field in [
+            "lifecycle",
+            "lifecycle_reason",
+            "lifecycle_proof",
+            "superseded_by",
+            "updated_at",
+        ] {
+            original_document[field] = updated_document[field].clone();
+        }
+        let reparsed = parse_goal_value(original_document.clone())?;
+        if serde_json::to_value(&reparsed)? != updated_document {
+            bail!("History migration changed the original ledger semantics");
+        }
+        write_json(&path, &original_document)?;
         Ok(goal)
     }
 

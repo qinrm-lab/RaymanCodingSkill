@@ -878,6 +878,14 @@ function Invoke-GitBytes {
     return $result
 }
 
+function Assert-CanonicalManifestBytes {
+    param([byte[]]$Bytes, [string]$Label)
+    $text = $script:Utf8.GetString($Bytes)
+    if ($text.StartsWith([string][char]0xFEFF, [StringComparison]::Ordinal) -or $text.Contains("`r")) {
+        Throw-TraceError 'TRACE_NONCANONICAL_BYTES' "$Label must be UTF-8 without BOM and use LF before hashing; preserve exact byte bindings"
+    }
+}
+
 function Get-PredecessorBytes {
     param(
         [Parameter(Mandatory = $true)][string]$RelativePath,
@@ -2230,6 +2238,13 @@ if ($SelfTest) { Write-Output 'no cases dispatched' }
         } | Sort-Object asset_id)
     $null = Assert-InventoryDocument -Inventory $assetCurrent -Discovered $fixture.Discovered -PredecessorBytes $assetPreviousBytes
 
+    Assert-CanonicalManifestBytes -Bytes ($script:Utf8.GetBytes("{}`n")) -Label 'LF fixture'
+    foreach ($invalidText in @("{}`r`n", ([string][char]0xFEFF + "{}`n"))) {
+        $rejected = $false
+        try { Assert-CanonicalManifestBytes -Bytes ($script:Utf8.GetBytes($invalidText)) -Label 'invalid fixture' }
+        catch { $rejected = $_.Exception.Message.Contains('[TRACE_NONCANONICAL_BYTES]') }
+        if (-not $rejected) { throw 'Noncanonical manifest bytes were accepted' }
+    }
     $fixtureIdentity = 'rust::eval_fixture::evals/tasks/sample/fixture/src/lib.rs::same_name'
     $oracleIdentity = 'rust::eval_oracle::evals/tasks/sample/oracle/tests.rs::same_name'
     if ($fixtureIdentity -ceq $oracleIdentity -or
@@ -2265,6 +2280,8 @@ $null = Resolve-TracePath -RelativePath $script:ManifestRelativePath
 $null = Resolve-TracePath -RelativePath $script:InventoryRelativePath
 $inventoryBytes = Get-FileBytes -Path $resolvedInventory
 $manifestBytes = Get-FileBytes -Path $resolvedManifest
+Assert-CanonicalManifestBytes -Bytes $inventoryBytes -Label 'first-party test inventory'
+Assert-CanonicalManifestBytes -Bytes $manifestBytes -Label 'test traceability manifest'
 $inventory = ConvertFrom-StrictJsonBytes -Bytes $inventoryBytes -Label 'first-party test inventory'
 $manifest = ConvertFrom-StrictJsonBytes -Bytes $manifestBytes -Label 'test traceability manifest'
 $discovered = @(Get-FirstPartyTestInventory)

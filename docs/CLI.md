@@ -105,6 +105,16 @@ bytes were rebuilt locally from the checkout.
   UI state, elevation labels, and caller-supplied identity names are not proof of
   installation, permissions, delivery, or user awareness.
 
+`goal archive --quarantine-invalid-history` is an explicit, one-way migration
+for completed history whose proof is invalid and has no trusted archive route.
+A current record must have no unresolved unbound/goal-bound pending, open lane,
+or incomplete required package. Its must requirements must already be done with
+recorded evidence. Replacement histories retain their original transfer proof
+instead of inventing direct validation receipts. The pending lock remains held
+through publication. Only lifecycle fields change; original requirement,
+validation, plan, authority and extension data are preserved. The resulting
+history cannot return to current or supply completion/replacement authority.
+
 The exact command families above may delegate to focused modules, but every
 public exit status and JSON object remains one end-to-end CLI integration
 contract. Retired commands must fail with an actionable migration rather than

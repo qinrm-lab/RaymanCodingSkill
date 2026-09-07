@@ -554,7 +554,29 @@ pub(super) fn quarantined_history_eligible(goal: &Goal) -> bool {
 }
 
 pub(super) fn integrity_quarantine_eligible(goal: &Goal) -> bool {
-    goal.lifecycle == GoalLifecycle::Archived && completed_current_schema_history(goal)
+    // Replacement history legitimately has a transfer proof instead of direct
+    // validation entries. This eligibility is only for permanently untrusted
+    // history; it must never relax completed_current_schema_history itself.
+    goal.lifecycle == GoalLifecycle::Archived
+        && (completed_current_schema_history(goal)
+            || (goal.schema_version == GOAL_SCHEMA_VERSION
+                && !goal.loaded_from_legacy
+                && goal.status == GoalStatus::Success
+                && goal.replacement_authority.is_some()
+                && goal
+                    .requirements
+                    .iter()
+                    .any(|r| r.kind == RequirementKind::Must)
+                && goal
+                    .requirements
+                    .iter()
+                    .filter(|r| r.kind == RequirementKind::Must)
+                    .all(|r| {
+                        r.status == RequirementStatus::Done
+                            && r.evidence
+                                .as_deref()
+                                .is_some_and(|text| !text.trim().is_empty())
+                    })))
 }
 
 /// 单个目标在 standard 门禁下的判定。

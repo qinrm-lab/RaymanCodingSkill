@@ -252,6 +252,11 @@ fn repository_quality_consumers_reject_malformed_types_and_ignore_stale_native_e
     let provider = fixture.path().join("provider.ps1");
     let process_temp = fixture.path().join("process-temp");
     fs::create_dir_all(&process_temp).expect("process temp must be created");
+    fs::copy(
+        repo_root.join("scripts/read-repository-quality.ps1"),
+        fixture.path().join("read-repository-quality.ps1"),
+    )
+    .expect("shared quality reader fixture must be copied");
     let consumer_sources = [
         fs::read_to_string(repo_root.join("scripts/check-repo.ps1"))
             .expect("check-repo consumer must be readable"),
@@ -1020,21 +1025,21 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
             consumer.contains("47f405e725ad272b2d2c0d2b189855375962689f2b356eadc306305f957a0b77")
         );
         assert!(consumer.contains("$usingDefaultProvider"));
-        assert!(consumer.contains("Repository quality command provider hash drifted"));
-        assert!(consumer.contains("rayman.repository-quality.commands.v1"));
-        assert!(consumer.contains("ConvertFrom-Json -Depth 8 -NoEnumerate"));
-        assert!(consumer.contains("$document -is [array]"));
-        assert!(consumer.contains("$document -isnot [pscustomobject]"));
-        assert!(consumer.contains("$document.commands -isnot [array]"));
-        assert!(consumer.contains("$command.argv -isnot [array]"));
-        assert!(consumer.contains("$command -is [array]"));
-        assert!(consumer.contains("[string]::IsNullOrWhiteSpace($_)"));
-        assert!(consumer.contains("if (-not $? -or [string]::IsNullOrWhiteSpace($json))"));
+        assert!(consumer.contains("Join-Path $PSScriptRoot 'read-repository-quality.ps1'"));
+        assert!(consumer.contains("Repository quality reader hash drifted"));
         assert!(
-            !consumer.contains("if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($json))")
+            !powershell_function(consumer, "Get-RepositoryQualityCommands")
+                .contains("ConvertFrom-Json -Depth 8 -NoEnumerate")
         );
         assert!(!consumer.contains(". (Join-Path $PSScriptRoot 'repository-quality.ps1')"));
     }
+    let reader = fs::read_to_string(repo_root.join("scripts/read-repository-quality.ps1"))
+        .expect("shared quality reader must be readable");
+    assert!(reader.contains("Repository quality command provider hash drifted"));
+    assert!(reader.contains("ConvertFrom-Json -Depth 8 -NoEnumerate"));
+    assert!(reader.contains("$document.commands -isnot [array]"));
+    assert!(reader.contains("$command.argv -isnot [array]"));
+    assert!(!reader.contains("if ($LASTEXITCODE -ne 0"));
     for expected in [
         "schema = 'rayman.repository-quality.commands.v1'",
         "suite = $Suite",

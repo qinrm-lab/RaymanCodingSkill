@@ -718,7 +718,7 @@ pub enum GoalAction {
         /// Explicitly preserve a pre-policy-v2 goal whose real v1 receipts still pass v1 integrity
         #[arg(long, value_name = "POLICY", conflicts_with = "migrate_unreceipted")]
         migrate_receipt_policy: Option<String>,
-        /// Preserve an invalid archived success, or a complete current legacy success with no trusted archive path, as untrusted history.
+        /// Preserve invalid completed history with no trusted archive path; current goals require no pending work or open lanes/packages.
         #[arg(
             long,
             conflicts_with_all = ["migrate_unreceipted", "migrate_receipt_policy"]

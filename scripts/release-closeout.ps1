@@ -361,6 +361,7 @@ function Get-ReleaseBinding {
         'check-test-traceability-v2.ps1',
         'check-update-freshness.ps1',
         'check-repo.ps1',
+        'read-repository-quality.ps1',
         'install-rayman.ps1',
         'repository-quality.ps1',
         'release-closeout.ps1',
@@ -785,8 +786,7 @@ try {
             -ReferenceWorkerPath $WorkerPath `
             -SkillPath $SkillPath `
             -WorkspaceSkillPath (Join-Path $repoRoot 'SKILL.md') `
-            -RequirePath `
-            -RequireSourceFresh
+            -RequirePath
         # The audit's installed_release_identity phase already performs the
         # clean isolated -RequireSourceFresh rebuild. Recomputing the exact
         # binding here detects any post-audit drift without a second rebuild.

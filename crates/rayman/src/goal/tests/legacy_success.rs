@@ -123,51 +123,136 @@ fn legacy_success_archive_preserves_a_valid_plan_ledger() {
 
 #[test]
 fn invalid_current_legacy_success_can_be_quarantined_atomically() {
-    let dir = tempfile::tempdir().unwrap();
-    let store = GoalStore::new(dir.path());
-    let mut goal = as_pre_rollout_legacy_plan(planned_non_code_success(&store, dir.path()));
-    goal.requirements[0].validations[0].command =
-        "pwsh -NoProfile -File missing-validation.ps1".into();
-    let command = goal.requirements[0].validations[0].command.clone();
-    goal.requirements[0].validations[0].receipt = Some(successful_receipt(
-        dir.path(),
-        &goal,
-        "req_1",
-        &command,
-        &[],
-        true,
-    ));
-    let path = dir.path().join(GOALS_DIR).join(format!("{}.json", goal.id));
-    write_json(&path, &goal).unwrap();
-    let requirements = goal.requirements.clone();
-    let plan_ledger = goal.plan_receipts.clone();
+    for legacy in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let store = GoalStore::new(dir.path());
+        let valid = planned_non_code_success(&store, dir.path());
+        assert!(
+            store
+                .quarantine_invalid_history(&valid.id, "keep trusted history")
+                .is_err()
+        );
+        let mut goal = if legacy {
+            as_pre_rollout_legacy_plan(valid)
+        } else {
+            valid
+        };
+        goal.requirements[0].validations[0].command =
+            "pwsh -NoProfile -File missing-validation.ps1".into();
+        let command = goal.requirements[0].validations[0].command.clone();
+        goal.requirements[0].validations[0].receipt = Some(successful_receipt(
+            dir.path(),
+            &goal,
+            "req_1",
+            &command,
+            &[],
+            true,
+        ));
+        goal.requirements[0].validations[0]
+            .receipt
+            .as_mut()
+            .unwrap()
+            .contract_sha256 = "0".repeat(64);
+        let path = dir.path().join(GOALS_DIR).join(format!("{}.json", goal.id));
+        write_json(&path, &goal).unwrap();
+        let requirements = goal.requirements.clone();
+        let plan_ledger = goal.plan_receipts.clone();
 
-    let quarantined = store
-        .quarantine_invalid_history(&goal.id, "retire invalid current receipt history")
-        .unwrap();
-    assert_eq!(quarantined.lifecycle, GoalLifecycle::Archived);
-    assert_eq!(quarantined.status, GoalStatus::Success);
-    assert_eq!(quarantined.requirements, requirements);
-    assert_eq!(quarantined.plan_receipts, plan_ledger);
-    assert_eq!(quarantined.lifecycle_proof_error(dir.path()), None);
-    assert_eq!(
-        quarantined
-            .lifecycle_proof
-            .as_ref()
-            .and_then(|proof| proof.receipt_policy.as_deref()),
-        Some(RECEIPT_POLICY_INTEGRITY_QUARANTINED)
-    );
-    assert!(
-        quarantined
-            .lifecycle_reason
-            .as_deref()
-            .is_some_and(|value| value.contains("success receipt proof invalid")),
-        "the retained reason must explain why trusted receipt integrity failed"
-    );
+        let pending = PendingStore::new(dir.path());
+        let boundary = pending
+            .add("unfinished work", "must not disappear during migration")
+            .unwrap();
+        let original = fs::read(&path).unwrap();
+        assert!(
+            store
+                .quarantine_invalid_history(&goal.id, "cannot hide pending")
+                .is_err()
+        );
+        assert_eq!(fs::read(&path).unwrap(), original);
+        pending.resolve(&boundary.id).unwrap();
+        if !legacy {
+            for case in ["active", "open_must", "open_lane", "open_package"] {
+                let mut incomplete = goal.clone();
+                match case {
+                    "active" => incomplete.status = GoalStatus::Active,
+                    "open_must" => incomplete.requirements[0].status = RequirementStatus::Open,
+                    "open_lane" => incomplete.lanes.push(LaneRecord {
+                        id: "unfinished".into(),
+                        mode: LaneMode::AdvisoryReadOnly,
+                        opened_at: now_iso(),
+                        opening_baseline: goal.baseline.clone().unwrap(),
+                        allowed_paths: Vec::new(),
+                        status: LaneStatus::Open,
+                        closed_at: None,
+                        closing_fingerprint: None,
+                        delta_paths: Vec::new(),
+                        violation: None,
+                        authoritative: false,
+                    }),
+                    "open_package" => incomplete.work_packages.push(WorkPackage {
+                        id: "unfinished".into(),
+                        title: "unfinished".into(),
+                        parent_id: None,
+                        requirement_ids: vec!["req_1".into()],
+                        required: true,
+                        status: WorkPackageStatus::Open,
+                        progress_receipt_ids: Vec::new(),
+                        completed_at: None,
+                    }),
+                    _ => unreachable!(),
+                }
+                write_json(&path, &incomplete).unwrap();
+                let before = fs::read(&path).unwrap();
+                assert!(
+                    store.quarantine_invalid_history(&goal.id, case).is_err(),
+                    "{case}"
+                );
+                assert_eq!(fs::read(&path).unwrap(), before, "{case}");
+            }
+            write_json(&path, &goal).unwrap();
+        }
+        let mut original_document: serde_json::Value = read_json(&path).unwrap().unwrap();
+        original_document["requirements"][0]["legacy_annotation"] =
+            serde_json::json!("preserve original evidence");
+        write_json(&path, &original_document).unwrap();
+        let quarantined = store
+            .quarantine_invalid_history(&goal.id, "retire invalid current receipt history")
+            .unwrap();
+        assert_eq!(quarantined.lifecycle, GoalLifecycle::Archived);
+        assert_eq!(quarantined.status, GoalStatus::Success);
+        assert_eq!(quarantined.requirements, requirements);
+        assert_eq!(quarantined.plan_receipts, plan_ledger);
+        let published_document: serde_json::Value = read_json(&path).unwrap().unwrap();
+        assert_eq!(
+            published_document["requirements"],
+            original_document["requirements"]
+        );
+        assert_eq!(quarantined.lifecycle_proof_error(dir.path()), None);
+        assert_eq!(
+            quarantined
+                .lifecycle_proof
+                .as_ref()
+                .and_then(|proof| proof.receipt_policy.as_deref()),
+            Some(RECEIPT_POLICY_INTEGRITY_QUARANTINED)
+        );
+        assert!(
+            quarantined
+                .lifecycle_reason
+                .as_deref()
+                .is_some_and(|value| value.contains("success receipt proof invalid")),
+            "the retained reason must explain why trusted receipt integrity failed"
+        );
 
-    let before = fs::read(&path).unwrap();
-    assert!(store.mark_current(&goal.id).is_err());
-    assert_eq!(fs::read(&path).unwrap(), before);
+        let before = fs::read(&path).unwrap();
+        assert!(store.mark_current(&goal.id).is_err());
+        assert_eq!(fs::read(&path).unwrap(), before);
+        assert!(
+            store
+                .archive(&goal.id, "cannot promote quarantined evidence", false)
+                .is_err()
+        );
+        assert_eq!(fs::read(&path).unwrap(), before);
+    }
 }
 
 #[test]

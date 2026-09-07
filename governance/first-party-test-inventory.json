@@ -20,11 +20,11 @@
     ]
   },
   "revision": {
-    "generation": 17,
+    "generation": 18,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 16,
-      "sha256": "525c49675f9783f7e8e39ab9df8d176d4c9978da2d908ccf50cafc4312dc3964"
+      "generation": 17,
+      "sha256": "30e203980aa7d7fc547ac949b8db7302550ad7f8542db646b2db1666388d6c1f"
     }
   },
   "tests": [
@@ -861,13 +861,32 @@
     },
     {
       "test_id": "TEST-PS-SELFTEST-1CE180031456-V2-R3",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/audit-repository.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/audit-repository.ps1",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "selector_sha256": "eada31fb8d3bddfb298a0949be2ad1eadd20768e66e09156baaa60f6f846271f",
+      "cfg": "all",
+      "owner": "",
+      "retirement": {
+        "retired_at": "2026-09-07",
+        "reason": "Reviewed audit repair: canonical manifest bytes, shared quality reader, and corrected delivery declarations.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-1CE180031456-V2-R3-AUDIT-20260908"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-PS-SELFTEST-1CE180031456-V2-R3-AUDIT-20260908",
+      "status": "active",
+      "identity": "powershell::powershell_self_test::scripts/audit-repository.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/audit-repository.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "d1c485a7db336b9e1bf4969e9d68f37342745270b7a7aa28cd0aa303f2bfd865",
       "cfg": "all",
       "owner": "",
       "retirement": null
@@ -919,13 +938,32 @@
     },
     {
       "test_id": "TEST-PS-SELFTEST-3AF243E44D59-R3",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/check-test-traceability.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/check-test-traceability.ps1",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "selector_sha256": "3b9cbb7b8fe073513c11b987245066703aee75d3927a50b38436b1198d6177f2",
+      "cfg": "all",
+      "owner": "",
+      "retirement": {
+        "retired_at": "2026-09-07",
+        "reason": "Reviewed audit repair: canonical manifest bytes, shared quality reader, and corrected delivery declarations.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-3AF243E44D59-R3-AUDIT-20260908"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-PS-SELFTEST-3AF243E44D59-R3-AUDIT-20260908",
+      "status": "active",
+      "identity": "powershell::powershell_self_test::scripts/check-test-traceability.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/check-test-traceability.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "72fe521cadea02d7ffb018a70dabc280307123a2487b3e148a8787da4be3feab",
       "cfg": "all",
       "owner": "",
       "retirement": null
@@ -1155,13 +1193,32 @@
     },
     {
       "test_id": "TEST-PS-SELFTEST-7EBA611DF16F",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/release-closeout.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/release-closeout.ps1",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "selector_sha256": "89316d0376163ba22efd2a17c626b6578a610a8a0578d4a72e9c4682082002a2",
+      "cfg": "all",
+      "owner": "",
+      "retirement": {
+        "retired_at": "2026-09-07",
+        "reason": "Reviewed audit repair: canonical manifest bytes, shared quality reader, and corrected delivery declarations.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-7EBA611DF16F-AUDIT-20260908"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-PS-SELFTEST-7EBA611DF16F-AUDIT-20260908",
+      "status": "active",
+      "identity": "powershell::powershell_self_test::scripts/release-closeout.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/release-closeout.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "35c053ad3e839aa158c64cb31cd5e0cde1c8addc6bb0d38d4ecb80570e7f947e",
       "cfg": "all",
       "owner": "",
       "retirement": null
@@ -1270,13 +1327,32 @@
     },
     {
       "test_id": "TEST-PS-SELFTEST-E4332C6D1ADD-R5",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/check-agent-instructions.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/check-agent-instructions.ps1",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "selector_sha256": "af59a226ef4636c8c56f944967af2862aba9b6a035b2e5563055bfb0d5eb85ca",
+      "cfg": "all",
+      "owner": "",
+      "retirement": {
+        "retired_at": "2026-09-07",
+        "reason": "Reviewed audit repair: canonical manifest bytes, shared quality reader, and corrected delivery declarations.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-E4332C6D1ADD-R5-AUDIT-20260908"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-PS-SELFTEST-E4332C6D1ADD-R5-AUDIT-20260908",
+      "status": "active",
+      "identity": "powershell::powershell_self_test::scripts/check-agent-instructions.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/check-agent-instructions.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "527b205ff505ef32cf05a95360c461d9584c459d66f522baf80c1dc1f7f4ee29",
       "cfg": "all",
       "owner": "",
       "retirement": null
@@ -2073,13 +2149,32 @@
     },
     {
       "test_id": "TEST-RUST-AUDIT-ORCHESTRATION-HAS-NO-ENVIRONMENT-BYPASS-OR-565B2A9F1C31-R7",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/tests/audit_script.rs::audit_orchestration_has_no_environment_bypass_or_implicit_provisioning",
       "role": "root_cargo",
       "path": "crates/rayman/tests/audit_script.rs",
       "selector_kind": "rust_test_fn",
       "selector": "audit_orchestration_has_no_environment_bypass_or_implicit_provisioning",
       "selector_sha256": "4be59c89ccdb0a89ca156f794c25a0de2c0a12f3f96b1ce36306b655644e6759",
+      "cfg": "all",
+      "owner": null,
+      "retirement": {
+        "retired_at": "2026-09-07",
+        "reason": "Reviewed audit repair: canonical manifest bytes, shared quality reader, and corrected delivery declarations.",
+        "replaced_by": [
+          "TEST-RUST-AUDIT-ORCHESTRATION-HAS-NO-ENVIRONMENT-BYPASS-OR-565B2A9F1C31-R7-AUDIT-20260908"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-AUDIT-ORCHESTRATION-HAS-NO-ENVIRONMENT-BYPASS-OR-565B2A9F1C31-R7-AUDIT-20260908",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/tests/audit_script.rs::audit_orchestration_has_no_environment_bypass_or_implicit_provisioning",
+      "role": "root_cargo",
+      "path": "crates/rayman/tests/audit_script.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "audit_orchestration_has_no_environment_bypass_or_implicit_provisioning",
+      "selector_sha256": "ce1b139faa9862ce05cfaaed4fa19a9373e0e4043f7afaf1bda7ab487cd68364",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -3908,13 +4003,32 @@
     },
     {
       "test_id": "TEST-RUST-CURRENT-AND-VALID-ARCHIVED-GOALS-CANNOT-MISUSE-I-4FFDD68EF47C",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/goal/tests.rs::current_and_valid_archived_goals_cannot_misuse_integrity_quarantine",
       "role": "root_cargo",
       "path": "crates/rayman/src/goal/tests.rs",
       "selector_kind": "rust_test_fn",
       "selector": "current_and_valid_archived_goals_cannot_misuse_integrity_quarantine",
       "selector_sha256": "4cc63525b5c57e8d6996e08fca15e360abc2c9c5f97d7acd188c86f91dec5069",
+      "cfg": "all",
+      "owner": null,
+      "retirement": {
+        "retired_at": "2026-09-07",
+        "reason": "Reviewed audit repair: canonical manifest bytes, shared quality reader, and corrected delivery declarations.",
+        "replaced_by": [
+          "TEST-RUST-CURRENT-AND-VALID-ARCHIVED-GOALS-CANNOT-MISUSE-I-4FFDD68EF47C-AUDIT-20260908"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-CURRENT-AND-VALID-ARCHIVED-GOALS-CANNOT-MISUSE-I-4FFDD68EF47C-AUDIT-20260908",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/goal/tests.rs::current_and_valid_archived_goals_cannot_misuse_integrity_quarantine",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/goal/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "current_and_valid_archived_goals_cannot_misuse_integrity_quarantine",
+      "selector_sha256": "ed98a4765bfaf9b486f43a1368a85f6e7d36a4118cb47cbf0b1d3c22eb0df47b",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -5867,13 +5981,32 @@
     },
     {
       "test_id": "TEST-RUST-INVALID-CURRENT-LEGACY-SUCCESS-CAN-BE-QUARANTINE-4BB3281FDA15",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/goal/tests/legacy_success.rs::invalid_current_legacy_success_can_be_quarantined_atomically",
       "role": "root_cargo",
       "path": "crates/rayman/src/goal/tests/legacy_success.rs",
       "selector_kind": "rust_test_fn",
       "selector": "invalid_current_legacy_success_can_be_quarantined_atomically",
       "selector_sha256": "3a9a889c9f2187cb256709adb2ce3f087e280c6b0cf5e1906e25069746972929",
+      "cfg": "all",
+      "owner": null,
+      "retirement": {
+        "retired_at": "2026-09-07",
+        "reason": "Reviewed audit repair: canonical manifest bytes, shared quality reader, and corrected delivery declarations.",
+        "replaced_by": [
+          "TEST-RUST-INVALID-CURRENT-LEGACY-SUCCESS-CAN-BE-QUARANTINE-4BB3281FDA15-AUDIT-20260908"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-INVALID-CURRENT-LEGACY-SUCCESS-CAN-BE-QUARANTINE-4BB3281FDA15-AUDIT-20260908",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/goal/tests/legacy_success.rs::invalid_current_legacy_success_can_be_quarantined_atomically",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/goal/tests/legacy_success.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "invalid_current_legacy_success_can_be_quarantined_atomically",
+      "selector_sha256": "40db87722cda43203da30b33cb9b92031cc91f801e48c74f2ec8a169752ab410",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -9854,13 +9987,32 @@
     },
     {
       "test_id": "TEST-RUST-REPOSITORY-QUALITY-CONSUMERS-REJECT-MALFORMED-TY-B97DE1372281",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/tests/audit_script.rs::repository_quality_consumers_reject_malformed_types_and_ignore_stale_native_exit_codes",
       "role": "root_cargo",
       "path": "crates/rayman/tests/audit_script.rs",
       "selector_kind": "rust_test_fn",
       "selector": "repository_quality_consumers_reject_malformed_types_and_ignore_stale_native_exit_codes",
       "selector_sha256": "1e5267f5ba7d701d25d38220174bdd8bb4d9d115680f3c96552fe478bc8057f9",
+      "cfg": "all",
+      "owner": null,
+      "retirement": {
+        "retired_at": "2026-09-07",
+        "reason": "Reviewed audit repair: canonical manifest bytes, shared quality reader, and corrected delivery declarations.",
+        "replaced_by": [
+          "TEST-RUST-REPOSITORY-QUALITY-CONSUMERS-REJECT-MALFORMED-TY-B97DE1372281-AUDIT-20260908"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-REPOSITORY-QUALITY-CONSUMERS-REJECT-MALFORMED-TY-B97DE1372281-AUDIT-20260908",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/tests/audit_script.rs::repository_quality_consumers_reject_malformed_types_and_ignore_stale_native_exit_codes",
+      "role": "root_cargo",
+      "path": "crates/rayman/tests/audit_script.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "repository_quality_consumers_reject_malformed_types_and_ignore_stale_native_exit_codes",
+      "selector_sha256": "91350f91dedef32c7f1f4085108e9913f084c8c2cd190f396f1dd42b4e2d5546",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -13287,9 +13439,24 @@
     },
     {
       "asset_id": "ASSET-FILE-R4-9BDB5C4AB657-R7",
-      "status": "active",
+      "status": "retired",
       "path": "crates/rayman/tests/audit_script.rs",
       "sha256": "60811facd1c2bfff65fada6ca8e10059307012c1878acbe4276bd41313c44eee",
+      "kind": "dedicated_file",
+      "cleanup_policy": "delete_on_last_reference",
+      "retirement": {
+        "retired_at": "2026-09-07",
+        "reason": "Reviewed audit repair: canonical manifest bytes, shared quality reader, and corrected delivery declarations.",
+        "replaced_by": [
+          "ASSET-FILE-R4-9BDB5C4AB657-R7-AUDIT-20260908"
+        ]
+      }
+    },
+    {
+      "asset_id": "ASSET-FILE-R4-9BDB5C4AB657-R7-AUDIT-20260908",
+      "status": "active",
+      "path": "crates/rayman/tests/audit_script.rs",
+      "sha256": "5482b7894c3140eb3c4f028e643b70f0b6c61f4e05dee8db0b7d85cab88f5050",
       "kind": "dedicated_file",
       "cleanup_policy": "delete_on_last_reference",
       "retirement": null

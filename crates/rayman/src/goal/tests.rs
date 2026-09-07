@@ -1527,7 +1527,7 @@ fn current_and_valid_archived_goals_cannot_misuse_integrity_quarantine() {
             .quarantine_invalid_history(&current.id, "hide current success")
             .unwrap_err()
             .to_string()
-            .contains("已归档")
+            .contains("trusted archive route")
     );
 
     let archived = store
