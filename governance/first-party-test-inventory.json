@@ -20,11 +20,11 @@
     ]
   },
   "revision": {
-    "generation": 15,
+    "generation": 16,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 14,
-      "sha256": "cde4a770bc7be32de40350a12e354f6c423b7357c22adda0726533547d2df182"
+      "generation": 15,
+      "sha256": "282ebf0ccda7aa1975c7ee0c999c98a73da45206eda6001d64fb7564066a73d4"
     }
   },
   "tests": [
@@ -2189,6 +2189,19 @@
       "selector": "background_descendants_are_reaped_after_success_and_failure",
       "selector_sha256": "dcac3afe7a845d070da44dabe6683773d46279a5eded1981f9b39214aa0080f0",
       "cfg": "windows",
+      "owner": null,
+      "retirement": null
+    },
+    {
+      "test_id": "TEST-RUST-BACKSLASH-REPOSITORY-HELPER-LITERALS-STILL-BIND-3F1B28D32EF5",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/goal/tests/authority_gate.rs::backslash_repository_helper_literals_still_bind_existing_helpers",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/goal/tests/authority_gate.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "backslash_repository_helper_literals_still_bind_existing_helpers",
+      "selector_sha256": "945df8269f61356851850cc0ecf7de97edf56ea053f46f622cb7fe22bb705882",
+      "cfg": "all",
       "owner": null,
       "retirement": null
     },
@@ -4429,6 +4442,19 @@
       "selector_kind": "rust_test_fn",
       "selector": "every_probe_names_what_it_is_needed_for",
       "selector_sha256": "bfae8d6fe125314bf15fa077ba33d887d3d7d78240dbf7672a8376e48c3c8732",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
+      "test_id": "TEST-RUST-EXECUTABLE-EXTERNAL-POWERSHELL-DEPENDENCY-FAILS-D3709C7374BA",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/goal/tests/authority_gate.rs::executable_external_powershell_dependency_fails_closed",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/goal/tests/authority_gate.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "executable_external_powershell_dependency_fails_closed",
+      "selector_sha256": "9c56d593da0403c5931b35793898029154a97e546067dd563072e963e7d89af8",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -10193,6 +10219,19 @@
       "selector_kind": "rust_test_fn",
       "selector": "runtime_authored_catalog_matches_all_production_source_templates",
       "selector_sha256": "784b301b77a532c419d5008db8da109f165540a35a94e94dfddddb8be1bfa2a4",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
+      "test_id": "TEST-RUST-RUNTIME-POWERSHELL-PATH-LITERALS-DO-NOT-POLLUTE-819D7934D048",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/goal/tests/authority_gate.rs::runtime_powershell_path_literals_do_not_pollute_gate_dependency_closure",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/goal/tests/authority_gate.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "runtime_powershell_path_literals_do_not_pollute_gate_dependency_closure",
+      "selector_sha256": "1b43758bff9bf2f8d209bc8e60bd5905ff02dbe35111eec16125f62eaacc4deb",
       "cfg": "all",
       "owner": null,
       "retirement": null

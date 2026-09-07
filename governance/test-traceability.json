@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 17,
+    "generation": 18,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 16,
-      "sha256": "e0e6a37e7c9526d9fa8017445b5ea72e8156db02f124dc0a1f4f8afc6ea317f5"
+      "generation": 17,
+      "sha256": "54fa6166742d7541f2ab664efc3136a00bba3c39769a2b5940d8e85125da07f9"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "282ebf0ccda7aa1975c7ee0c999c98a73da45206eda6001d64fb7564066a73d4"
+    "sha256": "525c49675f9783f7e8e39ab9df8d176d4c9978da2d908ccf50cafc4312dc3964"
   },
   "sources": [
     {
@@ -77003,6 +77003,69 @@
         "valid_until": "2027-03-06"
       },
       "semantic_sha256": "26e15551f50d00926002a5e68ec2744defc3186f50654b317eb66a538fb320e4",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R16-GOAL-AUTHORITY-BACKSLASH-HELPER-LITERAL",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GOAL-AUTHORITY-SOURCE-R4"
+      ],
+      "test_ids": [
+        "TEST-RUST-BACKSLASH-REPOSITORY-HELPER-LITERALS-STILL-BIND-3F1B28D32EF5"
+      ],
+      "rule_id": "RULE-REPO-GOAL-AUTHORITY",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-07",
+        "valid_until": "2027-03-07"
+      },
+      "semantic_sha256": "7cbd3c0e3b8b04bbd95e293b8a924a5b12140b0442aee1648be8907f22301a2f",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R16-GOAL-AUTHORITY-EXECUTABLE-EXTERNAL-PS1",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GOAL-AUTHORITY-SOURCE-R4"
+      ],
+      "test_ids": [
+        "TEST-RUST-EXECUTABLE-EXTERNAL-POWERSHELL-DEPENDENCY-FAILS-D3709C7374BA"
+      ],
+      "rule_id": "RULE-REPO-GOAL-AUTHORITY",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-07",
+        "valid_until": "2027-03-07"
+      },
+      "semantic_sha256": "da7caff732d9ce8f511d3e8c8f12e224c2ccf3da62b99a3954d58219780f922c",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-R16-GOAL-AUTHORITY-RUNTIME-PS1-LITERAL",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GOAL-AUTHORITY-SOURCE-R4"
+      ],
+      "test_ids": [
+        "TEST-RUST-RUNTIME-POWERSHELL-PATH-LITERALS-DO-NOT-POLLUTE-819D7934D048"
+      ],
+      "rule_id": "RULE-REPO-GOAL-AUTHORITY",
+      "gate_id": "GATE-CARGO-ROOT-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-07",
+        "valid_until": "2027-03-07"
+      },
+      "semantic_sha256": "5686c3def0cce6a1a9869b6f41bfaf682c3952ae1b559f1d81608c40050ee66d",
       "retirement": null
     },
     {

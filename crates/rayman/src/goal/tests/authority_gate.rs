@@ -1373,6 +1373,104 @@ fn absent_dynamic_fixture_preserves_live_and_captured_authority() {
 }
 
 #[test]
+fn runtime_powershell_path_literals_do_not_pollute_gate_dependency_closure() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    write(
+        root,
+        "scripts/check-repo.ps1",
+        ". (Join-Path $PSScriptRoot 'install-codex-powershell-broker.ps1')\n",
+    );
+    write(
+        root,
+        "scripts/install-codex-powershell-broker.ps1",
+        "$installerPath = Assert-ChildPath -Child (Join-Path $script:RepositoryRoot 'scripts\\install-codex-powershell-broker.ps1')\n$deepestWorker = Join-Path $caseRoot ('versions\\' + 'abc' + '\\codex-powershell-broker.ps1')\n$receipt = [pscustomobject]@{ worker_path = 'C:\\ProgramData\\Rayman\\CodexPowerShellBroker\\versions\\abc\\codex-powershell-broker.ps1' }\n",
+    );
+    let store = GoalStore::new(root);
+    let goal = store
+        .start(
+            "bind runtime literals",
+            &[("prove repository".into(), true)],
+        )
+        .unwrap();
+    let command = "pwsh -NoProfile -File scripts/check-repo.ps1";
+    let binding = authority_gate_binding_for_goal(&goal, root, command)
+        .unwrap()
+        .unwrap();
+
+    assert!(
+        binding
+            .dependency_sha256
+            .contains_key("scripts/install-codex-powershell-broker.ps1")
+    );
+    assert!(
+        binding
+            .dependency_sha256
+            .keys()
+            .all(|key| !key.contains("ProgramData") && !key.contains("versions/abc")),
+        "runtime path literals must not become repository dependencies: {:?}",
+        binding.dependency_sha256.keys().collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn executable_external_powershell_dependency_fails_closed() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    write(
+        root,
+        "scripts/check-repo.ps1",
+        "& 'C:\\ProgramData\\Rayman\\outside.ps1'\n",
+    );
+    let store = GoalStore::new(root);
+    let goal = store
+        .start(
+            "reject external helper",
+            &[("prove repository".into(), true)],
+        )
+        .unwrap();
+    let command = "pwsh -NoProfile -File scripts/check-repo.ps1";
+    let error = validate_authority_command_for_goal(root, &goal, command)
+        .unwrap_err()
+        .to_string();
+
+    assert!(
+        error.contains("executable dependency") && error.contains("non-repository path"),
+        "unexpected authority error: {error:#}"
+    );
+}
+
+#[test]
+fn backslash_repository_helper_literals_still_bind_existing_helpers() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    write(
+        root,
+        "scripts/check-repo.ps1",
+        ". (Join-Path $PSScriptRoot 'nested\\helper.ps1')\n",
+    );
+    write(root, "scripts/nested/helper.ps1", "throw 'baseline'\n");
+    let store = GoalStore::new(root);
+    let goal = store
+        .start(
+            "bind backslash helper",
+            &[("prove repository".into(), true)],
+        )
+        .unwrap();
+
+    write(root, "scripts/nested/helper.ps1", "return\n");
+    let command = "pwsh -NoProfile -File scripts/check-repo.ps1";
+    let error = authority_gate_binding_for_goal(&goal, root, command)
+        .unwrap_err()
+        .to_string();
+
+    assert!(
+        error.contains("scripts/nested/helper.ps1"),
+        "unexpected authority error: {error:#}"
+    );
+}
+
+#[test]
 fn dependency_slots_reject_added_deleted_and_changed_helpers_in_live_and_capture() {
     fn assert_rejected(goal: &Goal, root: &Path) {
         let fingerprint = workspace_fingerprint(root).unwrap();

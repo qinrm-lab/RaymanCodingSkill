@@ -664,18 +664,43 @@ fn xtask_authority_dependency_key(key: &str) -> bool {
             || key.starts_with("scripts/"))
 }
 
-fn dependency_key(parent: &str, literal: &str) -> Result<String> {
-    if literal.is_empty()
-        || literal != literal.trim()
-        || literal.starts_with('/')
-        || literal.starts_with('\\')
-        || literal.starts_with("//")
-        || literal.contains(':')
-        || literal.contains('\0')
-        || literal.contains('\\')
-    {
-        bail!("PowerShell gate dependency must be a canonical repository-relative key: {literal}");
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PowerShellDependencyLiteral {
+    text: String,
+    execution_context: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PowerShellDependencyKey {
+    key: String,
+    retain_missing_slot: bool,
+}
+
+fn line_has_powershell_script_execution(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    if trimmed.starts_with('&') || trimmed.starts_with(". ") || trimmed.starts_with(".(") {
+        return true;
     }
+    let lowered = trimmed.to_ascii_lowercase();
+    lowered.contains(" -file ")
+        || lowered.contains(" -filepath ")
+        || lowered.contains("start-process")
+}
+
+fn reject_or_ignore_dependency_literal(
+    literal: &PowerShellDependencyLiteral,
+    reason: &str,
+) -> Result<Option<PowerShellDependencyKey>> {
+    if literal.execution_context {
+        bail!(
+            "PowerShell gate executable dependency must be a canonical repository-relative key: {} ({reason})",
+            literal.text
+        );
+    }
+    Ok(None)
+}
+
+fn canonical_dependency_key(parent: &str, literal: &str) -> Result<String> {
     let mut parts = parent.split('/').collect::<Vec<_>>();
     if parts.pop().is_none() {
         bail!("PowerShell gate entrypoint has no parent: {parent}");
@@ -696,7 +721,41 @@ fn dependency_key(parent: &str, literal: &str) -> Result<String> {
     strict_authority_key(&key, true)
 }
 
-fn dependency_literals(source: &[u8]) -> Result<Vec<String>> {
+fn dependency_key(
+    parent: &str,
+    literal: &PowerShellDependencyLiteral,
+) -> Result<Option<PowerShellDependencyKey>> {
+    let raw = literal.text.as_str();
+    if raw.is_empty() || raw != raw.trim() || raw.contains('\0') {
+        return reject_or_ignore_dependency_literal(literal, "invalid text boundary");
+    }
+    if raw.starts_with('/') || raw.starts_with('\\') || raw.starts_with("//") {
+        return reject_or_ignore_dependency_literal(literal, "rooted path");
+    }
+    if raw.contains(':') {
+        return reject_or_ignore_dependency_literal(literal, "non-repository path");
+    }
+    let (candidate, retain_missing_slot) = if raw.contains('\\') {
+        (raw.replace('\\', "/"), false)
+    } else {
+        (raw.to_string(), true)
+    };
+    match canonical_dependency_key(parent, &candidate) {
+        Ok(key) => Ok(Some(PowerShellDependencyKey {
+            key,
+            retain_missing_slot,
+        })),
+        Err(_) if literal.execution_context => {
+            bail!(
+                "PowerShell gate executable dependency must be a canonical repository-relative key: {}",
+                literal.text
+            )
+        }
+        Err(_) => Ok(None),
+    }
+}
+
+fn dependency_literals(source: &[u8]) -> Result<Vec<PowerShellDependencyLiteral>> {
     let source = std::str::from_utf8(source)
         .context("PowerShell gate source must be valid UTF-8 for dependency closure")?;
     let mut result = Vec::new();
@@ -704,10 +763,15 @@ fn dependency_literals(source: &[u8]) -> Result<Vec<String>> {
         if line.trim_start().starts_with('#') {
             continue;
         }
+        let execution_context = line_has_powershell_script_execution(line);
         result.extend(
             powershell_quoted_literals(line)
                 .into_iter()
-                .filter(|literal| literal.to_ascii_lowercase().ends_with(".ps1")),
+                .filter(|literal| literal.to_ascii_lowercase().ends_with(".ps1"))
+                .map(|text| PowerShellDependencyLiteral {
+                    text,
+                    execution_context,
+                }),
         );
     }
     Ok(result)
@@ -758,33 +822,40 @@ fn trusted_workspace_gate_dependency_keys_with_context(
             bail!("PowerShell gate dependency key is ambiguous: {key}");
         }
         for literal in dependency_literals(captured.bytes)? {
-            let helper = dependency_key(&key, &literal)?;
-            match decision.captured_workspace_file(&helper)? {
-                Some(file) if file.key == helper => {
+            let Some(helper) = dependency_key(&key, &literal)? else {
+                continue;
+            };
+            match decision.captured_workspace_file(&helper.key)? {
+                Some(file) if file.key == helper.key => {
                     if receipt_baseline.is_some_and(|baseline| {
-                        baseline_hash_for_path(baseline, &helper)
+                        baseline_hash_for_path(baseline, &helper.key)
                             .ok()
                             .flatten()
                             .is_none()
                     }) {
                         continue;
                     }
-                    pending.push(helper);
+                    pending.push(helper.key);
                 }
                 Some(file) => bail!(
-                    "PowerShell gate dependency has ambiguous captured identity: {helper} -> {}",
+                    "PowerShell gate dependency has ambiguous captured identity: {} -> {}",
+                    helper.key,
                     file.key
                 ),
                 None if receipt_baseline.is_some_and(|baseline| {
-                    baseline_hash_for_path(baseline, &helper)
+                    baseline_hash_for_path(baseline, &helper.key)
                         .ok()
                         .flatten()
                         .is_none()
                 }) => {}
-                None if receipt_baseline.is_none() => {
-                    dependencies.insert(helper);
+                None if receipt_baseline.is_none() && helper.retain_missing_slot => {
+                    dependencies.insert(helper.key);
                 }
-                None => bail!("PowerShell gate dependency is absent from capture: {helper}"),
+                None if receipt_baseline.is_none() => {}
+                None => bail!(
+                    "PowerShell gate dependency is absent from capture: {}",
+                    helper.key
+                ),
             }
         }
     }
@@ -832,10 +903,12 @@ fn trusted_workspace_gate_dependency_paths(
         crate::context::ensure_source_file(root, &path)?;
         let source = fs::read(&path)?;
         for literal in dependency_literals(&source)? {
-            let helper = dependency_key(&key, &literal)?;
-            let path = root.join(&helper);
+            let Some(helper) = dependency_key(&key, &literal)? else {
+                continue;
+            };
+            let path = root.join(&helper.key);
             let missing_at_goal_baseline = receipt_baseline.is_some_and(|baseline| {
-                baseline_hash_for_path(baseline, &helper)
+                baseline_hash_for_path(baseline, &helper.key)
                     .ok()
                     .flatten()
                     .is_none()
@@ -845,16 +918,21 @@ fn trusted_workspace_gate_dependency_paths(
                     if missing_at_goal_baseline {
                         continue;
                     }
-                    pending.push(helper);
+                    pending.push(helper.key);
                 }
                 Err(error) if error_is_not_found(&error) && missing_at_goal_baseline => {}
-                Err(error) if error_is_not_found(&error) && receipt_baseline.is_none() => {
+                Err(error)
+                    if error_is_not_found(&error)
+                        && receipt_baseline.is_none()
+                        && helper.retain_missing_slot =>
+                {
                     // Retain the missing literal as an empty dependency slot.
                     // The caller compares `None` with the goal baseline, so a
                     // fixture absent on both sides is harmless while deletion
                     // of a baseline helper remains a self-validation conflict.
-                    dependencies.insert(helper);
+                    dependencies.insert(helper.key);
                 }
+                Err(error) if error_is_not_found(&error) && receipt_baseline.is_none() => {}
                 Err(error) => return Err(error),
             }
         }
