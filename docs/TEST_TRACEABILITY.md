@@ -126,8 +126,11 @@ old test ID and names a reviewed replacement.
 Each manifest revision binds predecessor schema, generation, and SHA-256.
 The two manifests must be UTF-8 without a BOM and use LF line endings before
 hashing or validation. The checker rejects noncanonical bytes before history
-lookup; it never normalizes bytes into acceptance. After generating JSON on
-Windows, normalize the output to LF before computing any dependent digest.
+lookup; it never normalizes bytes into acceptance. Use `scripts/update-test-traceability.ps1` for reviewed draft generation: it
+checks source bytes, computes derived hashes, validates successor history,
+emits canonical LF JSON and verifies the written bytes. See
+[Source bytes](SOURCE_BYTES.md) for candidate publication, recovery and summary.
+Do not compute dependent digests before canonicalizing generated output.
 Validate both the worktree and a clean Git checkout: Git's text filters can
 otherwise commit different bytes while still reporting a clean status.
 Delete/reintroduction, shallow history, unreadable Git state, and a missing

@@ -339,6 +339,7 @@ function Get-ReleaseBinding {
     # The verifier owns both the environment policy and activation snapshot.
     # Calling its read-only inspector on every binding computation makes the
     # initial, post-audit, reuse, and terminal boundaries use one exact source.
+    & (Join-Path $PSScriptRoot 'source-bytes.ps1') | Out-Null
     $sourceFreshInputs = Get-SourceFreshInputInspection
     $git = Resolve-ApplicationIdentity 'git'
     $status = & $git.path '-C' $repoRoot 'status' '--porcelain=v1' '--untracked-files=all'
@@ -357,6 +358,8 @@ function Get-ReleaseBinding {
     $scripts = [ordered]@{}
     foreach ($name in @(
         'audit-repository.ps1',
+        'source-bytes.ps1',
+        'update-test-traceability.ps1',
         'check-test-traceability.ps1',
         'check-test-traceability-v2.ps1',
         'check-update-freshness.ps1',

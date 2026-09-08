@@ -63,6 +63,9 @@ switch ($PSCmdlet.ParameterSetName) {
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $artifactName = if ($IsWindows) { 'rayman.exe' } else { 'rayman' }
+if ($PSCmdlet.ParameterSetName -eq 'Audit') {
+    & (Join-Path $PSScriptRoot 'source-bytes.ps1')
+}
 $script:CurrentAuditPhase = 'bootstrap'
 $script:RepositoryQualityProviderSha256 = '47f405e725ad272b2d2c0d2b189855375962689f2b356eadc306305f957a0b77'
 function Write-AuditPhase {
@@ -128,6 +131,17 @@ function Get-FileSha256 {
     )
 
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Invoke-PackagePreflight {
+    param(
+        [Parameter(Mandatory = $true)][string]$CargoPath,
+        [scriptblock]$RunNative = { param($path, $arguments) Invoke-NativeChecked -FilePath $path -Arguments $arguments },
+        [scriptblock]$RecordPhase = { param($status) Write-AuditPhase -Name 'package_preflight' -Status $status }
+    )
+    & $RecordPhase 'start'
+    & $RunNative $CargoPath @('package', '--locked', '-p', 'rayman')
+    & $RecordPhase 'pass'
 }
 
 function Resolve-NativeApplication {
@@ -1621,6 +1635,28 @@ db-path = "unexpected"
     foreach ($identity in $NativeIdentities) {
         Assert-NativeApplicationIdentity -Identity $identity
     }
+    $packageEvents = [Collections.Generic.List[string]]::new()
+    $packageCalls = [Collections.Generic.List[string]]::new()
+    $recordPackage = { param($status) $packageEvents.Add($status) }
+    Invoke-PackagePreflight -CargoPath 'fixture-cargo' -RecordPhase $recordPackage -RunNative {
+        param($path, $arguments)
+        $packageCalls.Add("$path $($arguments -join ' ')")
+    }
+    if (($packageEvents -join ',') -cne 'start,pass' -or
+        $packageCalls.Count -ne 1 -or $packageCalls[0] -cne 'fixture-cargo package --locked -p rayman') {
+        throw 'Package preflight did not execute the exact locked package command'
+    }
+    $packageEvents.Clear()
+    $packageFailed = $false
+    try {
+        Invoke-PackagePreflight -CargoPath 'fixture-cargo' -RecordPhase $recordPackage -RunNative {
+            param($path, $arguments)
+            throw 'intentional package transport failure'
+        }
+    } catch { $packageFailed = $_.Exception.Message.Contains('intentional package transport failure') }
+    if (-not $packageFailed -or ($packageEvents -join ',') -cne 'start') {
+        throw 'Failed package preflight incorrectly reported pass or continued'
+    }
     Write-Host 'Audit script self-test passed: native shadow/identity, explicit preparation authority, complete custom-grade guard task, exact isolated MSRV, isolated advisory state, and managed coverage guards fail closed.'
 }
 
@@ -1725,7 +1761,7 @@ function Get-RepositoryQualityCommands {
     $usingDefaultProvider = $ProviderPath -ceq (Join-Path $PSScriptRoot 'repository-quality.ps1')
     $reader = Join-Path $PSScriptRoot 'read-repository-quality.ps1'
     $readerHash = (Get-FileHash -LiteralPath $reader -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($readerHash -cne '769662308a73c4ea33f2a80e559fe4794ede46c0ba3a2a3d75088a1cc9fa21bd') {
+    if ($readerHash -cne 'd540cb7b63b67f9ed28616ed1f8dd9a52d17c1a8096e7b39cd789dd5525afd4b') {
         throw "Repository quality reader hash drifted: $readerHash"
     }
     $expectedHash = if ($usingDefaultProvider) { $script:RepositoryQualityProviderSha256 } else { '' }
@@ -1765,6 +1801,8 @@ if ($PSCmdlet.ParameterSetName -eq 'SelfTest') {
 }
 if ($PSCmdlet.ParameterSetName -eq 'Audit') {
     Write-AuditPhase -Name 'release_script_self_tests' -Status 'start'
+    & (Join-Path $PSScriptRoot 'source-bytes.ps1') -SelfTest
+    & (Join-Path $PSScriptRoot 'update-test-traceability.ps1') -SelfTest
     try {
         foreach ($scriptName in @(
             'check-ci-workflow.ps1',
@@ -1844,6 +1882,10 @@ try {
         throw "The MSRV $MsrvToolchain llvm-tools-preview component is unavailable. Run 'pwsh -NoProfile -File scripts/audit-repository.ps1 -PrepareAuditTools' as a separate explicit provisioning step, then rerun the audit. $($_.Exception.Message)"
     }
     Write-AuditPhase -Name 'environment_preflight' -Status 'pass'
+
+    # Exercise the real package/cache/transport boundary before the expensive
+    # quality, MSRV and coverage lanes. Installation remains a separate smoke.
+    Invoke-PackagePreflight -CargoPath $nativeApplications.Cargo.Path
 
     Write-AuditPhase -Name 'root_quality' -Status 'start'
     foreach ($qualityCommand in @(Get-RepositoryQualityCommands -Suite Root)) {
@@ -1927,9 +1969,8 @@ try {
     Write-AuditPhase -Name 'evals' -Status 'pass'
     Write-AuditPhase -Name 'package_install_smoke' -Status 'start'
 
-    # Packaging and cargo-install are separate from a workspace build. Exercise
-    # both so missing package metadata/files cannot survive until release day.
-    Invoke-NativeChecked $nativeApplications.Cargo.Path @('package', '--locked', '-p', 'rayman')
+    # The package was verified in package_preflight on this audit's source.
+    # cargo-install remains a distinct installation validation.
     # Anchor on $repoRoot like every sibling helper. [IO.Path]::GetFullPath
     # resolves a relative path against [Environment]::CurrentDirectory, which
     # Push-Location/Set-Location never update, so a pwsh started outside the repo

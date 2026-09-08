@@ -1,0 +1,3 @@
+#!/bin/sh
+# Git invokes this adapter; all policy and file handling remain in PowerShell.
+exec pwsh -NoProfile -File scripts/source-bytes.ps1

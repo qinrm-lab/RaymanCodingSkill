@@ -1124,3 +1124,35 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
         );
     }
 }
+
+#[test]
+fn source_bytes_and_governance_publication_regressions_execute() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    for script in ["source-bytes.ps1", "update-test-traceability.ps1"] {
+        let output = Command::new("pwsh")
+            .arg("-NoProfile")
+            .arg("-File")
+            .arg(root.join("scripts").join(script))
+            .arg("-SelfTest")
+            .output()
+            .expect("PowerShell source bytes/publication regression must execute");
+        assert!(
+            output.status.success(),
+            "{script}: {}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("self-test: PASS"));
+    }
+    let audit = fs::read_to_string(root.join("scripts/audit-repository.ps1")).unwrap();
+    let package = audit
+        .find("Invoke-PackagePreflight -CargoPath $nativeApplications.Cargo.Path")
+        .unwrap();
+    let quality = audit
+        .find("Write-AuditPhase -Name 'root_quality' -Status 'start'")
+        .unwrap();
+    assert!(
+        package < quality,
+        "package transport/cache must fail before expensive quality lanes"
+    );
+}

@@ -4,7 +4,12 @@ param(
     [string]$InventoryPath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'governance/first-party-test-inventory.json'),
     [switch]$SelfTest,
     [switch]$RuntimeInventory,
-    [switch]$ListInventory
+    [switch]$ListInventory,
+    [switch]$Generate,
+    [string]$DraftInventoryPath,
+    [string]$DraftManifestPath,
+    [string]$OutputDirectory,
+    [switch]$Summary
 )
 
 Set-StrictMode -Version Latest
@@ -883,6 +888,98 @@ function Assert-CanonicalManifestBytes {
     $text = $script:Utf8.GetString($Bytes)
     if ($text.StartsWith([string][char]0xFEFF, [StringComparison]::Ordinal) -or $text.Contains("`r")) {
         Throw-TraceError 'TRACE_NONCANONICAL_BYTES' "$Label must be UTF-8 without BOM and use LF before hashing; preserve exact byte bindings"
+    }
+}
+
+function ConvertTo-CanonicalJsonBytes {
+    param([Parameter(Mandatory = $true)]$Document)
+    $text = ($Document | ConvertTo-Json -Depth 100).Replace("`r`n", "`n") + "`n"
+    $bytes = $script:Utf8.GetBytes($text)
+    Assert-CanonicalManifestBytes -Bytes $bytes -Label 'generated JSON'
+    return ,$bytes
+}
+
+function New-TraceabilityCandidate {
+    param([string]$InventoryDraft, [string]$ManifestDraft, [string]$Destination)
+    if (-not $InventoryDraft -or -not $ManifestDraft -or -not [IO.Path]::IsPathFullyQualified($Destination)) {
+        Throw-TraceError 'TRACE_GENERATE_ARGUMENTS' 'generation requires two explicit draft files and a new absolute output directory'
+    }
+    if (Test-Path -LiteralPath $Destination) { Throw-TraceError 'TRACE_GENERATE_DESTINATION' 'output directory already exists' }
+    $null = & (Join-Path $PSScriptRoot 'source-bytes.ps1') -Root $script:RepoRoot
+    $inventory = ConvertFrom-StrictJsonBytes -Bytes (Get-FileBytes $InventoryDraft) -Label 'inventory draft'
+    $manifest = ConvertFrom-StrictJsonBytes -Bytes (Get-FileBytes $ManifestDraft) -Label 'traceability draft'
+    $oldInventory = Invoke-GitBytes @('show', "HEAD:$script:InventoryRelativePath")
+    $oldManifest = Invoke-GitBytes @('show', "HEAD:$script:ManifestRelativePath")
+    if ($oldInventory.ExitCode -ne 0 -or $oldManifest.ExitCode -ne 0) {
+        Throw-TraceError 'TRACE_GENERATE_PREDECESSOR' 'generation requires both committed predecessors'
+    }
+    $before = @{}
+    foreach ($path in @($script:InventoryRelativePath, $script:ManifestRelativePath)) {
+        $before[$path] = Get-Sha256Bytes (Get-FileBytes (Resolve-TracePath $path))
+    }
+    # The author supplies reviewed successor IDs, rules, links and horizons.
+    # Only derived hashes/revision bindings are generated; unchanged immutable
+    # identities cannot be renewed in place because the ordinary checker runs.
+    foreach ($pair in @(@($inventory, $oldInventory.Bytes), @($manifest, $oldManifest.Bytes))) {
+        $previous = ConvertFrom-StrictJsonBytes -Bytes $pair[1] -Label 'committed predecessor'
+        $pair[0].revision.generation = [int]$previous.revision.generation + 1
+        $pair[0].revision.predecessor = [pscustomobject][ordered]@{
+            schema = $previous.schema; generation = $previous.revision.generation
+            sha256 = Get-Sha256Bytes $pair[1]
+        }
+    }
+    $discovered = @(Get-FirstPartyTestInventory)
+    $discovery = @{}
+    foreach ($test in $discovered) { $discovery[$test.identity] = $test }
+    foreach ($test in @($inventory.tests | Where-Object status -eq 'active')) {
+        if (-not $discovery.ContainsKey([string]$test.identity)) { Throw-TraceError 'TRACE_GENERATE_TEST' "undiscovered active test: $($test.identity)" }
+        $test.selector_sha256 = $discovery[[string]$test.identity].selector_sha256
+    }
+    foreach ($asset in @($inventory.assets | Where-Object status -eq 'active')) {
+        $asset.sha256 = Get-Sha256Bytes (Get-FileBytes (Resolve-TracePath $asset.path))
+    }
+    foreach ($entry in @($manifest.sources) + @($manifest.gates)) {
+        if ($entry.status -eq 'active') { $entry.sha256 = Get-Sha256Bytes (Get-FileBytes (Resolve-TracePath $entry.path)) }
+    }
+    $inventoryBytes = ConvertTo-CanonicalJsonBytes $inventory
+    $context = Assert-InventoryDocument -Inventory $inventory -Discovered $discovered -PredecessorBytes $oldInventory.Bytes
+    $manifest.inventory.sha256 = Get-Sha256Bytes $inventoryBytes
+    $sources = @{}; $rules = @{}; $gates = @{}; $links = @{}; $tests = @{}; $assets = @{}
+    foreach ($x in $manifest.sources) { $sources[$x.source_id] = $x }
+    foreach ($x in $manifest.rules) { $rules[$x.rule_id] = $x }
+    foreach ($x in $manifest.gates) { $gates[$x.gate_id] = $x }
+    foreach ($x in $manifest.source_rule_links) { $links[$x.link_id] = $x }
+    foreach ($x in $inventory.tests) { $tests[$x.test_id] = $x }
+    foreach ($x in $inventory.assets) { $assets[$x.asset_id] = $x }
+    foreach ($binding in @($manifest.semantic_bindings | Where-Object status -eq 'active')) {
+        $binding.semantic_sha256 = Get-SemanticBindingSha256 -Binding $binding -Rule $rules[$binding.rule_id] `
+            -Gate $gates[$binding.gate_id] -SourceLinks @($binding.source_rule_link_ids | ForEach-Object { $links[$_] }) `
+            -Tests @($binding.test_ids | ForEach-Object { $tests[$_] }) -Sources $sources -Assets $assets
+    }
+    $null = Assert-TraceabilityDocument -Manifest $manifest -InventoryContext $context -AsOf ([DateTime]::UtcNow.Date) `
+        -PredecessorBytes $oldManifest.Bytes -ExpectedInventorySha256 $manifest.inventory.sha256
+    $manifestBytes = ConvertTo-CanonicalJsonBytes $manifest
+    $parent = Get-Item -LiteralPath (Split-Path -Parent $Destination) -Force
+    if (-not $parent.PSIsContainer -or ($parent.Attributes -band [IO.FileAttributes]::ReparsePoint)) { Throw-TraceError 'TRACE_GENERATE_DESTINATION' 'ordinary output parent required' }
+    $null = New-Item -ItemType Directory -Path $Destination -ErrorAction Stop
+    $files = @(
+        @{ path = $script:InventoryRelativePath; bytes = $inventoryBytes },
+        @{ path = $script:ManifestRelativePath; bytes = $manifestBytes }
+    )
+    foreach ($file in $files) {
+        if ((Get-Sha256Bytes (Get-FileBytes (Resolve-TracePath $file.path))) -cne $before[$file.path]) { Throw-TraceError 'TRACE_GENERATE_DRIFT' 'live manifest changed during generation' }
+        $target = Join-Path $Destination ([IO.Path]::GetFileName($file.path))
+        $stream = [IO.File]::Open($target, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+        try { $stream.Write($file.bytes); $stream.Flush($true) } finally { $stream.Dispose() }
+        if ((Get-Sha256Bytes (Get-FileBytes $target)) -cne (Get-Sha256Bytes $file.bytes)) { Throw-TraceError 'TRACE_GENERATE_READBACK' 'candidate bytes differ after writing' }
+    }
+    [ordered]@{
+        schema = 'rayman.traceability.candidate.v1'; status = 'validated'; source_modified = $false
+        output_directory = $Destination; predecessor_worktree_sha256 = $before
+        inventory_sha256 = Get-Sha256Bytes $inventoryBytes; manifest_sha256 = Get-Sha256Bytes $manifestBytes
+        active_tests = @($inventory.tests | Where-Object status -eq 'active').Count
+        active_bindings = @($manifest.semantic_bindings | Where-Object status -eq 'active').Count
+        retired_bindings = @($manifest.semantic_bindings | Where-Object status -eq 'retired').Count
     }
 }
 
@@ -2238,6 +2335,18 @@ if ($SelfTest) { Write-Output 'no cases dispatched' }
         } | Sort-Object asset_id)
     $null = Assert-InventoryDocument -Inventory $assetCurrent -Discovered $fixture.Discovered -PredecessorBytes $assetPreviousBytes
 
+    $jsonValue = [ordered]@{ label = '中文'; value = "a`r`nb" }
+    $canonicalJson = ConvertTo-CanonicalJsonBytes $jsonValue
+    Assert-CanonicalManifestBytes -Bytes $canonicalJson -Label 'generated JSON'
+    $roundTrip = ConvertFrom-StrictJsonBytes -Bytes $canonicalJson -Label 'generated JSON'
+    if ($roundTrip.value -cne "a`r`nb" -or
+        (Get-Sha256Bytes $canonicalJson) -cne (Get-Sha256Bytes (ConvertTo-CanonicalJsonBytes $roundTrip))) {
+        throw 'canonical JSON generation changed data or was not idempotent'
+    }
+    $generationRejected = $false
+    try { New-TraceabilityCandidate '' '' 'relative' | Out-Null }
+    catch { $generationRejected = $_.Exception.Message.Contains('TRACE_GENERATE_ARGUMENTS') }
+    if (-not $generationRejected) { throw 'generation accepted incomplete draft/output authority' }
     Assert-CanonicalManifestBytes -Bytes ($script:Utf8.GetBytes("{}`n")) -Label 'LF fixture'
     foreach ($invalidText in @("{}`r`n", ([string][char]0xFEFF + "{}`n"))) {
         $rejected = $false
@@ -2255,6 +2364,23 @@ if ($SelfTest) { Write-Output 'no cases dispatched' }
     Write-Output 'check-test-traceability self-test: PASS'
 }
 
+if ($Generate) {
+    if ($SelfTest -or $ListInventory -or $RuntimeInventory -or $Summary) { throw 'Generation cannot be combined with a check or listing mode' }
+    New-TraceabilityCandidate $DraftInventoryPath $DraftManifestPath $OutputDirectory | ConvertTo-Json -Depth 8
+    return
+}
+if ($DraftInventoryPath -or $DraftManifestPath -or $OutputDirectory) { throw 'Draft/output paths require -Generate' }
+if ($Summary) {
+    $document = ConvertFrom-StrictJsonBytes -Bytes (Get-FileBytes $ManifestPath) -Label 'traceability summary'
+    [ordered]@{
+        schema = 'rayman.traceability.summary.v1'; authority = $false; generation = $document.revision.generation
+        active_sources = @($document.sources | Where-Object status -eq 'active' | Select-Object source_id, path, valid_until)
+        active_rules = @($document.rules | Where-Object status -eq 'active' | Select-Object rule_id, statement)
+        active_bindings = @($document.semantic_bindings | Where-Object status -eq 'active').Count
+        retired_bindings = @($document.semantic_bindings | Where-Object status -eq 'retired').Count
+    } | ConvertTo-Json -Depth 8
+    return
+}
 if ($ListInventory) {
     [ordered]@{
         schema = 'rayman.first-party-test-inventory.discovery.v1'

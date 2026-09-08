@@ -1,0 +1,8 @@
+{
+  "schema": "rayman.source-bytes.policy.v1",
+  "text_extensions": [".rs", ".ps1", ".psm1", ".py", ".md", ".toml", ".json", ".yaml", ".yml", ".txt", ".lock", ".sh"],
+  "text_names": [".editorconfig", ".gitattributes", ".gitignore", "LICENSE", "pre-commit"],
+  "binary_extensions": [".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".exe"],
+  "binary_paths": [],
+  "crlf_paths": []
+}

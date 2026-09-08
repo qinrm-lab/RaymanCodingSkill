@@ -121,6 +121,12 @@ function Assert-CiWorkflowContract {
             throw "signed-release-freshness does not verify complete bundle input: $required"
         }
     }
+    $primary = [regex]::Match($Text, '(?ms)^  check:\s*$(.*?)(?=^  [A-Za-z0-9_-]+:\s*$|\z)').Groups[1].Value
+    if ([regex]::Matches($primary, 'cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate').Count -ne 1 -or
+        $primary -match '(?m)^\s*(?:-\s*)?run:\s*cargo (fmt|clippy|test)(?:\s|$)') {
+        throw 'Primary CI must execute the repository gate once without duplicate root fmt/clippy/test steps'
+    }
+
 }
 
 function Assert-Rejected {
@@ -150,6 +156,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - run: cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate
   test-traceability:
     strategy:
       matrix:
@@ -230,6 +237,7 @@ jobs:
     Assert-Rejected -Label 'missing non-linux-unix test gate' -Text ($valid -replace ', macos-latest', '')
     Assert-Rejected -Label 'freshness missing payload asset' -Text ($valid -replace '--pattern raymancodingskill-SKILL.md', '--pattern missing-SKILL.md')
     Assert-Rejected -Label 'tag release missing staged asset directory' -Text ($valid -replace '-AssetDirectory dist', '-MinimumRemainingDays 29')
+    Assert-Rejected -Label 'duplicate primary root checks' -Text ($valid -replace '      - run: cargo run --locked', "      - run: cargo test --locked --workspace --all-targets`n      - run: cargo run --locked")
     Write-Output 'check-ci-workflow self-test: PASS'
     return
 }

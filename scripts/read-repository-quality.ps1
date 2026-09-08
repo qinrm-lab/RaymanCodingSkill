@@ -17,7 +17,16 @@ if (-not (Test-Path -LiteralPath $helper -PathType Leaf)) {
 if (-not [string]::IsNullOrWhiteSpace($ExpectedProviderSha256)) {
     $actualProviderHash = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($actualProviderHash -cne $ExpectedProviderSha256) {
-        throw "Repository quality command provider hash drifted: $actualProviderHash"
+        $hint = 'content differs'
+        try {
+            $utf8 = [Text.UTF8Encoding]::new($false, $true)
+            $text = $utf8.GetString([IO.File]::ReadAllBytes($helper))
+            if ($text.StartsWith([string][char]0xFEFF, [StringComparison]::Ordinal)) { $text = $text.Substring(1) }
+            $canonical = $utf8.GetBytes($text.Replace("`r`n", "`n"))
+            $diagnostic = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($canonical)).ToLowerInvariant()
+            if ($diagnostic -ceq $ExpectedProviderSha256) { $hint = 'only CRLF/BOM differs; restore canonical source bytes before retrying' }
+        } catch { $hint = 'invalid UTF-8 or unreadable bytes' }
+        throw "Repository quality command provider hash drifted: $actualProviderHash ($hint)"
     }
 }
 $json = & $helper -Suite $Suite | Out-String

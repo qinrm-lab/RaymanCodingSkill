@@ -9,6 +9,9 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $repoRoot
+& (Join-Path $PSScriptRoot 'source-bytes.ps1')
+& (Join-Path $PSScriptRoot 'source-bytes.ps1') -SelfTest
+& (Join-Path $PSScriptRoot 'update-test-traceability.ps1') -SelfTest
 $script:RepositoryQualityProviderSha256 = '47f405e725ad272b2d2c0d2b189855375962689f2b356eadc306305f957a0b77'
 & (Join-Path $PSScriptRoot 'check-agent-instructions.ps1') -SelfTest
 & (Join-Path $PSScriptRoot 'check-ci-workflow.ps1') -SelfTest
@@ -63,7 +66,7 @@ function Get-RepositoryQualityCommands {
     $usingDefaultProvider = $ProviderPath -ceq (Join-Path $PSScriptRoot 'repository-quality.ps1')
     $reader = Join-Path $PSScriptRoot 'read-repository-quality.ps1'
     $readerHash = (Get-FileHash -LiteralPath $reader -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($readerHash -cne '769662308a73c4ea33f2a80e559fe4794ede46c0ba3a2a3d75088a1cc9fa21bd') {
+    if ($readerHash -cne 'd540cb7b63b67f9ed28616ed1f8dd9a52d17c1a8096e7b39cd789dd5525afd4b') {
         throw "Repository quality reader hash drifted: $readerHash"
     }
     $expectedHash = if ($usingDefaultProvider) { $script:RepositoryQualityProviderSha256 } else { '' }
@@ -75,7 +78,20 @@ $git = Resolve-NativeApplication -Name 'git'
 
 foreach ($suite in @('Root', 'Evals')) {
     foreach ($qualityCommand in @(Get-RepositoryQualityCommands -Suite $suite)) {
-        Invoke-NativeChecked -Application $cargo -Arguments $qualityCommand.argv
+        $phase = [ordered]@{ schema = 'rayman.repository.phase.v1'; suite = $suite; check = $qualityCommand.name; status = 'start'; timestamp_utc = [DateTimeOffset]::UtcNow.ToString('O') }
+        Write-Output ('RAYMAN_REPOSITORY_PHASE ' + ($phase | ConvertTo-Json -Compress))
+        $timer = [Diagnostics.Stopwatch]::StartNew()
+        try {
+            Invoke-NativeChecked -Application $cargo -Arguments $qualityCommand.argv
+            $phase.status = 'pass'
+        } catch {
+            $phase.status = 'fail'
+            throw
+        } finally {
+            $phase.timestamp_utc = [DateTimeOffset]::UtcNow.ToString('O')
+            $phase['elapsed_ms'] = $timer.ElapsedMilliseconds
+            Write-Output ('RAYMAN_REPOSITORY_PHASE ' + ($phase | ConvertTo-Json -Compress))
+        }
     }
 }
 $raymanName = if ($IsWindows) { 'rayman.exe' } else { 'rayman' }

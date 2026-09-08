@@ -102,3 +102,23 @@ It covers, in order:
 8. Installed CLI/reference artifact/deployed skill/effective PATH identity plus a clean isolated source-fresh rebuild and terminal identity re-hash.
 
 Use focused Cargo/rayman commands during development; only this command supports the complete local claim. CI covers the portable source/test/release subset across platform jobs and additionally performs the scheduled weekly advisory refresh. Local state audit, asset reporting, and checkpoint save/verify remain complete-audit-only lanes and are not claimed by CI.
+
+
+## Source bytes and early package validation
+
+The audit checks raw worktree/index source bytes before its expensive lanes.
+`package_preflight` runs the real locked Cargo package verification immediately
+after environment preflight, before root quality, MSRV and coverage. A package
+cache/transport failure therefore does not wait until the end of those lanes.
+The later `package_install_smoke` phase still independently validates installation.
+The existing `RAYMAN_AUDIT_PHASE` start/pass/fail timestamps expose each phase's
+duration. The primary CI job delegates fmt/clippy/test to the source-bound
+repository gate once; distinct MSRV, coverage, platform and repeated Goal
+authority executions remain required.
+
+For an intentionally offline audit, set `CARGO_NET_OFFLINE=true` in that process
+before invoking the same complete command. Cached packages and an available
+advisory seed are required. Offline evidence does not claim newly fetched
+advisories. Never assemble partial online/offline runs into one full gate pass.
+Source-format diagnostics and reviewed governance generation are documented in
+[Source bytes](SOURCE_BYTES.md).

@@ -4,7 +4,12 @@ param(
     [string]$InventoryPath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'governance/first-party-test-inventory.json'),
     [switch]$SelfTest,
     [switch]$RuntimeInventory,
-    [switch]$ListInventory
+    [switch]$ListInventory,
+    [switch]$Generate,
+    [string]$DraftInventoryPath,
+    [string]$DraftManifestPath,
+    [string]$OutputDirectory,
+    [switch]$Summary
 )
 
 Set-StrictMode -Version Latest
@@ -18,7 +23,7 @@ if (-not (Test-Path -LiteralPath $implementation -PathType Leaf)) {
     throw "Traceability implementation is missing: $implementation"
 }
 $implementationHash = (Get-FileHash -LiteralPath $implementation -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($implementationHash -cne '895acacff0846f443b75a93e789126a9c2c7bddb5e7317ee23cb12cf67949da1') {
+if ($implementationHash -cne '96eb85b81904fc2b0dd692dd27390d047ccde3acfcfed49f52d8a90a43d436b5') {
     throw "Traceability implementation hash drifted: $implementationHash"
 }
 & $implementation @PSBoundParameters
