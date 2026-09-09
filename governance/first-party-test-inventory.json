@@ -21,11 +21,11 @@
     ]
   },
   "revision": {
-    "generation": 20,
+    "generation": 21,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 19,
-      "sha256": "dcfc2e7af3d42080cbbd825b215a64d139642d5dc9c9c15fb3ac005ba760212d"
+      "generation": 20,
+      "sha256": "703bd1004ca843832646b89aece63decbc6c4f27348411db4000a9696ff545b9"
     }
   },
   "tests": [
@@ -1283,13 +1283,32 @@
     },
     {
       "test_id": "TEST-PS-SELFTEST-6BB97440C533-R6",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/install-codex-powershell-broker.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/install-codex-powershell-broker.ps1",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "selector_sha256": "c77125ec8fa3a4835416083f34cbe22659eb67dac07ce3572dbbeca7d3f5b110",
+      "cfg": "all",
+      "owner": "",
+      "retirement": {
+        "retired_at": "2026-09-09",
+        "reason": "Self-test now models periodic heartbeat publication for a running committed recovery task.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-6BB97440C533-R7"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-PS-SELFTEST-6BB97440C533-R7",
+      "status": "active",
+      "identity": "powershell::powershell_self_test::scripts/install-codex-powershell-broker.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/install-codex-powershell-broker.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "17920817260fb2f96b49763ca16134faf8d1f6752c91047d84bd4ba48fe96625",
       "cfg": "all",
       "owner": "",
       "retirement": null

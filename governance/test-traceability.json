@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 23,
+    "generation": 24,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 22,
-      "sha256": "a81c613dca27fffe6542838d2894cad57dc472b45ccbd1386bfa352b3bf3bf75"
+      "generation": 23,
+      "sha256": "d47d1d309c1e898f28e071b9d38f82719dc85f4715fea5e23ea19d5105da24d9"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "703bd1004ca843832646b89aece63decbc6c4f27348411db4000a9696ff545b9"
+    "sha256": "4ed35efbba88c36b7aa3cc6dad601ff97d6f82f8ff0f2196849ff699128657a4"
   },
   "sources": [
     {
@@ -2127,11 +2127,33 @@
     },
     {
       "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R6",
-      "status": "active",
+      "status": "retired",
       "kind": "powershell_self_test",
       "title": "PowerShell self-test: scripts/install-codex-powershell-broker.ps1",
       "path": "scripts/install-codex-powershell-broker.ps1",
       "sha256": "c77125ec8fa3a4835416083f34cbe22659eb67dac07ce3572dbbeca7d3f5b110",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "target_matrix": [
+        "windows",
+        "linux",
+        "other_unix"
+      ],
+      "retirement": {
+        "retired_at": "2026-09-09",
+        "reason": "Self-test now models periodic heartbeat publication for a running committed recovery task.",
+        "replaced_by": [
+          "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R7"
+        ]
+      }
+    },
+    {
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R7",
+      "status": "active",
+      "kind": "powershell_self_test",
+      "title": "PowerShell self-test: scripts/install-codex-powershell-broker.ps1",
+      "path": "scripts/install-codex-powershell-broker.ps1",
+      "sha256": "17920817260fb2f96b49763ca16134faf8d1f6752c91047d84bd4ba48fe96625",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "target_matrix": [
@@ -35788,7 +35810,7 @@
     },
     {
       "binding_id": "BIND-CASE-4BD97854DEDDFA95-R8-SB1",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3-SB1"
       ],
@@ -35805,6 +35827,33 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "7ac3cb55b4d15933bee244a0b0afcf77ffb47783ac658effc183cdc9fac75e3f",
+      "retirement": {
+        "retired_at": "2026-09-09",
+        "reason": "Self-test now models periodic heartbeat publication for a running committed recovery task.",
+        "replaced_by": [
+          "BIND-CASE-4BD97854DEDDFA95-R8-SB1-HB1"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CASE-4BD97854DEDDFA95-R8-SB1-HB1",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3-SB1"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R7"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R7",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-09",
+        "valid_until": "2027-03-09"
+      },
+      "semantic_sha256": "738d22a00b46aea8aa8206da7ca064195097ffa7c9493554f31d5dc8610cd8e9",
       "retirement": null
     },
     {
@@ -104448,7 +104497,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-AUTHORIZATION-R8",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-AUTHORIZATION-SOURCE-R8"
       ],
@@ -104466,6 +104515,34 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "366cb694e0af833e0422b73e07dfd78724f872a5cfb536fa11b8334168cab245",
+      "retirement": {
+        "retired_at": "2026-09-09",
+        "reason": "Self-test now models periodic heartbeat publication for a running committed recovery task.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-AUTHORIZATION-R8-HB1"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-AUTHORIZATION-R8-HB1",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-AUTHORIZATION-SOURCE-R8"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R7"
+      ],
+      "rule_id": "RULE-CODEX-GIT-AUTHORIZATION",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R7",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-09",
+        "valid_until": "2027-03-09"
+      },
+      "semantic_sha256": "b5648fc598da366391ca0a917df63941afe23eef1723926f0ef7c1178941b800",
       "retirement": null
     },
     {
@@ -104582,7 +104659,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-DIAGNOSTIC-BOUNDARY-R8",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-DIAGNOSTIC-BOUNDARY-SOURCE-R8"
       ],
@@ -104600,6 +104677,34 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "42fd92c7cd203d26bde42026d1933ea01a441ccb04619c97f396251829b41c3d",
+      "retirement": {
+        "retired_at": "2026-09-09",
+        "reason": "Self-test now models periodic heartbeat publication for a running committed recovery task.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-DIAGNOSTIC-BOUNDARY-R8-HB1"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-DIAGNOSTIC-BOUNDARY-R8-HB1",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-DIAGNOSTIC-BOUNDARY-SOURCE-R8"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R7"
+      ],
+      "rule_id": "RULE-CODEX-GIT-DIAGNOSTIC-BOUNDARY",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R7",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-09",
+        "valid_until": "2027-03-09"
+      },
+      "semantic_sha256": "5013bfbce220a7648fed9b136d38ce8339b1605b7ed5a7c17a9f6f6465ad676c",
       "retirement": null
     },
     {
@@ -105046,7 +105151,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-INSTALLATION-SERIALIZATION-R8",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-INSTALLATION-SERIALIZATION-SOURCE-R8"
       ],
@@ -105064,6 +105169,34 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "164d4f6d29b79ddaed9b1832ea90ae59055993f26485d06c6bb6eee43a5b7aa2",
+      "retirement": {
+        "retired_at": "2026-09-09",
+        "reason": "Self-test now models periodic heartbeat publication for a running committed recovery task.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-INSTALLATION-SERIALIZATION-R8-HB1"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-INSTALLATION-SERIALIZATION-R8-HB1",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-INSTALLATION-SERIALIZATION-SOURCE-R8"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R7"
+      ],
+      "rule_id": "RULE-CODEX-GIT-INSTALLATION-SERIALIZATION",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R7",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-09",
+        "valid_until": "2027-03-09"
+      },
+      "semantic_sha256": "427afc0c797294d992aeac7c5265e118599e373fb873b6dcacd8d1a4a15d5e9b",
       "retirement": null
     },
     {
@@ -105180,7 +105313,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-INSTALLER-CLEANUP-R8",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-INSTALLER-CLEANUP-SOURCE-R8"
       ],
@@ -105198,6 +105331,34 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "a4ccc1bc4142f86d1446242f70dd0fc666c37bac26b4a0d91ae566f7ea8481b9",
+      "retirement": {
+        "retired_at": "2026-09-09",
+        "reason": "Self-test now models periodic heartbeat publication for a running committed recovery task.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-INSTALLER-CLEANUP-R8-HB1"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-INSTALLER-CLEANUP-R8-HB1",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-INSTALLER-CLEANUP-SOURCE-R8"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R7"
+      ],
+      "rule_id": "RULE-CODEX-GIT-INSTALLER-CLEANUP",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R7",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-09",
+        "valid_until": "2027-03-09"
+      },
+      "semantic_sha256": "fbf2a417e469e3747e899183c2e18936834705d2ca36e81bdb83fbc45c6d0b1c",
       "retirement": null
     },
     {
@@ -105448,7 +105609,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-REGISTRATION-R8",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-REGISTRATION-SOURCE-R8"
       ],
@@ -105466,6 +105627,34 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "0666f43ed6286420b3e6f7358f035262387e461534cdad43adfe583800487d83",
+      "retirement": {
+        "retired_at": "2026-09-09",
+        "reason": "Self-test now models periodic heartbeat publication for a running committed recovery task.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-REGISTRATION-R8-HB1"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-REGISTRATION-R8-HB1",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-REGISTRATION-SOURCE-R8"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R7"
+      ],
+      "rule_id": "RULE-CODEX-GIT-REGISTRATION",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R7",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-09",
+        "valid_until": "2027-03-09"
+      },
+      "semantic_sha256": "a004b8760dd6c3b55ec1a247ba116e0b51c9293fe2bf8426c2641ef4ef2124fb",
       "retirement": null
     },
     {
@@ -105716,7 +105905,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-STAGING-RECOVERY-R8",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-STAGING-RECOVERY-SOURCE-R8"
       ],
@@ -105734,6 +105923,34 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "4d60afc35973a35d8683d778ec72d570b1f5846de1d47e6d2ddbac5a95ab3d78",
+      "retirement": {
+        "retired_at": "2026-09-09",
+        "reason": "Self-test now models periodic heartbeat publication for a running committed recovery task.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-STAGING-RECOVERY-R8-HB1"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-STAGING-RECOVERY-R8-HB1",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-STAGING-RECOVERY-SOURCE-R8"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R7"
+      ],
+      "rule_id": "RULE-CODEX-GIT-STAGING-RECOVERY-R8",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R7",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-09",
+        "valid_until": "2027-03-09"
+      },
+      "semantic_sha256": "2676150cbe6c5524c9e53093c822a05691a04b61c36bcba073da412afa2fcc75",
       "retirement": null
     },
     {
@@ -106012,7 +106229,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-UPGRADE-AUTHORITY-R8",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-UPGRADE-AUTHORITY-SOURCE-R8"
       ],
@@ -106030,6 +106247,34 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "b0e7b07e1ab840b0b629cebf3b15a533a4889e4c64ff43143a61c5cb3a15b1ec",
+      "retirement": {
+        "retired_at": "2026-09-09",
+        "reason": "Self-test now models periodic heartbeat publication for a running committed recovery task.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-UPGRADE-AUTHORITY-R8-HB1"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-UPGRADE-AUTHORITY-R8-HB1",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-UPGRADE-AUTHORITY-SOURCE-R8"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R7"
+      ],
+      "rule_id": "RULE-CODEX-GIT-UPGRADE-AUTHORITY",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R7",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-09",
+        "valid_until": "2027-03-09"
+      },
+      "semantic_sha256": "b9f9a5db0c4ba36b19e664ef18fb720e820a95bcc24bcb1e23d12ff2fa93c32b",
       "retirement": null
     },
     {
@@ -106118,7 +106363,7 @@
     },
     {
       "binding_id": "BIND-CODEX-GIT-UPGRADE-R8",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CODEX-GIT-UPGRADE-SOURCE-R8"
       ],
@@ -106136,6 +106381,34 @@
         "valid_until": "2027-03-02"
       },
       "semantic_sha256": "17c1c637b31835052989dc2ebec32bc3017e5e2d3a15b732d89710538bf82d44",
+      "retirement": {
+        "retired_at": "2026-09-09",
+        "reason": "Self-test now models periodic heartbeat publication for a running committed recovery task.",
+        "replaced_by": [
+          "BIND-CODEX-GIT-UPGRADE-R8-HB1"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CODEX-GIT-UPGRADE-R8-HB1",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CODEX-GIT-UPGRADE-SOURCE-R8"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-6BB97440C533-R7"
+      ],
+      "rule_id": "RULE-CODEX-GIT-UPGRADE",
+      "gate_id": "GATE-PS-INSTALL-CODEX-POWERSHELL-BROKER-R7",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-09",
+        "valid_until": "2027-03-09"
+      },
+      "semantic_sha256": "689d3ce13a9988950f58228c14f5bcd321c654db5767d2a06773b66e7902df76",
       "retirement": null
     },
     {

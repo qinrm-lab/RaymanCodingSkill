@@ -7899,6 +7899,14 @@ function Invoke-BrokerInterruptedUpgradeRecovery {
                 -Name $Name -SkipTaskValidation -SkipGitLiveValidation
             [void](Assert-GitCapabilityReadyInstalled `
                 -Receipt $committed -Root $Root)
+            if ($UseRecoverySelfTestTaskStore) {
+                # The fake running task has no background worker. Model its
+                # periodic publication immediately before the production
+                # freshness check so host load cannot age a static fixture.
+                Write-BrokerRecoverySelfTestHeartbeat `
+                    -Root $Root -Receipt $committed `
+                    -FileSecurity $FileSecurity -Replace
+            }
             $heartbeat = Wait-BrokerHeartbeat `
                 -Root $Root -Receipt $committed `
                 -TimeoutSeconds $script:BrokerHeartbeatStartupTimeoutSeconds `
