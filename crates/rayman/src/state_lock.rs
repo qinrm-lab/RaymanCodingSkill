@@ -15,12 +15,15 @@ use crate::state_paths;
 /// lock when a process exits, so crash recovery never guesses from mtime or
 /// deletes a lock path. Permission/ACL failures remain distinct from contention.
 pub struct StateLock {
-    file: fs::File,
+    file: Option<fs::File>,
+    _remote: Option<crate::global_state_bridge::RemoteLock>,
 }
 
 impl Drop for StateLock {
     fn drop(&mut self) {
-        let _ = FileExt::unlock(&self.file);
+        if let Some(file) = &self.file {
+            let _ = FileExt::unlock(file);
+        }
     }
 }
 
@@ -44,6 +47,12 @@ fn state_lock_contention_timeout(
 }
 
 pub fn acquire_state_lock(target: &Path) -> Result<StateLock> {
+    if let Some(remote) = crate::global_state_bridge::acquire(target)? {
+        return Ok(StateLock {
+            file: None,
+            _remote: Some(remote),
+        });
+    }
     let parent = target.parent().unwrap_or_else(|| Path::new("."));
     state_paths::ensure_real_directory(parent)?;
     let name = target
@@ -108,7 +117,12 @@ pub fn acquire_state_lock(target: &Path) -> Result<StateLock> {
     let started = Instant::now();
     loop {
         match file.try_lock_exclusive() {
-            Ok(()) => return Ok(StateLock { file }),
+            Ok(()) => {
+                return Ok(StateLock {
+                    file: Some(file),
+                    _remote: None,
+                });
+            }
             Err(error) if is_state_lock_contention(&error) && started.elapsed() < LOCK_TIMEOUT => {
                 thread::sleep(Duration::from_millis(25));
             }

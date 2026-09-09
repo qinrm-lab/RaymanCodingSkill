@@ -4,6 +4,7 @@
     "name": "repository_first_party_executable_tests",
     "claim": "Exact role-qualified inventory for every first-party Rust, PowerShell, and eval executable test; generated state/output roots are excluded.",
     "rust_roots": [
+      "crates/codex-global-execution/src",
       "crates/rayman/src",
       "crates/rayman/tests",
       "xtask/src",
@@ -20,11 +21,11 @@
     ]
   },
   "revision": {
-    "generation": 19,
+    "generation": 20,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 18,
-      "sha256": "569aaf762d50adf72fc3d6221597ad36ecf0007ffe5ad7e7c96a022ff195768f"
+      "generation": 19,
+      "sha256": "dcfc2e7af3d42080cbbd825b215a64d139642d5dc9c9c15fb3ac005ba760212d"
     }
   },
   "tests": [
@@ -924,6 +925,19 @@
       "retirement": null
     },
     {
+      "identity": "powershell::powershell_self_test::scripts/repair-codex-workspace-acl.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/repair-codex-workspace-acl.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "b30f11968b890fa17871bc0dd751c137b09af551a76473205a4cd514489edf93",
+      "cfg": "windows",
+      "owner": "",
+      "test_id": "TEST-PS-SELFTEST-35260E3B3E35",
+      "status": "active",
+      "retirement": null
+    },
+    {
       "test_id": "TEST-PS-SELFTEST-369504214737",
       "status": "active",
       "identity": "powershell::powershell_self_test::scripts/verify-release-contract.ps1::powershell_self_test_suite::-SelfTest",
@@ -954,6 +968,19 @@
           "TEST-PS-SELFTEST-3AF243E44D59-R3"
         ]
       }
+    },
+    {
+      "identity": "powershell::powershell_self_test::scripts/check-test-traceability.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/check-test-traceability.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "737829d1a85a9ec84ad663e46f9cdaea6e78bc22f1436a6c845f44d3c4034032",
+      "cfg": "all",
+      "owner": "",
+      "test_id": "TEST-PS-SELFTEST-3AF243E44D59-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
     },
     {
       "test_id": "TEST-PS-SELFTEST-3AF243E44D59-R3",
@@ -995,7 +1022,7 @@
     },
     {
       "test_id": "TEST-PS-SELFTEST-3AF243E44D59-R3-AUDIT-20260908-SB1",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/check-test-traceability.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/check-test-traceability.ps1",
@@ -1004,11 +1031,17 @@
       "selector_sha256": "caa6fac4d69f530df7916e879b2d11354073d7fbfac16915534f656ccc8dcc69",
       "cfg": "all",
       "owner": "",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-08",
+        "reason": "Global Codex execution introduced reviewed successor bytes and coverage.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-3AF243E44D59-GLOBAL-20260909"
+        ]
+      }
     },
     {
       "test_id": "TEST-PS-SELFTEST-3C495182E5FD",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/configure-codex-validation-temp.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/configure-codex-validation-temp.ps1",
@@ -1017,6 +1050,38 @@
       "selector_sha256": "50f2c7ecf1732cc6fa1beaab5faaeae702f17914047881ef096d168c9e1f4979",
       "cfg": "all",
       "owner": "",
+      "retirement": {
+        "retired_at": "2026-09-08",
+        "reason": "Global Codex execution introduced reviewed successor bytes and coverage.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-3C495182E5FD-GLOBAL-20260909"
+        ]
+      }
+    },
+    {
+      "identity": "powershell::powershell_self_test::scripts/configure-codex-validation-temp.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/configure-codex-validation-temp.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "144f8755dd063f476dbde03686109f515a0155a8736a962eedbf01b2c74a827e",
+      "cfg": "all",
+      "owner": "",
+      "test_id": "TEST-PS-SELFTEST-3C495182E5FD-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "powershell::powershell_self_test::scripts/enroll-global-codex-projects.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/enroll-global-codex-projects.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "72fa4e12b5e3a88521c37cf2f27a95d716bf397b5e5914bf6f060cb44d158e2e",
+      "cfg": "windows",
+      "owner": "",
+      "test_id": "TEST-PS-SELFTEST-4DC44102236A-GLOBAL-20260909",
+      "status": "active",
       "retirement": null
     },
     {
@@ -1313,6 +1378,19 @@
       "retirement": null
     },
     {
+      "identity": "powershell::powershell_self_test::scripts/configure-global-codex-execution.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/configure-global-codex-execution.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "39904e3c7a04a4b368fb1b5bc9ab91cf41230f795a9697cca140a79a5bd71466",
+      "cfg": "windows",
+      "owner": "",
+      "test_id": "TEST-PS-SELFTEST-9865501D815A-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
       "test_id": "TEST-PS-SELFTEST-A3DCE69BBABB",
       "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/check-ci-workflow.ps1::powershell_self_test_suite::-SelfTest",
@@ -1431,6 +1509,19 @@
       "selector_sha256": "527b205ff505ef32cf05a95360c461d9584c459d66f522baf80c1dc1f7f4ee29",
       "cfg": "all",
       "owner": "",
+      "retirement": null
+    },
+    {
+      "identity": "powershell::powershell_self_test::scripts/install-global-codex-execution.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/install-global-codex-execution.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "90cc4e97b676718f8a6a07d875e8053cedcfcf3a54e6e0c68affa634c2bff7c8",
+      "cfg": "windows",
+      "owner": "",
+      "test_id": "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909",
+      "status": "active",
       "retirement": null
     },
     {
@@ -2636,6 +2727,19 @@
       "retirement": null
     },
     {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/tests.rs::capability_restrictions_apply_even_with_a_fresh_registration_hash",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "capability_restrictions_apply_even_with_a_fresh_registration_hash",
+      "selector_sha256": "7a6bf3763de45339c253975657be7bc0c0412e46c9a9593543eac47fcca64464",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-CAPABILITY-RESTRICTIONS-APPLY-EVEN-WITH-4D12F6EB1DA8-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
       "test_id": "TEST-RUST-CAPACITY-WARNING-THRESHOLDS-ARE-NON-BLOCKING-OPE-1C3B44FA662C",
       "status": "active",
       "identity": "rust::root_cargo::crates/rayman/src/state_audit_cli.rs::capacity_warning_thresholds_are_non_blocking_operational_boundaries",
@@ -3013,6 +3117,19 @@
       "retirement": null
     },
     {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/tests.rs::case_collisions_order_empty_and_nonordinary_changes_fail_closed",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "case_collisions_order_empty_and_nonordinary_changes_fail_closed",
+      "selector_sha256": "22bbde9a4a25eafea6dd26b42760a5244edd1c0befef5fc4e302217d868bce61",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-CASE-COLLISIONS-ORDER-EMPTY-AND-NONORDIN-2250FE4E9CC8-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
       "test_id": "TEST-RUST-CHANGE-PLAN-BLOCKS-BROAD-SOURCE-CHANGE-WITHOUT-T-65F8EEBA2054",
       "status": "active",
       "identity": "rust::root_cargo::crates/rayman/src/map/tests.rs::change_plan_blocks_broad_source_change_without_test_anchor",
@@ -3208,6 +3325,71 @@
       "retirement": null
     },
     {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/checkpoint_store.rs::checkpoint_backend_preserves_other_tenants_and_rejects_duplicate_rows",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/checkpoint_store.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "checkpoint_backend_preserves_other_tenants_and_rejects_duplicate_rows",
+      "selector_sha256": "41462fa8b4b998c1989570334fa17601d683b9df23a383efdb4c7f2abede302b",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-CHECKPOINT-BACKEND-PRESERVES-OTHER-TENAN-A634550F6A7C-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/checkpoint_store.rs::checkpoint_backend_rejects_cross_tenant_replace_and_foreign_keys",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/checkpoint_store.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "checkpoint_backend_rejects_cross_tenant_replace_and_foreign_keys",
+      "selector_sha256": "b71d15e7aad65898e88121a1a954965a3e194a3bad9c0775a8a90a45381003bc",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-CHECKPOINT-BACKEND-REJECTS-CROSS-TENANT-48A947B850A6-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/enrollment.rs::checkpoint_control_accepts_line_endings_but_rejects_duplicate_or_changed_fields",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/enrollment.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "checkpoint_control_accepts_line_endings_but_rejects_duplicate_or_changed_fields",
+      "selector_sha256": "addd1637f8f2e40d18a5ad823f5e036e32ecd4b853fd7db809fbc7db7f730f6a",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-CHECKPOINT-CONTROL-ACCEPTS-LINE-ENDINGS-844097EC9E96-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/checkpoint_store.rs::checkpoint_migration_normalizes_sql_without_changing_rows_or_blob_bytes",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/checkpoint_store.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "checkpoint_migration_normalizes_sql_without_changing_rows_or_blob_bytes",
+      "selector_sha256": "7a831a796b96096a198f1d22a60734fb6dbd8aa3e14c389435ffe5c78244b37a",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-CHECKPOINT-MIGRATION-NORMALIZES-SQL-WITH-47C5C525C4BA-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/checkpoint_store.rs::checkpoint_receipt_and_rows_survive_reopen_without_replaying_writes",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/checkpoint_store.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "checkpoint_receipt_and_rows_survive_reopen_without_replaying_writes",
+      "selector_sha256": "06910fe764f2dc2f2d190be6da34922ccfc877c213b5491bb2b417a5851199ab",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-CHECKPOINT-RECEIPT-AND-ROWS-SURVIVE-REOP-FA48F728E2F6-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
       "test_id": "TEST-RUST-CHECKPOINT-RESTORE-IS-AN-EXACT-ARGV-INVOCATION-E07A9D375A84",
       "status": "active",
       "identity": "rust::root_cargo::crates/rayman/src/task_workflow.rs::checkpoint_restore_is_an_exact_argv_invocation",
@@ -3221,6 +3403,32 @@
       "retirement": null
     },
     {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/checkpoint_store.rs::checkpoint_row_backend_rejects_trigger_side_effects",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/checkpoint_store.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "checkpoint_row_backend_rejects_trigger_side_effects",
+      "selector_sha256": "323260f52ed34afbd32d44193d29bab39fc61b82a29a89a2da21d58f44d5015e",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-CHECKPOINT-ROW-BACKEND-REJECTS-TRIGGER-S-ACBD966D0ECD-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/checkpoint_store.rs::checkpoint_row_updates_are_scoped_atomic_and_conflict_checked",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/checkpoint_store.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "checkpoint_row_updates_are_scoped_atomic_and_conflict_checked",
+      "selector_sha256": "47b3e8e5c5bcb72ef05a82950a1c6dff4f17b58054bcc684e8010456528996d4",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-CHECKPOINT-ROW-UPDATES-ARE-SCOPED-ATOMIC-958E57AE1B68-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
       "test_id": "TEST-RUST-CHECKPOINT-SAVE-IS-LOSSLESS-BY-DEFAULT-AND-PRUNE-28EC6BC1FDBA",
       "status": "active",
       "identity": "rust::root_cargo::crates/rayman/tests/cli.rs::checkpoint_save_is_lossless_by_default_and_prune_requires_yes",
@@ -3231,6 +3439,19 @@
       "selector_sha256": "aa97de138ff70fd054fee8521718e7ff0cb5599fb4d4b8bd4dd4cfd565443b6e",
       "cfg": "all",
       "owner": null,
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/checkpoint_store.rs::checkpoint_schema_matches_savestatus_v3_fixture_and_cas_rolls_back",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/checkpoint_store.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "checkpoint_schema_matches_savestatus_v3_fixture_and_cas_rolls_back",
+      "selector_sha256": "f1e0c6a65d38813e57b23156a094e42abdef6cfc3baa70fae1899aa370a844c1",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-CHECKPOINT-SCHEMA-MATCHES-SAVESTATUS-V3-44312854F7BA-GLOBAL-20260909",
+      "status": "active",
       "retirement": null
     },
     {
@@ -4500,6 +4721,19 @@
       "retirement": null
     },
     {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/tests.rs::duplicate_case_alias_unknown_fields_and_arbitrary_execution_are_rejected",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "duplicate_case_alias_unknown_fields_and_arbitrary_execution_are_rejected",
+      "selector_sha256": "037b485c74d9d1302603a0610e3edd5b0861a375d96b4f92d98c5ff41f991fd6",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-DUPLICATE-CASE-ALIAS-UNKNOWN-FIELDS-AND-AE366264763F-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
       "test_id": "TEST-RUST-DUPLICATE-OR-NONCANONICAL-JSON-IS-REJECTED-BEFOR-2A2A81604B9F",
       "status": "active",
       "identity": "rust::root_cargo::crates/rayman/src/update/trust.rs::duplicate_or_noncanonical_json_is_rejected_before_signature_authority",
@@ -4510,6 +4744,19 @@
       "selector_sha256": "6a083cb75d963df86541c74daa4a1fc068f782c438b4545d78afec8f84e3e0d7",
       "cfg": "all",
       "owner": null,
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/storage.rs::durable_state_survives_reopen_and_does_not_repeat_an_effect",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/storage.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "durable_state_survives_reopen_and_does_not_repeat_an_effect",
+      "selector_sha256": "aac6e2cc41e10fa3a1306eebf31c60083dd6f7186cd4d63ac41ba96dd93cee00",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-DURABLE-STATE-SURVIVES-REOPEN-AND-DOES-N-554FAFBD196F-GLOBAL-20260909",
+      "status": "active",
       "retirement": null
     },
     {
@@ -4656,6 +4903,19 @@
       "retirement": null
     },
     {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/tests.rs::exact_added_modified_deleted_commit_is_valid_and_canonical",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "exact_added_modified_deleted_commit_is_valid_and_canonical",
+      "selector_sha256": "ac65f19e4c64613085924bdb3d3204a0137b057ff12345a99423c9a9db24f498",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-EXACT-ADDED-MODIFIED-DELETED-COMMIT-IS-V-86716FECCFB8-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
       "test_id": "TEST-RUST-EXECUTABLE-EXTERNAL-POWERSHELL-DEPENDENCY-FAILS-D3709C7374BA",
       "status": "active",
       "identity": "rust::root_cargo::crates/rayman/src/goal/tests/authority_gate.rs::executable_external_powershell_dependency_fails_closed",
@@ -4744,6 +5004,19 @@
       "selector_sha256": "217f3035a87981960478fda8f62ade240361bed779c92545d4d5d3462b10afb5",
       "cfg": "all",
       "owner": null,
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/tests.rs::expiry_future_and_integer_overflow_fail_closed",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "expiry_future_and_integer_overflow_fail_closed",
+      "selector_sha256": "8ddde2a5375abf566b8b97b0ff0786cc5b8c447d3a9c437ce28098ad19031533",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-EXPIRY-FUTURE-AND-INTEGER-OVERFLOW-FAIL-2491A7831155-GLOBAL-20260909",
+      "status": "active",
       "retirement": null
     },
     {
@@ -5075,6 +5348,19 @@
       "retirement": null
     },
     {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/tests.rs::formal_state_and_installation_use_typed_enrolled_operations",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "formal_state_and_installation_use_typed_enrolled_operations",
+      "selector_sha256": "6a73fe70199c87bc68a91faaffaca1e43794956a03ffbb7b70d713ab8be72c76",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-FORMAL-STATE-AND-INSTALLATION-USE-TYPED-A2D08663F0F9-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
       "test_id": "TEST-RUST-FRAGMENT-CATALOG-IS-UNIQUE-ENGLISH-COMPLETE-AND-2C0AAB9FE6C7",
       "status": "active",
       "identity": "rust::root_cargo::crates/rayman/src/i18n.rs::fragment_catalog_is_unique_english_complete_and_preserves_unknown_unicode",
@@ -5166,6 +5452,32 @@
       "retirement": null
     },
     {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/git_policy.rs::git_content_policy_preserves_precedence_and_rejects_silent_signing_changes",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/git_policy.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "git_content_policy_preserves_precedence_and_rejects_silent_signing_changes",
+      "selector_sha256": "df653c4b182561ac500e5000db85d2bfb7f971ff3203f7e58e0c288388ef46a8",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-GIT-CONTENT-POLICY-PRESERVES-PRECEDENCE-9941B006C139-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/git.rs::git_tree_and_index_parsers_reject_conflicts_aliases_and_nonfiles",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/git.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "git_tree_and_index_parsers_reject_conflicts_aliases_and_nonfiles",
+      "selector_sha256": "ae6c43def25d1edd9c08d95d8903720eeb3a2a05fb0945fe6c6e17aff20d2b90",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-GIT-TREE-AND-INDEX-PARSERS-REJECT-CONFLI-1D2297C844F0-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
       "test_id": "TEST-RUST-GITHUB-RELEASE-PARSER-ONLY-YIELDS-PUBLIC-NON-PRE-D2466EB742B6",
       "status": "active",
       "identity": "rust::root_cargo::crates/rayman/src/update.rs::github_release_parser_only_yields_public_non_prerelease_tags",
@@ -5202,6 +5514,45 @@
       "selector_sha256": "35a5d5903fa2b6a859a5cff208f79e6c6b82d2e084b90255d5c4c6c242327f12",
       "cfg": "all",
       "owner": null,
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/git_policy.rs::global_autocrlf_matches_native_git_without_changing_worktree_bytes",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/git_policy.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "global_autocrlf_matches_native_git_without_changing_worktree_bytes",
+      "selector_sha256": "d40c58be311b3bb488ad3e03071e3d15fffe7ac439aaef0b3e08bb07f606c828",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-GLOBAL-AUTOCRLF-MATCHES-NATIVE-GIT-WITHO-6949F080E3E8-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/install.rs::global_skill_publication_is_idempotent_and_preserves_different_content",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/install.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "global_skill_publication_is_idempotent_and_preserves_different_content",
+      "selector_sha256": "566ae7d2a1041e8e1cc99a9a13ed0bb282549bb7356d7c015684c49122e4066c",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-GLOBAL-SKILL-PUBLICATION-IS-IDEMPOTENT-AND-PRESE-BC93A64317EC",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/lib.rs::global_source_fingerprint_tracks_bytes_and_preserves_state_exclusion",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/lib.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "global_source_fingerprint_tracks_bytes_and_preserves_state_exclusion",
+      "selector_sha256": "ca1366e897a1f8a63614dbc51c05ab82e8fcc7b11a4fcff48beb76cad34bc723",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-GLOBAL-SOURCE-FINGERPRINT-TRACKS-BYTES-A-463FE4EEE120-GLOBAL-20260909",
+      "status": "active",
       "retirement": null
     },
     {
@@ -6004,6 +6355,84 @@
       "retirement": null
     },
     {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/install.rs::installation_bundle_rejects_unregistered_paths_versions_and_duplicate_roles",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/install.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "installation_bundle_rejects_unregistered_paths_versions_and_duplicate_roles",
+      "selector_sha256": "b681af7c1adb4cbce53db262385f3b1c67bc2272641509f339bd045fe5793387",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-INSTALLATION-BUNDLE-REJECTS-UNREGISTERED-PATHS-V-E68C99B92537",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/install.rs::installation_crash_recovery_never_claims_rollback_with_new_file_remaining",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/install.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "installation_crash_recovery_never_claims_rollback_with_new_file_remaining",
+      "selector_sha256": "92622515d623b3d203a8a014fb92c447abe3546b253a589ca8cd31831fc77c16",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-INSTALLATION-CRASH-RECOVERY-NEVER-CLAIMS-ROLLBAC-D99CB30A0C3B",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/install.rs::installation_kernel_publishes_exact_files_and_replays_committed_journal",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/install.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "installation_kernel_publishes_exact_files_and_replays_committed_journal",
+      "selector_sha256": "e6c7c90a185a400d78e99a64b3a478ca2b04f81beb2f157c30a24e2ca762eb2e",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-INSTALLATION-KERNEL-PUBLISHES-EXACT-FILES-AND-RE-115B6AE2F819",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/install.rs::installation_kernel_rolls_back_failure_and_refuses_conflicting_destination",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/install.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "installation_kernel_rolls_back_failure_and_refuses_conflicting_destination",
+      "selector_sha256": "03ef8eac822c96160b32956104f8ae2722ef895fe59d2d2ffee314f3f4239d3c",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-INSTALLATION-KERNEL-ROLLS-BACK-FAILURE-AND-REFUS-2D86C853579B",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/install.rs::installation_pending_intent_blocks_other_publications_without_ledger_admission",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/install.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "installation_pending_intent_blocks_other_publications_without_ledger_admission",
+      "selector_sha256": "02ba1395aaa00889694378c3faf02956c5cafb7a06c725d993c68388ecdde7ee",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-INSTALLATION-PENDING-INTENT-BLOCKS-OTHER-PUBLICA-B9B5DFDD4956",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/install.rs::installation_worker_dispatch_and_restart_reconcile_the_original_intent",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/install.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "installation_worker_dispatch_and_restart_reconcile_the_original_intent",
+      "selector_sha256": "2522bff842cde335663a8f7666e07fec161c2773a742d43eef43cdd292a1839f",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-INSTALLATION-WORKER-DISPATCH-AND-RESTART-RECONCI-20B23FB21FB6",
+      "status": "active",
+      "retirement": null
+    },
+    {
       "test_id": "TEST-RUST-INSTALLER-SELF-TEST-IS-GENERIC-EVIDENCE-NOT-A-TY-324FB4243415",
       "status": "active",
       "identity": "rust::root_cargo::crates/rayman/src/goal/installer_tests.rs::installer_self_test_is_generic_evidence_not_a_typed_test_or_installation_proof",
@@ -6040,6 +6469,19 @@
       "selector_sha256": "04ba77fede8b15a230fee81f05b75e0d8363a5cac14c4fee590c65a58b003e5d",
       "cfg": "all(windows,debug_assertions)",
       "owner": null,
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/tests.rs::interrupted_effect_never_runs_again_and_terminal_result_is_immutable",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "interrupted_effect_never_runs_again_and_terminal_result_is_immutable",
+      "selector_sha256": "bf7cf881ea1c6ded508c9475b88d39da8ab405943fa7195b94ab2a3690974cc3",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-INTERRUPTED-EFFECT-NEVER-RUNS-AGAIN-AND-26CE591AC48E-GLOBAL-20260909",
+      "status": "active",
       "retirement": null
     },
     {
@@ -6124,6 +6566,19 @@
       "selector_sha256": "a455d9cc773ac47b6b9124fcee5f5f2bf46df702588feb86991105f777afbcdd",
       "cfg": "all",
       "owner": null,
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/storage.rs::journal_recovers_exact_state_and_retains_conflicting_data",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/storage.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "journal_recovers_exact_state_and_retains_conflicting_data",
+      "selector_sha256": "9986ee630b98b05762b69252b3e87afcc25e1ddb2b160dc6de6e7808ebb31766",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-JOURNAL-RECOVERS-EXACT-STATE-AND-RETAINS-76954D4112E6-GLOBAL-20260909",
+      "status": "active",
       "retirement": null
     },
     {
@@ -7465,6 +7920,19 @@
       "retirement": null
     },
     {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/tests.rs::multi_project_preflight_is_activation_exempt_and_never_claims_authority",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "multi_project_preflight_is_activation_exempt_and_never_claims_authority",
+      "selector_sha256": "f8e8077861e9c5e6e9337d349469c301c8aa2ac6cdc3396a9c59291c1095e0dc",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-MULTI-PROJECT-PREFLIGHT-IS-ACTIVATION-EX-ACEBF771EA81-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
       "test_id": "TEST-RUST-MULTIPLE-SIDE-EFFECT-CALLS-FAIL-CLOSED-BEFORE-EX-304A178DFDD1",
       "status": "active",
       "identity": "rust::eval_cargo::evals/src/agent.rs::multiple_side_effect_calls_fail_closed_before_execution",
@@ -7514,6 +7982,19 @@
       "selector_sha256": "0c8f7570bf469af8602e77da0d3c4fbac09898f9995e86c85c33c1394864c0f8",
       "cfg": "all",
       "owner": null,
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/process.rs::native_process_roundtrips_quoted_unicode_and_rejects_descendants",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/process.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "native_process_roundtrips_quoted_unicode_and_rejects_descendants",
+      "selector_sha256": "6cc2c8021f8ac261f2e91e8a4a88da845c6211cf2fc5647e6363c74587abf166",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-NATIVE-PROCESS-ROUNDTRIPS-QUOTED-UNICODE-FFAAA9F0EFC6-GLOBAL-20260909",
+      "status": "active",
       "retirement": null
     },
     {
@@ -8782,6 +9263,71 @@
       "retirement": null
     },
     {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/tests.rs::project_worktree_and_protected_policy_substitution_are_rejected",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "project_worktree_and_protected_policy_substitution_are_rejected",
+      "selector_sha256": "eb0732a1202a1d76f491ff3ba18325fd9f9a8118b61f479b51d9574bfc5b7dbd",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-PROJECT-WORKTREE-AND-PROTECTED-POLICY-SU-9583082D1FDD-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/native.rs::protected_directory_checks_actual_owner_dacl_and_prevents_rename",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/native.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "protected_directory_checks_actual_owner_dacl_and_prevents_rename",
+      "selector_sha256": "d3e54aff8988fd4b9e3b18b4de80bfec5e4d8038e853df20b1f42cb50a485939",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-PROTECTED-DIRECTORY-CHECKS-ACTUAL-OWNER-C1ECC8A751D8-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/native.rs::protected_directory_rejects_inherited_or_extra_writer_permissions",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/native.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "protected_directory_rejects_inherited_or_extra_writer_permissions",
+      "selector_sha256": "da260f314b788dd11b95610cd72ae5e445bc32667d6fcd34a502a41a219519aa",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-PROTECTED-DIRECTORY-REJECTS-INHERITED-OR-80BF39C24C08-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/worker.rs::protected_worker_commits_exact_registered_source_and_replays_after_expiry",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/worker.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "protected_worker_commits_exact_registered_source_and_replays_after_expiry",
+      "selector_sha256": "f51050f92f80c3015c3421f25abaa805f5e22d39815914e92223ca9cf0164434",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-PROTECTED-WORKER-COMMITS-EXACT-REGISTERE-7347D4F302A6-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/worker.rs::protected_worker_processes_enrolled_state_and_refuses_forged_registration",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/worker.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "protected_worker_processes_enrolled_state_and_refuses_forged_registration",
+      "selector_sha256": "005b7a72423bb7c7dcb096332eacc7c6a8402a36162fc674f6fc243b838eb523",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-PROTECTED-WORKER-PROCESSES-ENROLLED-STAT-AF219789C484-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
       "test_id": "TEST-RUST-PROVENANCE-HASH-BINDS-FIXTURE-CONTENT-AND-REJECT-65CF23BDF2B3",
       "status": "active",
       "identity": "rust::eval_cargo::evals/src/task.rs::provenance_hash_binds_fixture_content_and_rejects_cached_input_drift",
@@ -8883,6 +9429,19 @@
       "selector_sha256": "0f6afa5007502211fb2728ed6cebd4c64cee8e3b665b1febf84818034bd97dd2",
       "cfg": "all",
       "owner": null,
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/publication.rs::publication_seed_identity_survives_claim_and_recovery",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/publication.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "publication_seed_identity_survives_claim_and_recovery",
+      "selector_sha256": "32798ae60d17d751c7480c2b08fa99f8c5e4f274297bec5428b11e186b3b35b9",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-PUBLICATION-SEED-IDENTITY-SURVIVES-CLAIM-284F43EF08B0-GLOBAL-20260909",
+      "status": "active",
       "retirement": null
     },
     {
@@ -9263,6 +9822,19 @@
       "retirement": null
     },
     {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/native.rs::queue_consumption_preserves_changed_and_linked_packets",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/native.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "queue_consumption_preserves_changed_and_linked_packets",
+      "selector_sha256": "fb5400965404ad95552b9203d38c809d67cb8bf4833e05d97f0865dc0b806568",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-QUEUE-CONSUMPTION-PRESERVES-CHANGED-AND-0ECB1E630C8E-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
       "test_id": "TEST-RUST-RAYMAN-INVOCATION-COUNTS-ONLY-LEADING-RAYMAN-TOK-B6E5BEA8E4B5",
       "status": "active",
       "identity": "rust::eval_cargo::evals/src/agent.rs::rayman_invocation_counts_only_leading_rayman_token",
@@ -9403,6 +9975,19 @@
       "selector_sha256": "16d08f4d2d37956fa48fc43ea41d19c16b8d3069710469610101c0bdd790f312",
       "cfg": "all",
       "owner": null,
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/git.rs::real_git_snapshot_preserves_source_and_index_with_added_crlf_and_deleted_files",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/git.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "real_git_snapshot_preserves_source_and_index_with_added_crlf_and_deleted_files",
+      "selector_sha256": "28bf2ead0e475a1e9c4e6e3ff374df79ba7d41a765c83aa7ec17ce43f2cb5006",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-REAL-GIT-SNAPSHOT-PRESERVES-SOURCE-AND-I-7209D78A5D5C-GLOBAL-20260909",
+      "status": "active",
       "retirement": null
     },
     {
@@ -10951,6 +11536,19 @@
       "retirement": null
     },
     {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/native.rs::source_file_reader_rejects_hardlink_aliases",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/native.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "source_file_reader_rejects_hardlink_aliases",
+      "selector_sha256": "9fe20fdf627d89d960a19d0c2f9aec6eb8b4ed0cbb8e3e5778ed9df6cd0d96d6",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-SOURCE-FILE-READER-REJECTS-HARDLINK-ALIA-B5999A2E9275-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
       "test_id": "TEST-RUST-SPAWN-FAILURE-STILL-RELEASES-THE-FRESH-LEASE-778539C639A5",
       "status": "active",
       "identity": "rust::root_cargo::crates/rayman/src/goal/validation/pytest_isolation.rs::spawn_failure_still_releases_the_fresh_lease",
@@ -11000,6 +11598,19 @@
       "selector_sha256": "85645ddea54ca2ec176cb5128d870e197c61e2f91bb4a4a169dd7d190e763a1d",
       "cfg": "all",
       "owner": null,
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/tests.rs::stage_reuse_binds_environment_tools_scope_policy_and_artifacts",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "stage_reuse_binds_environment_tools_scope_policy_and_artifacts",
+      "selector_sha256": "5ec773dc70faa6527dac2b6a5fe23c11d3fbe0b97b5ff4e37df9d8a069ef4151",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-STAGE-REUSE-BINDS-ENVIRONMENT-TOOLS-SCOP-76A42F134ED0-GLOBAL-20260909",
+      "status": "active",
       "retirement": null
     },
     {
@@ -11312,6 +11923,32 @@
       "selector_sha256": "23df2d1ab16f9b2012d52f8702470c484adb94261f079bdf19f20dbca480cb96",
       "cfg": "all",
       "owner": null,
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/tests.rs::state_cas_replay_and_project_namespaces_preserve_other_tasks",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "state_cas_replay_and_project_namespaces_preserve_other_tasks",
+      "selector_sha256": "039c2a55dfbdf842de6b42adc11786722522efa2db5dde66f05f364324c8b055",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-STATE-CAS-REPLAY-AND-PROJECT-NAMESPACES-8A73C6E659A6-GLOBAL-20260909",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/rayman/src/global_state_bridge.rs::state_lease_renewal_stops_promptly_and_propagates_failure",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/global_state_bridge.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "state_lease_renewal_stops_promptly_and_propagates_failure",
+      "selector_sha256": "bf473da12ddb13ce639270991ecb6fd733932ce40a834bb7dda7a19d9dc4278b",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-STATE-LEASE-RENEWAL-STOPS-PROMPTLY-AND-P-121E03A49D3E-GLOBAL-20260909",
+      "status": "active",
       "retirement": null
     },
     {
@@ -12664,6 +13301,19 @@
       "selector_sha256": "9e56dd2970a33d16ef4ead591fa02db9cfbfad4e44af4880a9d8a49261fb5d76",
       "cfg": "windows",
       "owner": null,
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/tests.rs::windows_aliases_traversal_and_managed_state_paths_are_rejected",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "windows_aliases_traversal_and_managed_state_paths_are_rejected",
+      "selector_sha256": "81e7e780e6b9f2a291f8f3c3e62b1cb6faaff5021469f78a9871a85181ff09b1",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-WINDOWS-ALIASES-TRAVERSAL-AND-MANAGED-ST-F6BAF9C62F1B-GLOBAL-20260909",
+      "status": "active",
       "retirement": null
     },
     {

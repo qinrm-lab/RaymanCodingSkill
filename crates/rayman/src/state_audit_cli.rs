@@ -81,6 +81,7 @@ pub(crate) fn run_state_audit(root: &Path, json: bool, check: bool) -> Result<()
         "workspace_skill.yaml",
         "quality.json",
         "release-closeout-evidence.json",
+        "global-state.json",
     ];
     let state = root.join(".RaymanCodingSkill");
     let mut retired = Vec::new();
@@ -256,7 +257,8 @@ fn audit_allowed_state_entry(root: &Path, name: &str) -> Result<()> {
         | "autosave.lock"
         | "workspace_skill.yaml"
         | "quality.json"
-        | "release-closeout-evidence.json" => {
+        | "release-closeout-evidence.json"
+        | "global-state.json" => {
             let path = rayman::state_paths::managed_state_file(root, Path::new(name), false)?;
             match std::fs::symlink_metadata(&path) {
                 Ok(_) => Ok(()),

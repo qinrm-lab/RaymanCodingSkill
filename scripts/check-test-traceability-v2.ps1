@@ -23,6 +23,7 @@ $script:ManifestRelativePath = 'governance/test-traceability.json'
 $script:InventoryRelativePath = 'governance/first-party-test-inventory.json'
 $script:Utf8 = [Text.UTF8Encoding]::new($false, $true)
 $script:RustRoots = @(
+    'crates/codex-global-execution/src',
     'crates/rayman/src',
     'crates/rayman/tests',
     'xtask/src',
@@ -448,6 +449,7 @@ function Get-SuggestedTestId {
 function Get-RustRole {
     param([Parameter(Mandatory = $true)][string]$Path)
     if ($Path.StartsWith('crates/rayman/', [StringComparison]::Ordinal) -or
+        $Path.StartsWith('crates/codex-global-execution/', [StringComparison]::Ordinal) -or
         $Path.StartsWith('xtask/', [StringComparison]::Ordinal)) { return 'root_cargo' }
     if ($Path.StartsWith('evals/src/', [StringComparison]::Ordinal)) { return 'eval_cargo' }
     if ($Path -match '^evals/tasks/[^/]+/fixture/') { return 'eval_fixture' }
@@ -631,7 +633,14 @@ function New-PowerShellInventoryRow {
         selector_kind = $Kind
         selector = $Selector
         selector_sha256 = Get-Sha256Text -Text $ExtentText
-        cfg = 'all'
+        # These native backend suites require Windows token/ACL/task APIs.
+        # Their inventory must not claim Linux or other-Unix runtime evidence.
+        cfg = if ($Role -ceq 'powershell_self_test' -and $Path -cin @(
+            'scripts/configure-global-codex-execution.ps1',
+            'scripts/install-global-codex-execution.ps1',
+            'scripts/enroll-global-codex-projects.ps1',
+            'scripts/repair-codex-workspace-acl.ps1'
+        )) { 'windows' } else { 'all' }
         owner = $Owner
         suggested_test_id = Get-SuggestedTestId -Identity $identity -SelectorKind $Kind -Selector $Selector
     }

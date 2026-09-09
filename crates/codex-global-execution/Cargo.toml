@@ -1,0 +1,37 @@
+[package]
+name = "rayman-global-execution"
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.97.1"
+license = "MIT"
+publish = false
+description = "Rayman fixed-capability local execution for enrolled Codex projects"
+
+[[bin]]
+name = "rayman-global"
+path = "src/main.rs"
+
+[[bin]]
+name = "rayman-global-worker"
+path = "src/bin/worker.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true }
+ignore = { workspace = true }
+fs2 = { workspace = true }
+getrandom = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+rusqlite = { version = "0.33", features = ["bundled", "backup"] }
+tempfile = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Wdk_Foundation", "Wdk_Storage_FileSystem", "Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Threading", "Win32_System_SystemServices", "Win32_System_JobObjects", "Win32_System_Pipes", "Win32_UI_Shell"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[dev-dependencies]

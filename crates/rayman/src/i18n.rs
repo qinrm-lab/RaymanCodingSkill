@@ -6307,6 +6307,46 @@ const MESSAGE_FRAGMENT_CATALOG: &[(&str, &str)] = &[
     ),
     ("待完成项", "Pending work"),
     (
+        "跨项目执行能力预检与固定操作协议检查",
+        "Cross-project capability preflight and fixed-operation protocol checks",
+    ),
+    (
+        "核对后台身份、心跳和当前请求阶段",
+        "Check worker identity, heartbeat, and current request phase",
+    ),
+    (
+        "由安装器初始化受保护的后台根目录",
+        "Initialize the protected worker root through the installer",
+    ),
+    (
+        "由登记所有者明确启用当前项目的固定能力",
+        "Explicitly enroll the current project's fixed capabilities as its owner",
+    ),
+    (
+        "查询原请求结果；超时后先查询，避免重复提交",
+        "Query the original request result before retrying after a timeout",
+    ),
+    (
+        "预览或提交已登记项目的明确文件清单；提交需要 --yes",
+        "Preview or commit explicit paths in an enrolled project; commit requires --yes",
+    ),
+    (
+        "提交固定操作请求；源文件只作为协议数据读取",
+        "Submit a fixed-operation request; the input file contains protocol data only",
+    ),
+    (
+        "运行已安装的固定操作后台；必须匹配安装身份及程序哈希",
+        "Run the installed worker with its bound identity and executable hash",
+    ),
+    (
+        "检查明确指定的项目；身份和可写性不代表后台已安装",
+        "Inspect explicit projects; identity and write access do not prove worker installation",
+    ),
+    (
+        "只校验协议，不执行请求，也不把传入登记文件视为授权",
+        "Validate protocol only; neither execute the request nor trust input registration as authorization",
+    ),
+    (
         "一次性工作区就绪检查（默认 standard；release 仅代表 strict-quality，不代表已安装发布）",
         "Workspace readiness check (standard by default; release is strict-quality, not installation)",
     ),

@@ -362,6 +362,7 @@ fn read_open_handle_bound_file_with_hook(
             display_path(path)
         );
     }
+    crate::global_state_bridge::observe(path, &second);
     Ok((second, after_identity))
 }
 
@@ -466,6 +467,9 @@ pub(crate) fn ensure_real_directory_labeled(path: &Path, label: &str) -> Result<
 }
 
 pub fn write_atomic(target: &Path, text: &str) -> Result<()> {
+    if crate::global_state_bridge::write(target, text)? {
+        return Ok(());
+    }
     let parent = target
         .parent()
         .ok_or_else(|| anyhow::anyhow!("原子写入目标没有父目录: {}", display_path(target)))?;

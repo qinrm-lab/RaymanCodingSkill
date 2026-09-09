@@ -26,6 +26,7 @@ pub mod walk;
 pub mod workspace;
 
 mod file_io;
+mod global_state_bridge;
 pub mod pathfmt;
 pub mod timefmt;
 

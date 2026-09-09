@@ -1,5 +1,8 @@
 [CmdletBinding(DefaultParameterSetName = 'Check')]
 param(
+    [Parameter(Mandatory = $true, ParameterSetName = 'Library')]
+    [switch]$Library,
+
     [Parameter(Mandatory = $true, ParameterSetName = 'SelfTest')]
     [switch]$SelfTest,
 
@@ -1371,6 +1374,8 @@ function Invoke-SelfTest {
         }
     }
 }
+
+if ($PSCmdlet.ParameterSetName -eq 'Library') { return }
 
 switch ($PSCmdlet.ParameterSetName) {
     'SelfTest' {

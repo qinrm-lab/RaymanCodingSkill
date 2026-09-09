@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/rayman", "xtask"]
+members = ["crates/rayman", "crates/codex-global-execution", "xtask"]
 # evals/ is a separate dev/research project (agent A/B outcome eval). It is
 # intentionally excluded from the shipped tool's dependency tree and the main
 # Cargo workspace; it has its own explicit CI job and dependency policy check.
@@ -7,7 +7,7 @@ exclude = ["evals"]
 resolver = "2"
 
 [workspace.package]
-version = "2.12.8"
+version = "2.13.0"
 edition = "2024"
 rust-version = "1.97.1"
 license = "MIT"

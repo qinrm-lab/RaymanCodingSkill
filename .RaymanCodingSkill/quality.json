@@ -3,6 +3,36 @@
   "block_warning_kinds": [],
   "exemptions": [
     {
+      "path": "crates/codex-global-execution/src/execution_context.rs",
+      "kind": "high_fan_in",
+      "reason": "The standalone worker centralizes token-bound identity for enrollment, protected storage and request execution. Its native protected-directory and worker integration tests exercise the shared principal boundary; retaining one identity implementation avoids divergent checks. This exception covers dependency count only, not authorization or deployment evidence."
+    },
+    {
+      "path": "crates/codex-global-execution/src/file_io.rs",
+      "kind": "high_fan_in",
+      "reason": "The standalone worker shares bounded file reads and identity checks across Git, storage and recovery. The native hardlink rejection, protected directory, exact Git snapshot and publication recovery tests exercise these callers. The exception is limited to dependency count; filesystem integrity checks remain required."
+    },
+    {
+      "path": "crates/codex-global-execution/src/hash.rs",
+      "kind": "high_fan_in",
+      "reason": "Protocol, source and storage hashes intentionally use one SHA-256 helper. Source fingerprint, Git CRLF/blob separation, request replay and checkpoint row CAS tests cover its consumers. Duplicating the hash helper would increase drift risk; this exact dependency-count finding remains informational."
+    },
+    {
+      "path": "crates/codex-global-execution/src/pathfmt.rs",
+      "kind": "high_fan_in",
+      "reason": "Path display is a shared formatting adapter for the standalone worker. Unicode process arguments, source identity and native Git snapshot tests exercise consumers; formatting is not an authorization decision. This exception applies only to dependency count."
+    },
+    {
+      "path": "crates/codex-global-execution/src/state_lock.rs",
+      "kind": "high_fan_in",
+      "reason": "The standalone worker centralizes bounded advisory locking for protected enrollment, per-project state and recovery journals. Durable state reopen, replay, exact Git publication and worker integration tests exercise those paths together. This exception covers dependency count and does not waive concurrency validation."
+    },
+    {
+      "path": "crates/codex-global-execution/src/state_paths.rs",
+      "kind": "high_fan_in",
+      "reason": "The standalone worker shares ordinary-directory checks and opt-in write probes. Alias rejection, multi-project preflight and protected worker tests exercise consumers. Reusing these checks is intentional; the exact dependency-count finding is informational while path safety and deployment evidence remain mandatory."
+    },
+    {
       "path": "crates/rayman/src/checkpoint.rs",
       "kind": "high_fan_in",
       "reason": "Checkpoint capture, integrity, retention, and restore entrypoints intentionally share one fail-closed recovery contract; focused checkpoint tests, recovery tests, CLI integration tests, and the full repository gate cover all consumers."

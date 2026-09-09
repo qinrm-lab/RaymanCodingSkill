@@ -4,6 +4,7 @@ mod checkpoint_cli;
 mod cli;
 mod codex_hook_cli;
 mod doctor;
+mod global_execution_cli;
 mod goal_cli;
 mod readiness;
 mod state_audit_cli;
@@ -72,6 +73,9 @@ fn main() {
 
 fn run(cli: Cli) -> Result<()> {
     let json = matches!(cli.format, Format::Json);
+    if let Command::GlobalExecution(command) = &cli.command {
+        return global_execution_cli::run(json, command);
+    }
     if let Command::CodexHook(command) = &cli.command {
         return codex_hook_cli::run(json, command);
     }
@@ -362,6 +366,7 @@ fn run(cli: Cli) -> Result<()> {
         Command::Autosave(cmd) => return run_autosave(&root, json, cmd),
 
         Command::Doctor(cmd) => return doctor::run(&root, json, cmd),
+        Command::GlobalExecution(_) => unreachable!(),
         Command::CodexHook(_) => unreachable!(),
         Command::Update(_) => unreachable!(),
         Command::LegacyAudit(_) => bail!(

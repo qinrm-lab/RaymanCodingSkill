@@ -27,6 +27,12 @@ $script:RepositoryQualityProviderSha256 = '47f405e725ad272b2d2c0d2b1898553759626
 & (Join-Path $PSScriptRoot 'verify-release-contract.ps1') -SelfTest
 & (Join-Path $PSScriptRoot 'repair-rayman-powershell-profile.ps1') -SelfTest
 & (Join-Path $PSScriptRoot 'configure-codex-validation-temp.ps1') -SelfTest
+if ($IsWindows) {
+    & (Join-Path $PSScriptRoot 'configure-global-codex-execution.ps1') -SelfTest
+    & (Join-Path $PSScriptRoot 'install-global-codex-execution.ps1') -SelfTest
+    & (Join-Path $PSScriptRoot 'enroll-global-codex-projects.ps1') -SelfTest
+    & (Join-Path $PSScriptRoot 'repair-codex-workspace-acl.ps1') -SelfTest
+}
 & (Join-Path $PSScriptRoot 'codex-powershell-broker.ps1') -SelfTest
 & (Join-Path $PSScriptRoot 'install-codex-powershell-broker.ps1') -SelfTest
 # Runs the audit script self-test plus the isolated-advisory-DB dependency
