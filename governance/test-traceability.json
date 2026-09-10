@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 25,
+    "generation": 26,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 24,
-      "sha256": "303b67eba9e603093ae2e7292e0bfc1ac965c85a42b6a27eb5c34f049a6f2658"
+      "generation": 25,
+      "sha256": "176f4dd94c38758daa16d98e0bb83b79c46549c2572bc98bf287dcaf97cd31ba"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "5af914d201c2f7d407b37c544cc3bed2b2ec616eeec963dc8fcf07afae9a80bd"
+    "sha256": "81e8a7b28be79660169f9b095eae23788adff6498e87e2ed310d2660e6369b0d"
   },
   "sources": [
     {
@@ -2185,11 +2185,31 @@
     },
     {
       "gate_id": "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION-R2",
-      "status": "active",
+      "status": "retired",
       "kind": "powershell_self_test",
       "title": "PowerShell self-test: scripts/install-global-codex-execution.ps1",
       "path": "scripts/install-global-codex-execution.ps1",
       "sha256": "06c7d8b8e43f1c844c9c727550c0b3d52889435587e0c35954c3f857d56dd781",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "target_matrix": [
+        "windows"
+      ],
+      "retirement": {
+        "retired_at": "2026-09-10",
+        "reason": "Installer SelfTest now covers Task Scheduler default materialization and exact initialized-root recovery.",
+        "replaced_by": [
+          "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION-R2-R3"
+        ]
+      }
+    },
+    {
+      "gate_id": "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION-R2-R3",
+      "status": "active",
+      "kind": "powershell_self_test",
+      "title": "PowerShell self-test: scripts/install-global-codex-execution.ps1",
+      "path": "scripts/install-global-codex-execution.ps1",
+      "sha256": "d37a9a96cd8af24b43cfcc2232a924a5ce16ea93814ea90b3f509592811a4d8d",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "target_matrix": [
@@ -125175,7 +125195,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125192,6 +125212,33 @@
         "valid_until": "2027-03-10"
       },
       "semantic_sha256": "365ec8d7c47069d47382e994316f6ed5a67a82fb6545c93ea6660598963da9c4",
+      "retirement": {
+        "retired_at": "2026-09-10",
+        "reason": "Installer SelfTest now covers Task Scheduler default materialization and exact initialized-root recovery.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909-R2-R3"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION-R2-R3",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-10",
+        "valid_until": "2027-03-10"
+      },
+      "semantic_sha256": "4b32026c25f335efab036d696d8e936b3f2126414cdee693f831f8edd453d165",
       "retirement": null
     },
     {

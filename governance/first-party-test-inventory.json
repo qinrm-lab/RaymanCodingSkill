@@ -21,11 +21,11 @@
     ]
   },
   "revision": {
-    "generation": 22,
+    "generation": 23,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 21,
-      "sha256": "4ed35efbba88c36b7aa3cc6dad601ff97d6f82f8ff0f2196849ff699128657a4"
+      "generation": 22,
+      "sha256": "5af914d201c2f7d407b37c544cc3bed2b2ec616eeec963dc8fcf07afae9a80bd"
     }
   },
   "tests": [
@@ -1559,6 +1559,25 @@
       "cfg": "windows",
       "owner": "",
       "test_id": "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909-R2",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-10",
+        "reason": "Installer SelfTest now covers Task Scheduler default materialization and exact initialized-root recovery.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909-R2-R3"
+        ]
+      }
+    },
+    {
+      "identity": "powershell::powershell_self_test::scripts/install-global-codex-execution.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/install-global-codex-execution.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "d37a9a96cd8af24b43cfcc2232a924a5ce16ea93814ea90b3f509592811a4d8d",
+      "cfg": "windows",
+      "owner": "",
+      "test_id": "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909-R2-R3",
       "status": "active",
       "retirement": null
     },
