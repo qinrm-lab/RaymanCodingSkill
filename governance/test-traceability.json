@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 26,
+    "generation": 27,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 25,
-      "sha256": "176f4dd94c38758daa16d98e0bb83b79c46549c2572bc98bf287dcaf97cd31ba"
+      "generation": 26,
+      "sha256": "68e482c83eb37471f46a015724d0081fe43a9f3e9c345b171fe687dea3be5f91"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "81e8a7b28be79660169f9b095eae23788adff6498e87e2ed310d2660e6369b0d"
+    "sha256": "b0c66d7b79c923d21263810b8be2f49d41571065d8bcd36b194ba6be7ddd11d6"
   },
   "sources": [
     {
@@ -2205,11 +2205,31 @@
     },
     {
       "gate_id": "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION-R2-R3",
-      "status": "active",
+      "status": "retired",
       "kind": "powershell_self_test",
       "title": "PowerShell self-test: scripts/install-global-codex-execution.ps1",
       "path": "scripts/install-global-codex-execution.ps1",
       "sha256": "d37a9a96cd8af24b43cfcc2232a924a5ce16ea93814ea90b3f509592811a4d8d",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "target_matrix": [
+        "windows"
+      ],
+      "retirement": {
+        "retired_at": "2026-09-10",
+        "reason": "Installer gate now executes the complete resumable installation state-machine SelfTest.",
+        "replaced_by": [
+          "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION-R2-R3-R4"
+        ]
+      }
+    },
+    {
+      "gate_id": "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION-R2-R3-R4",
+      "status": "active",
+      "kind": "powershell_self_test",
+      "title": "PowerShell self-test: scripts/install-global-codex-execution.ps1",
+      "path": "scripts/install-global-codex-execution.ps1",
+      "sha256": "e094574afbd5c9ccaae2355b64d956efc25225b53f18ffe5a5e1ba8fb3e06152",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "target_matrix": [
@@ -125222,7 +125242,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125239,6 +125259,33 @@
         "valid_until": "2027-03-10"
       },
       "semantic_sha256": "4b32026c25f335efab036d696d8e936b3f2126414cdee693f831f8edd453d165",
+      "retirement": {
+        "retired_at": "2026-09-10",
+        "reason": "Reviewed binding renewed for the complete resumable installation state-machine SelfTest.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3-R4"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3-R4",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909-R2-R3-R4"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION-R2-R3-R4",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-10",
+        "valid_until": "2027-03-10"
+      },
+      "semantic_sha256": "ae3fdd32dd6f67dcc4823442e21fdc4b80e82a7641b014fe24041d190efaed52",
       "retirement": null
     },
     {

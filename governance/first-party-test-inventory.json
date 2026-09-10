@@ -21,11 +21,11 @@
     ]
   },
   "revision": {
-    "generation": 23,
+    "generation": 24,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 22,
-      "sha256": "5af914d201c2f7d407b37c544cc3bed2b2ec616eeec963dc8fcf07afae9a80bd"
+      "generation": 23,
+      "sha256": "81e8a7b28be79660169f9b095eae23788adff6498e87e2ed310d2660e6369b0d"
     }
   },
   "tests": [
@@ -1578,6 +1578,25 @@
       "cfg": "windows",
       "owner": "",
       "test_id": "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909-R2-R3",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-10",
+        "reason": "Installer SelfTest now covers the complete recovery state machine, task-query tri-state, strict task XML, progress ordering, and failure matrix.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909-R2-R3-R4"
+        ]
+      }
+    },
+    {
+      "identity": "powershell::powershell_self_test::scripts/install-global-codex-execution.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/install-global-codex-execution.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "e094574afbd5c9ccaae2355b64d956efc25225b53f18ffe5a5e1ba8fb3e06152",
+      "cfg": "windows",
+      "owner": "",
+      "test_id": "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909-R2-R3-R4",
       "status": "active",
       "retirement": null
     },

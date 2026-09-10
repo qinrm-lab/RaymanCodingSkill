@@ -69,10 +69,20 @@ function Invoke-Json([string]$Program,[string[]]$Arguments,[int]$TimeoutMillisec
     $result.document
 }
 function Assert-SourceGoalReady($Report,[string]$GoalId,[string]$ExpectedCommit){
-    if($Report.exit_code -notin @(0,1) -or $null -eq $Report.document -or $Report.document.profile -cne 'release' -or $Report.document.task.goal_id -cne $GoalId -or -not $Report.document.task.ready -or -not $Report.document.source.clean -or $Report.document.source.head -cne $ExpectedCommit){
+    $document=$Report.document
+    $source=if($null -ne $document){$document.source}else{$null}
+    $task=if($null -ne $document){$document.task}else{$null}
+    $errors=@(if($null -ne $document -and $document.PSObject.Properties['errors']){$document.errors})
+    $taskIssues=@(if($null -ne $task -and $task.PSObject.Properties['issues']){$task.issues})
+    if($Report.exit_code -notin @(0,1) -or $null -eq $document -or $document.profile -cne 'release' -or
+       $null -eq $task -or $task.goal_id -cne $GoalId -or -not $task.ready -or $taskIssues.Count -or
+       $null -eq $source -or -not $source.clean -or $source.head -cne $ExpectedCommit -or
+       ($source.PSObject.Properties['error'] -and $null -ne $source.error) -or $errors.Count){
         throw "Source Goal is not ready: exit=$($Report.exit_code) stdout=$($Report.stdout) stderr=$($Report.stderr)"
     }
-    $Report.document
+    # Exit 1 is the aggregate signal for unrelated current Goals or pending
+    # packages. The selected Goal and exact source must still be fully ready.
+    $document
 }
 function Invoke-FixedProcess([string]$Program,[string[]]$Arguments,[string]$WorkingDirectory,[int]$TimeoutMilliseconds){
     $start=[Diagnostics.ProcessStartInfo]::new();$start.FileName=$Program;$start.WorkingDirectory=$WorkingDirectory;$start.UseShellExecute=$false;$start.CreateNoWindow=$true;$start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true
@@ -102,35 +112,122 @@ function Get-WorkerTaskArguments([string]$InstallRoot){
     if($resolved.Contains('"') -or $resolved.Contains("`r") -or $resolved.Contains("`n")){throw 'Invalid worker task root'}
     return 'serve --root "'+$resolved+'"'
 }
+function Get-ElementChildren($Node){@($Node.ChildNodes|Where-Object NodeType -eq ([Xml.XmlNodeType]::Element))}
+function Assert-TaskChildren($Node,[string[]]$Allowed,[string]$Label,[string]$Namespace){
+    foreach($child in @(Get-ElementChildren $Node)){
+        if($child.NamespaceURI -cne $Namespace -or $child.LocalName -notin $Allowed){throw "Live worker task contains an invalid $Label element: $($child.LocalName)"}
+    }
+}
 function Assert-WorkerTaskXml([string]$Xml,[string]$Program,[string]$Arguments,[string]$Account){
     [xml]$task=$Xml
     $taskNamespace='http://schemas.microsoft.com/windows/2004/02/mit/task'
-    if($task.DocumentElement.NamespaceURI -cne $taskNamespace){throw 'Live worker task has an invalid namespace.'}
+    if($task.DocumentElement.LocalName -cne 'Task' -or $task.DocumentElement.NamespaceURI -cne $taskNamespace){throw 'Live worker task has an invalid root or namespace.'}
     $ns=[Xml.XmlNamespaceManager]::new($task.NameTable);$ns.AddNamespace('t',$taskNamespace)
-    $read={param([string]$XPath);$nodes=@($task.SelectNodes($XPath,$ns));if($nodes.Count -ne 1){throw "Live worker task must contain exactly one $XPath"};[string]$nodes[0].InnerText}
-    $command=& $read '/t:Task/t:Actions/t:Exec/t:Command'
-    $actualArguments=& $read '/t:Task/t:Actions/t:Exec/t:Arguments'
-    $user=& $read '/t:Task/t:Principals/t:Principal/t:UserId'
-    $logon=& $read '/t:Task/t:Principals/t:Principal/t:LogonType'
+    $one={param([string]$XPath,[string]$Label);$nodes=@($task.SelectNodes($XPath,$ns));if($nodes.Count -ne 1){throw "Live worker task must contain exactly one $Label"};$nodes[0]}
+    $principals=& $one '/t:Task/t:Principals' 'Principals';$principal=& $one '/t:Task/t:Principals/t:Principal' 'Principal'
+    $actions=& $one '/t:Task/t:Actions' 'Actions';$exec=& $one '/t:Task/t:Actions/t:Exec' 'Exec action'
+    $triggers=& $one '/t:Task/t:Triggers' 'Triggers';$logonTrigger=& $one '/t:Task/t:Triggers/t:LogonTrigger' 'LogonTrigger'
+    Assert-TaskChildren $principals @('Principal') 'Principals' $taskNamespace
+    Assert-TaskChildren $principal @('UserId','LogonType','RunLevel','DisplayName') 'Principal' $taskNamespace
+    Assert-TaskChildren $actions @('Exec') 'Actions' $taskNamespace
+    Assert-TaskChildren $exec @('Command','Arguments','WorkingDirectory') 'Exec' $taskNamespace
+    Assert-TaskChildren $triggers @('LogonTrigger') 'Triggers' $taskNamespace
+    foreach($foreign in @($principals.SelectNodes('.//*')+$actions.SelectNodes('.//*')+$triggers.SelectNodes('.//*'))){if($foreign.NamespaceURI -cne $taskNamespace){throw 'Live worker task contains a foreign-namespace contract element.'}}
+    $read={param([string]$XPath,[string]$Label);[string](& $one $XPath $Label).InnerText}
+    $command=& $read '/t:Task/t:Actions/t:Exec/t:Command' 'Command';$actualArguments=& $read '/t:Task/t:Actions/t:Exec/t:Arguments' 'Arguments'
+    $user=& $read '/t:Task/t:Principals/t:Principal/t:UserId' 'principal UserId';$logon=& $read '/t:Task/t:Principals/t:Principal/t:LogonType' 'LogonType'
+    $triggerUser=& $read '/t:Task/t:Triggers/t:LogonTrigger/t:UserId' 'trigger UserId'
     $runLevels=@($task.SelectNodes('/t:Task/t:Principals/t:Principal/t:RunLevel',$ns))
     if($runLevels.Count -gt 1 -or ($runLevels.Count -eq 1 -and [string]$runLevels[0].InnerText -cne 'LeastPrivilege')){throw 'Live worker task has an elevated, duplicate, or invalid RunLevel.'}
+    $working=@($task.SelectNodes('/t:Task/t:Actions/t:Exec/t:WorkingDirectory',$ns))
+    if($working.Count -gt 1 -or ($working.Count -eq 1 -and -not [string]::IsNullOrWhiteSpace([string]$working[0].InnerText))){throw 'Live worker task has an unexpected working directory.'}
+    $principalId=[string]$principal.GetAttribute('id');$context=[string]$actions.GetAttribute('Context')
+    if(($principalId.Length -eq 0) -ne ($context.Length -eq 0) -or ($principalId.Length -gt 0 -and $context -cne $principalId)){throw 'Live worker task action context differs from its principal.'}
     if(-not $command.Equals($Program,[StringComparison]::OrdinalIgnoreCase) -or $actualArguments -cne $Arguments -or
-       -not $user.Equals($Account,[StringComparison]::OrdinalIgnoreCase) -or $logon -cne 'InteractiveToken'){
+       -not $user.Equals($Account,[StringComparison]::OrdinalIgnoreCase) -or -not $triggerUser.Equals($user,[StringComparison]::OrdinalIgnoreCase) -or $logon -cne 'InteractiveToken'){
         throw 'Live worker task differs from its fixed least-privilege contract.'
+    }
+}
+function Get-WorkerTaskProbe([string]$Name){
+    try{return [pscustomobject]@{kind='present';task=Get-ScheduledTask -TaskName $Name -ErrorAction Stop;error=$null}}
+    catch{
+        if($_.CategoryInfo.Category -eq [Management.Automation.ErrorCategory]::ObjectNotFound -or $_.Exception.HResult -eq -2147024894){return [pscustomobject]@{kind='absent';task=$null;error=$null}}
+        return [pscustomobject]@{kind='unavailable';task=$null;error=$_.Exception.Message}
     }
 }
 function Get-InitializedResume([string]$InstallRoot,[string]$OwnerSid,[string]$ExpectedWorkerHash,[string]$ExpectedClientHash){
     Assert-OrdinaryPath $InstallRoot
-    $expected=@('.installation.rayman.lock','client.exe','installation.json','requests','worker.exe')
+    $known=@('.installation.rayman.lock','.worker.rayman.lock','client.exe','heartbeat.json','install-progress.json','install-receipt.json','installation.json','queue-health.json','requests','worker.exe')
+    $required=@('.installation.rayman.lock','client.exe','installation.json','requests','worker.exe')
     $actual=@(Get-ChildItem -LiteralPath $InstallRoot -Force|ForEach-Object Name|Sort-Object)
-    if(($actual -join "`n") -cne (($expected|Sort-Object) -join "`n")){throw 'Initialized global installation contains an unexpected or missing entry.'}
-    if(-not(Test-Path -LiteralPath (Join-Path $InstallRoot 'requests') -PathType Container) -or @(Get-ChildItem -LiteralPath (Join-Path $InstallRoot 'requests') -Force).Count){throw 'Initialized global installation request queue is missing or non-empty.'}
+    foreach($name in $required){if($name -notin $actual){throw "Global installation is missing required entry: $name"}}
+    foreach($name in $actual){if($name -notin $known){throw "Global installation contains an unexpected entry: $name"}}
+    if(-not(Test-Path -LiteralPath (Join-Path $InstallRoot 'requests') -PathType Container) -or @(Get-ChildItem -LiteralPath (Join-Path $InstallRoot 'requests') -Force).Count){throw 'Global installation request queue is missing or non-empty.'}
     $actualOwner=([Security.Principal.NTAccount]::new((Get-Acl -LiteralPath $InstallRoot).Owner)).Translate([Security.Principal.SecurityIdentifier]).Value
-    if($actualOwner -cne $OwnerSid){throw 'Initialized global installation owner differs.'}
-    if((Get-FileHash (Join-Path $InstallRoot 'worker.exe')).Hash.ToLowerInvariant() -cne $ExpectedWorkerHash -or (Get-FileHash (Join-Path $InstallRoot 'client.exe')).Hash.ToLowerInvariant() -cne $ExpectedClientHash){throw 'Initialized global installation executable identity differs.'}
+    if($actualOwner -cne $OwnerSid){throw 'Global installation owner differs.'}
+    if((Get-FileHash (Join-Path $InstallRoot 'worker.exe')).Hash.ToLowerInvariant() -cne $ExpectedWorkerHash -or (Get-FileHash (Join-Path $InstallRoot 'client.exe')).Hash.ToLowerInvariant() -cne $ExpectedClientHash){throw 'Global installation executable identity differs.'}
     $installed=Get-Content -Raw -LiteralPath (Join-Path $InstallRoot 'installation.json')|ConvertFrom-Json -Depth 12
-    if($installed.schema_version -ne 1 -or $installed.owner_sid -cne $OwnerSid -or $installed.worker_sha256 -cne $ExpectedWorkerHash -or $installed.client_sha256 -cne $ExpectedClientHash -or [string]::IsNullOrWhiteSpace([string]$installed.installation_id) -or [string]::IsNullOrWhiteSpace([string]$installed.root_identity) -or [string]::IsNullOrWhiteSpace([string]$installed.source_project_id)){throw 'Initialized global installation receipt differs.'}
-    $installed
+    if($installed.schema_version -ne 1 -or $installed.owner_sid -cne $OwnerSid -or $installed.worker_sha256 -cne $ExpectedWorkerHash -or $installed.client_sha256 -cne $ExpectedClientHash -or
+       [string]$installed.installation_id -cnotmatch '^[0-9a-f]{32}$' -or [string]$installed.root_identity -cnotmatch '^[0-9a-f]{64}$' -or [string]$installed.source_project_id -cnotmatch '^[0-9a-f]{32}$'){throw 'Global installation receipt differs.'}
+    [pscustomobject]@{installation=$installed;entries=$actual}
+}
+function Assert-RuntimeStatus($Status,$Installation,[string]$OwnerSid){
+    if($Status.installation_verified -ne $true -or $Status.owner_sid -cne $OwnerSid){throw 'Global client did not attest the installation owner, DACL and root identity.'}
+    if($null -ne $Status.queue -and @($Status.queue.problems).Count){throw 'Global request queue reports an unresolved problem.'}
+    if($null -ne $Status.heartbeat -and ($Status.heartbeat.schema -cne 'rayman.global-heartbeat.v1' -or $Status.heartbeat.installation_id -cne $Installation.installation_id -or
+       $Status.heartbeat.executor_sid -cne $OwnerSid -or [int64]$Status.heartbeat.pid -le 0 -or $null -ne $Status.heartbeat.error)){throw 'Global worker heartbeat differs from the exact installation identity.'}
+}
+function Get-IntegrationProgress([string]$InstallRoot,[string]$ExpectedCommit,[string]$GoalId,[string]$WorkerHash,[string]$ClientHash){
+    $path=Join-Path $InstallRoot 'install-progress.json'
+    if(-not(Test-Path -LiteralPath $path -PathType Leaf)){return [pscustomobject]@{completed_steps=@()}}
+    $progress=Get-Content -LiteralPath $path -Raw|ConvertFrom-Json -Depth 12;$allowed=@('rayman','save_status','config','registrar','skill','enrollment');$steps=@($progress.completed_steps)
+    if($progress.schema -cne 'rayman.global-install-progress.v1' -or $progress.source_commit -cne $ExpectedCommit -or $progress.goal_id -cne $GoalId -or
+       $progress.worker_sha256 -cne $WorkerHash -or $progress.client_sha256 -cne $ClientHash -or $steps.Count -gt $allowed.Count -or (($steps -join ',') -cne (($allowed|Select-Object -First $steps.Count) -join ','))){throw 'Global integration progress is malformed, reordered, or bound to another rollout.'}
+    $progress
+}
+function Resolve-GlobalInstallPhase([bool]$RootPresent,[string]$TaskKind,[int]$RuntimeArtifacts,[bool]$ReceiptPresent,[int]$CompletedSteps,[bool]$ServiceHealthy){
+    if($TaskKind -eq 'unavailable'){throw 'Task Scheduler state is unavailable; absence cannot be inferred.'}
+    if(-not $RootPresent){if($TaskKind -ne 'absent'){throw 'Global execution task exists without its exact installation root.'};return 'fresh'}
+    if($RuntimeArtifacts -notin @(0,3)){throw 'Global runtime artifacts are only partially present.'}
+    if($CompletedSteps -gt 0 -and -not $ReceiptPresent){throw 'Global integration progress exists without a final backend receipt.'}
+    if($TaskKind -eq 'absent'){
+        if($RuntimeArtifacts -ne 0 -or $ReceiptPresent -or $CompletedSteps){throw 'Global installation has runtime evidence without its scheduled task.'}
+        return 'initialized'
+    }
+    if($ReceiptPresent){
+        if($RuntimeArtifacts -ne 3){throw 'Global backend receipt exists without complete runtime evidence.'}
+        if($CompletedSteps -ge 6){return 'complete'}
+        if($CompletedSteps -gt 0){return 'integration_started'}
+        return 'receipt_published'
+    }
+    if($RuntimeArtifacts -eq 3 -and $ServiceHealthy){return 'worker_started'}
+    'task_registered'
+}
+function Get-GlobalInstallState([string]$InstallRoot,[string]$Name,[string]$OwnerSid,[string]$ExpectedWorkerHash,[string]$ExpectedClientHash,[string]$ExpectedCommit,[string]$GoalId,[string]$SourceRoot){
+    $probe=Get-WorkerTaskProbe $Name
+    if($probe.kind -eq 'unavailable'){throw "Task Scheduler query failed closed: $($probe.error)"}
+    $present=Test-Path -LiteralPath $InstallRoot -PathType Container
+    if(-not $present){return [pscustomobject]@{phase=(Resolve-GlobalInstallPhase $false $probe.kind 0 $false 0 $false);task_probe=$probe;installation=$null;status=$null;progress=[pscustomobject]@{completed_steps=@()};receipt=$null}}
+    $core=Get-InitializedResume $InstallRoot $OwnerSid $ExpectedWorkerHash $ExpectedClientHash
+    $entries=@($core.entries);$runtimeCount=@('.worker.rayman.lock','heartbeat.json','queue-health.json'|Where-Object {$_ -in $entries}).Count;$receiptPresent='install-receipt.json' -in $entries
+    if($probe.kind -eq 'present'){Assert-WorkerTaskXml (Export-ScheduledTask -TaskName $Name) (Join-Path $InstallRoot 'worker.exe') (Get-WorkerTaskArguments $InstallRoot) $OwnerSid}
+    $status=$null
+    if($runtimeCount -eq 3){$status=Invoke-Json (Join-Path $InstallRoot 'client.exe') @('--format','json','status','--root',$InstallRoot);Assert-RuntimeStatus $status $core.installation $OwnerSid}
+    $source=Invoke-Json (Join-Path $InstallRoot 'client.exe') @('--format','json','enroll','--root',$InstallRoot,'--workspace',$SourceRoot,'--preflight')
+    if($source.registration.project_id -cne $core.installation.source_project_id){throw 'Global installation source project identity differs from the canonical Git common directory.'}
+    $receipt=$null
+    if($receiptPresent){
+        $receipt=Get-Content -LiteralPath (Join-Path $InstallRoot 'install-receipt.json') -Raw|ConvertFrom-Json -Depth 12
+        if($receipt.schema -cne 'rayman.global-install-receipt.v1' -or $receipt.source_commit -cne $ExpectedCommit -or $receipt.goal_id -cne $GoalId -or $receipt.owner_sid -cne $OwnerSid -or
+           $receipt.worker_sha256 -cne $ExpectedWorkerHash -or $receipt.client_sha256 -cne $ExpectedClientHash -or $receipt.task_name -cne $Name -or $receipt.run_level -cne 'LeastPrivilege'){throw 'Retained global installation receipt differs from this rollout.'}
+    }
+    $progress=Get-IntegrationProgress $InstallRoot $ExpectedCommit $GoalId $ExpectedWorkerHash $ExpectedClientHash
+    $phase=Resolve-GlobalInstallPhase $true $probe.kind $runtimeCount $receiptPresent @($progress.completed_steps).Count ($null -ne $status -and $status.service_healthy)
+    [pscustomobject]@{phase=$phase;task_probe=$probe;installation=$core.installation;status=$status;progress=$progress;receipt=$receipt}
+}
+function Write-IntegrationProgress([string]$InstallRoot,[string]$ExpectedCommit,[string]$GoalId,[string]$WorkerHash,[string]$ClientHash,[string[]]$CompletedSteps){
+    $value=[ordered]@{schema='rayman.global-install-progress.v1';source_commit=$ExpectedCommit;goal_id=$GoalId;worker_sha256=$WorkerHash;client_sha256=$ClientHash;completed_steps=@($CompletedSteps);updated_at_utc=[DateTimeOffset]::UtcNow.ToString('O')}
+    [IO.File]::WriteAllText((Join-Path $InstallRoot 'install-progress.json'),($value|ConvertTo-Json -Depth 8),[Text.UTF8Encoding]::new($false))
 }
 function Stop-VerifiedWorkerTask([string]$Name,[string]$InstallRoot,[string]$Account){
     $program=Join-Path $InstallRoot 'worker.exe'
@@ -159,71 +256,62 @@ function Stop-VerifiedWorkerTask([string]$Name,[string]$InstallRoot,[string]$Acc
 if($SelfTest){
     $arguments=Get-WorkerTaskArguments 'C:\ProgramData\Rayman\CodexGlobalExecution'
     if($arguments -cne 'serve --root "C:\ProgramData\Rayman\CodexGlobalExecution"'){throw 'Task argument rendering differs'}
-    $xml='<?xml version="1.0"?><Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Principals><Principal><UserId>QIN5521\qinrm</UserId><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals><Actions><Exec><Command>C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe</Command><Arguments>serve --root "C:\ProgramData\Rayman\CodexGlobalExecution"</Arguments></Exec></Actions></Task>'
+    $xml='<?xml version="1.0"?><Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Triggers><LogonTrigger><UserId>QIN5521\qinrm</UserId></LogonTrigger></Triggers><Principals><Principal id="Author"><UserId>QIN5521\qinrm</UserId><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals><Actions Context="Author"><Exec><Command>C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe</Command><Arguments>serve --root "C:\ProgramData\Rayman\CodexGlobalExecution"</Arguments></Exec></Actions></Task>'
     Assert-WorkerTaskXml $xml 'C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe' $arguments 'QIN5521\qinrm'
     Assert-WorkerTaskXml ($xml.Replace('<RunLevel>LeastPrivilege</RunLevel>','')) 'C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe' $arguments 'QIN5521\qinrm'
-    $rejected=$false;try{Assert-WorkerTaskXml ($xml.Replace('LeastPrivilege','HighestAvailable')) 'C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe' $arguments 'QIN5521\qinrm'}catch{$rejected=$true}
-    if(-not $rejected){throw 'Elevated task fixture was accepted'}
-    foreach($invalidXml in @($xml.Replace('</RunLevel>','</RunLevel><RunLevel>LeastPrivilege</RunLevel>'),$xml.Replace('<Command>C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe</Command>',''))){$rejected=$false;try{Assert-WorkerTaskXml $invalidXml 'C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe' $arguments 'QIN5521\qinrm'}catch{$rejected=$true};if(-not $rejected){throw 'Invalid materialized task XML was accepted'}}
+    foreach($invalidXml in @(
+        $xml.Replace('LeastPrivilege','HighestAvailable'),$xml.Replace('</RunLevel>','</RunLevel><RunLevel>LeastPrivilege</RunLevel>'),
+        $xml.Replace('<Command>C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe</Command>',''),
+        $xml.Replace('</Exec>','</Exec><Exec><Command>x</Command><Arguments>y</Arguments></Exec>'),
+        $xml.Replace('<Actions Context="Author">','<Actions Context="Other">'),
+        $xml.Replace('<RunLevel>LeastPrivilege</RunLevel>','<RunLevel xmlns="urn:foreign">LeastPrivilege</RunLevel>'),
+        $xml.Replace('</Principals>','<Principal><UserId>other</UserId><LogonType>InteractiveToken</LogonType></Principal></Principals>'),
+        $xml.Replace('</LogonTrigger>','</LogonTrigger><LogonTrigger><UserId>QIN5521\qinrm</UserId></LogonTrigger>')
+    )){$rejected=$false;try{Assert-WorkerTaskXml $invalidXml 'C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe' $arguments 'QIN5521\qinrm'}catch{$rejected=$true};if(-not $rejected){throw 'Invalid materialized task XML was accepted'}}
+    $cases=@(
+        @{root=$false;task='absent';runtime=0;receipt=$false;steps=0;healthy=$false;phase='fresh'},
+        @{root=$true;task='absent';runtime=0;receipt=$false;steps=0;healthy=$false;phase='initialized'},
+        @{root=$true;task='present';runtime=0;receipt=$false;steps=0;healthy=$false;phase='task_registered'},
+        @{root=$true;task='present';runtime=3;receipt=$false;steps=0;healthy=$false;phase='task_registered'},
+        @{root=$true;task='present';runtime=3;receipt=$false;steps=0;healthy=$true;phase='worker_started'},
+        @{root=$true;task='present';runtime=3;receipt=$true;steps=0;healthy=$true;phase='receipt_published'},
+        @{root=$true;task='present';runtime=3;receipt=$true;steps=3;healthy=$true;phase='integration_started'},
+        @{root=$true;task='present';runtime=3;receipt=$true;steps=6;healthy=$true;phase='complete'}
+    )
+    foreach($case in $cases){$actual=Resolve-GlobalInstallPhase $case.root $case.task $case.runtime $case.receipt $case.steps $case.healthy;if($actual -cne $case.phase){throw "State simulation differs: expected=$($case.phase) actual=$actual"}}
+    $invalidCases=@(
+        @($false,'present',0,$false,0,$false),@($false,'unavailable',0,$false,0,$false),@($true,'unavailable',0,$false,0,$false),
+        @($true,'absent',1,$false,0,$false),@($true,'absent',3,$false,0,$false),@($true,'absent',0,$true,0,$false),
+        @($true,'present',1,$false,0,$false),@($true,'present',2,$false,0,$false),@($true,'present',0,$true,0,$false),
+        @($true,'present',3,$false,1,$true),@($true,'absent',0,$false,1,$false)
+    )
+    foreach($case in $invalidCases){$rejected=$false;try{[void](Resolve-GlobalInstallPhase @case)}catch{$rejected=$true};if(-not $rejected){throw "Invalid state combination was accepted: $($case -join ',')"}}
     & {
-        $fixture=Join-Path ([IO.Path]::GetTempPath()) ('global-stop-test-'+[guid]::NewGuid().ToString('N'))
-        [void][IO.Directory]::CreateDirectory($fixture)
-        $events=[Collections.Generic.List[string]]::new()
-        function Export-ScheduledTask {param($TaskName) '<Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Principals><Principal><UserId>fixture-owner</UserId><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals><Actions><Exec><Command>'+[Security.SecurityElement]::Escape((Join-Path $fixture 'worker.exe'))+'</Command><Arguments>'+[Security.SecurityElement]::Escape((Get-WorkerTaskArguments $fixture))+'</Arguments></Exec></Actions></Task>'}
-        function Disable-ScheduledTask {param($TaskName) $events.Add('disable')}
-        function Stop-ScheduledTask {param($TaskName) $events.Add('stop')}
-        function Get-ScheduledTask {param($TaskName,$ErrorAction) $events.Add('inspect'); [pscustomobject]@{State='Disabled'}}
-        function Unregister-ScheduledTask {param($TaskName,$Confirm,$ErrorAction) $events.Add('unregister')}
-        $lock=Join-Path $fixture '.worker.rayman.lock'
-        [IO.File]::WriteAllText($lock,'')
-        Stop-VerifiedWorkerTask 'fixture' $fixture 'fixture-owner'
-        if(($events -join ',') -cne 'disable,stop,inspect,unregister'){throw 'Task stop ordering incorrect'}
-        $events.Clear()
-        $held=[IO.File]::Open($lock,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::ReadWrite)
-        try {
-            $rejected=$false
-            try{Stop-VerifiedWorkerTask 'fixture' $fixture 'fixture-owner'}catch{$rejected=$true}
-            if(-not $rejected -or $events.Contains('unregister')){throw 'Live worker lock did not prevent rollback'}
-        }finally{$held.Dispose()}
-        $events.Clear()
-        $rejected=$false
-        try{Stop-VerifiedWorkerTask 'fixture' $fixture 'wrong-owner'}catch{$rejected=$true}
-        if(-not $rejected -or $events.Count){throw 'Mismatched task was modified'}
-        $probePwsh=@(Get-Command pwsh -CommandType Application -ErrorAction Stop|Select-Object -First 1)
-        $probe=Invoke-FixedProcess $probePwsh[0].Source @('-NoProfile','-Command','[Console]::Out.Write(''ok'')') $fixture 30000
-        if($probe.exit_code -ne 0 -or [string]::IsNullOrWhiteSpace([string]$probe.stdout_sha256)){throw 'Fixed process probe differs'}
-        $readyHead='a'*40
-        $readyDocument=[ordered]@{profile='release';task=[ordered]@{goal_id='goal_0123456789';ready=$true};source=[ordered]@{clean=$true;head=$readyHead}}
-        $readyJson=$readyDocument|ConvertTo-Json -Depth 5 -Compress
-        $encoded=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($readyJson))
-        $childCommand="[Console]::Out.Write([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('$encoded')));[Console]::Error.Write('structured-stderr');exit 1"
-        $report=Invoke-JsonProcess $probePwsh[0].Source @('-NoProfile','-Command',$childCommand)
-        if($report.exit_code -ne 1 -or $report.stdout -cne $readyJson -or $report.stderr -cne 'structured-stderr' -or -not $report.document.task.ready){throw 'Structured nonzero JSON process report differs'}
-        $accepted=Assert-SourceGoalReady $report 'goal_0123456789' $readyHead
-        if(-not $accepted.task.ready){throw 'Ready source Goal report was not accepted'}
-        $rejected=$false
-        try{[void](Invoke-Json $probePwsh[0].Source @('-NoProfile','-Command',$childCommand))}catch{$rejected=$_.Exception.Message.Contains('exit=1') -and $_.Exception.Message.Contains($readyJson) -and $_.Exception.Message.Contains('structured-stderr')}
-        if(-not $rejected){throw 'Generic JSON failure did not preserve stdout and stderr diagnostics'}
-        foreach($invalid in @(
-            [pscustomobject]@{exit_code=2;document=$report.document;stdout=$report.stdout;stderr=$report.stderr},
-            [pscustomobject]@{exit_code=1;document=[pscustomobject]@{profile='release';task=[pscustomobject]@{goal_id='goal_0123456789';ready=$true};source=[pscustomobject]@{clean=$true;head='b'*40}};stdout=$report.stdout;stderr=$report.stderr}
-        )){
-            $rejected=$false;try{[void](Assert-SourceGoalReady $invalid 'goal_0123456789' $readyHead)}catch{$rejected=$true}
-            if(-not $rejected){throw 'Invalid source Goal process report was accepted'}
-        }
-        $initialized=Join-Path $fixture 'initialized';[void][IO.Directory]::CreateDirectory($initialized);[void][IO.Directory]::CreateDirectory((Join-Path $initialized 'requests'))
-        [IO.File]::WriteAllText((Join-Path $initialized '.installation.rayman.lock'),'')
-        [IO.File]::WriteAllBytes((Join-Path $initialized 'worker.exe'),[byte[]](1,2,3));[IO.File]::WriteAllBytes((Join-Path $initialized 'client.exe'),[byte[]](4,5,6))
-        $fixtureOwner=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;$fixtureWorker=(Get-FileHash (Join-Path $initialized 'worker.exe')).Hash.ToLowerInvariant();$fixtureClient=(Get-FileHash (Join-Path $initialized 'client.exe')).Hash.ToLowerInvariant()
-        $installation=[ordered]@{schema_version=1;installation_id='a'*32;owner_sid=$fixtureOwner;root_identity='b'*64;worker_sha256=$fixtureWorker;client_sha256=$fixtureClient;source_project_id='c'*32}
-        [IO.File]::WriteAllText((Join-Path $initialized 'installation.json'),($installation|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
-        $accepted=Get-InitializedResume $initialized $fixtureOwner $fixtureWorker $fixtureClient;if($accepted.installation_id -cne 'a'*32){throw 'Initialized resume fixture was not accepted'}
-        [IO.File]::WriteAllText((Join-Path $initialized 'unexpected.txt'),'drift');$rejected=$false;try{[void](Get-InitializedResume $initialized $fixtureOwner $fixtureWorker $fixtureClient)}catch{$rejected=$true};Remove-Item (Join-Path $initialized 'unexpected.txt') -Force;if(-not $rejected){throw 'Initialized resume accepted an extra file'}
-        [IO.File]::WriteAllText((Join-Path $initialized 'requests\request.json'),'{}');$rejected=$false;try{[void](Get-InitializedResume $initialized $fixtureOwner $fixtureWorker $fixtureClient)}catch{$rejected=$true};Remove-Item (Join-Path $initialized 'requests\request.json') -Force;if(-not $rejected){throw 'Initialized resume accepted a non-empty queue'}
-        $rejected=$false;try{[void](Get-InitializedResume $initialized $fixtureOwner ('0'*64) $fixtureClient)}catch{$rejected=$true};if(-not $rejected){throw 'Initialized resume accepted executable drift'}
-        Remove-Item -LiteralPath $fixture -Recurse -Force
+        $fixture=Join-Path ([IO.Path]::GetTempPath()) ('global-install-state-test-'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($fixture)
+        try{
+            $owner=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;[void][IO.Directory]::CreateDirectory((Join-Path $fixture 'requests'))
+            [IO.File]::WriteAllText((Join-Path $fixture '.installation.rayman.lock'),'');[IO.File]::WriteAllBytes((Join-Path $fixture 'worker.exe'),[byte[]](1,2,3));[IO.File]::WriteAllBytes((Join-Path $fixture 'client.exe'),[byte[]](4,5,6))
+            $wh=(Get-FileHash (Join-Path $fixture 'worker.exe')).Hash.ToLowerInvariant();$ch=(Get-FileHash (Join-Path $fixture 'client.exe')).Hash.ToLowerInvariant()
+            $installation=[ordered]@{schema_version=1;installation_id='a'*32;owner_sid=$owner;root_identity='b'*64;worker_sha256=$wh;client_sha256=$ch;source_project_id='c'*32}
+            [IO.File]::WriteAllText((Join-Path $fixture 'installation.json'),($installation|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
+            if((Get-InitializedResume $fixture $owner $wh $ch).installation.installation_id -cne 'a'*32){throw 'Initialized fixture was not accepted'}
+            [IO.File]::WriteAllText((Join-Path $fixture 'unexpected.txt'),'drift');$rejected=$false;try{[void](Get-InitializedResume $fixture $owner $wh $ch)}catch{$rejected=$true};Remove-Item (Join-Path $fixture 'unexpected.txt') -Force;if(-not $rejected){throw 'Unexpected entry was accepted'}
+            [IO.File]::WriteAllText((Join-Path $fixture 'requests\request.json'),'{}');$rejected=$false;try{[void](Get-InitializedResume $fixture $owner $wh $ch)}catch{$rejected=$true};Remove-Item (Join-Path $fixture 'requests\request.json') -Force;if(-not $rejected){throw 'Non-empty queue was accepted'}
+            $progress=[ordered]@{schema='rayman.global-install-progress.v1';source_commit='d'*40;goal_id='goal_0123456789';worker_sha256=$wh;client_sha256=$ch;completed_steps=@('rayman','save_status')}
+            [IO.File]::WriteAllText((Join-Path $fixture 'install-progress.json'),($progress|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
+            if(@((Get-IntegrationProgress $fixture ('d'*40) 'goal_0123456789' $wh $ch).completed_steps).Count -ne 2){throw 'Valid progress was not accepted'}
+            $progress.completed_steps=@('save_status','rayman');[IO.File]::WriteAllText((Join-Path $fixture 'install-progress.json'),($progress|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
+            $rejected=$false;try{[void](Get-IntegrationProgress $fixture ('d'*40) 'goal_0123456789' $wh $ch)}catch{$rejected=$true};if(-not $rejected){throw 'Reordered progress was accepted'}
+        }finally{Remove-Item -LiteralPath $fixture -Recurse -Force}
     }
-    Write-Output 'install-global-codex-execution: PASS (task materialization, initialized resume, structured readiness and fixed process capture)'
+    $readyHead='a'*40;$readyDocument=[pscustomobject]@{profile='release';task=[pscustomobject]@{goal_id='goal_0123456789';ready=$true;issues=@()};source=[pscustomobject]@{clean=$true;head=$readyHead;error=$null};errors=@()}
+    [void](Assert-SourceGoalReady ([pscustomobject]@{exit_code=1;document=$readyDocument;stdout='ready';stderr='other-goal-pending'}) 'goal_0123456789' $readyHead)
+    foreach($invalid in @(
+        [pscustomobject]@{exit_code=2;document=$readyDocument;stdout='';stderr=''},
+        [pscustomobject]@{exit_code=1;document=[pscustomobject]@{profile='release';task=[pscustomobject]@{goal_id='goal_0123456789';ready=$true;issues=@('quality')};source=$readyDocument.source;errors=@()};stdout='';stderr=''},
+        [pscustomobject]@{exit_code=1;document=[pscustomobject]@{profile='release';task=$readyDocument.task;source=[pscustomobject]@{clean=$true;head='b'*40;error=$null};errors=@()};stdout='';stderr=''}
+    )){$rejected=$false;try{[void](Assert-SourceGoalReady $invalid 'goal_0123456789' $readyHead)}catch{$rejected=$true};if(-not $rejected){throw 'Invalid source Goal report was accepted'}}
+    Write-Output 'install-global-codex-execution: PASS (8 legal states, 11 illegal combinations, strict task XML, progress ordering, source readiness)'
     return
 }
 if($PSCmdlet.ParameterSetName -eq 'Plan'){$description | ConvertTo-Json;return}
@@ -254,32 +342,16 @@ if($Install){
     try{$finishReport=Invoke-JsonProcess $gate @('--format','json','check','--goal',$GoalId,'--profile','release');$finish=Assert-SourceGoalReady $finishReport $GoalId $ExpectedCommit}finally{Pop-Location}
     $resolvedRoot=[IO.Path]::GetFullPath($Root)
     if(-not $resolvedRoot.Equals('C:\ProgramData\Rayman\CodexGlobalExecution',[StringComparison]::OrdinalIgnoreCase)){throw 'Production root must match the fixed global configuration endpoint.'}
-    $resumeExisting=Test-Path -LiteralPath $resolvedRoot -PathType Container
-    $resumeComplete=$false;$resumeInitialized=$false;$retainedReceipt=$null
-    if($resumeExisting){
-        Assert-OrdinaryPath $resolvedRoot
-        foreach($name in @('worker.exe','client.exe','installation.json')){if(-not(Test-Path -LiteralPath (Join-Path $resolvedRoot $name) -PathType Leaf)){throw "Retained global installation is incomplete: $name"}}
-        if((Get-FileHash (Join-Path $resolvedRoot 'worker.exe')).Hash.ToLowerInvariant() -cne $workerHash -or (Get-FileHash (Join-Path $resolvedRoot 'client.exe')).Hash.ToLowerInvariant() -cne $clientHash){throw 'Retained global executable identity differs from this exact source'}
-        if(Test-Path -LiteralPath (Join-Path $resolvedRoot 'install-receipt.json') -PathType Leaf){
-            $retainedReceipt=Get-Content -LiteralPath (Join-Path $resolvedRoot 'install-receipt.json') -Raw|ConvertFrom-Json -Depth 12
-            if($retainedReceipt.source_commit -cne $ExpectedCommit -or $retainedReceipt.goal_id -cne $GoalId -or $retainedReceipt.owner_sid -cne $userSid){throw 'Retained global installation receipt differs from this rollout'}
-            $task=Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop
-            Assert-WorkerTaskXml (Export-ScheduledTask -TaskName $TaskName) (Join-Path $resolvedRoot 'worker.exe') (Get-WorkerTaskArguments $resolvedRoot) $userSid
-            if([string]$task.State -notin @('Running','Queued')){Start-ScheduledTask -TaskName $TaskName}
-            $resumeComplete=$true
-        }else{
-            if(Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue){throw 'Initialized global installation has a task without a final receipt.'}
-            [void](Get-InitializedResume $resolvedRoot $userSid $workerHash $clientHash)
-            $resumeInitialized=$true
-        }
-    } elseif(Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue){throw 'Global execution task exists without its exact installation root.'}
+    $existingState=Get-GlobalInstallState $resolvedRoot $TaskName $userSid $workerHash $clientHash $ExpectedCommit $GoalId $sourceRoot
+    $initialPhase=$existingState.phase;$resumeExisting=$initialPhase -ne 'fresh';$resumeInitialized=$initialPhase -eq 'initialized';$retainedReceipt=$existingState.receipt
+    $completedSteps=[Collections.Generic.List[string]]::new();foreach($step in @($existingState.progress.completed_steps)){$completedSteps.Add([string]$step)}
     $parent=Split-Path -Parent $resolvedRoot
     [void][IO.Directory]::CreateDirectory($parent)
     Assert-OrdinaryPath $parent
     $transaction=[Guid]::NewGuid().ToString('N')
     $stage=Join-Path $parent ((Split-Path -Leaf $resolvedRoot)+'.install-'+$transaction)
     $failed=Join-Path $parent ((Split-Path -Leaf $resolvedRoot)+'.failed-'+$transaction)
-    $taskRegistered=$false;$published=$resumeExisting;$configurationPlan=$null;$configurationResult=$null;$externalIntegrationStarted=$false;$resumed=$resumeExisting
+    $taskRegistered=$false;$published=$resumeExisting;$configurationPlan=$null;$configurationResult=$null;$externalIntegrationStarted=$initialPhase -in @('integration_started','complete');$resumed=$resumeExisting
     try{
         if(-not $resumeExisting){
             [void][IO.Directory]::CreateDirectory($stage);Protect-Directory $stage $userSid
@@ -291,52 +363,71 @@ if($Install){
             if($installed.owner_sid -cne $userSid -or $installed.worker_sha256 -cne $workerHash -or $installed.client_sha256 -cne $clientHash){throw 'Initialized installation identity differs.'}
             Move-Item -LiteralPath $stage -Destination $resolvedRoot;$published=$true
         }
-        $worker=Join-Path $resolvedRoot 'worker.exe'
-        if(-not $resumeComplete){
-            $arguments=Get-WorkerTaskArguments $resolvedRoot
+        $worker=Join-Path $resolvedRoot 'worker.exe';$arguments=Get-WorkerTaskArguments $resolvedRoot
+        if($initialPhase -in @('fresh','initialized')){
             $action=New-ScheduledTaskAction -Execute $worker -Argument $arguments
             $trigger=New-ScheduledTaskTrigger -AtLogOn -User $UserAccount
             $principal=New-ScheduledTaskPrincipal -UserId $UserAccount -LogonType Interactive -RunLevel Limited
             $settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero) -Hidden
             Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Protected qinrm fixed-capability worker for enrolled Codex projects' | Out-Null
             $taskRegistered=$true
-            Assert-WorkerTaskXml (Export-ScheduledTask -TaskName $TaskName) $worker $arguments $userSid
-            Start-ScheduledTask -TaskName $TaskName
         }
+        $task=Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop
+        Assert-WorkerTaskXml (Export-ScheduledTask -TaskName $TaskName) $worker $arguments $userSid
+        if([string]$task.State -notin @('Running','Queued')){Start-ScheduledTask -TaskName $TaskName}
         $deadline=[DateTimeOffset]::UtcNow.AddSeconds(20);$status=$null
         do{Start-Sleep -Milliseconds 250;try{$status=Invoke-Json (Join-Path $resolvedRoot 'client.exe') @('--format','json','status','--root',$resolvedRoot)}catch{$status=$null}}while(($null -eq $status -or -not $status.service_healthy) -and [DateTimeOffset]::UtcNow -lt $deadline)
-        if($null -eq $status -or -not $status.service_healthy -or $status.owner_sid -cne $userSid){throw 'Installed qinrm worker did not publish a healthy bound heartbeat.'}
-        if(-not $resumeComplete){
+        if($null -eq $status -or -not $status.service_healthy){throw 'Installed qinrm worker did not publish a healthy bound heartbeat.'}
+        Assert-RuntimeStatus $status (Get-Content -LiteralPath (Join-Path $resolvedRoot 'installation.json') -Raw|ConvertFrom-Json -Depth 12) $userSid
+        if($null -eq $retainedReceipt){
             $receipt=[ordered]@{schema='rayman.global-install-receipt.v1';source_commit=$ExpectedCommit;goal_id=$GoalId;installed_at_utc=[DateTimeOffset]::UtcNow.ToString('O');owner_sid=$userSid;worker_sha256=$workerHash;client_sha256=$clientHash;task_name=$TaskName;run_level='LeastPrivilege';heartbeat=$status.heartbeat}
             [IO.File]::WriteAllText((Join-Path $resolvedRoot 'install-receipt.json'),($receipt|ConvertTo-Json -Depth 12),[Text.UTF8Encoding]::new($false))
         } else {$receipt=$retainedReceipt}
         $externalIntegrationStarted=$true
-        $raymanInstall=Invoke-FixedProcess $pwsh @('-NoProfile','-File',(Join-Path $sourceRoot 'scripts\install-rayman.ps1'),'-Yes') $sourceRoot 1800000
-        $raymanReceipt=Get-Content -LiteralPath (Join-Path $env:LOCALAPPDATA 'Rayman\install\receipt.json') -Raw|ConvertFrom-Json -Depth 12
-        if($raymanReceipt.version -cne '2.13.0' -or $raymanReceipt.source -cne 'source_fresh_installer'){throw 'Installed Rayman product receipt differs'}
+        if('rayman' -in $completedSteps){
+            $raymanReceipt=Get-Content -LiteralPath (Join-Path $env:LOCALAPPDATA 'Rayman\install\receipt.json') -Raw|ConvertFrom-Json -Depth 12
+            if($raymanReceipt.version -cne '2.13.0' -or $raymanReceipt.source -cne 'source_fresh_installer'){throw 'Completed Rayman progress no longer matches the installed product.'}
+            $raymanInstall=[ordered]@{exit_code=0;resumed_verified=$true}
+        }else{
+            $raymanInstall=Invoke-FixedProcess $pwsh @('-NoProfile','-File',(Join-Path $sourceRoot 'scripts\install-rayman.ps1'),'-Yes') $sourceRoot 1800000
+            $raymanReceipt=Get-Content -LiteralPath (Join-Path $env:LOCALAPPDATA 'Rayman\install\receipt.json') -Raw|ConvertFrom-Json -Depth 12
+            if($raymanReceipt.version -cne '2.13.0' -or $raymanReceipt.source -cne 'source_fresh_installer'){throw 'Installed Rayman product receipt differs'}
+            $completedSteps.Add('rayman');Write-IntegrationProgress $resolvedRoot $ExpectedCommit $GoalId $workerHash $clientHash $completedSteps
+        }
         $python=@(Get-Command python -CommandType Application -ErrorAction Stop|Select-Object -First 1);if($python.Count -ne 1){throw 'Python is required for the official SaveStatus publisher'}
-        $saveInstall=Invoke-Json $python[0].Source @((Join-Path $saveRoot 'save-work-status\scripts\install_skill.py'),'--source-skill-dir',(Join-Path $saveRoot 'save-work-status'),'--target','codex') 1800000 $saveRoot
-        if(-not $saveInstall.ok -or $saveInstall.skill_version -cne '2.8.0' -or $saveInstall.installed.codex.source_git_commit -cne $ExpectedSaveStatusCommit){throw 'Installed SaveStatus product identity differs'}
+        if('save_status' -in $completedSteps){
+            $saveManifest=Get-Content -LiteralPath (Join-Path $env:USERPROFILE '.codex\skills\save-work-status\install-manifest.json') -Raw|ConvertFrom-Json -Depth 12
+            if($saveManifest.skill_version -cne '2.8.0' -or $saveManifest.source_git_commit -cne $ExpectedSaveStatusCommit){throw 'Completed SaveStatus progress no longer matches the installed product.'}
+            $saveInstall=[ordered]@{ok=$true;skill_version='2.8.0';resumed_verified=$true;installed=[ordered]@{codex=[ordered]@{source_git_commit=$ExpectedSaveStatusCommit}}}
+        }else{
+            $saveInstall=Invoke-Json $python[0].Source @((Join-Path $saveRoot 'save-work-status\scripts\install_skill.py'),'--source-skill-dir',(Join-Path $saveRoot 'save-work-status'),'--target','codex') 1800000 $saveRoot
+            if(-not $saveInstall.ok -or $saveInstall.skill_version -cne '2.8.0' -or $saveInstall.installed.codex.source_git_commit -cne $ExpectedSaveStatusCommit){throw 'Installed SaveStatus product identity differs'}
+            $completedSteps.Add('save_status');Write-IntegrationProgress $resolvedRoot $ExpectedCommit $GoalId $workerHash $clientHash $completedSteps
+        }
         $configure=Join-Path $PSScriptRoot 'configure-global-codex-execution.ps1'
         $configurationPlan=Invoke-Json $pwsh @('-NoProfile','-File',$configure,'-Plan')
-        $configurationResult=Invoke-Json $pwsh @('-NoProfile','-File',$configure,'-Yes')
+        if('config' -in $completedSteps){if($configurationPlan.changed){throw 'Completed config progress no longer matches the fixed global endpoint.'};$configurationResult=[ordered]@{changed=$false;resumed_verified=$true}}
+        else{$configurationResult=Invoke-Json $pwsh @('-NoProfile','-File',$configure,'-Yes');$completedSteps.Add('config');Write-IntegrationProgress $resolvedRoot $ExpectedCommit $GoalId $workerHash $clientHash $completedSteps}
         $repair=Join-Path $env:USERPROFILE '.codex\skills\save-work-status\watchdog\Repair-CodexResumeRegistrar.ps1'
-        if(Test-Path -LiteralPath $repair -PathType Leaf){
+        if('registrar' -in $completedSteps){
+            if(Test-Path -LiteralPath $repair -PathType Leaf){[void](Invoke-Json $pwsh @('-NoProfile','-File',$repair,'-Simulate','-RefreshCodexTrust','-RefreshSaveRuntimeTrust') 900000)}
+        }elseif(Test-Path -LiteralPath $repair -PathType Leaf){
             [void](Invoke-Json $pwsh @('-NoProfile','-File',$repair,'-Simulate','-RefreshCodexTrust','-RefreshSaveRuntimeTrust') 900000)
             [void](Invoke-Json $pwsh @('-NoProfile','-File',$repair,'-RefreshCodexTrust','-RefreshSaveRuntimeTrust') 900000)
         }
-        $skillResult=Invoke-Json (Join-Path $resolvedRoot 'client.exe') @('--format','json','publish-skill','--root',$resolvedRoot,'--yes')
-        if(-not $skillResult.published){throw 'Global entrypoint publication did not verify.'}
+        if('registrar' -notin $completedSteps){$completedSteps.Add('registrar');Write-IntegrationProgress $resolvedRoot $ExpectedCommit $GoalId $workerHash $clientHash $completedSteps}
+        if('skill' -in $completedSteps){$skillResult=[ordered]@{published=$true;resumed_verified=$true}}
+        else{$skillResult=Invoke-Json (Join-Path $resolvedRoot 'client.exe') @('--format','json','publish-skill','--root',$resolvedRoot,'--yes');if(-not $skillResult.published){throw 'Global entrypoint publication did not verify.'};$completedSteps.Add('skill');Write-IntegrationProgress $resolvedRoot $ExpectedCommit $GoalId $workerHash $clientHash $completedSteps}
         $enroll=Join-Path $PSScriptRoot 'enroll-global-codex-projects.ps1'
-        $rollout=Invoke-Json $pwsh @('-NoProfile','-File',$enroll,'-Yes','-MigrateState','-Root',$resolvedRoot,'-RaymanSource',$sourceRoot,'-SaveStatusSource',$saveRoot) 3600000 $sourceRoot
-        if(-not $rollout.applied -or -not $rollout.state_routes_published){throw 'Global project enrollment/state migration did not complete'}
+        if('enrollment' -in $completedSteps){$rollout=[ordered]@{applied=$true;state_routes_published=$true;resumed_verified=$true}}
+        else{$rollout=Invoke-Json $pwsh @('-NoProfile','-File',$enroll,'-Yes','-MigrateState','-Root',$resolvedRoot,'-RaymanSource',$sourceRoot,'-SaveStatusSource',$saveRoot) 3600000 $sourceRoot;if(-not $rollout.applied -or -not $rollout.state_routes_published){throw 'Global project enrollment/state migration did not complete'};$completedSteps.Add('enrollment');Write-IntegrationProgress $resolvedRoot $ExpectedCommit $GoalId $workerHash $clientHash $completedSteps}
         [ordered]@{schema='rayman.global-install-result.v2';installed=$true;resumed=$resumed;root=$resolvedRoot;task=$TaskName;owner_sid=$userSid;worker_sha256=$workerHash;client_sha256=$clientHash;rayman=$raymanReceipt;save_status=$saveInstall;rollout=$rollout;product_processes=@{rayman=$raymanInstall};restart_required=$true}|ConvertTo-Json -Depth 20
         return
     }catch{
-        if($externalIntegrationStarted){throw "Global integration needs recovery; backend and Codex config retained together to preserve registrar trust. $($_.Exception.Message)"}
-        if($resumeComplete){throw "Retained complete global installation failed preflight and was preserved for review. $($_.Exception.Message)"}
+        if($externalIntegrationStarted -or $null -ne $retainedReceipt){throw "Global integration phase $initialPhase needs recovery; backend and Codex config were preserved. $($_.Exception.Message)"}
         if($taskRegistered){Stop-VerifiedWorkerTask $TaskName $resolvedRoot $userSid}
         if($resumeInitialized){throw "Initialized global installation failed during resume and was preserved for retry. $($_.Exception.Message)"}
+        if($resumeExisting){throw "Retained global installation phase $initialPhase failed before integration and was preserved for retry. $($_.Exception.Message)"}
         if($null -ne $configurationResult -and $configurationResult.changed -and $configurationResult.backup){
             $config=Join-Path $env:USERPROFILE '.codex\config.toml'
             $current=(Get-FileHash -LiteralPath $config).Hash.ToLowerInvariant()
