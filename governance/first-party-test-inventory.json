@@ -21,11 +21,11 @@
     ]
   },
   "revision": {
-    "generation": 21,
+    "generation": 22,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 20,
-      "sha256": "703bd1004ca843832646b89aece63decbc6c4f27348411db4000a9696ff545b9"
+      "generation": 21,
+      "sha256": "4ed35efbba88c36b7aa3cc6dad601ff97d6f82f8ff0f2196849ff699128657a4"
     }
   },
   "tests": [
@@ -1540,6 +1540,25 @@
       "cfg": "windows",
       "owner": "",
       "test_id": "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-10",
+        "reason": "Installer SelfTest now covers structured nonzero source readiness and complete stdout/stderr diagnostics.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909-R2"
+        ]
+      }
+    },
+    {
+      "identity": "powershell::powershell_self_test::scripts/install-global-codex-execution.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/install-global-codex-execution.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "06c7d8b8e43f1c844c9c727550c0b3d52889435587e0c35954c3f857d56dd781",
+      "cfg": "windows",
+      "owner": "",
+      "test_id": "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909-R2",
       "status": "active",
       "retirement": null
     },

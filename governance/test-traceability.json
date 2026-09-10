@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 24,
+    "generation": 25,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 23,
-      "sha256": "d47d1d309c1e898f28e071b9d38f82719dc85f4715fea5e23ea19d5105da24d9"
+      "generation": 24,
+      "sha256": "303b67eba9e603093ae2e7292e0bfc1ac965c85a42b6a27eb5c34f049a6f2658"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "4ed35efbba88c36b7aa3cc6dad601ff97d6f82f8ff0f2196849ff699128657a4"
+    "sha256": "5af914d201c2f7d407b37c544cc3bed2b2ec616eeec963dc8fcf07afae9a80bd"
   },
   "sources": [
     {
@@ -2165,11 +2165,31 @@
     },
     {
       "gate_id": "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION",
-      "status": "active",
+      "status": "retired",
       "kind": "powershell_self_test",
       "title": "PowerShell self-test: scripts/install-global-codex-execution.ps1",
       "path": "scripts/install-global-codex-execution.ps1",
       "sha256": "90cc4e97b676718f8a6a07d875e8053cedcfcf3a54e6e0c68affa634c2bff7c8",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "target_matrix": [
+        "windows"
+      ],
+      "retirement": {
+        "retired_at": "2026-09-10",
+        "reason": "Installer SelfTest now covers structured nonzero source readiness and complete stdout/stderr diagnostics.",
+        "replaced_by": [
+          "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION-R2"
+        ]
+      }
+    },
+    {
+      "gate_id": "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION-R2",
+      "status": "active",
+      "kind": "powershell_self_test",
+      "title": "PowerShell self-test: scripts/install-global-codex-execution.ps1",
+      "path": "scripts/install-global-codex-execution.ps1",
+      "sha256": "06c7d8b8e43f1c844c9c727550c0b3d52889435587e0c35954c3f857d56dd781",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "target_matrix": [
@@ -125128,7 +125148,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-879DE0B35A4B8E01",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125145,6 +125165,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "e0e24fe36ffccdd835385c1fec84b350c6feea26a84720dd95efbe4776e87df9",
+      "retirement": {
+        "retired_at": "2026-09-10",
+        "reason": "Installer SelfTest now covers structured nonzero source readiness and complete stdout/stderr diagnostics.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909-R2"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION-R2",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-10",
+        "valid_until": "2027-03-10"
+      },
+      "semantic_sha256": "365ec8d7c47069d47382e994316f6ed5a67a82fb6545c93ea6660598963da9c4",
       "retirement": null
     },
     {

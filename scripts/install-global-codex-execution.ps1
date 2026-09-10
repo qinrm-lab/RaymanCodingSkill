@@ -50,18 +50,29 @@ function Protect-Directory([string]$Path,[string]$Owner,[switch]$Queue){
     }
     Set-Acl -LiteralPath $Path -AclObject $security
 }
-function Invoke-Json([string]$Program,[string[]]$Arguments,[int]$TimeoutMilliseconds=30000,[string]$WorkingDirectory=(Get-Location).ProviderPath){
+function Invoke-JsonProcess([string]$Program,[string[]]$Arguments,[int]$TimeoutMilliseconds=30000,[string]$WorkingDirectory=(Get-Location).ProviderPath){
     $start=[Diagnostics.ProcessStartInfo]::new();$start.FileName=$Program;$start.WorkingDirectory=$WorkingDirectory;$start.UseShellExecute=$false;$start.CreateNoWindow=$true;$start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true
     foreach($arg in $Arguments){$start.ArgumentList.Add($arg)}
     $process=[Diagnostics.Process]::new();$process.StartInfo=$start
     try{
         if(-not $process.Start()){throw 'Cannot start global worker'}
         $out=$process.StandardOutput.ReadToEndAsync();$err=$process.StandardError.ReadToEndAsync()
-        if(-not $process.WaitForExit($TimeoutMilliseconds)){$process.Kill($true);$process.WaitForExit();throw 'Global initialization timed out'}
+        if(-not $process.WaitForExit($TimeoutMilliseconds)){$process.Kill($true);$process.WaitForExit();throw "Global process timed out: $Program"}
         $stdout=$out.GetAwaiter().GetResult();$stderr=$err.GetAwaiter().GetResult()
-        if($process.ExitCode -ne 0){throw "Global initialization failed: $stderr"}
-        $stdout | ConvertFrom-Json -Depth 30
+        try{$document=$stdout | ConvertFrom-Json -Depth 30}catch{throw "Global process returned invalid JSON: exit=$($process.ExitCode) stdout=$stdout stderr=$stderr"}
+        [pscustomobject]@{exit_code=$process.ExitCode;document=$document;stdout=$stdout;stderr=$stderr}
     }finally{$process.Dispose()}
+}
+function Invoke-Json([string]$Program,[string[]]$Arguments,[int]$TimeoutMilliseconds=30000,[string]$WorkingDirectory=(Get-Location).ProviderPath){
+    $result=Invoke-JsonProcess $Program $Arguments $TimeoutMilliseconds $WorkingDirectory
+    if($result.exit_code -ne 0){throw "Global process failed: exit=$($result.exit_code) stdout=$($result.stdout) stderr=$($result.stderr)"}
+    $result.document
+}
+function Assert-SourceGoalReady($Report,[string]$GoalId,[string]$ExpectedCommit){
+    if($Report.exit_code -notin @(0,1) -or $null -eq $Report.document -or $Report.document.profile -cne 'release' -or $Report.document.task.goal_id -cne $GoalId -or -not $Report.document.task.ready -or -not $Report.document.source.clean -or $Report.document.source.head -cne $ExpectedCommit){
+        throw "Source Goal is not ready: exit=$($Report.exit_code) stdout=$($Report.stdout) stderr=$($Report.stderr)"
+    }
+    $Report.document
 }
 function Invoke-FixedProcess([string]$Program,[string[]]$Arguments,[string]$WorkingDirectory,[int]$TimeoutMilliseconds){
     $start=[Diagnostics.ProcessStartInfo]::new();$start.FileName=$Program;$start.WorkingDirectory=$WorkingDirectory;$start.UseShellExecute=$false;$start.CreateNoWindow=$true;$start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true
@@ -162,8 +173,27 @@ if($SelfTest){
         $probePwsh=@(Get-Command pwsh -CommandType Application -ErrorAction Stop|Select-Object -First 1)
         $probe=Invoke-FixedProcess $probePwsh[0].Source @('-NoProfile','-Command','[Console]::Out.Write(''ok'')') $fixture 30000
         if($probe.exit_code -ne 0 -or [string]::IsNullOrWhiteSpace([string]$probe.stdout_sha256)){throw 'Fixed process probe differs'}
+        $readyHead='a'*40
+        $readyDocument=[ordered]@{profile='release';task=[ordered]@{goal_id='goal_0123456789';ready=$true};source=[ordered]@{clean=$true;head=$readyHead}}
+        $readyJson=$readyDocument|ConvertTo-Json -Depth 5 -Compress
+        $encoded=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($readyJson))
+        $childCommand="[Console]::Out.Write([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('$encoded')));[Console]::Error.Write('structured-stderr');exit 1"
+        $report=Invoke-JsonProcess $probePwsh[0].Source @('-NoProfile','-Command',$childCommand)
+        if($report.exit_code -ne 1 -or $report.stdout -cne $readyJson -or $report.stderr -cne 'structured-stderr' -or -not $report.document.task.ready){throw 'Structured nonzero JSON process report differs'}
+        $accepted=Assert-SourceGoalReady $report 'goal_0123456789' $readyHead
+        if(-not $accepted.task.ready){throw 'Ready source Goal report was not accepted'}
+        $rejected=$false
+        try{[void](Invoke-Json $probePwsh[0].Source @('-NoProfile','-Command',$childCommand))}catch{$rejected=$_.Exception.Message.Contains('exit=1') -and $_.Exception.Message.Contains($readyJson) -and $_.Exception.Message.Contains('structured-stderr')}
+        if(-not $rejected){throw 'Generic JSON failure did not preserve stdout and stderr diagnostics'}
+        foreach($invalid in @(
+            [pscustomobject]@{exit_code=2;document=$report.document;stdout=$report.stdout;stderr=$report.stderr},
+            [pscustomobject]@{exit_code=1;document=[pscustomobject]@{profile='release';task=[pscustomobject]@{goal_id='goal_0123456789';ready=$true};source=[pscustomobject]@{clean=$true;head='b'*40}};stdout=$report.stdout;stderr=$report.stderr}
+        )){
+            $rejected=$false;try{[void](Assert-SourceGoalReady $invalid 'goal_0123456789' $readyHead)}catch{$rejected=$true}
+            if(-not $rejected){throw 'Invalid source Goal process report was accepted'}
+        }
     }
-    Write-Output 'install-global-codex-execution: PASS (task contract, rollback stop and fixed process capture)'
+    Write-Output 'install-global-codex-execution: PASS (task contract, rollback stop, structured readiness and fixed process capture)'
     return
 }
 if($PSCmdlet.ParameterSetName -eq 'Plan'){$description | ConvertTo-Json;return}
@@ -191,7 +221,7 @@ if($Install){
     if($LASTEXITCODE -ne 0 -or (($saveVersion|ConvertFrom-Json).skill_version -cne '2.8.0')){throw 'SaveStatus release runtime is not v2.8.0'}
     $gate=Join-Path $repoRoot 'target/release/rayman.exe'
     Push-Location $repoRoot
-    try{$finish=Invoke-Json $gate @('--format','json','check','--goal',$GoalId,'--profile','release');if(-not $finish.task.ready){throw 'Source Goal is not ready.'}}finally{Pop-Location}
+    try{$finishReport=Invoke-JsonProcess $gate @('--format','json','check','--goal',$GoalId,'--profile','release');$finish=Assert-SourceGoalReady $finishReport $GoalId $ExpectedCommit}finally{Pop-Location}
     $resolvedRoot=[IO.Path]::GetFullPath($Root)
     if(-not $resolvedRoot.Equals('C:\ProgramData\Rayman\CodexGlobalExecution',[StringComparison]::OrdinalIgnoreCase)){throw 'Production root must match the fixed global configuration endpoint.'}
     $resumeExisting=Test-Path -LiteralPath $resolvedRoot -PathType Container
