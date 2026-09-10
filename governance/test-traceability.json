@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 27,
+    "generation": 28,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 26,
-      "sha256": "68e482c83eb37471f46a015724d0081fe43a9f3e9c345b171fe687dea3be5f91"
+      "generation": 27,
+      "sha256": "47bedec9e9b3c3c87a4a8d32853bdff68da2acc93cf138d312b58c62c00aa7bd"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "b0c66d7b79c923d21263810b8be2f49d41571065d8bcd36b194ba6be7ddd11d6"
+    "sha256": "adb3280dd39c8f8aed54a54adee07c0fcb3f12f77023e4801cc77f2b8b8b9d14"
   },
   "sources": [
     {
@@ -2225,11 +2225,31 @@
     },
     {
       "gate_id": "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION-R2-R3-R4",
-      "status": "active",
+      "status": "retired",
       "kind": "powershell_self_test",
       "title": "PowerShell self-test: scripts/install-global-codex-execution.ps1",
       "path": "scripts/install-global-codex-execution.ps1",
       "sha256": "e094574afbd5c9ccaae2355b64d956efc25225b53f18ffe5a5e1ba8fb3e06152",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "target_matrix": [
+        "windows"
+      ],
+      "retirement": {
+        "retired_at": "2026-09-10",
+        "reason": "Resolve account names to SIDs and verify explicit original worker source inventory and retained build artifacts without changing installation identity.",
+        "replaced_by": [
+          "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION-R2-R3-R4-SID"
+        ]
+      }
+    },
+    {
+      "gate_id": "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION-R2-R3-R4-SID",
+      "status": "active",
+      "kind": "powershell_self_test",
+      "title": "PowerShell self-test: scripts/install-global-codex-execution.ps1",
+      "path": "scripts/install-global-codex-execution.ps1",
+      "sha256": "0b227539e78e310e3cfae8b15837825c09d02d492b481f90b886eec68512b987",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "target_matrix": [
@@ -125269,7 +125289,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3-R4",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125286,6 +125306,33 @@
         "valid_until": "2027-03-10"
       },
       "semantic_sha256": "ae3fdd32dd6f67dcc4823442e21fdc4b80e82a7641b014fe24041d190efaed52",
+      "retirement": {
+        "retired_at": "2026-09-10",
+        "reason": "Resolve account names to SIDs and verify explicit original worker source inventory and retained build artifacts without changing installation identity.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3-R4-SID"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3-R4-SID",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909-R2-R3-R4-SID"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION-R2-R3-R4-SID",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-10",
+        "valid_until": "2027-03-10"
+      },
+      "semantic_sha256": "043a4fe3e264f0046f51a31b922e196782d6c54e0a8f841fb102bb1700ff15f1",
       "retirement": null
     },
     {

@@ -10,6 +10,7 @@ param(
     [Parameter(Mandatory,ParameterSetName='Install')][string]$SaveStatusSource,
     [Parameter(Mandatory,ParameterSetName='Install')][string]$ExpectedSaveStatusCommit,
     [Parameter(ParameterSetName='Install')][string]$CanonicalSourceRoot=(Split-Path -Parent $PSScriptRoot),
+    [Parameter(ParameterSetName='Install')][string]$WorkerSourceRoot,
     [string]$Root='C:\ProgramData\Rayman\CodexGlobalExecution',
     [string]$WorkerPath=(Join-Path (Split-Path -Parent $PSScriptRoot) 'target/release/rayman-global-worker.exe'),
     [string]$ClientPath=(Join-Path (Split-Path -Parent $PSScriptRoot) 'target/release/rayman-global.exe'),
@@ -118,6 +119,13 @@ function Assert-TaskChildren($Node,[string[]]$Allowed,[string]$Label,[string]$Na
         if($child.NamespaceURI -cne $Namespace -or $child.LocalName -notin $Allowed){throw "Live worker task contains an invalid $Label element: $($child.LocalName)"}
     }
 }
+function Resolve-WorkerAccountSid([string]$Account){
+    if([string]::IsNullOrWhiteSpace($Account)){throw 'Task account is empty.'}
+    if($Account -match '^S-1-'){
+        return [Security.Principal.SecurityIdentifier]::new($Account).Value
+    }
+    return ([Security.Principal.NTAccount]::new($Account)).Translate([Security.Principal.SecurityIdentifier]).Value
+}
 function Assert-WorkerTaskXml([string]$Xml,[string]$Program,[string]$Arguments,[string]$Account){
     [xml]$task=$Xml
     $taskNamespace='http://schemas.microsoft.com/windows/2004/02/mit/task'
@@ -143,8 +151,11 @@ function Assert-WorkerTaskXml([string]$Xml,[string]$Program,[string]$Arguments,[
     if($working.Count -gt 1 -or ($working.Count -eq 1 -and -not [string]::IsNullOrWhiteSpace([string]$working[0].InnerText))){throw 'Live worker task has an unexpected working directory.'}
     $principalId=[string]$principal.GetAttribute('id');$context=[string]$actions.GetAttribute('Context')
     if(($principalId.Length -eq 0) -ne ($context.Length -eq 0) -or ($principalId.Length -gt 0 -and $context -cne $principalId)){throw 'Live worker task action context differs from its principal.'}
+    $expectedSid=Resolve-WorkerAccountSid $Account
+    $principalSid=Resolve-WorkerAccountSid $user
+    $triggerSid=Resolve-WorkerAccountSid $triggerUser
     if(-not $command.Equals($Program,[StringComparison]::OrdinalIgnoreCase) -or $actualArguments -cne $Arguments -or
-       -not $user.Equals($Account,[StringComparison]::OrdinalIgnoreCase) -or -not $triggerUser.Equals($user,[StringComparison]::OrdinalIgnoreCase) -or $logon -cne 'InteractiveToken'){
+       $principalSid -cne $expectedSid -or $triggerSid -cne $expectedSid -or $logon -cne 'InteractiveToken'){
         throw 'Live worker task differs from its fixed least-privilege contract.'
     }
 }
@@ -155,9 +166,32 @@ function Get-WorkerTaskProbe([string]$Name){
         return [pscustomobject]@{kind='unavailable';task=$null;error=$_.Exception.Message}
     }
 }
+function Assert-WorkerSourceInputs([string]$Original,[string]$Current,[string]$Git,[string]$WorkerHash,[string]$ClientHash){
+    foreach($rootPath in @($Original,$Current)){
+        Assert-OrdinaryPath $rootPath
+        $dirty=@(& $Git -C $rootPath status --porcelain=v1 --untracked-files=all)
+        if($LASTEXITCODE -ne 0 -or $dirty.Count){throw "Worker source must be readable and clean: $rootPath"}
+    }
+    # Include the worker crate and its compile-time included resources as well
+    # as workspace dependency/build configuration. Compare raw working bytes.
+    $inputs=@('Cargo.toml','Cargo.lock','.cargo','crates/codex-global-execution','scripts/install-rayman.ps1','global-skill')
+    $originalFiles=@(& $Git -C $Original ls-files -- @inputs)
+    if($LASTEXITCODE -ne 0 -or $originalFiles.Count -eq 0){throw 'Original worker source inventory is unavailable.'}
+    $currentFiles=@(& $Git -C $Current ls-files -- @inputs)
+    if($LASTEXITCODE -ne 0 -or (($originalFiles|Sort-Object) -join "`n") -cne (($currentFiles|Sort-Object) -join "`n")){throw 'Worker source inventory differs.'}
+    foreach($relative in $originalFiles){
+        $oldPath=Join-Path $Original $relative;$newPath=Join-Path $Current $relative
+        Assert-OrdinaryPath $oldPath;Assert-OrdinaryPath $newPath
+        if((Get-FileHash -LiteralPath $oldPath).Hash -cne (Get-FileHash -LiteralPath $newPath).Hash){throw "Worker build input differs: $relative"}
+    }
+    foreach($pair in @(@('target/release/rayman-global-worker.exe',$WorkerHash),@('target/release/rayman-global.exe',$ClientHash))){
+        $artifact=Join-Path $Original $pair[0];Assert-OrdinaryPath $artifact
+        if((Get-FileHash -LiteralPath $artifact).Hash.ToLowerInvariant() -cne $pair[1]){throw 'Original worker build artifact differs from the retained installation.'}
+    }
+}
 function Get-InitializedResume([string]$InstallRoot,[string]$OwnerSid,[string]$ExpectedWorkerHash,[string]$ExpectedClientHash){
     Assert-OrdinaryPath $InstallRoot
-    $known=@('.installation.rayman.lock','.worker.rayman.lock','client.exe','heartbeat.json','install-progress.json','install-receipt.json','installation.json','queue-health.json','requests','worker.exe')
+    $known=@('.installation.rayman.lock','.worker.rayman.lock','.registry.rayman.lock','client.exe','heartbeat.json','install-progress.json','install-receipt.json','installation.json','queue-health.json','requests','worker.exe')
     $required=@('.installation.rayman.lock','client.exe','installation.json','requests','worker.exe')
     $actual=@(Get-ChildItem -LiteralPath $InstallRoot -Force|ForEach-Object Name|Sort-Object)
     foreach($name in $required){if($name -notin $actual){throw "Global installation is missing required entry: $name"}}
@@ -214,7 +248,7 @@ function Get-GlobalInstallState([string]$InstallRoot,[string]$Name,[string]$Owne
     $status=$null
     if($runtimeCount -eq 3){$status=Invoke-Json (Join-Path $InstallRoot 'client.exe') @('--format','json','status','--root',$InstallRoot);Assert-RuntimeStatus $status $core.installation $OwnerSid}
     $source=Invoke-Json (Join-Path $InstallRoot 'client.exe') @('--format','json','enroll','--root',$InstallRoot,'--workspace',$SourceRoot,'--preflight')
-    if($source.registration.project_id -cne $core.installation.source_project_id){throw 'Global installation source project identity differs from the canonical Git common directory.'}
+    if($source.registration.project_id -cne $core.installation.source_project_id){throw 'Global installation source project identity differs from the explicitly verified worker source Git common directory.'}
     $receipt=$null
     if($receiptPresent){
         $receipt=Get-Content -LiteralPath (Join-Path $InstallRoot 'install-receipt.json') -Raw|ConvertFrom-Json -Depth 12
@@ -254,11 +288,61 @@ function Stop-VerifiedWorkerTask([string]$Name,[string]$InstallRoot,[string]$Acc
     } finally {if($null -ne $guard){$guard.Dispose()}}
 }
 if($SelfTest){
+    & {
+        $fixture=Join-Path ([IO.Path]::GetTempPath()) ('worker-source-test-'+[guid]::NewGuid().ToString('N'))
+        [void][IO.Directory]::CreateDirectory($fixture)
+        try{
+            foreach($name in @('original','current')){
+                $dir=Join-Path $fixture $name;[void][IO.Directory]::CreateDirectory($dir)
+                & $GitPath -C $dir init -q
+                if($LASTEXITCODE -ne 0){throw 'Fixture Git initialization failed.'}
+                [IO.File]::WriteAllText((Join-Path $dir 'Cargo.toml'),"# fixed source`n",[Text.UTF8Encoding]::new($false))
+                [IO.File]::WriteAllText((Join-Path $dir '.gitignore'),"target/`n",[Text.UTF8Encoding]::new($false))
+                & $GitPath -C $dir add -- Cargo.toml .gitignore
+                if($LASTEXITCODE -ne 0){throw 'Fixture staging failed.'}
+                & $GitPath -C $dir -c user.name=Fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false commit -qm baseline
+                if($LASTEXITCODE -ne 0){throw 'Fixture commit failed.'}
+                [void][IO.Directory]::CreateDirectory((Join-Path $dir 'target/release'))
+                foreach($binary in @('rayman-global-worker.exe','rayman-global.exe')){[IO.File]::WriteAllBytes((Join-Path $dir ('target/release/'+$binary)),[byte[]](1,2,3))}
+            }
+            $original=Join-Path $fixture 'original';$current=Join-Path $fixture 'current'
+            $hash=(Get-FileHash (Join-Path $original 'target/release/rayman-global.exe')).Hash.ToLowerInvariant()
+            Assert-WorkerSourceInputs $original $current $GitPath $hash $hash
+            $rejected=$false;try{Assert-WorkerSourceInputs $original $current $GitPath ('0'*64) $hash}catch{$rejected=$true}
+            if(-not $rejected){throw 'Mismatched original build artifact accepted.'}
+            [IO.File]::AppendAllText((Join-Path $current 'Cargo.toml'),"# drift`n")
+            $rejected=$false;try{Assert-WorkerSourceInputs $original $current $GitPath $hash $hash}catch{$rejected=$true}
+            if(-not $rejected){throw 'Dirty worker source accepted.'}
+            & $GitPath -C $current add -- Cargo.toml
+            if($LASTEXITCODE -ne 0){throw 'Fixture staging failed.'}
+            & $GitPath -C $current -c user.name=Fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false commit -qm drift
+            if($LASTEXITCODE -ne 0){throw 'Fixture commit failed.'}
+            $rejected=$false;try{Assert-WorkerSourceInputs $original $current $GitPath $hash $hash}catch{$rejected=$true}
+            if(-not $rejected){throw 'Different committed worker source accepted.'}
+        }finally{
+            $base=[IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\')+'\'
+            if(-not [IO.Path]::GetFullPath($fixture).StartsWith($base,[StringComparison]::OrdinalIgnoreCase)){throw 'Unsafe source fixture cleanup path.'}
+            Assert-OrdinaryPath $fixture
+            Remove-Item -LiteralPath $fixture -Recurse -Force
+        }
+    }
+    $fixtureAccount=[Security.Principal.WindowsIdentity]::GetCurrent().Name
     $arguments=Get-WorkerTaskArguments 'C:\ProgramData\Rayman\CodexGlobalExecution'
     if($arguments -cne 'serve --root "C:\ProgramData\Rayman\CodexGlobalExecution"'){throw 'Task argument rendering differs'}
     $xml='<?xml version="1.0"?><Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Triggers><LogonTrigger><UserId>QIN5521\qinrm</UserId></LogonTrigger></Triggers><Principals><Principal id="Author"><UserId>QIN5521\qinrm</UserId><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals><Actions Context="Author"><Exec><Command>C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe</Command><Arguments>serve --root "C:\ProgramData\Rayman\CodexGlobalExecution"</Arguments></Exec></Actions></Task>'
-    Assert-WorkerTaskXml $xml 'C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe' $arguments 'QIN5521\qinrm'
-    Assert-WorkerTaskXml ($xml.Replace('<RunLevel>LeastPrivilege</RunLevel>','')) 'C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe' $arguments 'QIN5521\qinrm'
+    $xml=$xml.Replace('QIN5521\qinrm',$fixtureAccount)
+    Assert-WorkerTaskXml $xml 'C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe' $arguments $fixtureAccount
+    Assert-WorkerTaskXml ($xml.Replace('<RunLevel>LeastPrivilege</RunLevel>','')) 'C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe' $arguments $fixtureAccount
+    $fixtureSid=Resolve-WorkerAccountSid $fixtureAccount
+    $mixedXml=$xml.Replace(('<Principal id="Author"><UserId>'+$fixtureAccount+'</UserId>'),('<Principal id="Author"><UserId>'+$fixtureSid+'</UserId>')).Replace('<RunLevel>LeastPrivilege</RunLevel>','')
+    Assert-WorkerTaskXml $mixedXml 'C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe' $arguments $fixtureSid
+    Assert-WorkerTaskXml ($xml.Replace($fixtureAccount,$fixtureSid)) 'C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe' $arguments $fixtureAccount
+    foreach($badAccount in @('S-1-5-18','S-1-5-','RaymanNonexistentTaskAccount-19da')){
+        $badXml=$mixedXml.Replace(('<LogonTrigger><UserId>'+$fixtureAccount+'</UserId>'),('<LogonTrigger><UserId>'+$badAccount+'</UserId>'))
+        $rejected=$false
+        try{Assert-WorkerTaskXml $badXml 'C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe' $arguments $fixtureSid}catch{$rejected=$true}
+        if(-not $rejected){throw 'Mismatched or unresolved trigger account was accepted.'}
+    }
     foreach($invalidXml in @(
         $xml.Replace('LeastPrivilege','HighestAvailable'),$xml.Replace('</RunLevel>','</RunLevel><RunLevel>LeastPrivilege</RunLevel>'),
         $xml.Replace('<Command>C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe</Command>',''),
@@ -266,8 +350,8 @@ if($SelfTest){
         $xml.Replace('<Actions Context="Author">','<Actions Context="Other">'),
         $xml.Replace('<RunLevel>LeastPrivilege</RunLevel>','<RunLevel xmlns="urn:foreign">LeastPrivilege</RunLevel>'),
         $xml.Replace('</Principals>','<Principal><UserId>other</UserId><LogonType>InteractiveToken</LogonType></Principal></Principals>'),
-        $xml.Replace('</LogonTrigger>','</LogonTrigger><LogonTrigger><UserId>QIN5521\qinrm</UserId></LogonTrigger>')
-    )){$rejected=$false;try{Assert-WorkerTaskXml $invalidXml 'C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe' $arguments 'QIN5521\qinrm'}catch{$rejected=$true};if(-not $rejected){throw 'Invalid materialized task XML was accepted'}}
+        $xml.Replace('</LogonTrigger>',('</LogonTrigger><LogonTrigger><UserId>'+$fixtureAccount+'</UserId></LogonTrigger>'))
+    )){$rejected=$false;try{Assert-WorkerTaskXml $invalidXml 'C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe' $arguments $fixtureAccount}catch{$rejected=$true};if(-not $rejected){throw 'Invalid materialized task XML was accepted'}}
     $cases=@(
         @{root=$false;task='absent';runtime=0;receipt=$false;steps=0;healthy=$false;phase='fresh'},
         @{root=$true;task='absent';runtime=0;receipt=$false;steps=0;healthy=$false;phase='initialized'},
@@ -342,7 +426,9 @@ if($Install){
     try{$finishReport=Invoke-JsonProcess $gate @('--format','json','check','--goal',$GoalId,'--profile','release');$finish=Assert-SourceGoalReady $finishReport $GoalId $ExpectedCommit}finally{Pop-Location}
     $resolvedRoot=[IO.Path]::GetFullPath($Root)
     if(-not $resolvedRoot.Equals('C:\ProgramData\Rayman\CodexGlobalExecution',[StringComparison]::OrdinalIgnoreCase)){throw 'Production root must match the fixed global configuration endpoint.'}
-    $existingState=Get-GlobalInstallState $resolvedRoot $TaskName $userSid $workerHash $clientHash $ExpectedCommit $GoalId $sourceRoot
+    $workerSource=if($WorkerSourceRoot){[IO.Path]::GetFullPath($WorkerSourceRoot)}else{$sourceRoot}
+    Assert-WorkerSourceInputs $workerSource $sourceRoot $git.Source $workerHash $clientHash
+    $existingState=Get-GlobalInstallState $resolvedRoot $TaskName $userSid $workerHash $clientHash $ExpectedCommit $GoalId $workerSource
     $initialPhase=$existingState.phase;$resumeExisting=$initialPhase -ne 'fresh';$resumeInitialized=$initialPhase -eq 'initialized';$retainedReceipt=$existingState.receipt
     $completedSteps=[Collections.Generic.List[string]]::new();foreach($step in @($existingState.progress.completed_steps)){$completedSteps.Add([string]$step)}
     $parent=Split-Path -Parent $resolvedRoot
@@ -359,7 +445,7 @@ if($Install){
             Copy-Item -LiteralPath $WorkerPath -Destination (Join-Path $stage 'worker.exe')
             Copy-Item -LiteralPath $ClientPath -Destination (Join-Path $stage 'client.exe')
             if((Get-FileHash (Join-Path $stage 'worker.exe')).Hash.ToLowerInvariant() -cne $workerHash -or (Get-FileHash (Join-Path $stage 'client.exe')).Hash.ToLowerInvariant() -cne $clientHash){throw 'Staged executable identity differs.'}
-            $installed=Invoke-Json (Join-Path $stage 'worker.exe') @('--format','json','initialize','--root',$stage,'--source-workspace',$repoRoot,'--yes')
+            $installed=Invoke-Json (Join-Path $stage 'worker.exe') @('--format','json','initialize','--root',$stage,'--source-workspace',$workerSource,'--yes')
             if($installed.owner_sid -cne $userSid -or $installed.worker_sha256 -cne $workerHash -or $installed.client_sha256 -cne $clientHash){throw 'Initialized installation identity differs.'}
             Move-Item -LiteralPath $stage -Destination $resolvedRoot;$published=$true
         }

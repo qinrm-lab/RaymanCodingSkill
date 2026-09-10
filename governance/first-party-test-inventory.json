@@ -21,11 +21,11 @@
     ]
   },
   "revision": {
-    "generation": 24,
+    "generation": 25,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 23,
-      "sha256": "81e8a7b28be79660169f9b095eae23788adff6498e87e2ed310d2660e6369b0d"
+      "generation": 24,
+      "sha256": "b0c66d7b79c923d21263810b8be2f49d41571065d8bcd36b194ba6be7ddd11d6"
     }
   },
   "tests": [
@@ -1597,6 +1597,25 @@
       "cfg": "windows",
       "owner": "",
       "test_id": "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909-R2-R3-R4",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-10",
+        "reason": "Resolve account names to SIDs and verify explicit original worker source inventory and retained build artifacts without changing installation identity.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909-R2-R3-R4-SID"
+        ]
+      }
+    },
+    {
+      "identity": "powershell::powershell_self_test::scripts/install-global-codex-execution.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/install-global-codex-execution.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "0b227539e78e310e3cfae8b15837825c09d02d492b481f90b886eec68512b987",
+      "cfg": "windows",
+      "owner": "",
+      "test_id": "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909-R2-R3-R4-SID",
       "status": "active",
       "retirement": null
     },
