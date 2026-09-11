@@ -21,11 +21,11 @@
     ]
   },
   "revision": {
-    "generation": 26,
+    "generation": 27,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 25,
-      "sha256": "adb3280dd39c8f8aed54a54adee07c0fcb3f12f77023e4801cc77f2b8b8b9d14"
+      "generation": 26,
+      "sha256": "fb4987262c539ffae9dd3953eed839dc54ad23265508db15a3e4a3c95ab70a9b"
     }
   },
   "tests": [
@@ -39,6 +39,19 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-GLOBAL-HOOK-OWNER-TRUST-20260911",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/tests.rs::reenrollment_preserves_registered_install_adapter_policies",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "reenrollment_preserves_registered_install_adapter_policies",
+      "selector_sha256": "131d1825ffca933775ac52120afd5d0f61dbd1c03bc6d44188e548464a17f88c",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-REENROLL-ADAPTERS-20260911",
       "status": "active",
       "retirement": null
     },

@@ -324,6 +324,14 @@ pub fn enroll(
             target.file_name().unwrap().to_str().unwrap(),
             MAX_REQUEST_BYTES as u64,
         )?)?;
+        old.validate(&installation)?;
+        // Enrollment does not request revocation of owner-registered adapters.
+        // Preserve that authenticated extension, then compare every other field.
+        enrollment.install_policies = old.install_policies.clone();
+        enrollment.registration.capabilities.install_adapters =
+            old.registration.capabilities.install_adapters.clone();
+        enrollment.registration.policy_sha256 = enrollment.policy_digest()?;
+        enrollment.validate(&installation)?;
         if serde_json::to_vec(&old)? != serde_json::to_vec(&enrollment)? {
             bail!("project already enrolled with different policy; explicit migration required");
         }

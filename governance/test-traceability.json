@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 29,
+    "generation": 30,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 28,
-      "sha256": "200cfaeb4a466a59119139e74b8c92789ea5453485fcbf97eb762381e00fb28d"
+      "generation": 29,
+      "sha256": "683698bdfde378219e00c1f4738a9c89abd8237528c8c731e24b48dc5798f3ec"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "fb4987262c539ffae9dd3953eed839dc54ad23265508db15a3e4a3c95ab70a9b"
+    "sha256": "8577cddcd2bff8003984339fd2ad3edef9a42c1f553eb5baa5255e55a6108e87"
   },
   "sources": [
     {
@@ -125375,6 +125375,27 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "81f04578dcf7b71c90604e1e0fc035025a878ef8d951035f3d9b944991c5be5c",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-REENROLL-ADAPTERS-20260911",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-REENROLL-ADAPTERS-20260911"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-11",
+        "valid_until": "2027-03-09"
+      },
+      "semantic_sha256": "ee0ce8374cbac3ee6a5fcf04cf18c8be12c11b01b0b86b103c75ec32654e3561",
       "retirement": null
     },
     {

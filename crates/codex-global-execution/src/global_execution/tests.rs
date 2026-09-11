@@ -403,3 +403,50 @@ fn multi_project_preflight_is_activation_exempt_and_never_claims_authority() {
     assert!(preflight(&[first.path().to_path_buf(), first.path().join(".")], false).is_err());
     assert!(preflight(&[], false).is_err());
 }
+
+#[cfg(windows)]
+#[test]
+fn reenrollment_preserves_registered_install_adapter_policies() {
+    let root = tempfile::tempdir().unwrap();
+    let workspace = tempfile::tempdir().unwrap();
+    let context = crate::execution_context::execution_context_probe();
+    let sid = context.principal_sid.unwrap();
+    super::native::protect_fixture_directory(root.path(), &sid, "").unwrap();
+    let pin = ProtectedDirectory::open(root.path(), &sid).unwrap();
+    std::fs::write(root.path().join("worker.exe"), b"fixture worker").unwrap();
+    std::fs::write(root.path().join("client.exe"), b"fixture client").unwrap();
+    let install = Installation {
+        schema_version: 1,
+        installation_id: "a".repeat(32),
+        owner_sid: sid,
+        root_identity: pin.identity().into(),
+        source_project_id: "c".repeat(32),
+        worker_sha256: crate::hash::sha256_bytes(b"fixture worker"),
+        client_sha256: crate::hash::sha256_bytes(b"fixture client"),
+    };
+    crate::file_io::write_json(&root.path().join("installation.json"), &install).unwrap();
+    let first = enroll(root.path(), workspace.path(), None, true, true).unwrap();
+    let target = std::path::PathBuf::from(context.token_profile.unwrap())
+        .join("AppData/Local/rayman-enrollment-fixture-never-created.bin");
+    let spec = root.path().join("fixture-adapter.json");
+    crate::file_io::write_json(
+        &spec,
+        &serde_json::json!({"adapter_id":"fixture","targets":{"output":target}}),
+    )
+    .unwrap();
+    let adapter = register_install_adapter(root.path(), workspace.path(), &spec).unwrap();
+    let registry_path = root
+        .path()
+        .join(format!("project-{}.json", first.registration.worktree_id));
+    let before = std::fs::read(&registry_path).unwrap();
+    for publish in [false, true] {
+        let repeated = enroll(root.path(), workspace.path(), None, true, publish).unwrap();
+        assert_eq!(
+            repeated.install_policies.get("fixture"),
+            Some(&adapter.digest().unwrap())
+        );
+        assert_eq!(before, std::fs::read(&registry_path).unwrap());
+    }
+    assert!(enroll(root.path(), workspace.path(), None, false, false).is_err());
+    assert_eq!(before, std::fs::read(&registry_path).unwrap());
+}
