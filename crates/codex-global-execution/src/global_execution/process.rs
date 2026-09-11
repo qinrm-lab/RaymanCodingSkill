@@ -196,9 +196,22 @@ fn run_process(
     {
         bail!("invalid fixed process bounds");
     }
-    let program_w = wide(program.as_os_str())?;
+    // Git derives its installation/configuration prefix from the image path.
+    // The Windows verbatim spelling changes that discovery even when the file
+    // itself is identical. Preserve attestation, but launch a verified ordinary
+    // spelling so enrollment and worker execution see the same configuration.
+    let launch_program = std::path::PathBuf::from(crate::pathfmt::display_path(program));
+    if !launch_program.is_absolute()
+        || launch_program.components().any(|component| {
+            matches!(component, std::path::Component::Normal(part) if part.to_str().is_none_or(|text| text.ends_with(['.', ' '])))
+        })
+        || std::fs::canonicalize(&launch_program)? != std::fs::canonicalize(program)?
+    {
+        bail!("ordinary executable spelling does not identify the attested program");
+    }
+    let program_w = wide(launch_program.as_os_str())?;
     let cwd_w = wide(cwd.as_os_str())?;
-    let program_s = program
+    let program_s = launch_program
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("native executable path is not Unicode"))?;
     let mut command = quote(program_s);
@@ -368,6 +381,61 @@ fn run_process(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    #[test]
+    fn canonical_git_image_preserves_system_content_configuration() {
+        let program = Path::new("C:/Program Files/Git/mingw64/bin/git.exe");
+        let canonical = std::fs::canonicalize(program).unwrap();
+        let cwd = tempfile::tempdir().unwrap();
+        let mut environment = BTreeMap::new();
+        environment.insert("SystemRoot".into(), "C:\\Windows".into());
+        environment.insert("USERPROFILE".into(), cwd.path().to_str().unwrap().into());
+        environment.insert("GIT_CONFIG_COUNT".into(), "0".into());
+        environment.insert("PATH".into(), String::new());
+        let args = vec![
+            "config".into(),
+            "--system".into(),
+            "--no-includes".into(),
+            "--null".into(),
+            "--get-regexp".into(),
+            "^core\\.(autocrlf|eol|safecrlf)$".into(),
+        ];
+        let ordinary =
+            run_single_process(program, &args, cwd.path(), &environment, b"", 10000, 65536)
+                .unwrap();
+        assert_eq!(
+            ordinary.exit_code, 0,
+            "Git system content configuration is required for this regression"
+        );
+        assert!(!ordinary.stdout.is_empty());
+        let extended = run_single_process(
+            &canonical,
+            &args,
+            cwd.path(),
+            &environment,
+            b"",
+            10000,
+            65536,
+        )
+        .unwrap();
+        assert_eq!(extended.exit_code, ordinary.exit_code);
+        assert_eq!(extended.stdout, ordinary.stdout);
+        assert_eq!(extended.stderr, ordinary.stderr);
+        for ambiguous in [r"\\?\C:\untrusted.\git.exe", r"\\?\C:\untrusted\git.exe "] {
+            let error = run_single_process(
+                Path::new(ambiguous),
+                &args,
+                cwd.path(),
+                &environment,
+                b"",
+                10000,
+                65536,
+            )
+            .err()
+            .expect("ambiguous Win32 spelling must be rejected before launch");
+            assert!(error.to_string().contains("ordinary executable spelling"));
+        }
+    }
     #[cfg(windows)]
     #[test]
     fn native_process_roundtrips_quoted_unicode_and_rejects_descendants() {

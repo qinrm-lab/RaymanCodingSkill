@@ -21,11 +21,11 @@
     ]
   },
   "revision": {
-    "generation": 28,
+    "generation": 29,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 27,
-      "sha256": "8577cddcd2bff8003984339fd2ad3edef9a42c1f553eb5baa5255e55a6108e87"
+      "generation": 28,
+      "sha256": "6da24ab70568b240cc8ebb3d57c2f34b006204c169d06fc4e865a28a9bb0f9c2"
     }
   },
   "tests": [
@@ -39,6 +39,19 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/process.rs::canonical_git_image_preserves_system_content_configuration",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/process.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "canonical_git_image_preserves_system_content_configuration",
+      "selector_sha256": "c598ace6c693666a723ed71c3b48d5f0195eea133bf320ffaa27a2c1ab0b747b",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-GIT-IMAGE-PATH-20260912",
       "status": "active",
       "retirement": null
     },

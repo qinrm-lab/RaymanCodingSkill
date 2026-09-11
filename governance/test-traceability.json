@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 31,
+    "generation": 32,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 30,
-      "sha256": "a6002b11e73159baf369a53d0d7528187d8cab5fe105a5ed3c444df13672d39a"
+      "generation": 31,
+      "sha256": "9b05cd8d6f9ebd8d47b89bb4bba828e300b44c51a5188a2b090b40ae24b7bac1"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "6da24ab70568b240cc8ebb3d57c2f34b006204c169d06fc4e865a28a9bb0f9c2"
+    "sha256": "af7b2219af80cd926bd60acae91df6e94401f1faa7666b884ece192ac2987c51"
   },
   "sources": [
     {
@@ -125056,6 +125056,27 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "d2d14fbd3e35924eb2483263ad6d91bc8b67c71110579cbc7dfed2f811b47896",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-GIT-IMAGE-PATH-20260912",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-GIT-IMAGE-PATH-20260912"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-11",
+        "valid_until": "2027-03-09"
+      },
+      "semantic_sha256": "008bfd1851bcb102c662c245ea2702ff245e22eb61636ad453826097fb1dfa9d",
       "retirement": null
     },
     {
