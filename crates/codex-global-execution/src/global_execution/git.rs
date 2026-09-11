@@ -1070,7 +1070,10 @@ impl<'a> GitInspector<'a> {
             }
             let code = &record[..2];
             let path = std::str::from_utf8(&record[3..])?.to_string();
-            validate_relative_path(&path)?;
+            validate_observed_git_path(&path)?;
+            if is_protected_workflow_path(&path) {
+                continue;
+            }
             if !matches!(code, b"??" | b" M" | b" D") {
                 bail!("Git status requires unsupported rename/type/staged handling");
             }
@@ -1130,6 +1133,25 @@ impl<'a> GitInspector<'a> {
     }
 }
 
+fn is_protected_workflow_path(path: &str) -> bool {
+    let first = path.split('/').next().unwrap_or_default();
+    first.eq_ignore_ascii_case(".agent-checkpoints")
+        || (first.eq_ignore_ascii_case(".RaymanCodingSkill")
+            && path != ".RaymanCodingSkill/quality.json")
+}
+
+// Observation does not grant permission to include state files in a commit.
+fn validate_observed_git_path(path: &str) -> Result<()> {
+    if is_protected_workflow_path(path) {
+        let (_, suffix) = path
+            .split_once('/')
+            .ok_or_else(|| anyhow::anyhow!("workflow state entry must name a file"))?;
+        validate_relative_path(&format!("observed-state/{suffix}"))
+    } else {
+        validate_relative_path(path)
+    }
+}
+
 fn parse_entries(
     bytes: &[u8],
     tree: bool,
@@ -1142,7 +1164,7 @@ fn parse_entries(
         let (header, path) = text
             .split_once('\t')
             .ok_or_else(|| anyhow::anyhow!("malformed Git entry"))?;
-        validate_relative_path(path)?;
+        validate_observed_git_path(path)?;
         let fields: Vec<_> = header.split(' ').collect();
         if fields.len() != 3 {
             bail!("malformed Git entry fields");
@@ -1225,6 +1247,18 @@ mod tests {
         std::fs::write(repo.path().join(".gitattributes"), b"* text=auto eol=lf\n").unwrap();
         std::fs::write(repo.path().join("old.txt"), b"before\n").unwrap();
         std::fs::write(repo.path().join("deleted.txt"), b"delete\n").unwrap();
+        std::fs::create_dir(repo.path().join(".RaymanCodingSkill")).unwrap();
+        std::fs::write(
+            repo.path().join(".RaymanCodingSkill/workspace_skill.yaml"),
+            b"original state\n",
+        )
+        .unwrap();
+        std::fs::create_dir(repo.path().join(".agent-checkpoints")).unwrap();
+        std::fs::write(
+            repo.path().join(".agent-checkpoints/tracked-state"),
+            b"checkpoint state\n",
+        )
+        .unwrap();
         run(&["add", "."]);
         run(&["-c", "commit.gpgsign=false", "commit", "-m", "fixture"]);
         std::fs::create_dir(repo.path().join(".githooks")).unwrap();
@@ -1239,6 +1273,16 @@ mod tests {
         std::fs::write(repo.path().join("old.txt"), b"after\r\n").unwrap();
         std::fs::write(repo.path().join("added.txt"), b"added\r\n").unwrap();
         std::fs::remove_file(repo.path().join("deleted.txt")).unwrap();
+        std::fs::write(
+            repo.path().join(".RaymanCodingSkill/workspace_skill.yaml"),
+            b"preserved dirty state\n",
+        )
+        .unwrap();
+        std::fs::write(
+            repo.path().join(".agent-checkpoints/untracked-lock"),
+            b"preserved lock\n",
+        )
+        .unwrap();
         let gitdir = repo.path().join(".git");
         let old_index = std::fs::read(gitdir.join("index")).unwrap();
         let mut r = super::super::tests::registration();
@@ -1345,6 +1389,17 @@ mod tests {
         drop(reader);
         let reader = GitInspector::open(repo.path(), &binding, &r, &isolation).unwrap();
         let published = reader.publish_commit(&q, &r, 1002).unwrap();
+        assert_eq!(
+            std::fs::read(repo.path().join(".RaymanCodingSkill/workspace_skill.yaml")).unwrap(),
+            b"preserved dirty state\n"
+        );
+        assert_eq!(
+            std::fs::read(repo.path().join(".agent-checkpoints/untracked-lock")).unwrap(),
+            b"preserved lock\n"
+        );
+        assert!(validate_relative_path(".RaymanCodingSkill/workspace_skill.yaml").is_err());
+        assert!(validate_relative_path(".agent-checkpoints/tracked-state").is_err());
+
         assert!(!gitdir.join("index.lock").exists());
         assert_eq!(reader.capture(&r).unwrap().head, published.commit);
         assert_eq!(

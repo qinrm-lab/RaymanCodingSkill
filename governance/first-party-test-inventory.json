@@ -21,14 +21,27 @@
     ]
   },
   "revision": {
-    "generation": 25,
+    "generation": 26,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 24,
-      "sha256": "b0c66d7b79c923d21263810b8be2f49d41571065d8bcd36b194ba6be7ddd11d6"
+      "generation": 25,
+      "sha256": "adb3280dd39c8f8aed54a54adee07c0fcb3f12f77023e4801cc77f2b8b8b9d14"
     }
   },
   "tests": [
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/git_policy.rs::hook_config_trust_is_scoped_to_the_requested_repository",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/git_policy.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "hook_config_trust_is_scoped_to_the_requested_repository",
+      "selector_sha256": "f9817c9dcbfd897aef016263823b83d1726b3dffcc9cb6191f4b75d69f062728",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-HOOK-OWNER-TRUST-20260911",
+      "status": "active",
+      "retirement": null
+    },
     {
       "test_id": "TEST-PS-ASSERT-REJECTED-FRESHNESS-MISSING-PAYLOAD-ASSET-6AF892E7911F",
       "status": "active",
@@ -10082,6 +10095,25 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-RUST-REAL-GIT-SNAPSHOT-PRESERVES-SOURCE-AND-I-7209D78A5D5C-GLOBAL-20260909",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-11",
+        "reason": "Extend real Git transaction coverage to preserve tracked and dirty protected workflow state.",
+        "replaced_by": [
+          "TEST-RUST-REAL-GIT-SNAPSHOT-PRESERVES-SOURCE-AND-I-7209D78A5D5C-GLOBAL-20260909-ENROLL-R2"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/git.rs::real_git_snapshot_preserves_source_and_index_with_added_crlf_and_deleted_files",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/git.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "real_git_snapshot_preserves_source_and_index_with_added_crlf_and_deleted_files",
+      "selector_sha256": "286112b787b0d08a3d7e2b78e0d1cc1cf6df74767ff9d1576b6cc990620ba857",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-REAL-GIT-SNAPSHOT-PRESERVES-SOURCE-AND-I-7209D78A5D5C-GLOBAL-20260909-ENROLL-R2",
       "status": "active",
       "retirement": null
     },

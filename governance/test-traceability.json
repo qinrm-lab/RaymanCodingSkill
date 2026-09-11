@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 28,
+    "generation": 29,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 27,
-      "sha256": "47bedec9e9b3c3c87a4a8d32853bdff68da2acc93cf138d312b58c62c00aa7bd"
+      "generation": 28,
+      "sha256": "200cfaeb4a466a59119139e74b8c92789ea5453485fcbf97eb762381e00fb28d"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "adb3280dd39c8f8aed54a54adee07c0fcb3f12f77023e4801cc77f2b8b8b9d14"
+    "sha256": "fb4987262c539ffae9dd3953eed839dc54ad23265508db15a3e4a3c95ab70a9b"
   },
   "sources": [
     {
@@ -125018,6 +125018,27 @@
       "retirement": null
     },
     {
+      "binding_id": "BIND-GLOBAL-HOOK-OWNER-TRUST-20260911",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-HOOK-OWNER-TRUST-20260911"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-11",
+        "valid_until": "2027-03-09"
+      },
+      "semantic_sha256": "3ba56b35fce288d8a76a5265df85c8dcf24465fa9635b89ff671679d7724b1e0",
+      "retirement": null
+    },
+    {
       "binding_id": "BIND-GLOBAL-INSTALL-317A6BB8D5401F11",
       "status": "active",
       "source_rule_link_ids": [
@@ -125778,7 +125799,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8F0F527F49026311",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125795,6 +125816,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "a34aaae0f33c174e2156019b95454a0f9f862544e8458a4dc334e0af7411126d",
+      "retirement": {
+        "retired_at": "2026-09-11",
+        "reason": "Bind the reviewed protected-state preservation regression successor.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1"
+      ],
+      "test_ids": [
+        "TEST-RUST-REAL-GIT-SNAPSHOT-PRESERVES-SOURCE-AND-I-7209D78A5D5C-GLOBAL-20260909-ENROLL-R2"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-11",
+        "valid_until": "2027-03-09"
+      },
+      "semantic_sha256": "6beddd06990f0d2e0754b47920aef972e828adc5129da27baef9383e61c231e1",
       "retirement": null
     },
     {

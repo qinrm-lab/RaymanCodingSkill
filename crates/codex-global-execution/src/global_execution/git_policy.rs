@@ -127,21 +127,33 @@ pub struct GitHookPolicy {
 }
 
 #[cfg(windows)]
+fn hook_config_command(program: &Path, workspace: &Path, local: bool) -> std::process::Command {
+    let mut command = std::process::Command::new(program);
+    command
+        .arg("-c")
+        .arg(format!(
+            "safe.directory={}",
+            crate::pathfmt::display_path(workspace)
+        ))
+        .arg("config");
+    if local {
+        command.arg("--local");
+    }
+    command
+        .args(["--get-all", "core.hooksPath"])
+        .current_dir(workspace)
+        .env("GIT_TERMINAL_PROMPT", "0");
+    command
+}
+
+#[cfg(windows)]
 impl GitHookPolicy {
     pub fn capture(program: &Path, workspace: &Path) -> Result<Option<Self>> {
-        let local_output = std::process::Command::new(program)
-            .args(["config", "--local", "--get-all", "core.hooksPath"])
-            .current_dir(workspace)
-            .env("GIT_TERMINAL_PROMPT", "0")
-            .output()?;
+        let local_output = hook_config_command(program, workspace, true).output()?;
         if !local_output.status.success() && local_output.status.code() != Some(1) {
             bail!("cannot inspect repository hook policy");
         }
-        let effective_output = std::process::Command::new(program)
-            .args(["config", "--get-all", "core.hooksPath"])
-            .current_dir(workspace)
-            .env("GIT_TERMINAL_PROMPT", "0")
-            .output()?;
+        let effective_output = hook_config_command(program, workspace, false).output()?;
         if !effective_output.status.success() && effective_output.status.code() != Some(1) {
             bail!("cannot inspect effective repository hook policy");
         }
@@ -323,5 +335,52 @@ mod tests {
         drop(reader);
         std::fs::write(config, b"[core]\nautocrlf = false\n").unwrap();
         assert!(GitInspector::open_for_worker(project.path(), &binding, &r, &store).is_err());
+    }
+}
+
+#[cfg(all(test, windows))]
+mod ownership_tests {
+    use super::*;
+    #[cfg(windows)]
+    #[test]
+    fn hook_config_trust_is_scoped_to_the_requested_repository() {
+        let repo = tempfile::tempdir().unwrap();
+        let git = Path::new("C:/Program Files/Git/mingw64/bin/git.exe");
+        assert!(
+            std::process::Command::new(git)
+                .args(["init", "-b", "main"])
+                .current_dir(repo.path())
+                .output()
+                .unwrap()
+                .status
+                .success()
+        );
+        let baseline = std::process::Command::new(git)
+            .args([
+                "-c",
+                "safe.directory=",
+                "config",
+                "--local",
+                "--get-all",
+                "core.hooksPath",
+            ])
+            .env("GIT_TEST_ASSUME_DIFFERENT_OWNER", "1")
+            .current_dir(repo.path())
+            .output()
+            .unwrap();
+        assert!(!matches!(baseline.status.code(), Some(0 | 1)));
+        for local in [true, false] {
+            let result = hook_config_command(git, repo.path(), local)
+                .env("GIT_TEST_ASSUME_DIFFERENT_OWNER", "1")
+                .output()
+                .unwrap();
+            assert_eq!(
+                result.status.code(),
+                Some(1),
+                "{}",
+                String::from_utf8_lossy(&result.stderr)
+            );
+        }
+        assert!(!repo.path().join(".git/index.lock").exists());
     }
 }
