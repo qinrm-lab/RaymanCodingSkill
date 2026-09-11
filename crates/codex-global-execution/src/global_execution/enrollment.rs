@@ -552,7 +552,7 @@ fn checkpoint_marker_slot(
     } else {
         PublicationSlot::create(state.path(), name, bytes)?
     };
-    slot.preserve_security_from(metadata_source)?;
+    slot.preserve_access_from(metadata_source)?;
     Ok(slot)
 }
 

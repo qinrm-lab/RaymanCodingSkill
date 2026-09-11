@@ -105,6 +105,17 @@ impl PublicationSlot {
     }
 
     pub(super) fn preserve_security_from(&self, source: &Path) -> Result<String> {
+        self.copy_security_from(source, true)
+    }
+
+    // Routing markers are new owner-created files, not replacements for the
+    // legacy database. Carry its access policy without assigning its historical
+    // owner or primary group to a new object.
+    pub(super) fn preserve_access_from(&self, source: &Path) -> Result<String> {
+        self.copy_security_from(source, false)
+    }
+
+    fn copy_security_from(&self, source: &Path, preserve_identity: bool) -> Result<String> {
         use windows_sys::Win32::Security::{
             DACL_SECURITY_INFORMATION, GROUP_SECURITY_INFORMATION, GetKernelObjectSecurity,
             GetSecurityDescriptorControl, OWNER_SECURITY_INFORMATION,
@@ -149,15 +160,28 @@ impl PublicationSlot {
             Ok(bytes)
         };
         let mut bytes = read(&handle)?;
-        let projection = security_projection(&bytes)?;
-        if security_projection(&read(&self.file)?)? == projection {
+        let original_target = security_projection(&read(&self.file)?)?;
+        if !preserve_identity {
+            let sid = crate::execution_context::execution_context_probe()
+                .principal_sid
+                .ok_or_else(|| anyhow::anyhow!("routing marker owner unavailable"))?;
+            if original_target["owner"] != sid {
+                bail!("routing marker staging file is not owned by the current publisher");
+            }
+        }
+        let projection = publication_security_target(
+            security_projection(&bytes)?,
+            &original_target,
+            preserve_identity,
+        )?;
+        if original_target == projection {
             return Ok(crate::hash::sha256_bytes(&serde_json::to_vec(&projection)?));
         }
         // Metadata rights are requested only for this explicit preservation
         // operation, not for ordinary publication recovery.
         use windows_sys::Win32::Storage::FileSystem::{FILE_SHARE_DELETE, FILE_SHARE_WRITE};
         let metadata_handle = std::fs::OpenOptions::new()
-            .access_mode(READ_CONTROL | WRITE_DAC | WRITE_OWNER)
+            .access_mode(READ_CONTROL | WRITE_DAC | if preserve_identity { WRITE_OWNER } else { 0 })
             .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
             .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
             .open(self.parent.path().join(&self.name))?;
@@ -181,19 +205,21 @@ impl PublicationSlot {
         if unsafe {
             SetKernelObjectSecurity(
                 metadata_handle.as_raw_handle() as _,
-                flags | protection,
+                (if preserve_identity {
+                    flags
+                } else {
+                    DACL_SECURITY_INFORMATION
+                }) | protection,
                 bytes.as_mut_ptr().cast(),
             )
         } == 0
         {
             return Err(std::io::Error::last_os_error().into());
         }
-        if security_projection(&read(&self.file)?)? != security_projection(&bytes)? {
+        if security_projection(&read(&self.file)?)? != projection {
             bail!("publication owner/group/DACL readback differs");
         }
-        Ok(crate::hash::sha256_bytes(&serde_json::to_vec(
-            &security_projection(&bytes)?,
-        )?))
+        Ok(crate::hash::sha256_bytes(&serde_json::to_vec(&projection)?))
     }
 
     /// The caller must durably save identity/digest before claiming a Git lock.
@@ -308,6 +334,21 @@ impl PublicationSlot {
     }
 }
 
+fn publication_security_target(
+    mut source: serde_json::Value,
+    target: &serde_json::Value,
+    preserve_identity: bool,
+) -> Result<serde_json::Value> {
+    if !preserve_identity {
+        if source["dacl_present"] != true || source["dacl_null"] != false {
+            bail!("routing marker requires a present non-null source DACL");
+        }
+        source["owner"] = target["owner"].clone();
+        source["group"] = target["group"].clone();
+    }
+    Ok(source)
+}
+
 fn security_projection(bytes: &[u8]) -> Result<serde_json::Value> {
     use windows_sys::Win32::Security::{
         ACE_HEADER, GetAce, GetSecurityDescriptorControl, GetSecurityDescriptorDacl,
@@ -353,6 +394,91 @@ fn security_projection(bytes: &[u8]) -> Result<serde_json::Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    #[test]
+    fn routing_marker_preserves_access_without_foreign_owner_assignment() {
+        let foreign = serde_json::json!({"owner":"legacy-sandbox", "group":"legacy-group", "dacl_present":true,"dacl_null":false,"dacl_protected":true,"aces":[[1,2,3]]});
+        let owner = serde_json::json!({"owner":"enrolled-owner","group":"owner-group"});
+        let projected = publication_security_target(foreign.clone(), &owner, false).unwrap();
+        assert_eq!(projected["owner"], owner["owner"]);
+        assert_eq!(projected["group"], owner["group"]);
+        assert_eq!(projected["aces"], foreign["aces"]);
+        assert_eq!(
+            publication_security_target(foreign.clone(), &owner, true).unwrap(),
+            foreign
+        );
+        let mut missing = foreign.clone();
+        missing["dacl_null"] = serde_json::json!(true);
+        assert!(publication_security_target(missing, &owner, false).is_err());
+
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("legacy");
+        std::fs::write(&source, b"original database sentinel").unwrap();
+        let sid = crate::execution_context::execution_context_probe()
+            .principal_sid
+            .unwrap();
+        // Exercise the metadata-write branch, not merely the already-equal
+        // descriptor fast path. The fixture keeps the current owner authorized.
+        super::super::native::protect_fixture_directory(&source, &sid, "").unwrap();
+        let slot = PublicationSlot::create(temp.path(), "marker.tmp", b"marker").unwrap();
+        // A file creator need not retain WRITE_OWNER. Reproduce the old
+        // metadata reopen failure with a real DACL that grants all other file
+        // rights, then prove the access-only copier works on the same object.
+        use windows_sys::Win32::{
+            Foundation::LocalFree,
+            Security::{
+                Authorization::{
+                    ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
+                },
+                DACL_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION,
+                SetKernelObjectSecurity,
+            },
+        };
+        let sddl: Vec<u16> = format!("D:P(A;;0x1701ff;;;{sid})")
+            .encode_utf16()
+            .chain(Some(0))
+            .collect();
+        let mut descriptor = std::ptr::null_mut();
+        assert_ne!(
+            unsafe {
+                ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                    sddl.as_ptr(),
+                    SDDL_REVISION_1,
+                    &mut descriptor,
+                    std::ptr::null_mut(),
+                )
+            },
+            0
+        );
+        let applied = unsafe {
+            SetKernelObjectSecurity(
+                slot.file.as_raw_handle() as _,
+                DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+                descriptor,
+            )
+        };
+        unsafe {
+            LocalFree(descriptor);
+        }
+        assert_ne!(applied, 0);
+        assert!(slot.preserve_security_from(&source).is_err());
+        slot.preserve_access_from(&source).unwrap();
+        let id = slot.identity().to_owned();
+        let hash = slot.digest().to_owned();
+        drop(slot);
+        let mut resumed = PublicationSlot::resume(temp.path(), "marker.tmp", &id, &hash).unwrap();
+        resumed.preserve_access_from(&source).unwrap();
+        resumed.rename("marker.json", false).unwrap();
+        drop(resumed);
+        assert_eq!(
+            std::fs::read(&source).unwrap(),
+            b"original database sentinel"
+        );
+        assert_eq!(
+            std::fs::read(temp.path().join("marker.json")).unwrap(),
+            b"marker"
+        );
+    }
     #[cfg(windows)]
     #[test]
     fn publication_seed_identity_survives_claim_and_recovery() {

@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 30,
+    "generation": 31,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 29,
-      "sha256": "683698bdfde378219e00c1f4738a9c89abd8237528c8c731e24b48dc5798f3ec"
+      "generation": 30,
+      "sha256": "a6002b11e73159baf369a53d0d7528187d8cab5fe105a5ed3c444df13672d39a"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "8577cddcd2bff8003984339fd2ad3edef9a42c1f553eb5baa5255e55a6108e87"
+    "sha256": "6da24ab70568b240cc8ebb3d57c2f34b006204c169d06fc4e865a28a9bb0f9c2"
   },
   "sources": [
     {
@@ -2047,11 +2047,31 @@
     },
     {
       "gate_id": "GATE-PS-ENROLL-GLOBAL-CODEX-PROJECTS",
-      "status": "active",
+      "status": "retired",
       "kind": "powershell_self_test",
       "title": "PowerShell self-test: scripts/enroll-global-codex-projects.ps1",
       "path": "scripts/enroll-global-codex-projects.ps1",
       "sha256": "72fa4e12b5e3a88521c37cf2f27a95d716bf397b5e5914bf6f060cb44d158e2e",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "target_matrix": [
+        "windows"
+      ],
+      "retirement": {
+        "retired_at": "2026-09-11",
+        "reason": "Checkpoint recovery orchestration and diagnostics corrected",
+        "replaced_by": [
+          "GATE-PS-ENROLL-GLOBAL-CODEX-PROJECTS-CP1"
+        ]
+      }
+    },
+    {
+      "gate_id": "GATE-PS-ENROLL-GLOBAL-CODEX-PROJECTS-CP1",
+      "status": "active",
+      "kind": "powershell_self_test",
+      "title": "PowerShell self-test: scripts/enroll-global-codex-projects.ps1",
+      "path": "scripts/enroll-global-codex-projects.ps1",
+      "sha256": "3a0b7f944bf9e4e0fde47f1a881cc8e02b722f6be90b7c6fd5390ec669819315",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "target_matrix": [
@@ -121443,6 +121463,27 @@
       "retirement": null
     },
     {
+      "binding_id": "BIND-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-11",
+        "valid_until": "2027-03-09"
+      },
+      "semantic_sha256": "7eadb189dd4104522098d807a960e02db05aef04fc9dccaa59ca28869887c031",
+      "retirement": null
+    },
+    {
       "binding_id": "BIND-GLOBAL-D00BB6163A2140DE29DF",
       "status": "active",
       "source_rule_link_ids": [
@@ -125187,7 +125228,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-563CDEDE5B59E458",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125204,6 +125245,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "5d4d60bfafef58519fc27fc03f96a4b331ef5e34122fe3eeb1e81d04ddf37efb",
+      "retirement": {
+        "retired_at": "2026-09-11",
+        "reason": "Reviewed exact marker access and prepared-transaction recovery regression",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-563CDEDE5B59E458-CP1"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-563CDEDE5B59E458-CP1",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-4DC44102236A-GLOBAL-20260909-CP1"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-ENROLL-GLOBAL-CODEX-PROJECTS-CP1",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-11",
+        "valid_until": "2027-03-09"
+      },
+      "semantic_sha256": "2fad0c29f40e96c9c16ea6f9aaffadda1402c97e603971313ba08684503650f1",
       "retirement": null
     },
     {

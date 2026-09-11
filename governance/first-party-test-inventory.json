@@ -21,14 +21,27 @@
     ]
   },
   "revision": {
-    "generation": 27,
+    "generation": 28,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 26,
-      "sha256": "fb4987262c539ffae9dd3953eed839dc54ad23265508db15a3e4a3c95ab70a9b"
+      "generation": 27,
+      "sha256": "8577cddcd2bff8003984339fd2ad3edef9a42c1f553eb5baa5255e55a6108e87"
     }
   },
   "tests": [
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/publication.rs::routing_marker_preserves_access_without_foreign_owner_assignment",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/publication.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "routing_marker_preserves_access_without_foreign_owner_assignment",
+      "selector_sha256": "9374ecd53dd2f12b9b806a965f59378318aa3a5b7e8088e4db8bb10a304c6cfb",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911",
+      "status": "active",
+      "retirement": null
+    },
     {
       "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/git_policy.rs::hook_config_trust_is_scoped_to_the_requested_repository",
       "role": "root_cargo",
@@ -1107,6 +1120,25 @@
       "cfg": "windows",
       "owner": "",
       "test_id": "TEST-PS-SELFTEST-4DC44102236A-GLOBAL-20260909",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-11",
+        "reason": "Enrollment self-test expanded to cover pending migration discovery",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-4DC44102236A-GLOBAL-20260909-CP1"
+        ]
+      }
+    },
+    {
+      "identity": "powershell::powershell_self_test::scripts/enroll-global-codex-projects.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/enroll-global-codex-projects.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "3a0b7f944bf9e4e0fde47f1a881cc8e02b722f6be90b7c6fd5390ec669819315",
+      "cfg": "windows",
+      "owner": "",
+      "test_id": "TEST-PS-SELFTEST-4DC44102236A-GLOBAL-20260909-CP1",
       "status": "active",
       "retirement": null
     },
