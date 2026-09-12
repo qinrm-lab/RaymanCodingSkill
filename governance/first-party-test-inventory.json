@@ -21,11 +21,11 @@
     ]
   },
   "revision": {
-    "generation": 29,
+    "generation": 30,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 28,
-      "sha256": "6da24ab70568b240cc8ebb3d57c2f34b006204c169d06fc4e865a28a9bb0f9c2"
+      "generation": 29,
+      "sha256": "af7b2219af80cd926bd60acae91df6e94401f1faa7666b884ece192ac2987c51"
     }
   },
   "tests": [
@@ -1687,6 +1687,25 @@
       "cfg": "windows",
       "owner": "",
       "test_id": "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909-R2-R3-R4-SID",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909-R2-R3-R4-SID-POWER"
+        ]
+      }
+    },
+    {
+      "identity": "powershell::powershell_self_test::scripts/install-global-codex-execution.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/install-global-codex-execution.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "af22c96917814fea825d81a9a5464cc1ab24879338cb4d5bde14fc4ce8473346",
+      "cfg": "windows",
+      "owner": "",
+      "test_id": "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909-R2-R3-R4-SID-POWER",
       "status": "active",
       "retirement": null
     },

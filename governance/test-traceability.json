@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 32,
+    "generation": 33,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 31,
-      "sha256": "9b05cd8d6f9ebd8d47b89bb4bba828e300b44c51a5188a2b090b40ae24b7bac1"
+      "generation": 32,
+      "sha256": "6ad2e6168fdd7ca4f32602cf67ab95e90771ccaa9d60742037ace3e63f6d06e0"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "af7b2219af80cd926bd60acae91df6e94401f1faa7666b884ece192ac2987c51"
+    "sha256": "441b97f0e0fdd006c0b2b749ca6d381ec317b09bf8d1709abc298809ec6e9d3d"
   },
   "sources": [
     {
@@ -334,11 +334,27 @@
     },
     {
       "source_id": "SRC-GLOBAL-CODEX-EXECUTION-R1",
-      "status": "active",
+      "status": "retired",
       "kind": "internal_contract",
       "title": "Global Codex fixed-capability execution contract",
       "path": "governance/sources/global-codex-execution.md",
       "sha256": "fdd8d2cd1febecdb35e3db0c61ae5f0ae790866e325a93d2bb77fbb00ea7fbba",
+      "valid_until": "2027-09-09",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER"
+        ]
+      }
+    },
+    {
+      "source_id": "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER",
+      "status": "active",
+      "kind": "internal_contract",
+      "title": "Global Codex fixed-capability execution contract",
+      "path": "governance/sources/global-codex-execution.md",
+      "sha256": "026df9ec010182beded8a2bbcc42f52e1ae8643928c1e9c6d17cdd13ba7a6267",
       "valid_until": "2027-09-09",
       "retirement": null
     },
@@ -2265,11 +2281,31 @@
     },
     {
       "gate_id": "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION-R2-R3-R4-SID",
-      "status": "active",
+      "status": "retired",
       "kind": "powershell_self_test",
       "title": "PowerShell self-test: scripts/install-global-codex-execution.ps1",
       "path": "scripts/install-global-codex-execution.ps1",
       "sha256": "0b227539e78e310e3cfae8b15837825c09d02d492b481f90b886eec68512b987",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "target_matrix": [
+        "windows"
+      ],
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION-R2-R3-R4-SID-POWER"
+        ]
+      }
+    },
+    {
+      "gate_id": "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION-R2-R3-R4-SID-POWER",
+      "status": "active",
+      "kind": "powershell_self_test",
+      "title": "PowerShell self-test: scripts/install-global-codex-execution.ps1",
+      "path": "scripts/install-global-codex-execution.ps1",
+      "sha256": "af22c96917814fea825d81a9a5464cc1ab24879338cb4d5bde14fc4ce8473346",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "target_matrix": [
@@ -4363,13 +4399,31 @@
     },
     {
       "link_id": "LINK-GLOBAL-CODEX-EXECUTION-R1",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-GLOBAL-CODEX-EXECUTION-R1",
       "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
       "relation": "defines",
       "review": {
         "reviewed_at": "2026-09-08",
         "valid_until": "2027-09-09"
+      },
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER",
+      "status": "active",
+      "source_id": "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER",
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
       },
       "retirement": null
     },
@@ -121464,7 +121518,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -121481,6 +121535,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "7eadb189dd4104522098d807a960e02db05aef04fc9dccaa59ca28869887c031",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "27ec8785948f453bad9a3a3d0dd95f90f820a16d065fc16b91d57c84e9a6b7b6",
       "retirement": null
     },
     {
@@ -125060,7 +125141,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-GIT-IMAGE-PATH-20260912",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125077,11 +125158,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "008bfd1851bcb102c662c245ea2702ff245e22eb61636ad453826097fb1dfa9d",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-GIT-IMAGE-PATH-20260912-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-GIT-IMAGE-PATH-20260912-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-GIT-IMAGE-PATH-20260912"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "fa605840d912c3e0ecbae389a4b0967f62f2d5fef7110c6cfb1afaa066b1437d",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-HOOK-OWNER-TRUST-20260911",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125098,11 +125206,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "3ba56b35fce288d8a76a5265df85c8dcf24465fa9635b89ff671679d7724b1e0",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-HOOK-OWNER-TRUST-20260911-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-HOOK-OWNER-TRUST-20260911-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-HOOK-OWNER-TRUST-20260911"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "6d2be4c9e41d6cfb54c4f0791fedbd679c44635572dd20af94bf93ff88da6d08",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-317A6BB8D5401F11",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125119,11 +125254,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "db1551a89d3ede922f9c3363eaa4fb0fd034edeac84e30966d217ad1d5098972",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-317A6BB8D5401F11-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-317A6BB8D5401F11-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-KERNEL-ROLLS-BACK-FAILURE-AND-REFUS-2D86C853579B"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "4a64c778829cc34602d9eb987f292a8a0f9c9ef6d0c8422694ee9bacabfb55eb",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-40C32CD7E9809BE3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125140,11 +125302,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "4e4c1085fd26c21055e2ac6215bb95a34088eb2d87b0d07c490f466ab59e504a",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-40C32CD7E9809BE3-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-40C32CD7E9809BE3-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-KERNEL-PUBLISHES-EXACT-FILES-AND-RE-115B6AE2F819"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "496bd58b16afe5b046315d5fb02e45ec433bb9c9fc1bdbd08641ddf7a80dfecd",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-7FB4C693DA187D47",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125161,11 +125350,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "b9a6999b1057b13cb135d2ebd51b6d7a1d7d49d81bb4e8bc8b6a4e41335f8e4b",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-7FB4C693DA187D47-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-7FB4C693DA187D47-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-WORKER-DISPATCH-AND-RESTART-RECONCI-20B23FB21FB6"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "701fd8313921de5d6895b265af8f79d858c171bc3e25d8fbf750a386e407e858",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-97F43A91A81AD55F",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125182,11 +125398,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "878061852d38bb180435c02a2cb9a721d4070cecf23e169d1dc76312a23d5a8a",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-97F43A91A81AD55F-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-97F43A91A81AD55F-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-CRASH-RECOVERY-NEVER-CLAIMS-ROLLBAC-D99CB30A0C3B"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "5e6d74933c03f4ca948338bd67785282e690062574a8cfcd0b26a59969052b50",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-AB943ED2B6A98F15",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125203,11 +125446,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "d346f347f3dec2cf395a9afe6d89e6650e8579bda44bff7344a426e3b635f374",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-AB943ED2B6A98F15-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-AB943ED2B6A98F15-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-PENDING-INTENT-BLOCKS-OTHER-PUBLICA-B9B5DFDD4956"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "fec14c2675ea6de00744683fe031619b89e44683dc4d4daddf62d29ffa54e8be",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-B438D756A765861D",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125224,11 +125494,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "2de321fedeee9331aac014b6e6cd7074b72211fe2b4f27575421b5817df2df53",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-B438D756A765861D-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-B438D756A765861D-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-BUNDLE-REJECTS-UNREGISTERED-PATHS-V-E68C99B92537"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "794d9c5bb03ecbf082de5debf2cb5bd9e1b51af4a921791c09fcbc2893ced706",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-BD678F984719CAE3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125245,6 +125542,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "bb69bf1e17a86921dc097d9eadc2a65fbea82802d7e6eca363d161ac6aea65f7",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-BD678F984719CAE3-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-BD678F984719CAE3-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-GLOBAL-SKILL-PUBLICATION-IS-IDEMPOTENT-AND-PRESE-BC93A64317EC"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "5fd146d010869da9399804e1626462b9fc57f6e02d0dc81f03e05ef80a4ebffa",
       "retirement": null
     },
     {
@@ -125276,7 +125600,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-563CDEDE5B59E458-CP1",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125293,11 +125617,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "2fad0c29f40e96c9c16ea6f9aaffadda1402c97e603971313ba08684503650f1",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-563CDEDE5B59E458-CP1-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-563CDEDE5B59E458-CP1-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-4DC44102236A-GLOBAL-20260909-CP1"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-ENROLL-GLOBAL-CODEX-PROJECTS-CP1",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "832214fcc1dd47959565af4b7e676af7ee459a59831753f0803d8832f347c051",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-PS-5BE8CDDBF80D3213",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125314,6 +125665,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "f17c08231d0822f75649e782a456a49554b18a690221a0229e6e14a88f993e9c",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-5BE8CDDBF80D3213-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-5BE8CDDBF80D3213-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-9865501D815A-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-CONFIGURE-GLOBAL-CODEX-EXECUTION",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "6fcc72d189ce38c46832f3c2c9bdb316ec27530a2e1356667b5ca9584d4a2068",
       "retirement": null
     },
     {
@@ -125426,7 +125804,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3-R4-SID",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125443,11 +125821,38 @@
         "valid_until": "2027-03-10"
       },
       "semantic_sha256": "043a4fe3e264f0046f51a31b922e196782d6c54e0a8f841fb102bb1700ff15f1",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3-R4-SID-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3-R4-SID-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909-R2-R3-R4-SID-POWER"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION-R2-R3-R4-SID-POWER",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "79f67b48f9700f01251893365862bb10b4a7adbfcc0f7da2639bdd9df445c031",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-PS-ACL-9B31F4E0C6D2A817",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125464,11 +125869,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "81f04578dcf7b71c90604e1e0fc035025a878ef8d951035f3d9b944991c5be5c",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-ACL-9B31F4E0C6D2A817-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-ACL-9B31F4E0C6D2A817-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-35260E3B3E35"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-REPAIR-CODEX-WORKSPACE-ACL",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "dfa8e731a1fd150bf136ac2898ad266c722a56079935121199f7eddb0179c497",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-REENROLL-ADAPTERS-20260911",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125485,11 +125917,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "ee0ce8374cbac3ee6a5fcf04cf18c8be12c11b01b0b86b103c75ec32654e3561",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-REENROLL-ADAPTERS-20260911-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-REENROLL-ADAPTERS-20260911-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-REENROLL-ADAPTERS-20260911"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "9880f2feaaa86852232bd2641320b3e521d0691ab1c4df301ab7f1a7635c2be9",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-0A4D994577024965",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125506,11 +125965,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "e7c7bcdfa5dd54795878121d04fa4487d907a66e16ccad6c88998ce53aacb3fb",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-0A4D994577024965-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-0A4D994577024965-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-MULTI-PROJECT-PREFLIGHT-IS-ACTIVATION-EX-ACEBF771EA81-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "56fbcbfdcc4e9fe0304ee0869554b818a1309a13ba8aa89804de162228d34f63",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-10BB28AB1DE6EA34",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125527,11 +126013,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "02a3aa2222b30b513ff56a82a1a0c8f2142e478107d4b8a6f6169ff4d70a5378",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-10BB28AB1DE6EA34-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-10BB28AB1DE6EA34-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-INTERRUPTED-EFFECT-NEVER-RUNS-AGAIN-AND-26CE591AC48E-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "8a4ee3287ef3399c26decca42c54ff69a3d4b73a97d174ff6102e7d36a9fa2e1",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-11CEAF74B0B26C45",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125548,11 +126061,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "ad8a7d488e4545c1cee37af7199ca2ff080953e40c7f0788b1a15170f0c7ab55",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-11CEAF74B0B26C45-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-11CEAF74B0B26C45-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-EXPIRY-FUTURE-AND-INTEGER-OVERFLOW-FAIL-2491A7831155-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "62a8580c5d62834f73d04e2257ae3d67b8b13188b1de8326a7b264e92a432227",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-14FEF5F84CDAF1ED",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125569,11 +126109,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "57e4055bcda6433ed250f0db8e79787958a5b551b49f48e9631974c6c5c8db81",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-14FEF5F84CDAF1ED-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-14FEF5F84CDAF1ED-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-GIT-TREE-AND-INDEX-PARSERS-REJECT-CONFLI-1D2297C844F0-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "0d4b98819ac25c273fce4d542b4ba4cbb6eda708eab24ac6ed3f911d703db3ba",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-1A1D1FEBC08A65A8",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125590,11 +126157,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "f5e2d293065b31d5f23983c9bfb6a3f0bc38bb060c7f8acc597f8d4abf6987d4",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-1A1D1FEBC08A65A8-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-1A1D1FEBC08A65A8-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-CONTROL-ACCEPTS-LINE-ENDINGS-844097EC9E96-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "67a3054e4d01a722f9ac40ba0b16844930a3390e9317bb89f1e5d53a9d34ba9d",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-2092D9E411E8ACC3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125611,11 +126205,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "baf433434566fa41fced3180055135d45b59f853f5c55627b59f09e43c7f763a",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-2092D9E411E8ACC3-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-2092D9E411E8ACC3-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-SOURCE-FILE-READER-REJECTS-HARDLINK-ALIA-B5999A2E9275-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "4f400e955faaeee46ceb22ff416198efe5c63681264ac32772b482508787f020",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-2DD5295CC9465193",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125632,11 +126253,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "bc52b5f53913928fd68d1dfe706a4f6948fd0518250c99b5124b6bd7844a5e68",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-2DD5295CC9465193-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-2DD5295CC9465193-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-ROW-UPDATES-ARE-SCOPED-ATOMIC-958E57AE1B68-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "66271eba9ca0ba0327260f635ebc20ad1b03618ded78838a90ba55eccb077880",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-3589F2032B1A9325",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125653,11 +126301,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "e486a0a47478a467cc6127fd5fa8e2025ccf9a1c459e01fe8aad85bafc441803",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-3589F2032B1A9325-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-3589F2032B1A9325-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-WINDOWS-ALIASES-TRAVERSAL-AND-MANAGED-ST-F6BAF9C62F1B-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "20834cd6b04ac7ac693b4da5beca2d8d4b60f8d9d9ab251eaf3e5f30322cad9d",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-3BCF0BCEFCF772F6",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125674,11 +126349,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "efc684624d26acde4e1c28e4ae094be7c6de62760045e01aef1fdb913b3e18f3",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-3BCF0BCEFCF772F6-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-3BCF0BCEFCF772F6-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-GLOBAL-SOURCE-FINGERPRINT-TRACKS-BYTES-A-463FE4EEE120-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "8900f347d1794246503760be4b24cea7914927c53da5b39fae16d6debe0bd38e",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-40A36BA93D92AA10",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125695,11 +126397,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "88fed66082157de59d7da4328f7f19392288bc99c558ca5e951d696a17dcc281",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-40A36BA93D92AA10-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-40A36BA93D92AA10-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-QUEUE-CONSUMPTION-PRESERVES-CHANGED-AND-0ECB1E630C8E-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "25f8c3149588279a2ff3ebdf8e8b0bb53bf4a4eb401d9e87accd88d67cc067a4",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-4A21E91A102E73B8",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125716,11 +126445,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "1e0e048b6fee41e4e0a1b52c2593896fefa0b6da4ecb413980756fa9c382849a",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-4A21E91A102E73B8-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-4A21E91A102E73B8-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-STATE-LEASE-RENEWAL-STOPS-PROMPTLY-AND-P-121E03A49D3E-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "dda943e9492cdb85336e97ea1cde7b40e351f7a06010122a79c489a46db559c4",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-4E87E82148F93C10",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125737,11 +126493,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "b6340a8bf498d4bbc759bce5626982839bdb604b3d42fe180bdbce6ece665c4b",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-4E87E82148F93C10-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-4E87E82148F93C10-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROJECT-WORKTREE-AND-PROTECTED-POLICY-SU-9583082D1FDD-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "d1468b0b1c9594cafacd61879b367268766af7645450d99b014fc4f3ae07e207",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-51F1FFC0FF09AE4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125758,11 +126541,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "f7669262f3ea5dfae952f552f5268f989ba4b0d4be777aa5f7ff23de2e626c12",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-51F1FFC0FF09AE4B-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-51F1FFC0FF09AE4B-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-NATIVE-PROCESS-ROUNDTRIPS-QUOTED-UNICODE-FFAAA9F0EFC6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "27198e12ba3a642c9e1fbe4639e3283b6062bda9eba47f3d36a2d32fb2b1e371",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-55B846B8E672D54A",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125779,11 +126589,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "1ca1ea02f0e5109dff79c3e0d1d70c7b2c8095d0c0d5a4b3230402c52eb02423",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-55B846B8E672D54A-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-55B846B8E672D54A-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-EXACT-ADDED-MODIFIED-DELETED-COMMIT-IS-V-86716FECCFB8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "5535c96337b58a4758ce41c97ba4c7025fb83ebc994fe5c0d2d0ede650e68e70",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-65D0FE541C219BC9",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125800,11 +126637,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "7974bab06660af93dd8cf0b97b75ed23c702024419f926b2f074d131a660800f",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-65D0FE541C219BC9-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-65D0FE541C219BC9-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-DIRECTORY-REJECTS-INHERITED-OR-80BF39C24C08-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "c7c25816a55df5832afe5b74924df2a322b4a19215034e7b8a2c4dfb09723c38",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-778DACD69B40A948",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125821,11 +126685,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "45e4741d139b91e8c3290b3b50b76fbb7d338dc3321ad0f7777340a7d4ffde50",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-778DACD69B40A948-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-778DACD69B40A948-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-JOURNAL-RECOVERS-EXACT-STATE-AND-RETAINS-76954D4112E6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "9c57c86f674a7a2c31276aaacd69a85dbfb813e6fb32dc979538367817e80afd",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-7F123D22A1459EA2",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125842,11 +126733,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "5b7b0a41be3896a1af23b8c8dc6ddb511f0b6c3eb0672485958226602ab11d63",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-7F123D22A1459EA2-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-7F123D22A1459EA2-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-ROW-BACKEND-REJECTS-TRIGGER-S-ACBD966D0ECD-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "df36713eb08198e074e85b7fbc172bfe1d1e6562a5eeb305a5c6bff1c71800f5",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8107A30F555E561D",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125863,11 +126781,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "ef3f2424f2952a4a8bd7d31198a17e10b4bc44baa0cdbe600248719086c04b3b",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8107A30F555E561D-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8107A30F555E561D-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-GLOBAL-AUTOCRLF-MATCHES-NATIVE-GIT-WITHO-6949F080E3E8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "f665903231ac12908a8bdfd63a59437219c18e7fd2d4e999ab0499154d151900",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-82A077277B69A094",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125884,11 +126829,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "08be531a655054b30eba54e8b9ed751263453ecd7485baf6422d012095a77ffc",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-82A077277B69A094-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-82A077277B69A094-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-MIGRATION-NORMALIZES-SQL-WITH-47C5C525C4BA-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "8ab364e19270f9f2db0819ffeba4373ce9a8177f24a680522c0496a966ed1e25",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8B9E25B328749D46",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125905,6 +126877,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "856c59191388e573826be667786164f9b148130fc682e6b8959323eb18dadf90",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8B9E25B328749D46-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8B9E25B328749D46-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-WORKER-COMMITS-EXACT-REGISTERE-7347D4F302A6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "486ae9820b4028559d2cc0033235c42b1f98a0f21fca99a049bd9acbd9f85829",
       "retirement": null
     },
     {
@@ -125936,7 +126935,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125953,11 +126952,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "6beddd06990f0d2e0754b47920aef972e828adc5129da27baef9383e61c231e1",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-REAL-GIT-SNAPSHOT-PRESERVES-SOURCE-AND-I-7209D78A5D5C-GLOBAL-20260909-ENROLL-R2"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "481dd09f38a39e5dcef9d58d2d20fa5462b39df4485bad4fc39cd9ecdef4fbc9",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8F796BF2C1954DE4",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125974,11 +127000,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "19300a10e808ba79f0192717796ec6ff320ddd1599648e44ce2b3c77a9166f58",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8F796BF2C1954DE4-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8F796BF2C1954DE4-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-CASE-COLLISIONS-ORDER-EMPTY-AND-NONORDIN-2250FE4E9CC8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "491e6d99de2a6935c0db7baa9076fb0d75e5edf155f198124c8985fefca1a874",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-96D0F61691F547DD",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -125995,11 +127048,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "020898e7cc034f1fecd216aa938c1c14d7834ac7fb1cf2b7b369126ace101635",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-96D0F61691F547DD-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-96D0F61691F547DD-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-PUBLICATION-SEED-IDENTITY-SURVIVES-CLAIM-284F43EF08B0-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "bb82ae24985153bbd35ba1a282b4169b4f1bee31c090f061c13397b14e4176d7",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-9B7C80D244870C80",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -126016,11 +127096,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "5f5e7841a189749ae213d02dcbac854be325810741c6fca6c0b73f23884f697d",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-9B7C80D244870C80-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-9B7C80D244870C80-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-WORKER-PROCESSES-ENROLLED-STAT-AF219789C484-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "121d481d9b208c4009d46ad94084b39404ac3edaf56683ceff893a18c70b6057",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-A1D9DC4AE3162DAE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -126037,11 +127144,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "f060fdd4171626f678bb06e5f2e040f8d1a76707df873b3feb53bf63763b9f38",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-A1D9DC4AE3162DAE-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-A1D9DC4AE3162DAE-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-RECEIPT-AND-ROWS-SURVIVE-REOP-FA48F728E2F6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "a33ac2275208a64ce7dbf9e2906ddeb83d4f246230571264ade3f202dd60ae66",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-A7661C6406541E08",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -126058,11 +127192,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "deae9058028603e389d8a70fb7a83b1da0ab8347d4b27e1633ffc996911bf066",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-A7661C6406541E08-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-A7661C6406541E08-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-STATE-CAS-REPLAY-AND-PROJECT-NAMESPACES-8A73C6E659A6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "acebb9a9190164a05c733f7cec66de31d954a2a42695f2d14f2e87fbc9ec4943",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-AFD7A8CDE4C751D9",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -126079,11 +127240,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "6e99a7bbafb19681ef4032b0ba40adf9a17912c8cda36a7c0129f217755743bf",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-AFD7A8CDE4C751D9-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-AFD7A8CDE4C751D9-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-STAGE-REUSE-BINDS-ENVIRONMENT-TOOLS-SCOP-76A42F134ED0-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "2ac86a8c96623e1a354e1ec54763547cc99413e66424abeadf7aa0c8532521cb",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-B7785F6F85CDB43D",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -126100,11 +127288,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "9cf7bc5da0f0b5e61d5e8df40f47200389a163e71841f89dce5b604a705d6d90",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-B7785F6F85CDB43D-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-B7785F6F85CDB43D-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-SCHEMA-MATCHES-SAVESTATUS-V3-44312854F7BA-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "f38b9252357556edcae66bc63bf29b825522c46789ad9e7e9d1e686e2d79139d",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-C27ADB994160229E",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -126121,11 +127336,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "88d1bb1fb1d0c3ebf259b42eca0ff8eb8eaa5dc81d68c59b0eb3fdcb5612684e",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-C27ADB994160229E-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-C27ADB994160229E-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-DIRECTORY-CHECKS-ACTUAL-OWNER-C1ECC8A751D8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "9bcaebe48a0c3b08e9434371be0cfa2725c4e9a147b32869915f463cf2b49485",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-C79022F1FBD299D6",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -126142,11 +127384,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "b72fb0eda01ef68d793c071c5448a09f309b1bff919b862229bd7792130f884b",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-C79022F1FBD299D6-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-C79022F1FBD299D6-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-DUPLICATE-CASE-ALIAS-UNKNOWN-FIELDS-AND-AE366264763F-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "c3d9068565d889b4c64c163e3cef63f646f946433e3ed708da565f5118069f5a",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-CAF7E4BA8992C0A0",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -126163,11 +127432,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "568f95a059f86701a87b259add04f1e184c3794f4083ac98c0fd9af58cc90f59",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-CAF7E4BA8992C0A0-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-CAF7E4BA8992C0A0-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-FORMAL-STATE-AND-INSTALLATION-USE-TYPED-A2D08663F0F9-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "6af97073e88c35133c8ffe6767421dfb4a2dfb6c561a72bcc46b6da80412558c",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-CB866DC002A20C6A",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -126184,11 +127480,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "91978f21506524fb7a3573a6eded7db6d5f76de0d35b7e0e9da341c6a063ea7c",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-CB866DC002A20C6A-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-CB866DC002A20C6A-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-GIT-CONTENT-POLICY-PRESERVES-PRECEDENCE-9941B006C139-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "95c46fc7eb767a161b413fb36a304a3f508e350094b6c1747d2d202860690aad",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-CD1C459C5E11D688",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -126205,11 +127528,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "9339a465a76a30682e7b7747da3ba3a391692572b538485a3d6fa2d776fc2c1d",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-CD1C459C5E11D688-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-CD1C459C5E11D688-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-CAPABILITY-RESTRICTIONS-APPLY-EVEN-WITH-4D12F6EB1DA8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "18b3fe04bfad33132a815d6d8b3b8764a1347c17a54d2440c473cfece0fafa20",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-D8D2F9F141ED7925",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -126226,11 +127576,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "95eb803e952f7789dac31b23f88d59584a3d79cfc15eee952c87ba4f611d7f61",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-D8D2F9F141ED7925-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-D8D2F9F141ED7925-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-DURABLE-STATE-SURVIVES-REOPEN-AND-DOES-N-554FAFBD196F-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "f05187440c7ac82b89648898813efd52e67140ad44d788439d6cba6210750de9",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-F0AF41C7DFBDF26D",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -126247,11 +127624,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "3541c9b99da34c5775c0bebbcaa8e98f561a7766c8d12b031162a50551b8055d",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-F0AF41C7DFBDF26D-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-F0AF41C7DFBDF26D-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-BACKEND-PRESERVES-OTHER-TENAN-A634550F6A7C-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "4844d1b3769b4dc09d20aa48fa3ec2c2724a7b0bcfc187df14abaa09e29c5b0c",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-FF0AD4B184D6DD85",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1"
       ],
@@ -126268,6 +127672,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "6dd64f573ca7f18c127f01ae2d4f447270f55e1785b1def7a3af7560b78e7ae2",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Require explicit battery continuity for the persistent worker and test invalid task settings.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-FF0AD4B184D6DD85-POWER"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-FF0AD4B184D6DD85-POWER",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-BACKEND-REJECTS-CROSS-TENANT-48A947B850A6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "50e87cb9b206e7a71cc065c760230987966a98c5a039af6c8865fd1ad9933084",
       "retirement": null
     },
     {

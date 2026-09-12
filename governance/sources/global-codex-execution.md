@@ -48,6 +48,10 @@ Installation uses a protected, registered adapter and fixed destinations.
 It never executes an unreviewed project script as the desktop user. Source,
 artifact and tool identities are checked before reuse or continuation.
 Local installation and complete release acceptance are separate claims.
+The persistent least-privilege worker task must allow battery operation and
+continue when AC power is disconnected. Installation validates both explicit
+battery settings; missing, duplicate, malformed or stopping settings fail
+closed. A healthy startup alone cannot prove this lifecycle contract.
 Unchanged source alone is insufficient to reuse checks affected by tools,
 environment or test scope. Progress distinguishes process liveness from
 successful execution. Completion requires actual recorded outcomes.

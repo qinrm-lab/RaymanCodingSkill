@@ -132,6 +132,10 @@ function Assert-WorkerTaskXml([string]$Xml,[string]$Program,[string]$Arguments,[
     if($task.DocumentElement.LocalName -cne 'Task' -or $task.DocumentElement.NamespaceURI -cne $taskNamespace){throw 'Live worker task has an invalid root or namespace.'}
     $ns=[Xml.XmlNamespaceManager]::new($task.NameTable);$ns.AddNamespace('t',$taskNamespace)
     $one={param([string]$XPath,[string]$Label);$nodes=@($task.SelectNodes($XPath,$ns));if($nodes.Count -ne 1){throw "Live worker task must contain exactly one $Label"};$nodes[0]}
+    foreach($setting in @('DisallowStartIfOnBatteries','StopIfGoingOnBatteries')){
+        $node=& $one ('/t:Task/t:Settings/t:'+$setting) $setting
+        if([string]$node.InnerText -cne 'false'){throw ('Worker battery continuity setting is unsafe: '+$setting)}
+    }
     $principals=& $one '/t:Task/t:Principals' 'Principals';$principal=& $one '/t:Task/t:Principals/t:Principal' 'Principal'
     $actions=& $one '/t:Task/t:Actions' 'Actions';$exec=& $one '/t:Task/t:Actions/t:Exec' 'Exec action'
     $triggers=& $one '/t:Task/t:Triggers' 'Triggers';$logonTrigger=& $one '/t:Task/t:Triggers/t:LogonTrigger' 'LogonTrigger'
@@ -329,7 +333,7 @@ if($SelfTest){
     $fixtureAccount=[Security.Principal.WindowsIdentity]::GetCurrent().Name
     $arguments=Get-WorkerTaskArguments 'C:\ProgramData\Rayman\CodexGlobalExecution'
     if($arguments -cne 'serve --root "C:\ProgramData\Rayman\CodexGlobalExecution"'){throw 'Task argument rendering differs'}
-    $xml='<?xml version="1.0"?><Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Triggers><LogonTrigger><UserId>QIN5521\qinrm</UserId></LogonTrigger></Triggers><Principals><Principal id="Author"><UserId>QIN5521\qinrm</UserId><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals><Actions Context="Author"><Exec><Command>C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe</Command><Arguments>serve --root "C:\ProgramData\Rayman\CodexGlobalExecution"</Arguments></Exec></Actions></Task>'
+    $xml='<?xml version="1.0"?><Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Settings><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries><StopIfGoingOnBatteries>false</StopIfGoingOnBatteries></Settings><Triggers><LogonTrigger><UserId>QIN5521\qinrm</UserId></LogonTrigger></Triggers><Principals><Principal id="Author"><UserId>QIN5521\qinrm</UserId><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals><Actions Context="Author"><Exec><Command>C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe</Command><Arguments>serve --root "C:\ProgramData\Rayman\CodexGlobalExecution"</Arguments></Exec></Actions></Task>'
     $xml=$xml.Replace('QIN5521\qinrm',$fixtureAccount)
     Assert-WorkerTaskXml $xml 'C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe' $arguments $fixtureAccount
     Assert-WorkerTaskXml ($xml.Replace('<RunLevel>LeastPrivilege</RunLevel>','')) 'C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe' $arguments $fixtureAccount
@@ -352,6 +356,14 @@ if($SelfTest){
         $xml.Replace('</Principals>','<Principal><UserId>other</UserId><LogonType>InteractiveToken</LogonType></Principal></Principals>'),
         $xml.Replace('</LogonTrigger>',('</LogonTrigger><LogonTrigger><UserId>'+$fixtureAccount+'</UserId></LogonTrigger>'))
     )){$rejected=$false;try{Assert-WorkerTaskXml $invalidXml 'C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe' $arguments $fixtureAccount}catch{$rejected=$true};if(-not $rejected){throw 'Invalid materialized task XML was accepted'}}
+    foreach($setting in @('DisallowStartIfOnBatteries','StopIfGoingOnBatteries')){
+        $good='<'+$setting+'>false</'+$setting+'>'
+        foreach($badXml in @($xml.Replace($good,$good.Replace('false','true')),$xml.Replace($good,''),$xml.Replace($good,$good+$good),$xml.Replace($good,$good.Replace('false','invalid')))){
+            $rejected=$false
+            try{Assert-WorkerTaskXml $badXml 'C:\ProgramData\Rayman\CodexGlobalExecution\worker.exe' $arguments $fixtureAccount}catch{$rejected=$true}
+            if(-not $rejected){throw ('Unsafe battery task setting accepted: '+$setting)}
+        }
+    }
     $cases=@(
         @{root=$false;task='absent';runtime=0;receipt=$false;steps=0;healthy=$false;phase='fresh'},
         @{root=$true;task='absent';runtime=0;receipt=$false;steps=0;healthy=$false;phase='initialized'},
@@ -454,7 +466,7 @@ if($Install){
             $action=New-ScheduledTaskAction -Execute $worker -Argument $arguments
             $trigger=New-ScheduledTaskTrigger -AtLogOn -User $UserAccount
             $principal=New-ScheduledTaskPrincipal -UserId $UserAccount -LogonType Interactive -RunLevel Limited
-            $settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero) -Hidden
+            $settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero) -Hidden -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
             Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Protected qinrm fixed-capability worker for enrolled Codex projects' | Out-Null
             $taskRegistered=$true
         }
