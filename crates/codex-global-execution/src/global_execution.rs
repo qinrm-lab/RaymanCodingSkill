@@ -189,6 +189,18 @@ pub(crate) fn validate_request_structure(
                 }
             }
         }
+        Operation::RecoverCommit {
+            original_request_id,
+            candidate_sha256,
+        } => {
+            if !registration.capabilities.local_commit
+                || !is_id(original_request_id)
+                || original_request_id == &request.request_id
+                || !is_sha256(candidate_sha256)
+            {
+                bail!("invalid enrolled commit recovery request");
+            }
+        }
         Operation::Commit {
             expected_head,
             expected_index_sha256,

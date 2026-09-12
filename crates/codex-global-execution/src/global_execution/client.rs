@@ -13,6 +13,102 @@ pub struct Client {
 }
 
 impl Client {
+    pub fn prepare_commit_recovery_request(
+        &self,
+        workspace: &Path,
+        original_id: &str,
+        expected_candidate: Option<&str>,
+        now: i64,
+    ) -> Result<Request> {
+        if !is_id(original_id) || expected_candidate.is_some_and(|hash| !is_sha256(hash)) {
+            bail!("invalid commit recovery identity");
+        }
+        let enrollment = self.enrollment(workspace)?;
+        let directory = super::native::SourceDirectory::open(
+            &self.root.path().join(format!("candidate-{original_id}")),
+        )?;
+        let bytes = directory.read_file(Path::new("candidate.json"), 64 * 1024 * 1024)?;
+        let digest = crate::hash::sha256_bytes(&bytes);
+        if expected_candidate.is_some_and(|expected| expected != digest) {
+            bail!("recovery candidate changed since review");
+        }
+        let candidate: CommitCandidate = serde_json::from_slice(&bytes)?;
+        if candidate.registration_sha256 != enrollment.registration.digest()? {
+            bail!("recovery candidate belongs to a different registration");
+        }
+        let archive_name = format!("commit-request-{original_id}.json");
+        let admitted = StateStorage::at_existing_root(self.root.path(), &enrollment.registration)?
+            .snapshot_recorded_request_by_id(original_id, &enrollment.registration)?
+            .ok_or_else(|| anyhow::anyhow!("recovery has no admitted original intent"))?;
+        if admitted.request_sha256 != candidate.request_sha256
+            || !matches!(
+                admitted.result,
+                RecordedResult::RecoveryRequired | RecordedResult::EffectSucceeded { .. }
+            )
+        {
+            bail!("recovery admission does not match the candidate");
+        }
+        let request = self.request(
+            &enrollment,
+            Operation::RecoverCommit {
+                original_request_id: original_id.into(),
+                candidate_sha256: digest.clone(),
+            },
+            now,
+        )?;
+        let mut legacy = false;
+        match std::fs::symlink_metadata(self.root.path().join(&archive_name)) {
+            Ok(_) => {
+                let original = decode_request(
+                    &self
+                        .root
+                        .read_file(&archive_name, MAX_REQUEST_BYTES as u64)?,
+                )?;
+                if original.request_id != original_id
+                    || original.digest()? != candidate.request_sha256
+                    || !matches!(original.operation, Operation::Commit { .. })
+                {
+                    bail!("recovery original request binding differs");
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                legacy = true;
+                if enrollment
+                    .git
+                    .as_ref()
+                    .is_none_or(|git| git.hook_policy.is_some())
+                {
+                    bail!("legacy recovery without a retained request cannot attest hooks");
+                }
+            }
+            Err(e) => return Err(e.into()),
+        }
+        if legacy && admitted.result == RecordedResult::RecoveryRequired {
+            let git_binding = enrollment
+                .git
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("Git enrollment missing"))?;
+            let identity = enrollment
+                .commit_identity
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("commit identity missing"))?;
+            let git =
+                GitInspector::open(workspace, git_binding, &enrollment.registration, &self.root)?;
+            git.preview_legacy_candidate(
+                directory.path(),
+                &candidate,
+                &enrollment.registration,
+                &super::git::LegacyRecovery {
+                    original_id,
+                    original_digest: &admitted.request_sha256,
+                    candidate_sha256: &digest,
+                    source_sha256: &request.source_sha256,
+                    identity,
+                },
+            )?;
+        }
+        Ok(request)
+    }
     pub fn prepare_install_request(
         &self,
         workspace: &Path,
@@ -136,6 +232,12 @@ impl Client {
                 && h["executor_sid"] == self.installation.owner_sid
         });
         let fresh = bound && age.is_some_and(|age| (0..=10).contains(&age));
+        let maintenance =
+            match std::fs::symlink_metadata(self.root.path().join("kernel-maintenance.json")) {
+                Ok(_) => true,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+                Err(e) => return Err(e.into()),
+            } || heartbeat.as_ref().is_some_and(|h| h["maintenance"] == true);
         let install_pending = super::install::pending_request(&self.root)?
             .map(|r| serde_json::json!({"request_id":r.request_id,"worktree_id":r.worktree_id}));
         let queue = if self.root.path().join("queue-health.json").try_exists()? {
@@ -148,7 +250,7 @@ impl Client {
             None
         };
         Ok(
-            serde_json::json!({"schema":"rayman.global-status.v1","installation_verified":true,"owner_sid":self.installation.owner_sid,"heartbeat_fresh":fresh,"heartbeat_age_seconds":age,"service_healthy":fresh && heartbeat.as_ref().is_some_and(|h|h["error"].is_null()),"heartbeat":heartbeat,"queue":queue,"install_transaction_pending":install_pending,"validation_authority":false}),
+            serde_json::json!({"schema":"rayman.global-status.v1","installation_verified":true,"owner_sid":self.installation.owner_sid,"heartbeat_fresh":fresh,"heartbeat_age_seconds":age,"maintenance_pending":maintenance,"service_healthy":!maintenance && fresh && heartbeat.as_ref().is_some_and(|h|h["error"].is_null()),"heartbeat":heartbeat,"queue":queue,"install_transaction_pending":install_pending,"validation_authority":false}),
         )
     }
 
@@ -557,6 +659,11 @@ impl Client {
         now: i64,
     ) -> Result<PathBuf> {
         use std::os::windows::ffi::OsStrExt;
+        match std::fs::symlink_metadata(self.root.path().join("kernel-maintenance.json")) {
+            Ok(_) => bail!("kernel maintenance is active; submission was not queued"),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.into()),
+        }
         validate_request(request, registration, now)?;
         if self
             .root

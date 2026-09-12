@@ -33,6 +33,38 @@ fn bounded_error(error: &anyhow::Error) -> String {
     bounded
 }
 
+fn retain_commit_request(root: &ProtectedDirectory, request: &Request, bytes: &[u8]) -> Result<()> {
+    if !matches!(
+        request.operation,
+        Operation::Commit { .. } | Operation::RecoverCommit { .. }
+    ) || decode_request(bytes)?.digest()? != request.digest()?
+        || !is_id(&request.request_id)
+    {
+        bail!("commit request archive binding differs");
+    }
+    let name = format!("commit-request-{}.json", request.request_id);
+    let path = root.path().join(&name);
+    let _lock = crate::state_lock::acquire_state_lock(&path)?;
+    if path.try_exists()? {
+        let old = root.read_file(&name, MAX_REQUEST_BYTES as u64)?;
+        if decode_request(&old)?.digest()? != request.digest()? {
+            bail!("retained commit request differs; original evidence preserved");
+        }
+        return Ok(());
+    }
+    let mut nonce = [0u8; 16];
+    getrandom::fill(&mut nonce).map_err(|e| anyhow::anyhow!("archive entropy unavailable: {e}"))?;
+    let nonce: String = nonce.iter().map(|b| format!("{b:02x}")).collect();
+    let seed = format!(".commit-request-{}-{nonce}", request.request_id);
+    let mut slot = super::publication::PublicationSlot::create(root.path(), &seed, bytes)?;
+    slot.rename(&name, false)?;
+    drop(slot);
+    if root.read_file(&name, MAX_REQUEST_BYTES as u64)? != bytes {
+        bail!("commit request archive readback differs");
+    }
+    Ok(())
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct QueueResult {
@@ -60,6 +92,128 @@ pub struct WorkerResult {
 }
 
 impl Worker {
+    fn maintenance_requested(&self) -> Result<bool> {
+        let path = self.root.path().join("kernel-maintenance.json");
+        match std::fs::symlink_metadata(path) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+            Err(e) => return Err(e.into()),
+            Ok(_) => {}
+        }
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Marker {
+            schema: String,
+            installation_id: String,
+            transaction_id: String,
+            worker_sha256: Vec<String>,
+        }
+        let marker: Marker = super::decode_json(
+            &self
+                .root
+                .read_file("kernel-maintenance.json", MAX_REQUEST_BYTES as u64)?,
+        )?;
+        if marker.schema != "rayman.global-kernel-maintenance.v1"
+            || marker.installation_id != self.installation.installation_id
+            || !is_id(&marker.transaction_id)
+            || marker.worker_sha256.is_empty()
+            || marker.worker_sha256.len() > 2
+            || marker.worker_sha256.iter().any(|hash| !is_sha256(hash))
+            || !marker
+                .worker_sha256
+                .contains(&self.installation.worker_sha256)
+        {
+            bail!("kernel maintenance marker does not match this installation");
+        }
+        Ok(true)
+    }
+    fn recover_legacy_commit(
+        &self,
+        request: &Request,
+        enrollment: &Enrollment,
+        storage: &StateStorage,
+        bytes: &[u8],
+    ) -> Result<WorkerResult> {
+        let Operation::RecoverCommit {
+            original_request_id,
+            candidate_sha256,
+        } = &request.operation
+        else {
+            bail!("not a recovery request");
+        };
+        let original = storage
+            .recorded_request_by_id(original_request_id, &enrollment.registration)?
+            .ok_or_else(|| anyhow::anyhow!("legacy recovery has no admitted original request"))?;
+        if !matches!(
+            original.result,
+            RecordedResult::RecoveryRequired | RecordedResult::EffectSucceeded { .. }
+        ) {
+            bail!("legacy recovery refuses a terminal failure");
+        }
+        let directory = super::native::SourceDirectory::open(
+            &self
+                .root
+                .path()
+                .join(format!("candidate-{original_request_id}")),
+        )?;
+        let raw = directory.read_file(Path::new("candidate.json"), MAX_REQUEST_BYTES as u64)?;
+        if sha256_bytes(&raw) != *candidate_sha256 {
+            bail!("legacy candidate differs from review");
+        }
+        let candidate: CommitCandidate = super::decode_json(&raw)?;
+        if candidate.request_sha256 != original.request_sha256
+            || candidate.registration_sha256 != enrollment.registration.digest()?
+        {
+            bail!("legacy candidate admission differs");
+        }
+        retain_commit_request(&self.root, request, bytes)?;
+        let result = if original.result == RecordedResult::RecoveryRequired {
+            let binding = enrollment
+                .git
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("Git capability missing"))?;
+            let identity = enrollment
+                .commit_identity
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("commit identity missing"))?;
+            let git = GitInspector::open_for_worker(
+                &enrollment.workspace,
+                binding,
+                &enrollment.registration,
+                &self.root,
+            )?;
+            let committed = git.recover_legacy_prepared(
+                super::git::LegacyRecovery {
+                    original_id: original_request_id,
+                    original_digest: &original.request_sha256,
+                    candidate_sha256,
+                    source_sha256: &request.source_sha256,
+                    identity,
+                },
+                &enrollment.registration,
+            )?;
+            let outcome = RecordedResult::EffectSucceeded {
+                outcome_sha256: sha256_bytes(&serde_json::to_vec(&committed)?),
+            };
+            storage.record_effect_result(
+                original_request_id,
+                &original.request_sha256,
+                outcome.clone(),
+            )?;
+            outcome
+        } else {
+            original.result
+        };
+        Ok(WorkerResult {
+            schema: "rayman.global-worker-result.v1".into(),
+            installation_id: self.installation.installation_id.clone(),
+            request_id: request.request_id.clone(),
+            request_sha256: request.digest()?,
+            registration_sha256: enrollment.registration.digest()?,
+            executor_sid: self.installation.owner_sid.clone(),
+            replayed: true,
+            result,
+        })
+    }
     fn stage(&self, name: &str) -> Result<()> {
         self.activity
             .lock()
@@ -105,6 +259,9 @@ impl Worker {
     }
 
     pub fn process(&self, bytes: &[u8], now: i64) -> Result<WorkerResult> {
+        if self.maintenance_requested()? {
+            bail!("kernel maintenance is active; request was not admitted");
+        }
         let request = decode_request(bytes)?;
         if !is_id(&request.worktree_id) {
             bail!("invalid worktree identity");
@@ -116,8 +273,10 @@ impl Worker {
             super::decode_json(&self.root.read_file(&name, MAX_REQUEST_BYTES as u64)?)?;
         enrollment.validate(&self.installation)?;
         validate_request_structure(&request, &enrollment.registration)?;
-        if matches!(request.operation, Operation::Commit { .. })
-            && enrollment.registration.project_id == self.installation.source_project_id
+        if matches!(
+            request.operation,
+            Operation::Commit { .. } | Operation::RecoverCommit { .. }
+        ) && enrollment.registration.project_id == self.installation.source_project_id
         {
             bail!(
                 "global worker cannot commit its own installation source repository or linked worktrees"
@@ -143,6 +302,76 @@ impl Worker {
             });
         }
         let storage = StateStorage::at_existing_root(self.root.path(), &enrollment.registration)?;
+        if let Operation::RecoverCommit {
+            original_request_id,
+            candidate_sha256,
+        } = &request.operation
+        {
+            validate_request(&request, &enrollment.registration, now)?;
+            if crate::source_fingerprint(&enrollment.workspace)? != request.source_sha256 {
+                bail!("recovery source changed before admission");
+            }
+            let archived_name = format!("commit-request-{original_request_id}.json");
+            let archive_present =
+                match std::fs::symlink_metadata(self.root.path().join(&archived_name)) {
+                    Ok(_) => true,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+                    Err(e) => return Err(e.into()),
+                };
+            if !archive_present {
+                return self.recover_legacy_commit(&request, &enrollment, &storage, bytes);
+            }
+            let original_bytes = self.root.read_file(&archived_name, MAX_REQUEST_BYTES as u64)
+                .map_err(|e| anyhow::anyhow!("original commit request archive unavailable; legacy recovery needs separate verified handling: {e:#}"))?;
+            let original = decode_request(&original_bytes)?;
+            if original.request_id != *original_request_id
+                || !matches!(original.operation, Operation::Commit { .. })
+            {
+                bail!("recovery archive is not the original commit request");
+            }
+            let recorded = storage
+                .recorded_result(&original, &enrollment.registration)?
+                .ok_or_else(|| {
+                    anyhow::anyhow!("commit recovery has no admitted original intent")
+                })?;
+            if !matches!(
+                recorded,
+                RecordedResult::RecoveryRequired | RecordedResult::EffectSucceeded { .. }
+            ) {
+                bail!("terminal failed commit cannot be replayed");
+            }
+            let candidate_dir = super::native::SourceDirectory::open(
+                &self
+                    .root
+                    .path()
+                    .join(format!("candidate-{original_request_id}")),
+            )?;
+            let candidate_bytes =
+                candidate_dir.read_file(Path::new("candidate.json"), 64 * 1024 * 1024)?;
+            if sha256_bytes(&candidate_bytes) != *candidate_sha256 {
+                bail!("recovery candidate differs from the reviewed bytes");
+            }
+            let candidate: CommitCandidate = serde_json::from_slice(&candidate_bytes)?;
+            if candidate.request_sha256 != original.digest()?
+                || candidate.registration_sha256 != enrollment.registration.digest()?
+            {
+                bail!("recovery candidate differs from original admission");
+            }
+            retain_commit_request(&self.root, &request, bytes)?;
+            // This invokes only the admitted Commit branch. The original queue
+            // result remains immutable; this recovery has its own result ID.
+            let recovered = self.process(&original_bytes, now)?;
+            return Ok(WorkerResult {
+                schema: "rayman.global-worker-result.v1".into(),
+                installation_id: self.installation.installation_id.clone(),
+                request_id: request.request_id.clone(),
+                request_sha256: request.digest()?,
+                registration_sha256: enrollment.registration.digest()?,
+                executor_sid: self.installation.owner_sid.clone(),
+                replayed: true,
+                result: recovered.result,
+            });
+        }
         let recorded = storage.recorded_result(&request, &enrollment.registration)?;
         let reply = |result, replayed| -> Result<WorkerResult> {
             Ok(WorkerResult {
@@ -260,6 +489,10 @@ impl Worker {
         } else {
             None
         };
+        if matches!(request.operation, Operation::Commit { .. }) {
+            self.stage("retain_commit_request")?;
+            retain_commit_request(&self.root, &request, bytes)?;
+        }
         self.stage("record_intent")?;
         let transition = storage.accept(&request, &enrollment.registration, now)?;
         let mut result = transition.result;
@@ -313,6 +546,19 @@ impl Worker {
     }
 
     fn cycle_with_clock(&self, clock: impl Fn() -> i64) -> Result<usize> {
+        if self.maintenance_requested()? {
+            self.stage("maintenance")?;
+            return Ok(0);
+        }
+        {
+            let mut activity = self
+                .activity
+                .lock()
+                .map_err(|_| anyhow::anyhow!("worker activity lock poisoned"))?;
+            if activity.stage.as_deref() == Some("maintenance") {
+                activity.stage = None;
+            }
+        }
         // One recovery attempt per service start, never an unbounded retry loop.
         if !self
             .recovery_checked
@@ -474,7 +720,7 @@ pub fn serve(root: &Path, once: bool) -> Result<()> {
         let heartbeat=scope.spawn(move || -> Result<()> {
             loop {
                 let activity=worker.activity.lock().map_err(|_|anyhow::anyhow!("worker activity lock poisoned"))?.clone();
-                let record=serde_json::json!({"schema":"rayman.global-heartbeat.v1","installation_id":worker.installation.installation_id,"executor_sid":worker.installation.owner_sid,"observed_at":chrono::Utc::now().timestamp(),"pid":std::process::id(),"activity":activity,"error":activity.service_error});
+                let record=serde_json::json!({"schema":"rayman.global-heartbeat.v1","installation_id":worker.installation.installation_id,"executor_sid":worker.installation.owner_sid,"observed_at":chrono::Utc::now().timestamp(),"pid":std::process::id(),"activity":activity,"error":activity.service_error,"maintenance":worker.maintenance_requested().unwrap_or(true)});
                 crate::file_io::write_json(&worker.root.path().join("heartbeat.json"),&record)?;
                 match receiver.recv_timeout(std::time::Duration::from_secs(2)) {
                     Ok(())|Err(std::sync::mpsc::RecvTimeoutError::Disconnected)=>return Ok(()),
@@ -531,6 +777,118 @@ pub fn serve(root: &Path, once: bool) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    #[test]
+    fn maintenance_preserves_queue_and_defers_startup_recovery() {
+        let temp = tempfile::tempdir().unwrap();
+        let sid = crate::execution_context::execution_context_probe()
+            .principal_sid
+            .unwrap();
+        super::super::native::protect_fixture_directory(temp.path(), &sid, "").unwrap();
+        let pin = ProtectedDirectory::open(temp.path(), &sid).unwrap();
+        let binary = temp.path().join("worker.exe");
+        std::fs::write(&binary, b"worker fixture").unwrap();
+        std::fs::write(temp.path().join("client.exe"), b"client fixture").unwrap();
+        let installation = Installation {
+            schema_version: 1,
+            installation_id: "a".repeat(32),
+            owner_sid: sid,
+            root_identity: pin.identity().into(),
+            worker_sha256: sha256_bytes(b"worker fixture"),
+            client_sha256: sha256_bytes(b"client fixture"),
+            source_project_id: "b".repeat(32),
+        };
+        file_io::write_json(&temp.path().join("installation.json"), &installation).unwrap();
+        let worker = Worker::open_with_executable(temp.path(), &binary).unwrap();
+        std::fs::create_dir(temp.path().join("requests")).unwrap();
+        let packet = temp
+            .path()
+            .join("requests")
+            .join(format!("{}.request.json", "c".repeat(32)));
+        std::fs::write(&packet, b"invalid test packet retained during maintenance").unwrap();
+        let marker = temp.path().join("kernel-maintenance.json");
+        file_io::write_json(&marker, &serde_json::json!({
+            "schema":"rayman.global-kernel-maintenance.v1", "installation_id":installation.installation_id,
+            "transaction_id":"d".repeat(32), "worker_sha256":[installation.worker_sha256]
+        })).unwrap();
+        file_io::write_json(&temp.path().join("heartbeat.json"), &serde_json::json!({
+            "schema":"rayman.global-heartbeat.v1", "installation_id":installation.installation_id,
+            "executor_sid":installation.owner_sid, "observed_at":chrono::Utc::now().timestamp(), "error":null
+        })).unwrap();
+        let client = Client::open(temp.path()).unwrap();
+        assert_eq!(worker.cycle(1000).unwrap(), 0);
+        assert!(
+            !worker
+                .recovery_checked
+                .load(std::sync::atomic::Ordering::Acquire)
+        );
+        assert!(packet.exists());
+        assert!(
+            worker
+                .process(b"{}", 1000)
+                .unwrap_err()
+                .to_string()
+                .contains("maintenance")
+        );
+        assert_eq!(client.status().unwrap()["service_healthy"], false);
+        let r = registration();
+        let q = request(&r);
+        assert!(
+            client
+                .submit(&q, &r, 1001)
+                .unwrap_err()
+                .to_string()
+                .contains("maintenance")
+        );
+
+        std::fs::write(&marker, b"malformed marker").unwrap();
+        assert!(worker.cycle(1000).is_err());
+        assert!(packet.exists());
+        std::fs::remove_file(marker).unwrap();
+        assert_eq!(worker.cycle(1000).unwrap(), 1);
+        assert!(!packet.exists());
+        assert!(
+            worker
+                .recovery_checked
+                .load(std::sync::atomic::Ordering::Acquire)
+        );
+    }
+    #[cfg(windows)]
+    #[test]
+    fn commit_request_archive_preserves_original_bytes_and_refuses_substitution() {
+        let temp = tempfile::tempdir().unwrap();
+        let sid = crate::execution_context::execution_context_probe()
+            .principal_sid
+            .unwrap();
+        super::super::native::protect_fixture_directory(temp.path(), &sid, "").unwrap();
+        let root = ProtectedDirectory::open(temp.path(), &sid).unwrap();
+        let registration = super::super::tests::registration();
+        let request = super::super::tests::request(&registration);
+        let original = serde_json::to_vec_pretty(&request).unwrap();
+        retain_commit_request(&root, &request, &original).unwrap();
+        let name = format!("commit-request-{}.json", request.request_id);
+        assert_eq!(
+            root.read_file(&name, MAX_REQUEST_BYTES as u64).unwrap(),
+            original
+        );
+        retain_commit_request(&root, &request, &serde_json::to_vec(&request).unwrap()).unwrap();
+        assert_eq!(
+            root.read_file(&name, MAX_REQUEST_BYTES as u64).unwrap(),
+            original
+        );
+        let mut changed = request.clone();
+        changed.source_sha256 = "f".repeat(64);
+        assert!(
+            retain_commit_request(&root, &changed, &serde_json::to_vec(&changed).unwrap()).is_err()
+        );
+        assert!(
+            retain_commit_request(&root, &request, &serde_json::to_vec(&changed).unwrap()).is_err()
+        );
+        assert_eq!(
+            root.read_file(&name, MAX_REQUEST_BYTES as u64).unwrap(),
+            original
+        );
+    }
     use crate::file_io;
     use crate::global_execution::tests::{registration, request};
 
@@ -614,6 +972,433 @@ mod tests {
             server.join().unwrap().unwrap();
             result.unwrap();
         });
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn recovery_queue_preserves_failed_result_and_uses_retained_original_request() {
+        let root = tempfile::tempdir().unwrap();
+        let workspace = tempfile::tempdir().unwrap();
+        let git_program = std::path::PathBuf::from("C:/Program Files/Git/mingw64/bin/git.exe");
+        let git = |args: &[&str]| {
+            let out = std::process::Command::new(&git_program)
+                .args(args)
+                .current_dir(workspace.path())
+                .output()
+                .unwrap();
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            out.stdout
+        };
+        git(&["init", "-b", "main"]);
+        git(&["config", "user.name", "Fixture"]);
+        git(&["config", "user.email", "fixture@example.invalid"]);
+        std::fs::write(workspace.path().join("tracked.txt"), b"old\n").unwrap();
+        git(&["add", "."]);
+        git(&["-c", "commit.gpgsign=false", "commit", "-m", "initial"]);
+        std::fs::write(workspace.path().join("added.txt"), b"new\n").unwrap();
+        let sid = crate::execution_context::execution_context_probe()
+            .principal_sid
+            .unwrap();
+        super::super::native::protect_fixture_directory(root.path(), &sid, "").unwrap();
+        let pin = ProtectedDirectory::open(root.path(), &sid).unwrap();
+        let binary = root.path().join("worker.exe");
+        std::fs::write(&binary, b"test worker").unwrap();
+        let installation = Installation {
+            source_project_id: "9".repeat(32),
+            schema_version: 1,
+            installation_id: "a".repeat(32),
+            owner_sid: sid.clone(),
+            root_identity: pin.identity().into(),
+            worker_sha256: sha256_bytes(b"test worker"),
+            client_sha256: sha256_bytes(b"test client"),
+        };
+        file_io::write_json(&root.path().join("installation.json"), &installation).unwrap();
+        let mut registration = registration();
+        registration.owner_sid = sid;
+        registration.root_identity = super::super::native::SourceDirectory::open(workspace.path())
+            .unwrap()
+            .identity()
+            .into();
+        let git_dir = workspace.path().join(".git");
+        registration.git_common_identity = super::super::native::SourceDirectory::open(&git_dir)
+            .unwrap()
+            .identity()
+            .into();
+        let binding = GitBinding {
+            content_policy: GitContentPolicy::capture(&git_program, workspace.path()).unwrap(),
+            hook_policy: None,
+            executable: git_program.clone(),
+            executable_sha256: crate::hash::sha256_file(&git_program).unwrap(),
+            git_directory: git_dir.clone(),
+            common_directory: git_dir.clone(),
+            branch_ref: "refs/heads/main".into(),
+            config_sha256: crate::hash::sha256_file(&git_dir.join("config")).unwrap(),
+        };
+        let inspector =
+            GitInspector::open(workspace.path(), &binding, &registration, &pin).unwrap();
+        let snapshot = inspector.capture(&registration).unwrap();
+        drop(inspector);
+        let mut enrollment = Enrollment {
+            schema_version: 1,
+            installation_id: installation.installation_id.clone(),
+            registration: registration.clone(),
+            workspace: workspace.path().to_path_buf(),
+            source_policy: SourcePolicy::WorkspaceFingerprintV1,
+            git: Some(binding),
+            commit_identity: Some(CommitIdentity {
+                name: "Fixture".into(),
+                email: "fixture@example.invalid".into(),
+            }),
+            install_policies: Default::default(),
+        };
+        enrollment
+            .registration
+            .capabilities
+            .install_adapters
+            .clear();
+        enrollment.registration.policy_sha256 = enrollment.policy_digest().unwrap();
+        registration = enrollment.registration.clone();
+        file_io::write_json(
+            &root
+                .path()
+                .join(format!("project-{}.json", registration.worktree_id)),
+            &enrollment,
+        )
+        .unwrap();
+        let worker = Worker::open_with_executable(root.path(), &binary).unwrap();
+        assert!(Worker::open(root.path()).is_err());
+        let mut request = request(&registration);
+        request.source_sha256 = crate::source_fingerprint(workspace.path()).unwrap();
+        request.operation = Operation::Commit {
+            expected_head: snapshot.head.clone(),
+            expected_index_sha256: snapshot.index_sha256.clone(),
+            message: "global exact commit".into(),
+            changes: snapshot.changes,
+            hook_receipt: None,
+        };
+        let bytes = serde_json::to_vec(&request).unwrap();
+
+        std::fs::write(root.path().join("client.exe"), b"test client").unwrap();
+        std::fs::create_dir(root.path().join("requests")).unwrap();
+        let client = Client::open(root.path()).unwrap();
+        let foreign_lock = git_dir.join("index.lock");
+        std::fs::write(&foreign_lock, b"foreign writer").unwrap();
+        client.submit(&request, &registration, 1001).unwrap();
+        assert_eq!(worker.cycle(1001).unwrap(), 1);
+        let failure_path = root
+            .path()
+            .join(format!("result-{}.json", request.request_id));
+        let failure = std::fs::read(&failure_path).unwrap();
+        assert!(
+            !serde_json::from_slice::<QueueResult>(&failure)
+                .unwrap()
+                .success
+        );
+        assert!(
+            !root
+                .path()
+                .join("requests")
+                .join(format!("{}.request.json", request.request_id))
+                .exists()
+        );
+        assert_eq!(
+            std::fs::read(
+                root.path()
+                    .join(format!("commit-request-{}.json", request.request_id))
+            )
+            .unwrap(),
+            bytes
+        );
+        assert!(client.submit(&request, &registration, 1002).is_err());
+        std::fs::remove_file(foreign_lock).unwrap();
+        let recovery = client
+            .prepare_commit_recovery_request(workspace.path(), &request.request_id, None, 2000)
+            .unwrap();
+        client.submit(&recovery, &registration, 2000).unwrap();
+        assert_eq!(worker.cycle(2000).unwrap(), 1);
+        let result = client.result(&recovery).unwrap().unwrap();
+        assert!(matches!(
+            result.result,
+            RecordedResult::EffectSucceeded { .. }
+        ));
+        assert_eq!(std::fs::read(&failure_path).unwrap(), failure);
+        let candidate: CommitCandidate = file_io::read_json(
+            &root
+                .path()
+                .join(format!("candidate-{}/candidate.json", request.request_id)),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            String::from_utf8(git(&["rev-parse", "HEAD"]))
+                .unwrap()
+                .trim(),
+            candidate.commit
+        );
+        assert_eq!(
+            std::fs::read(workspace.path().join("added.txt")).unwrap(),
+            b"new\n"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn legacy_queued_recovery_verifies_candidate_without_fabricating_request() {
+        let root = tempfile::tempdir().unwrap();
+        let workspace = tempfile::tempdir().unwrap();
+        let git_program = std::path::PathBuf::from("C:/Program Files/Git/mingw64/bin/git.exe");
+        let git = |args: &[&str]| {
+            let out = std::process::Command::new(&git_program)
+                .args(args)
+                .current_dir(workspace.path())
+                .output()
+                .unwrap();
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            out.stdout
+        };
+        git(&["init", "-b", "main"]);
+        git(&["config", "user.name", "Fixture"]);
+        git(&["config", "user.email", "fixture@example.invalid"]);
+        std::fs::write(workspace.path().join("tracked.txt"), b"old\n").unwrap();
+        git(&["add", "."]);
+        git(&["-c", "commit.gpgsign=false", "commit", "-m", "initial"]);
+        std::fs::write(workspace.path().join("added.txt"), b"new\n").unwrap();
+        let sid = crate::execution_context::execution_context_probe()
+            .principal_sid
+            .unwrap();
+        super::super::native::protect_fixture_directory(root.path(), &sid, "").unwrap();
+        let pin = ProtectedDirectory::open(root.path(), &sid).unwrap();
+        let binary = root.path().join("worker.exe");
+        std::fs::write(&binary, b"test worker").unwrap();
+        let installation = Installation {
+            source_project_id: "9".repeat(32),
+            schema_version: 1,
+            installation_id: "a".repeat(32),
+            owner_sid: sid.clone(),
+            root_identity: pin.identity().into(),
+            worker_sha256: sha256_bytes(b"test worker"),
+            client_sha256: sha256_bytes(b"test client"),
+        };
+        file_io::write_json(&root.path().join("installation.json"), &installation).unwrap();
+        let mut registration = registration();
+        registration.owner_sid = sid;
+        registration.root_identity = super::super::native::SourceDirectory::open(workspace.path())
+            .unwrap()
+            .identity()
+            .into();
+        let git_dir = workspace.path().join(".git");
+        registration.git_common_identity = super::super::native::SourceDirectory::open(&git_dir)
+            .unwrap()
+            .identity()
+            .into();
+        let binding = GitBinding {
+            content_policy: GitContentPolicy::capture(&git_program, workspace.path()).unwrap(),
+            hook_policy: None,
+            executable: git_program.clone(),
+            executable_sha256: crate::hash::sha256_file(&git_program).unwrap(),
+            git_directory: git_dir.clone(),
+            common_directory: git_dir.clone(),
+            branch_ref: "refs/heads/main".into(),
+            config_sha256: crate::hash::sha256_file(&git_dir.join("config")).unwrap(),
+        };
+        let inspector =
+            GitInspector::open(workspace.path(), &binding, &registration, &pin).unwrap();
+        let snapshot = inspector.capture(&registration).unwrap();
+        drop(inspector);
+        let mut enrollment = Enrollment {
+            schema_version: 1,
+            installation_id: installation.installation_id.clone(),
+            registration: registration.clone(),
+            workspace: workspace.path().to_path_buf(),
+            source_policy: SourcePolicy::WorkspaceFingerprintV1,
+            git: Some(binding),
+            commit_identity: Some(CommitIdentity {
+                name: "Fixture".into(),
+                email: "fixture@example.invalid".into(),
+            }),
+            install_policies: Default::default(),
+        };
+        enrollment
+            .registration
+            .capabilities
+            .install_adapters
+            .clear();
+        enrollment.registration.policy_sha256 = enrollment.policy_digest().unwrap();
+        registration = enrollment.registration.clone();
+        file_io::write_json(
+            &root
+                .path()
+                .join(format!("project-{}.json", registration.worktree_id)),
+            &enrollment,
+        )
+        .unwrap();
+        let worker = Worker::open_with_executable(root.path(), &binary).unwrap();
+        assert!(Worker::open(root.path()).is_err());
+        let mut request = request(&registration);
+        request.source_sha256 = crate::source_fingerprint(workspace.path()).unwrap();
+        request.operation = Operation::Commit {
+            expected_head: snapshot.head.clone(),
+            expected_index_sha256: snapshot.index_sha256.clone(),
+            message: "global exact commit".into(),
+            changes: snapshot.changes,
+            hook_receipt: None,
+        };
+
+        std::fs::write(root.path().join("client.exe"), b"test client").unwrap();
+        std::fs::create_dir(root.path().join("requests")).unwrap();
+        let client = Client::open(root.path()).unwrap();
+        // Construct a v1-style retained snapshot through real admission and
+        // candidate preparation, deliberately without the new request archive.
+        let storage = StateStorage::at_existing_root(root.path(), &registration).unwrap();
+        storage.accept(&request, &registration, 1001).unwrap();
+        let inspector = GitInspector::open_for_worker(
+            workspace.path(),
+            enrollment.git.as_ref().unwrap(),
+            &registration,
+            &pin,
+        )
+        .unwrap();
+        let candidate = inspector
+            .prepare_commit(
+                &request,
+                &registration,
+                1001,
+                "Fixture",
+                "fixture@example.invalid",
+            )
+            .unwrap();
+        assert!(
+            inspector
+                .test_publish_cut(&request, &registration, "ref_seed_created")
+                .is_err()
+        );
+        drop(inspector);
+        let directory = root
+            .path()
+            .join(format!("candidate-{}", request.request_id));
+        std::fs::remove_file(directory.join("staging-attempts.json")).unwrap();
+        let mut orphans = Vec::new();
+        for (parent, prefix) in [
+            (
+                git_dir.clone(),
+                format!(".rayman-index-{}", request.request_id),
+            ),
+            (
+                git_dir.join("refs/heads"),
+                format!(".rayman-ref-{}", request.request_id),
+            ),
+        ] {
+            let entry = std::fs::read_dir(&parent)
+                .unwrap()
+                .map(Result::unwrap)
+                .find(|e| e.file_name().to_string_lossy().starts_with(&prefix))
+                .unwrap();
+            let old_name = parent.join(prefix);
+            std::fs::rename(entry.path(), &old_name).unwrap();
+            orphans.push((old_name.clone(), std::fs::read(old_name).unwrap()));
+        }
+        let failure_path = root
+            .path()
+            .join(format!("result-{}.json", request.request_id));
+        file_io::write_json(
+            &failure_path,
+            &QueueResult {
+                schema: "rayman.global-queue-result.v1".into(),
+                installation_id: installation.installation_id.clone(),
+                request_id: request.request_id.clone(),
+                request_sha256: request.digest().unwrap(),
+                executor_sid: installation.owner_sid.clone(),
+                success: false,
+                output: None,
+                error: Some(
+                    "v1 fixture: metadata preservation failed before journal creation".into(),
+                ),
+            },
+        )
+        .unwrap();
+        let failure = std::fs::read(&failure_path).unwrap();
+        let candidate_path = directory.join("candidate.json");
+        let candidate_bytes = std::fs::read(&candidate_path).unwrap();
+        let mut altered: serde_json::Value = serde_json::from_slice(&candidate_bytes).unwrap();
+        altered["paths"] = serde_json::json!(["tracked.txt"]);
+        file_io::write_json(&candidate_path, &altered).unwrap();
+        assert!(
+            client
+                .prepare_commit_recovery_request(workspace.path(), &request.request_id, None, 2000)
+                .is_err()
+        );
+        // A caller cannot bypass the worker's checks by skipping client preview.
+        let rejected = client
+            .request(
+                &enrollment,
+                Operation::RecoverCommit {
+                    original_request_id: request.request_id.clone(),
+                    candidate_sha256: crate::hash::sha256_file(&candidate_path).unwrap(),
+                },
+                2000,
+            )
+            .unwrap();
+        client.submit(&rejected, &registration, 2000).unwrap();
+        assert_eq!(worker.cycle(2000).unwrap(), 1);
+        assert!(client.result(&rejected).is_err());
+        assert!(!directory.join("legacy-recovery.json").exists());
+        assert!(!directory.join("publication.json").exists());
+        std::fs::write(&candidate_path, &candidate_bytes).unwrap();
+        let foreign = git_dir.join("index.lock");
+        std::fs::write(&foreign, b"fixture external writer").unwrap();
+        let interrupted = client
+            .prepare_commit_recovery_request(workspace.path(), &request.request_id, None, 2001)
+            .unwrap();
+        assert!(
+            !directory.join("legacy-recovery.json").exists(),
+            "preview must not persist acceptance"
+        );
+        assert!(
+            !directory.join("publication.json").exists(),
+            "preview must not start publication"
+        );
+        client.submit(&interrupted, &registration, 2001).unwrap();
+        assert_eq!(worker.cycle(2001).unwrap(), 1);
+        assert!(client.result(&interrupted).is_err());
+        assert!(directory.join("legacy-recovery.json").exists());
+        assert!(directory.join("publication.json").exists());
+        assert_eq!(std::fs::read(&foreign).unwrap(), b"fixture external writer");
+        // The fixture's external writer, not the recovery worker, releases it.
+        std::fs::remove_file(foreign).unwrap();
+        let recovery = client
+            .prepare_commit_recovery_request(workspace.path(), &request.request_id, None, 2002)
+            .unwrap();
+        client.submit(&recovery, &registration, 2002).unwrap();
+        assert_eq!(worker.cycle(2002).unwrap(), 1);
+        assert!(matches!(
+            client.result(&recovery).unwrap().unwrap().result,
+            RecordedResult::EffectSucceeded { .. }
+        ));
+        assert_eq!(std::fs::read(&failure_path).unwrap(), failure);
+        assert!(
+            !root
+                .path()
+                .join(format!("commit-request-{}.json", request.request_id))
+                .exists(),
+            "must not fabricate the missing original request"
+        );
+        assert_eq!(
+            String::from_utf8(git(&["rev-parse", "HEAD"]))
+                .unwrap()
+                .trim(),
+            candidate.commit
+        );
+        for (path, bytes) in orphans {
+            assert_eq!(std::fs::read(path).unwrap(), bytes);
+        }
     }
 
     #[cfg(windows)]

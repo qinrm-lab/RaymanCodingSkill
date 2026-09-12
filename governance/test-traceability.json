@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 33,
+    "generation": 34,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 32,
-      "sha256": "6ad2e6168fdd7ca4f32602cf67ab95e90771ccaa9d60742037ace3e63f6d06e0"
+      "generation": 33,
+      "sha256": "69152d8d8f1dfea543112dae1c113cfb557e23d278804bf1388ab8d42f17cc14"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "441b97f0e0fdd006c0b2b749ca6d381ec317b09bf8d1709abc298809ec6e9d3d"
+    "sha256": "f4b468abe65687ec96327f7c1382332cad1a7c5662784be40c629bc0f64f1864"
   },
   "sources": [
     {
@@ -350,11 +350,27 @@
     },
     {
       "source_id": "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER",
-      "status": "active",
+      "status": "retired",
       "kind": "internal_contract",
       "title": "Global Codex fixed-capability execution contract",
       "path": "governance/sources/global-codex-execution.md",
       "sha256": "026df9ec010182beded8a2bbcc42f52e1ae8643928c1e9c6d17cdd13ba7a6267",
+      "valid_until": "2027-09-09",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "source_id": "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY",
+      "status": "active",
+      "kind": "internal_contract",
+      "title": "Global Codex fixed-capability execution contract",
+      "path": "governance/sources/global-codex-execution.md",
+      "sha256": "b44fb6770de55b8da257166a3eb2e4730eb3884462cd85774287a29216d5bb92",
       "valid_until": "2027-09-09",
       "retirement": null
     },
@@ -4417,8 +4433,26 @@
     },
     {
       "link_id": "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER",
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY",
+      "status": "active",
+      "source_id": "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY",
       "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
       "relation": "defines",
       "review": {
@@ -121545,7 +121579,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -121562,6 +121596,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "27ec8785948f453bad9a3a3d0dd95f90f820a16d065fc16b91d57c84e9a6b7b6",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "9d106d61a2bebe04ea7df2067d693a06861aaf8a2cd510ed5012597873f3a6fc",
       "retirement": null
     },
     {
@@ -125168,7 +125229,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-GIT-IMAGE-PATH-20260912-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -125185,6 +125246,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "fa605840d912c3e0ecbae389a4b0967f62f2d5fef7110c6cfb1afaa066b1437d",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-GIT-IMAGE-PATH-20260912-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-GIT-IMAGE-PATH-20260912-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-GIT-IMAGE-PATH-20260912"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "777ddaf3d2938b2711b4b4bc4e83572260cee842f29be09430fd8840f6fec740",
       "retirement": null
     },
     {
@@ -125216,7 +125304,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-HOOK-OWNER-TRUST-20260911-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -125233,6 +125321,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "6d2be4c9e41d6cfb54c4f0791fedbd679c44635572dd20af94bf93ff88da6d08",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-HOOK-OWNER-TRUST-20260911-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-HOOK-OWNER-TRUST-20260911-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-HOOK-OWNER-TRUST-20260911"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "ecfdfbcfe51742cf62d23ba90108dec4c13d3bc5196822e0677a4d134fa0e7ad",
       "retirement": null
     },
     {
@@ -125264,7 +125379,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-317A6BB8D5401F11-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -125281,6 +125396,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "4a64c778829cc34602d9eb987f292a8a0f9c9ef6d0c8422694ee9bacabfb55eb",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-317A6BB8D5401F11-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-317A6BB8D5401F11-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-KERNEL-ROLLS-BACK-FAILURE-AND-REFUS-2D86C853579B"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "ecea32787f433c3c750077684e4c23f80e1e05e8d8301afb074a814ccd941222",
       "retirement": null
     },
     {
@@ -125312,7 +125454,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-40C32CD7E9809BE3-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -125329,6 +125471,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "496bd58b16afe5b046315d5fb02e45ec433bb9c9fc1bdbd08641ddf7a80dfecd",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-40C32CD7E9809BE3-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-40C32CD7E9809BE3-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-KERNEL-PUBLISHES-EXACT-FILES-AND-RE-115B6AE2F819"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "0f68176f5b24caff9eaba1b9fb2fe10fb87e14dfe68261df21c9e39f6d20cd05",
       "retirement": null
     },
     {
@@ -125360,7 +125529,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-7FB4C693DA187D47-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -125377,6 +125546,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "701fd8313921de5d6895b265af8f79d858c171bc3e25d8fbf750a386e407e858",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-7FB4C693DA187D47-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-7FB4C693DA187D47-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-WORKER-DISPATCH-AND-RESTART-RECONCI-20B23FB21FB6"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "1389e759109fa42d3a81e23851e593c05e370efbd1339c4ed603838609da923e",
       "retirement": null
     },
     {
@@ -125408,7 +125604,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-97F43A91A81AD55F-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -125425,6 +125621,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "5e6d74933c03f4ca948338bd67785282e690062574a8cfcd0b26a59969052b50",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-97F43A91A81AD55F-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-97F43A91A81AD55F-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-CRASH-RECOVERY-NEVER-CLAIMS-ROLLBAC-D99CB30A0C3B"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "c1b8b1944727828eb6a45d81a73a65f4ed475d6de3052820b32c04089ced8e19",
       "retirement": null
     },
     {
@@ -125456,7 +125679,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-AB943ED2B6A98F15-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -125473,6 +125696,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "fec14c2675ea6de00744683fe031619b89e44683dc4d4daddf62d29ffa54e8be",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-AB943ED2B6A98F15-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-AB943ED2B6A98F15-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-PENDING-INTENT-BLOCKS-OTHER-PUBLICA-B9B5DFDD4956"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "c759b1d30e2cccfa06d66564953d51a1edf64a3b083337248981c0373dc76982",
       "retirement": null
     },
     {
@@ -125504,7 +125754,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-B438D756A765861D-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -125521,6 +125771,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "794d9c5bb03ecbf082de5debf2cb5bd9e1b51af4a921791c09fcbc2893ced706",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-B438D756A765861D-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-B438D756A765861D-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-BUNDLE-REJECTS-UNREGISTERED-PATHS-V-E68C99B92537"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "b0f258b4d42295122a899fe8a6815ce8e381bcb732a133d57cd098dae077c41b",
       "retirement": null
     },
     {
@@ -125552,7 +125829,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-BD678F984719CAE3-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -125569,6 +125846,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "5fd146d010869da9399804e1626462b9fc57f6e02d0dc81f03e05ef80a4ebffa",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-BD678F984719CAE3-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-BD678F984719CAE3-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-GLOBAL-SKILL-PUBLICATION-IS-IDEMPOTENT-AND-PRESE-BC93A64317EC"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "49c0dd55ebfac07b0ec155ae8a0965db91b6743d91353c971b1498f068508fa2",
       "retirement": null
     },
     {
@@ -125627,7 +125931,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-563CDEDE5B59E458-CP1-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -125644,6 +125948,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "832214fcc1dd47959565af4b7e676af7ee459a59831753f0803d8832f347c051",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-563CDEDE5B59E458-CP1-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-563CDEDE5B59E458-CP1-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-4DC44102236A-GLOBAL-20260909-CP1"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-ENROLL-GLOBAL-CODEX-PROJECTS-CP1",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "47a48898ad9607c93f814c410305e71b08cefef829afcce267b2b30b8feb794d",
       "retirement": null
     },
     {
@@ -125675,7 +126006,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-5BE8CDDBF80D3213-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -125692,6 +126023,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "6fcc72d189ce38c46832f3c2c9bdb316ec27530a2e1356667b5ca9584d4a2068",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-5BE8CDDBF80D3213-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-5BE8CDDBF80D3213-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-9865501D815A-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-CONFIGURE-GLOBAL-CODEX-EXECUTION",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "56d45391ff764e085c6e252ff0cabff77064189061d10005b205d1d63c1299ee",
       "retirement": null
     },
     {
@@ -125831,7 +126189,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3-R4-SID-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -125848,6 +126206,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "79f67b48f9700f01251893365862bb10b4a7adbfcc0f7da2639bdd9df445c031",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3-R4-SID-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3-R4-SID-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909-R2-R3-R4-SID-POWER"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION-R2-R3-R4-SID-POWER",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "dd417dbdbf757062a1c9ad78c486d601aa5a17db11f4da4f4aad72bf18ce21e5",
       "retirement": null
     },
     {
@@ -125879,7 +126264,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-ACL-9B31F4E0C6D2A817-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -125896,6 +126281,264 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "dfa8e731a1fd150bf136ac2898ad266c722a56079935121199f7eddb0179c497",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-ACL-9B31F4E0C6D2A817-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-ACL-9B31F4E0C6D2A817-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-35260E3B3E35"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-REPAIR-CODEX-WORKSPACE-ACL",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "eb5eb45b6703e62e4c2bf9a876b4ec4b5eb84535e5697098f55ddc6c9c1c422d",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-31E0734B9F006F39AC5B",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-31E0734B9F006F39AC5B"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "09648b2912d5c780fdccece12e5c176b2b7d05b7000c912c399a5e855d85f860",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-358A6FF795E1901CCC1F",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-358A6FF795E1901CCC1F"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "13529e17fb6a74741d09150306e01295ff8ff47e21f084fb3a31054c69d880da",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "7c91236ed9975816d6149ae32bf448a4506ee18b855ef0b36cea76439b4ef0e5",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "dbb5b4dee7a364b5e1aa45fe5922ce66da0978f241bb6ffe07b2cda83ce72e70",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "5b1a6f903fd3e3f51f439affc71f53d056cc18c704c6d89e137dea3121fd8cd3",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-B9F4BD26F591EC648C11",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-B9F4BD26F591EC648C11"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "28f419daf8124d116bdae55d039914ea3f68dabb44f616a038783dc7ad664968",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "11a43655c9feeb1573e2c5d4cf5a6d5900716c817b952d3dd04c062f302b0b44",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "cda53f55cf866f621fd0f590a6ff1bb24f92155d957e461ea59d9d53913b4112",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "32b1d277ef2584bbc4225567932e41eb04cf300a50acffec6c46f0451185139f",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "b5b5a16e841747737f49d0ab0644b97e5d7451c9c8418e956573edbf66455151",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "44da2241f6e3ff8b26f3bcb0bceccaff2f3e5becd44bc6b6337065253a9f6652",
       "retirement": null
     },
     {
@@ -125927,7 +126570,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-REENROLL-ADAPTERS-20260911-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -125944,6 +126587,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "9880f2feaaa86852232bd2641320b3e521d0691ab1c4df301ab7f1a7635c2be9",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-REENROLL-ADAPTERS-20260911-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-REENROLL-ADAPTERS-20260911-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-REENROLL-ADAPTERS-20260911"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "624b94880fc8be05e250348867b2cd6b49472484e7213b3ddcb31a95d2a89c92",
       "retirement": null
     },
     {
@@ -125975,7 +126645,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-0A4D994577024965-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -125992,6 +126662,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "56fbcbfdcc4e9fe0304ee0869554b818a1309a13ba8aa89804de162228d34f63",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-0A4D994577024965-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-0A4D994577024965-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-MULTI-PROJECT-PREFLIGHT-IS-ACTIVATION-EX-ACEBF771EA81-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "b70496ef76a5db8029644cd1eb4736120fa1da1bfc2b3fe8ce52a9e342e6f9e6",
       "retirement": null
     },
     {
@@ -126023,7 +126720,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-10BB28AB1DE6EA34-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -126040,6 +126737,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "8a4ee3287ef3399c26decca42c54ff69a3d4b73a97d174ff6102e7d36a9fa2e1",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-10BB28AB1DE6EA34-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-10BB28AB1DE6EA34-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-INTERRUPTED-EFFECT-NEVER-RUNS-AGAIN-AND-26CE591AC48E-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "c128730c02879a1fd5d6e8df406856e1d11db51219a2bb4629ae31a4e0cf4bcc",
       "retirement": null
     },
     {
@@ -126071,7 +126795,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-11CEAF74B0B26C45-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -126088,6 +126812,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "62a8580c5d62834f73d04e2257ae3d67b8b13188b1de8326a7b264e92a432227",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-11CEAF74B0B26C45-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-11CEAF74B0B26C45-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-EXPIRY-FUTURE-AND-INTEGER-OVERFLOW-FAIL-2491A7831155-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "8c2ba9e3d4135c0aec77e72bfebeb797fca38d14ea2e2d573a518d0b3aaf1029",
       "retirement": null
     },
     {
@@ -126119,7 +126870,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-14FEF5F84CDAF1ED-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -126136,6 +126887,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "0d4b98819ac25c273fce4d542b4ba4cbb6eda708eab24ac6ed3f911d703db3ba",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-14FEF5F84CDAF1ED-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-14FEF5F84CDAF1ED-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-GIT-TREE-AND-INDEX-PARSERS-REJECT-CONFLI-1D2297C844F0-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "ea5e512eaabf6530bab6637a8e8bd366d157ed0cacb35923b3c0b7dee67a909a",
       "retirement": null
     },
     {
@@ -126167,7 +126945,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-1A1D1FEBC08A65A8-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -126184,6 +126962,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "67a3054e4d01a722f9ac40ba0b16844930a3390e9317bb89f1e5d53a9d34ba9d",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-1A1D1FEBC08A65A8-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-1A1D1FEBC08A65A8-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-CONTROL-ACCEPTS-LINE-ENDINGS-844097EC9E96-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "de072b9b4f45e7953618421c6b2538c680e612490ffdd36e4001c4dac1c7a376",
       "retirement": null
     },
     {
@@ -126215,7 +127020,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-2092D9E411E8ACC3-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -126232,6 +127037,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "4f400e955faaeee46ceb22ff416198efe5c63681264ac32772b482508787f020",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-2092D9E411E8ACC3-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-2092D9E411E8ACC3-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-SOURCE-FILE-READER-REJECTS-HARDLINK-ALIA-B5999A2E9275-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "e03ddce89db29e6ae4e2d7ee8e243d1a52364f19e01e10bf97044d467b23b123",
       "retirement": null
     },
     {
@@ -126263,7 +127095,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-2DD5295CC9465193-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -126280,6 +127112,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "66271eba9ca0ba0327260f635ebc20ad1b03618ded78838a90ba55eccb077880",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-2DD5295CC9465193-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-2DD5295CC9465193-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-ROW-UPDATES-ARE-SCOPED-ATOMIC-958E57AE1B68-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "4e5527de5c92b61661371ec1cc93bca9923d89dc5e76cf7836758382edbe16ac",
       "retirement": null
     },
     {
@@ -126311,7 +127170,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-3589F2032B1A9325-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -126328,6 +127187,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "20834cd6b04ac7ac693b4da5beca2d8d4b60f8d9d9ab251eaf3e5f30322cad9d",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-3589F2032B1A9325-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-3589F2032B1A9325-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-WINDOWS-ALIASES-TRAVERSAL-AND-MANAGED-ST-F6BAF9C62F1B-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "3464ea707d2874d779e34ee686d5b93210675048702875532ecc96857d2dca0c",
       "retirement": null
     },
     {
@@ -126359,7 +127245,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-3BCF0BCEFCF772F6-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -126376,6 +127262,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "8900f347d1794246503760be4b24cea7914927c53da5b39fae16d6debe0bd38e",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-3BCF0BCEFCF772F6-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-3BCF0BCEFCF772F6-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-GLOBAL-SOURCE-FINGERPRINT-TRACKS-BYTES-A-463FE4EEE120-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "52a6e820ef2d302ad01cbb701f1c2f811abaa79d9834d7ee68f04ac36680a9d6",
       "retirement": null
     },
     {
@@ -126407,7 +127320,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-40A36BA93D92AA10-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -126424,6 +127337,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "25f8c3149588279a2ff3ebdf8e8b0bb53bf4a4eb401d9e87accd88d67cc067a4",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-40A36BA93D92AA10-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-40A36BA93D92AA10-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-QUEUE-CONSUMPTION-PRESERVES-CHANGED-AND-0ECB1E630C8E-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "95a05c3fb83e43f7734d2c70e30e0eb1dac0cd2c9925fba0a34ea823e5d1a7fe",
       "retirement": null
     },
     {
@@ -126455,7 +127395,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-4A21E91A102E73B8-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -126472,6 +127412,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "dda943e9492cdb85336e97ea1cde7b40e351f7a06010122a79c489a46db559c4",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-4A21E91A102E73B8-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-4A21E91A102E73B8-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-STATE-LEASE-RENEWAL-STOPS-PROMPTLY-AND-P-121E03A49D3E-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "1313209855dc4bad08f1fab0935e5859d2a81353de90120001f2a04c7ca7e029",
       "retirement": null
     },
     {
@@ -126503,7 +127470,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-4E87E82148F93C10-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -126520,6 +127487,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "d1468b0b1c9594cafacd61879b367268766af7645450d99b014fc4f3ae07e207",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-4E87E82148F93C10-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-4E87E82148F93C10-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROJECT-WORKTREE-AND-PROTECTED-POLICY-SU-9583082D1FDD-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "ba62a3552e1d08580f52d7a7cc9c8365ea12900b57c84de963891ef39a1e5ba3",
       "retirement": null
     },
     {
@@ -126551,7 +127545,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-51F1FFC0FF09AE4B-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -126568,6 +127562,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "27198e12ba3a642c9e1fbe4639e3283b6062bda9eba47f3d36a2d32fb2b1e371",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-51F1FFC0FF09AE4B-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-51F1FFC0FF09AE4B-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-NATIVE-PROCESS-ROUNDTRIPS-QUOTED-UNICODE-FFAAA9F0EFC6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "f16a4a5b36f6a7cfdcd481c99188b1d2bd50a98a99bdca88be72100c33f0d8d2",
       "retirement": null
     },
     {
@@ -126599,7 +127620,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-55B846B8E672D54A-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -126616,6 +127637,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "5535c96337b58a4758ce41c97ba4c7025fb83ebc994fe5c0d2d0ede650e68e70",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-55B846B8E672D54A-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-55B846B8E672D54A-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-EXACT-ADDED-MODIFIED-DELETED-COMMIT-IS-V-86716FECCFB8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "47284372c2cb9c16c3910ff49e5bf9c26f4c96e86be45f305106c0ac005413cd",
       "retirement": null
     },
     {
@@ -126647,7 +127695,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-65D0FE541C219BC9-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -126664,6 +127712,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "c7c25816a55df5832afe5b74924df2a322b4a19215034e7b8a2c4dfb09723c38",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-65D0FE541C219BC9-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-65D0FE541C219BC9-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-DIRECTORY-REJECTS-INHERITED-OR-80BF39C24C08-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "fe57a8bbf8d5cf534720b2a41f3cd626f10b5040e7357308c6c1114db2712460",
       "retirement": null
     },
     {
@@ -126695,7 +127770,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-778DACD69B40A948-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -126712,6 +127787,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "9c57c86f674a7a2c31276aaacd69a85dbfb813e6fb32dc979538367817e80afd",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-778DACD69B40A948-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-778DACD69B40A948-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-JOURNAL-RECOVERS-EXACT-STATE-AND-RETAINS-76954D4112E6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "c86d56ffb119ec58eb669c7094b0528b5f70b85c1df4bd013356967b3698fdd1",
       "retirement": null
     },
     {
@@ -126743,7 +127845,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-7F123D22A1459EA2-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -126760,6 +127862,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "df36713eb08198e074e85b7fbc172bfe1d1e6562a5eeb305a5c6bff1c71800f5",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-7F123D22A1459EA2-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-7F123D22A1459EA2-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-ROW-BACKEND-REJECTS-TRIGGER-S-ACBD966D0ECD-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "114ecc66becbe7d646409aa5ba457b96a400ee6cdae3325dd0087d4f350b56e6",
       "retirement": null
     },
     {
@@ -126791,7 +127920,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8107A30F555E561D-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -126808,6 +127937,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "f665903231ac12908a8bdfd63a59437219c18e7fd2d4e999ab0499154d151900",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8107A30F555E561D-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8107A30F555E561D-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-GLOBAL-AUTOCRLF-MATCHES-NATIVE-GIT-WITHO-6949F080E3E8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "836337dbb155f802d639bb50c3a29b723dd54ca632fbbf881777609ae5aa4757",
       "retirement": null
     },
     {
@@ -126839,7 +127995,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-82A077277B69A094-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -126856,6 +128012,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "8ab364e19270f9f2db0819ffeba4373ce9a8177f24a680522c0496a966ed1e25",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-82A077277B69A094-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-82A077277B69A094-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-MIGRATION-NORMALIZES-SQL-WITH-47C5C525C4BA-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "20eebae92c410924bcfaa4caf189655bba9ea77ff6abeb408a4489463707137e",
       "retirement": null
     },
     {
@@ -126887,7 +128070,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8B9E25B328749D46-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -126904,6 +128087,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "486ae9820b4028559d2cc0033235c42b1f98a0f21fca99a049bd9acbd9f85829",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8B9E25B328749D46-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8B9E25B328749D46-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-WORKER-COMMITS-EXACT-REGISTERE-7347D4F302A6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "264483d9d5d6608dfc38d246e047a274a7327837b7e221505ef964739ebb5e05",
       "retirement": null
     },
     {
@@ -126962,7 +128172,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -126979,6 +128189,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "481dd09f38a39e5dcef9d58d2d20fa5462b39df4485bad4fc39cd9ecdef4fbc9",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-REAL-GIT-SNAPSHOT-PRESERVES-SOURCE-AND-I-7209D78A5D5C-GLOBAL-20260909-ENROLL-R2"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "47078000399cfe9bf9bf6f73f35ddb1feecb3518d9581044b85510bcb016fd6a",
       "retirement": null
     },
     {
@@ -127010,7 +128247,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8F796BF2C1954DE4-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -127027,6 +128264,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "491e6d99de2a6935c0db7baa9076fb0d75e5edf155f198124c8985fefca1a874",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8F796BF2C1954DE4-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8F796BF2C1954DE4-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-CASE-COLLISIONS-ORDER-EMPTY-AND-NONORDIN-2250FE4E9CC8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "a7da02aa1888ffb494696c28135c57dc190c3615aa4087e0a45c7a7abf8104d7",
       "retirement": null
     },
     {
@@ -127058,7 +128322,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-96D0F61691F547DD-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -127075,6 +128339,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "bb82ae24985153bbd35ba1a282b4169b4f1bee31c090f061c13397b14e4176d7",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-96D0F61691F547DD-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-96D0F61691F547DD-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-PUBLICATION-SEED-IDENTITY-SURVIVES-CLAIM-284F43EF08B0-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "de2885d0745001768c0bc7397b69a025c6a6e23038bac7e480e511a09cec9447",
       "retirement": null
     },
     {
@@ -127106,7 +128397,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-9B7C80D244870C80-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -127123,6 +128414,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "121d481d9b208c4009d46ad94084b39404ac3edaf56683ceff893a18c70b6057",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-9B7C80D244870C80-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-9B7C80D244870C80-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-WORKER-PROCESSES-ENROLLED-STAT-AF219789C484-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "c615508ef61ae43a5669ce3dcc08b45b01c0a6623170f1138eb1a009de20e25b",
       "retirement": null
     },
     {
@@ -127154,7 +128472,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-A1D9DC4AE3162DAE-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -127171,6 +128489,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "a33ac2275208a64ce7dbf9e2906ddeb83d4f246230571264ade3f202dd60ae66",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-A1D9DC4AE3162DAE-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-A1D9DC4AE3162DAE-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-RECEIPT-AND-ROWS-SURVIVE-REOP-FA48F728E2F6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "c3fdab692b867914a12dcd1ab7e2a3006fc6ba5f49ac1003482573fdb01f58d0",
       "retirement": null
     },
     {
@@ -127202,7 +128547,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-A7661C6406541E08-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -127219,6 +128564,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "acebb9a9190164a05c733f7cec66de31d954a2a42695f2d14f2e87fbc9ec4943",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-A7661C6406541E08-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-A7661C6406541E08-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-STATE-CAS-REPLAY-AND-PROJECT-NAMESPACES-8A73C6E659A6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "e7e9c1cabee2b8e2781ddf7f228b12ff0e17f7bd8e7a3cb357d92a490c4992b5",
       "retirement": null
     },
     {
@@ -127250,7 +128622,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-AFD7A8CDE4C751D9-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -127267,6 +128639,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "2ac86a8c96623e1a354e1ec54763547cc99413e66424abeadf7aa0c8532521cb",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-AFD7A8CDE4C751D9-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-AFD7A8CDE4C751D9-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-STAGE-REUSE-BINDS-ENVIRONMENT-TOOLS-SCOP-76A42F134ED0-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "6e0e1cca0dcca3b7d397a1dc98c0f1d7a9ee7ef64f60aa1881e7c0aa222b0df8",
       "retirement": null
     },
     {
@@ -127298,7 +128697,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-B7785F6F85CDB43D-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -127315,6 +128714,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "f38b9252357556edcae66bc63bf29b825522c46789ad9e7e9d1e686e2d79139d",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-B7785F6F85CDB43D-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-B7785F6F85CDB43D-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-SCHEMA-MATCHES-SAVESTATUS-V3-44312854F7BA-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "595c15ff97d80964557554415594502bbcdd2baf16742e45e29dc837d8119c2c",
       "retirement": null
     },
     {
@@ -127346,7 +128772,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-C27ADB994160229E-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -127363,6 +128789,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "9bcaebe48a0c3b08e9434371be0cfa2725c4e9a147b32869915f463cf2b49485",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-C27ADB994160229E-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-C27ADB994160229E-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-DIRECTORY-CHECKS-ACTUAL-OWNER-C1ECC8A751D8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "1424395c3d6d0cb89ec4e419cbea295d6c535d7481d846ff43ef33a213d21fb1",
       "retirement": null
     },
     {
@@ -127394,7 +128847,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-C79022F1FBD299D6-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -127411,6 +128864,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "c3d9068565d889b4c64c163e3cef63f646f946433e3ed708da565f5118069f5a",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-C79022F1FBD299D6-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-C79022F1FBD299D6-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-DUPLICATE-CASE-ALIAS-UNKNOWN-FIELDS-AND-AE366264763F-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "98f27336bda74bd28d34ffdf2d1a93e02fbf976f9120ee30fd071f5c57c22593",
       "retirement": null
     },
     {
@@ -127442,7 +128922,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-CAF7E4BA8992C0A0-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -127459,6 +128939,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "6af97073e88c35133c8ffe6767421dfb4a2dfb6c561a72bcc46b6da80412558c",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-CAF7E4BA8992C0A0-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-CAF7E4BA8992C0A0-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-FORMAL-STATE-AND-INSTALLATION-USE-TYPED-A2D08663F0F9-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "108a5067b2826ccb619a29442d637ec4f9d81a9d5cd576ae9a988f4e5ad321f8",
       "retirement": null
     },
     {
@@ -127490,7 +128997,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-CB866DC002A20C6A-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -127507,6 +129014,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "95c46fc7eb767a161b413fb36a304a3f508e350094b6c1747d2d202860690aad",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-CB866DC002A20C6A-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-CB866DC002A20C6A-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-GIT-CONTENT-POLICY-PRESERVES-PRECEDENCE-9941B006C139-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "d7d27feea48441d35e8d88324b489a11249ce1bec3617004d09ebc4e31256579",
       "retirement": null
     },
     {
@@ -127538,7 +129072,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-CD1C459C5E11D688-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -127555,6 +129089,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "18b3fe04bfad33132a815d6d8b3b8764a1347c17a54d2440c473cfece0fafa20",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-CD1C459C5E11D688-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-CD1C459C5E11D688-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-CAPABILITY-RESTRICTIONS-APPLY-EVEN-WITH-4D12F6EB1DA8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "bfb7c0726a9c4a704911b51abf601882e37dfadb83c2cd757187a10f60cd17d1",
       "retirement": null
     },
     {
@@ -127586,7 +129147,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-D8D2F9F141ED7925-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -127603,6 +129164,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "f05187440c7ac82b89648898813efd52e67140ad44d788439d6cba6210750de9",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-D8D2F9F141ED7925-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-D8D2F9F141ED7925-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-DURABLE-STATE-SURVIVES-REOPEN-AND-DOES-N-554FAFBD196F-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "0fa11299c84b0cb8f8cf99e9434ededa46357fd4e8d7ab7813e8b43731663a1c",
       "retirement": null
     },
     {
@@ -127634,7 +129222,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-F0AF41C7DFBDF26D-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -127651,6 +129239,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "4844d1b3769b4dc09d20aa48fa3ec2c2724a7b0bcfc187df14abaa09e29c5b0c",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-F0AF41C7DFBDF26D-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-F0AF41C7DFBDF26D-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-BACKEND-PRESERVES-OTHER-TENAN-A634550F6A7C-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "bef0d1190aa091b2a33a2b6453986d5731ba044fd1867cdacedc589207bf6ef9",
       "retirement": null
     },
     {
@@ -127682,7 +129297,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-FF0AD4B184D6DD85-POWER",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER"
       ],
@@ -127699,6 +129314,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "50e87cb9b206e7a71cc065c760230987966a98c5a039af6c8865fd1ad9933084",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review durable commit request retention, authenticated legacy recovery, journaled publication and maintenance activation boundaries.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-FF0AD4B184D6DD85-POWER-RECOVERY"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-FF0AD4B184D6DD85-POWER-RECOVERY",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-BACKEND-REJECTS-CROSS-TENANT-48A947B850A6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "e1861d392fc0cd9868b0e73be787047774928e5475adb5d3a7917781b82ec87a",
       "retirement": null
     },
     {

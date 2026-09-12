@@ -37,6 +37,18 @@ After a timeout, query `result --root <root> --request-id <id>` before retrying.
 A failed or recovery-required effect is not a commit. The worker's own source
 repository has a separate commit boundary; never evade it using a copied repo.
 
+For an admitted failed commit, preview `recover-commit --root <root> --workspace
+<workspace> --original-request-id <id>`. Execute only with the reviewed
+`--candidate-sha256 <hash> --yes`. This is a separate recovery result linked to
+the original intent; the old failure stays immutable. Do not substitute a fresh
+commit request, invent a missing original request, or delete seed/lock files.
+Legacy missing-request recovery verifies the candidate and complete Git state
+and refuses cases whose hook evidence cannot be attested.
+
+`maintenance_pending=true` means requests are paused for a verified kernel
+upgrade. Wait for that owner operation to finish; do not downgrade the sandbox,
+restart a different worker, or force a request through the maintenance boundary.
+
 ## Workflow state
 
 Use the application's normal frontend after its owner-published route is

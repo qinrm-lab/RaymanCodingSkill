@@ -81,6 +81,10 @@ impl Request {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Operation {
+    RecoverCommit {
+        original_request_id: String,
+        candidate_sha256: String,
+    },
     Storage {
         action: StorageAction,
     },

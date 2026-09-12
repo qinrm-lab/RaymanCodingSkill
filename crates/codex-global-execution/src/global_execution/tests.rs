@@ -1,5 +1,40 @@
 use super::*;
 
+#[test]
+fn recovery_requests_require_commit_capability_and_original_intent() {
+    let mut r = registration();
+    let mut q = request(&r);
+    q.operation = Operation::RecoverCommit {
+        original_request_id: "0".repeat(32),
+        candidate_sha256: "a".repeat(64),
+    };
+    validate_request(&q, &r, 1001).unwrap();
+    assert!(Ledger::default().accept(&q, &r, 1001).is_err());
+    let mut invalid = q.clone();
+    if let Operation::RecoverCommit {
+        original_request_id,
+        ..
+    } = &mut invalid.operation
+    {
+        *original_request_id = invalid.request_id.clone();
+    }
+    assert!(validate_request(&invalid, &r, 1001).is_err());
+    if let Operation::RecoverCommit {
+        original_request_id,
+        candidate_sha256,
+    } = &mut invalid.operation
+    {
+        *original_request_id = "../outside".into();
+        *candidate_sha256 = "bad".into();
+    }
+    assert!(validate_request(&invalid, &r, 1001).is_err());
+    r.capabilities.local_commit = false;
+    r.capabilities.added_files = false;
+    r.capabilities.deleted_files = false;
+    q.registration_sha256 = r.digest().unwrap();
+    assert!(validate_request(&q, &r, 1001).is_err());
+}
+
 pub(super) fn registration() -> Registration {
     Registration {
         schema_version: 1,

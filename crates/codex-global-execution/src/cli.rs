@@ -26,6 +26,21 @@ pub struct GlobalExecutionCmd {
 
 #[derive(Subcommand)]
 pub enum GlobalExecutionAction {
+    /// Recover one admitted commit; an execution binds the reviewed candidate bytes
+    RecoverCommit {
+        #[arg(long)]
+        root: PathBuf,
+        #[arg(long)]
+        workspace: PathBuf,
+        #[arg(long)]
+        original_request_id: String,
+        #[arg(long)]
+        candidate_sha256: Option<String>,
+        #[arg(long)]
+        yes: bool,
+        #[arg(long, default_value_t = 300)]
+        timeout_seconds: u64,
+    },
     /// Publish the compiled global entrypoint as the installation owner
     PublishSkill {
         #[arg(long)]

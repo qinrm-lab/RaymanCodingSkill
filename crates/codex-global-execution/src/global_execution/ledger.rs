@@ -134,6 +134,9 @@ impl Ledger {
             Operation::Storage { .. } => {
                 bail!("application storage uses its own file transaction handler")
             }
+            Operation::RecoverCommit { .. } => {
+                bail!("commit recovery must use its original admitted intent");
+            }
             Operation::Commit { .. } | Operation::Install { .. } => {
                 RecordedResult::RecoveryRequired
             }

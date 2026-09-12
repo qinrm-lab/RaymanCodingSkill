@@ -400,6 +400,12 @@ pub(super) fn protect_fixture_directory(
     owner_sid: &str,
     extra_ace: &str,
 ) -> Result<()> {
+    let sddl = format!("D:P(A;OICI;FA;;;{owner_sid})(A;OICI;FA;;;SY)(A;OICI;FA;;;BA){extra_ace}");
+    set_fixture_dacl(path, &sddl)
+}
+
+#[cfg(test)]
+pub(super) fn set_fixture_dacl(path: &Path, sddl: &str) -> Result<()> {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::{
         Foundation::LocalFree,
@@ -412,7 +418,6 @@ pub(super) fn protect_fixture_directory(
             PROTECTED_DACL_SECURITY_INFORMATION,
         },
     };
-    let sddl = format!("D:P(A;OICI;FA;;;{owner_sid})(A;OICI;FA;;;SY)(A;OICI;FA;;;BA){extra_ace}");
     let text: Vec<u16> = sddl.encode_utf16().chain(Some(0)).collect();
     let mut descriptor = std::ptr::null_mut();
     if unsafe {

@@ -488,6 +488,56 @@ pub fn run(json: bool, command: &GlobalExecutionCmd) -> Result<()> {
                 bail!("global execution currently requires Windows");
             }
         }
+        GlobalExecutionAction::RecoverCommit {
+            root,
+            workspace,
+            original_request_id,
+            candidate_sha256,
+            yes,
+            timeout_seconds,
+        } => {
+            #[cfg(windows)]
+            {
+                if *yes && candidate_sha256.is_none() {
+                    bail!("commit recovery execution requires the reviewed --candidate-sha256");
+                }
+                let client = global::Client::open(root)?;
+                let request = client.prepare_commit_recovery_request(
+                    workspace,
+                    original_request_id,
+                    candidate_sha256.as_deref(),
+                    chrono::Utc::now().timestamp(),
+                )?;
+                if !yes {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(
+                            &serde_json::json!({"preview":true,"executed":false,"request":request})
+                        )?
+                    );
+                } else {
+                    let enrollment = client.enrollment(workspace)?;
+                    submit_and_wait(
+                        &client,
+                        &request,
+                        &enrollment.registration,
+                        *timeout_seconds,
+                    )?;
+                }
+            }
+            #[cfg(not(windows))]
+            {
+                let _ = (
+                    root,
+                    workspace,
+                    original_request_id,
+                    candidate_sha256,
+                    yes,
+                    timeout_seconds,
+                );
+                bail!("global execution currently requires Windows");
+            }
+        }
         GlobalExecutionAction::Commit {
             root,
             workspace,

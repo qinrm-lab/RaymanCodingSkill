@@ -32,6 +32,20 @@ drift, non-ordinary files and concurrent ref/index writers fail closed.
 Fixed Git plumbing cannot execute hooks, filters, helpers or network commands
 as the desktop user. Ref/index publication is journaled and recoverable.
 
+New Git metadata files retain the publisher's owner/group while preserving the
+source access policy; publication must not demand assignment of a historical
+owner. Seed identities are durable before metadata changes and lock claims.
+Unjournaled seeds are retained and never adopted by name or hash alone; unique
+staging attempts are bounded. Individual object seeds are journaled before rename.
+
+Commit request bytes are retained before admission. Recovery is a separate,
+freshly authorized request referring to the original intent and reviewed
+candidate bytes; it never overwrites the original queue failure. A legacy
+missing-request candidate requires no unattested hook, a matching complete Git
+snapshot, exact selected/preserved paths, matching index/tree/object hashes and
+the enrolled commit identity. Its new recovery verification is not an invented
+original request. The own-worker-source commit prohibition also covers recovery.
+
 ## GLOBAL-STATE
 
 Formal state has one desktop-user writer through typed operations. Reads,
@@ -52,6 +66,10 @@ The persistent least-privilege worker task must allow battery operation and
 continue when AC power is disconnected. Installation validates both explicit
 battery settings; missing, duplicate, malformed or stopping settings fail
 closed. A healthy startup alone cannot prove this lifecycle contract.
+Kernel maintenance pauses queue consumption and startup recovery, and clients
+refuse new submissions. New code must be verified while requests remain paused
+and recovery data is pinned. Once activation may permit new-format writes,
+failure recovery moves forward; it cannot restore an older decoder over them.
 Unchanged source alone is insufficient to reuse checks affected by tools,
 environment or test scope. Progress distinguishes process liveness from
 successful execution. Completion requires actual recorded outcomes.

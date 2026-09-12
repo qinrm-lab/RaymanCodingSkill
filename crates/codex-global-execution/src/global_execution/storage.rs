@@ -124,6 +124,43 @@ impl StateStorage {
         Ok(())
     }
 
+    pub(super) fn recorded_request_by_id(
+        &self,
+        id: &str,
+        registration: &Registration,
+    ) -> Result<Option<RecordedRequest>> {
+        if !is_id(id) || registration.digest()? != self.registration_sha256 {
+            bail!("invalid admitted request lookup");
+        }
+        let _lock = state_lock::acquire_state_lock(&self.ledger)?;
+        self.snapshot_recorded_request_by_id(id, registration)
+    }
+
+    // Preview only. The worker repeats this lookup under its ledger lock.
+    pub(super) fn snapshot_recorded_request_by_id(
+        &self,
+        id: &str,
+        registration: &Registration,
+    ) -> Result<Option<RecordedRequest>> {
+        if !is_id(id) || registration.digest()? != self.registration_sha256 {
+            bail!("invalid admitted request snapshot");
+        }
+        let Some((_, envelope)) = self.read_current()? else {
+            return Ok(None);
+        };
+        let Some(record) = envelope.ledger.requests.get(id) else {
+            return Ok(None);
+        };
+        if record.registration_sha256 != self.registration_sha256
+            || record.project_id != registration.project_id
+            || record.worktree_id != registration.worktree_id
+            || !is_sha256(&record.request_sha256)
+        {
+            bail!("admitted request registration differs");
+        }
+        Ok(Some(record.clone()))
+    }
+
     fn read_current(&self) -> Result<Option<(String, Envelope)>> {
         let Some((bytes, _)) = file_io::read_optional_handle_bound_file_bounded(
             &self.ledger,

@@ -1,6 +1,7 @@
 //! Exact Git snapshot reader. It runs fixed read-only plumbing inside the
 //! single-process native boundary; it never stages, writes an object or a ref.
 use super::*;
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -15,6 +16,10 @@ pub struct CommitSnapshot {
 }
 
 enum ReadCommand<'a> {
+    Tree(&'a str),
+    ObjectType(&'a str),
+    ObjectBytes(&'a str, &'a str),
+    HashObjectBytes(&'a str),
     Head,
     Branch,
     Index,
@@ -50,6 +55,10 @@ pub struct CommitCandidate {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PublicationRecord {
+    #[serde(default = "legacy_publication_version")]
+    version: u32,
+    #[serde(default)]
+    metadata_ready: bool,
     request_sha256: String,
     registration_sha256: String,
     index_seed: String,
@@ -59,11 +68,65 @@ struct PublicationRecord {
     ref_identity: String,
     ref_digest: String,
     phase: String,
+    #[serde(default)]
+    object_seeds: BTreeMap<String, ObjectSeed>,
+    #[serde(default)]
+    object_attempts: BTreeMap<String, u8>,
+}
+
+fn legacy_publication_version() -> u32 {
+    1
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ObjectSeed {
+    name: String,
+    identity: String,
+    digest: String,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StagingAttempts {
+    request_sha256: String,
+    registration_sha256: String,
+    ids: Vec<String>,
+}
+
+fn staging_nonce() -> Result<String> {
+    let mut bytes = [0u8; 16];
+    getrandom::fill(&mut bytes).map_err(|e| anyhow::anyhow!("staging entropy unavailable: {e}"))?;
+    Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+fn publication_fault(fault: Option<&str>, point: &str) -> Result<()> {
+    if fault == Some(point) {
+        bail!("simulated publication interruption: {point}");
+    }
+    Ok(())
 }
 
 struct CandidateEnvironment<'a> {
     index: &'a Path,
     objects: &'a Path,
+}
+
+pub(super) struct LegacyRecovery<'a> {
+    pub original_id: &'a str,
+    pub original_digest: &'a str,
+    pub candidate_sha256: &'a str,
+    pub source_sha256: &'a str,
+    pub identity: &'a CommitIdentity,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LegacyAcceptance {
+    request_sha256: String,
+    registration_sha256: String,
+    candidate_sha256: String,
+    verified_source_sha256: String,
 }
 
 pub struct GitInspector<'a> {
@@ -298,6 +361,38 @@ impl<'a> GitInspector<'a> {
             args.extend(["-c".into(), format!("{key}={value}")]);
         }
         let specific: Vec<String> = match command {
+            ReadCommand::Tree(oid)
+            | ReadCommand::ObjectType(oid)
+            | ReadCommand::ObjectBytes(_, oid)
+                if !is_hex(oid, 40) && !is_hex(oid, 64) =>
+            {
+                bail!("invalid recovery object identity");
+            }
+            ReadCommand::Tree(oid) => vec![
+                "ls-tree".into(),
+                "-r".into(),
+                "-z".into(),
+                "--full-tree".into(),
+                oid.into(),
+            ],
+            ReadCommand::ObjectType(oid) => vec!["cat-file".into(), "-t".into(), oid.into()],
+            ReadCommand::ObjectBytes(kind, oid) => {
+                if !matches!(kind, "blob" | "tree" | "commit") {
+                    bail!("invalid recovery object type");
+                }
+                vec!["cat-file".into(), kind.into(), oid.into()]
+            }
+            ReadCommand::HashObjectBytes(kind) => {
+                if !matches!(kind, "blob" | "tree" | "commit") {
+                    bail!("invalid recovery hash type");
+                }
+                vec![
+                    "hash-object".into(),
+                    "-t".into(),
+                    kind.into(),
+                    "--stdin".into(),
+                ]
+            }
             ReadCommand::Head => vec!["rev-parse".into(), "--verify".into(), "HEAD".into()],
             ReadCommand::Branch => vec!["symbolic-ref".into(), "-q".into(), "HEAD".into()],
             ReadCommand::Index => vec!["ls-files".into(), "--stage".into(), "-z".into()],
@@ -789,13 +884,22 @@ impl<'a> GitInspector<'a> {
         self.publish_commit_inner(request, registration, None)
     }
 
+    #[cfg(test)]
+    pub(super) fn test_publish_cut(
+        &self,
+        request: &Request,
+        registration: &Registration,
+        point: &str,
+    ) -> Result<CommitCandidate> {
+        self.publish_commit_inner(request, registration, Some(point))
+    }
+
     fn publish_commit_inner(
         &self,
         request: &Request,
         registration: &Registration,
         fault: Option<&str>,
     ) -> Result<CommitCandidate> {
-        use super::publication::PublicationSlot;
         validate_request_structure(request, registration)?;
         let Operation::Commit {
             expected_head,
@@ -805,23 +909,67 @@ impl<'a> GitInspector<'a> {
         else {
             bail!("not a commit request");
         };
+        self.publish_bound_commit(
+            &request.request_id,
+            &request.digest()?,
+            Some((expected_head, expected_index_sha256)),
+            registration,
+            fault,
+            None,
+        )
+    }
+
+    pub(super) fn recover_legacy_prepared(
+        &self,
+        binding: LegacyRecovery<'_>,
+        registration: &Registration,
+    ) -> Result<CommitCandidate> {
+        if !is_id(binding.original_id)
+            || !is_sha256(binding.original_digest)
+            || !is_sha256(binding.candidate_sha256)
+            || !is_sha256(binding.source_sha256)
+        {
+            bail!("invalid legacy recovery binding");
+        }
+        self.publish_bound_commit(
+            binding.original_id,
+            binding.original_digest,
+            None,
+            registration,
+            None,
+            Some(&binding),
+        )
+    }
+
+    fn publish_bound_commit(
+        &self,
+        request_id: &str,
+        request_sha256: &str,
+        expected: Option<(&str, &str)>,
+        registration: &Registration,
+        fault: Option<&str>,
+        legacy: Option<&LegacyRecovery<'_>>,
+    ) -> Result<CommitCandidate> {
+        use super::publication::PublicationSlot;
         let _common_lock = crate::state_lock::acquire_state_lock(
             &self
                 .isolation
                 .join(format!("git-common-{}", registration.git_common_identity)),
         )?;
-        let directory = self
-            .isolation
-            .join(format!("candidate-{}", request.request_id));
+        let directory = self.isolation.join(format!("candidate-{}", request_id));
         let candidate: CommitCandidate =
             crate::file_io::read_json(&directory.join("candidate.json"))?
                 .ok_or_else(|| anyhow::anyhow!("verified commit candidate is missing"))?;
-        if candidate.request_sha256 != request.digest()?
+        if candidate.request_sha256 != request_sha256
             || candidate.registration_sha256 != registration.digest()?
-            || &candidate.parent != expected_head
-            || &candidate.original_index_sha256 != expected_index_sha256
+            || expected.is_some_and(|(head, index)| {
+                candidate.parent != head || candidate.original_index_sha256 != index
+            })
         {
             bail!("commit candidate binding changed");
+        }
+        if let Some(binding) = legacy {
+            self.accept_legacy_candidate(&directory, &candidate, registration, binding, true)?;
         }
         validate_relative_path(&self.binding.branch_ref)?;
         let ref_path = self.binding.common_directory.join(&self.binding.branch_ref);
@@ -857,19 +1005,52 @@ impl<'a> GitInspector<'a> {
             if crate::hash::sha256_bytes(&index_bytes) != candidate.candidate_index_sha256 {
                 bail!("candidate index changed");
             }
-            let index_seed = format!(".rayman-index-{}", request.request_id);
-            let ref_seed = format!(".rayman-ref-{}", request.request_id);
+            let attempts_path = directory.join("staging-attempts.json");
+            let mut attempts: StagingAttempts = crate::file_io::read_json(&attempts_path)?
+                .unwrap_or(StagingAttempts {
+                    request_sha256: request_sha256.into(),
+                    registration_sha256: registration.digest()?,
+                    ids: vec![],
+                });
+            if attempts.request_sha256 != request_sha256
+                || attempts.registration_sha256 != registration.digest()?
+                || attempts.ids.len() >= 8
+                || attempts.ids.iter().any(|id| !is_id(id))
+                || attempts
+                    .ids
+                    .iter()
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .len()
+                    != attempts.ids.len()
+            {
+                bail!(
+                    "staging attempt binding invalid or retry limit reached; retain orphan evidence"
+                );
+            }
+            let attempt = staging_nonce()?;
+            if attempts.ids.contains(&attempt) {
+                bail!("staging attempt identity collision");
+            }
+            attempts.ids.push(attempt.clone());
+            crate::file_io::write_json(&attempts_path, &attempts)?;
+            publication_fault(fault, "attempt_recorded")?;
+            // A seed whose identity was never journaled is retained, never
+            // adopted by its name or contents on a later attempt.
+            let index_seed = format!(".rayman-index-{}-{attempt}", request_id);
+            let ref_seed = format!(".rayman-ref-{}-{attempt}", request_id);
             let index_slot =
                 PublicationSlot::create(&self.binding.git_directory, &index_seed, &index_bytes)?;
+            publication_fault(fault, "index_seed_created")?;
             let ref_slot = PublicationSlot::create(
                 ref_parent,
                 &ref_seed,
                 format!("{}\n", candidate.commit).as_bytes(),
             )?;
-            index_slot.preserve_security_from(&self.binding.git_directory.join("index"))?;
-            ref_slot.preserve_security_from(&ref_path)?;
+            publication_fault(fault, "ref_seed_created")?;
             let record = PublicationRecord {
-                request_sha256: request.digest()?,
+                version: 2,
+                metadata_ready: false,
+                request_sha256: request_sha256.into(),
                 registration_sha256: registration.digest()?,
                 index_seed,
                 index_identity: index_slot.identity().into(),
@@ -878,19 +1059,75 @@ impl<'a> GitInspector<'a> {
                 ref_identity: ref_slot.identity().into(),
                 ref_digest: ref_slot.digest().into(),
                 phase: "seeds_recorded".into(),
+                object_seeds: BTreeMap::new(),
+                object_attempts: BTreeMap::new(),
             };
             crate::file_io::write_json(&journal_path, &record)?;
+            publication_fault(fault, "seeds_recorded")?;
             drop(index_slot);
             drop(ref_slot);
             record
         };
-        if record.request_sha256 != request.digest()?
+        if !matches!(record.version, 1 | 2)
+            || record.request_sha256 != request_sha256
             || record.registration_sha256 != registration.digest()?
             || record.index_digest != candidate.candidate_index_sha256
             || record.ref_digest
                 != crate::hash::sha256_bytes(format!("{}\n", candidate.commit).as_bytes())
         {
             bail!("publication journal binding changed");
+        }
+        if !matches!(
+            record.phase.as_str(),
+            "seeds_recorded" | "objects_published" | "ref_published" | "complete"
+        ) || record
+            .object_attempts
+            .iter()
+            .any(|(key, count)| !candidate.objects.contains_key(key) || !(1..=8).contains(count))
+            || record.object_seeds.iter().any(|(key, seed)| {
+                candidate.objects.get(key) != Some(&seed.digest)
+                    || !record.object_attempts.contains_key(key)
+                    || !is_sha256(&seed.identity)
+                    || !seed
+                        .name
+                        .starts_with(&format!(".rayman-object-{}-", request_id))
+            })
+        {
+            bail!("invalid publication phase or object staging record");
+        }
+        if record.version == 1 {
+            // v1 persisted its journal only after both metadata copies.
+            record.version = 2;
+            record.metadata_ready = true;
+            crate::file_io::write_json(&journal_path, &record)?;
+        }
+        if record.version == 2 && !record.metadata_ready {
+            if record.phase != "seeds_recorded" {
+                bail!("publication advanced without verified metadata");
+            }
+            let index = PublicationSlot::resume(
+                &self.binding.git_directory,
+                &record.index_seed,
+                &record.index_identity,
+                &record.index_digest,
+            )?;
+            let reference = PublicationSlot::resume(
+                ref_parent,
+                &record.ref_seed,
+                &record.ref_identity,
+                &record.ref_digest,
+            )?;
+            index
+                .preserve_access_from(&self.binding.git_directory.join("index"))
+                .context("preserve Git index access policy")?;
+            publication_fault(fault, "index_metadata_prepared")?;
+            reference
+                .preserve_access_from(&ref_path)
+                .context("preserve Git ref access policy")?;
+            publication_fault(fault, "ref_metadata_prepared")?;
+            record.metadata_ready = true;
+            crate::file_io::write_json(&journal_path, &record)?;
+            publication_fault(fault, "metadata_recorded")?;
         }
         if record.phase == "complete" {
             let current = self.capture(registration)?;
@@ -939,6 +1176,7 @@ impl<'a> GitInspector<'a> {
                     &record.index_digest,
                 )?)
             };
+        publication_fault(fault, "index_lock_claimed")?;
         let mut ref_slot = if current_head == candidate.commit {
             None
         } else {
@@ -950,6 +1188,7 @@ impl<'a> GitInspector<'a> {
                 &record.ref_digest,
             )?)
         };
+        publication_fault(fault, "ref_lock_claimed")?;
         if ref_slot.is_some() {
             let current = self.capture(registration)?;
             if current.head != candidate.parent
@@ -994,10 +1233,34 @@ impl<'a> GitInspector<'a> {
                     bail!("existing object differs; preserve evidence");
                 }
             } else {
-                let seed = format!(".rayman-object-{}-{name}", request.request_id);
-                let mut slot = PublicationSlot::create(&destination, &seed, &bytes)?;
+                let mut slot = if let Some(seed) = record.object_seeds.get(relative) {
+                    PublicationSlot::resume(&destination, &seed.name, &seed.identity, &seed.digest)?
+                } else {
+                    let count = record.object_attempts.get(relative).copied().unwrap_or(0);
+                    if count >= 8 {
+                        bail!("object staging retry limit reached; retain orphan evidence");
+                    }
+                    record.object_attempts.insert(relative.clone(), count + 1);
+                    crate::file_io::write_json(&journal_path, &record)?;
+                    publication_fault(fault, "object_attempt_recorded")?;
+                    let seed = format!(".rayman-object-{}-{}-{name}", request_id, staging_nonce()?);
+                    let slot = PublicationSlot::create(&destination, &seed, &bytes)?;
+                    publication_fault(fault, "object_seed_created")?;
+                    record.object_seeds.insert(
+                        relative.clone(),
+                        ObjectSeed {
+                            name: seed,
+                            identity: slot.identity().into(),
+                            digest: slot.digest().into(),
+                        },
+                    );
+                    crate::file_io::write_json(&journal_path, &record)?;
+                    publication_fault(fault, "object_seed_recorded")?;
+                    slot
+                };
                 slot.rename(name, false)?;
             }
+            publication_fault(fault, "object_published")?;
         }
         record.phase = "objects_published".into();
         crate::file_io::write_json(&journal_path, &record)?;
@@ -1017,6 +1280,7 @@ impl<'a> GitInspector<'a> {
             slot.rename("index", true)?;
             drop(slot);
         }
+        publication_fault(fault, "index_published")?;
         let terminal = self.capture(registration)?;
         if terminal.head != candidate.commit
             || terminal.index_sha256 != candidate.candidate_index_sha256
@@ -1033,7 +1297,239 @@ impl<'a> GitInspector<'a> {
         }
         record.phase = "complete".into();
         crate::file_io::write_json(&journal_path, &record)?;
+        publication_fault(fault, "complete")?;
         Ok(candidate)
+    }
+
+    pub(super) fn preview_legacy_candidate(
+        &self,
+        directory: &Path,
+        candidate: &CommitCandidate,
+        registration: &Registration,
+        binding: &LegacyRecovery<'_>,
+    ) -> Result<()> {
+        self.accept_legacy_candidate(directory, candidate, registration, binding, false)
+    }
+
+    fn accept_legacy_candidate(
+        &self,
+        directory: &Path,
+        candidate: &CommitCandidate,
+        registration: &Registration,
+        binding: &LegacyRecovery<'_>,
+        persist_acceptance: bool,
+    ) -> Result<()> {
+        if self.binding.hook_policy.is_some() {
+            bail!("legacy recovery without the original request cannot attest a hook receipt");
+        }
+        let protected = super::native::SourceDirectory::open(directory)?;
+        let raw = protected.read_file(Path::new("candidate.json"), 64 * 1024 * 1024)?;
+        if crate::hash::sha256_bytes(&raw) != binding.candidate_sha256
+            || crate::source_fingerprint(&self.workspace)? != binding.source_sha256
+            || !is_hex(&candidate.commit, registration.object_id_length)
+            || !is_hex(&candidate.tree, registration.object_id_length)
+            || !is_hex(&candidate.parent, registration.object_id_length)
+            || crate::hash::sha256_bytes(
+                &protected.read_file(Path::new("index"), 64 * 1024 * 1024)?,
+            ) != candidate.candidate_index_sha256
+            || crate::hash::sha256_bytes(
+                &protected.read_file(Path::new("index-before"), 64 * 1024 * 1024)?,
+            ) != candidate.original_index_sha256
+        {
+            bail!("legacy candidate/source/index evidence differs");
+        }
+        let acceptance_path = directory.join("legacy-recovery.json");
+        if let Some(accepted) = crate::file_io::read_json::<LegacyAcceptance>(&acceptance_path)? {
+            if accepted.request_sha256 != binding.original_digest
+                || accepted.registration_sha256 != registration.digest()?
+                || accepted.candidate_sha256 != binding.candidate_sha256
+                || accepted.verified_source_sha256 != binding.source_sha256
+            {
+                bail!("legacy recovery acceptance differs");
+            }
+            return Ok(());
+        }
+        if directory.join("publication.json").try_exists()? {
+            bail!("legacy publication journal has no verified recovery acceptance");
+        }
+        let snapshot = self.capture(registration)?;
+        if snapshot.head != candidate.parent
+            || snapshot.index_sha256 != candidate.original_index_sha256
+            || crate::hash::sha256_bytes(&serde_json::to_vec(&snapshot.changes)?)
+                != candidate.changes_sha256
+            || candidate.paths.is_empty()
+            || candidate.paths.len() > 1024
+            || candidate.paths.windows(2).any(|pair| pair[0] >= pair[1])
+        {
+            bail!("legacy recovery requires the original complete Git snapshot");
+        }
+        let mut expected = parse_entries(
+            &self.run(ReadCommand::HeadTree, &[])?,
+            true,
+            registration.object_id_length,
+        )?;
+        let mut folded = std::collections::BTreeSet::new();
+        for path in &candidate.paths {
+            validate_relative_path(path)?;
+            if !folded.insert(path.to_lowercase()) {
+                bail!("legacy selected paths alias each other");
+            }
+            let change = snapshot
+                .changes
+                .iter()
+                .find(|change| &change.path == path)
+                .ok_or_else(|| {
+                    anyhow::anyhow!("legacy selected path is absent from the snapshot")
+                })?;
+            change.validate(registration)?;
+            match &change.after {
+                Some(after) => {
+                    expected.insert(path.clone(), (after.mode, after.git_blob_oid.clone()));
+                }
+                None => {
+                    expected.remove(path);
+                }
+            }
+        }
+        let preserved: Vec<_> = snapshot
+            .changes
+            .iter()
+            .filter(|change| candidate.paths.binary_search(&change.path).is_err())
+            .collect();
+        if preserved
+            .iter()
+            .map(|change| change.path.clone())
+            .collect::<Vec<_>>()
+            != candidate.preserved_paths
+            || crate::hash::sha256_bytes(&serde_json::to_vec(&preserved)?)
+                != candidate.preserved_changes_sha256
+        {
+            bail!("legacy preserved changes differ");
+        }
+        let index = directory.join("index");
+        let objects = directory.join("objects");
+        let environment = CandidateEnvironment {
+            index: &index,
+            objects: &objects,
+        };
+        let entries = parse_entries(
+            &self.run_in(ReadCommand::Index, &[], Some(&environment))?,
+            false,
+            registration.object_id_length,
+        )?;
+        let tree = parse_entries(
+            &self.run_in(ReadCommand::Tree(&candidate.tree), &[], Some(&environment))?,
+            true,
+            registration.object_id_length,
+        )?;
+        if entries != expected || tree != expected {
+            bail!("legacy tree/index contains changes outside the selected paths");
+        }
+        let mut oids =
+            std::collections::BTreeSet::from([candidate.commit.clone(), candidate.tree.clone()]);
+        for (relative, digest) in &candidate.objects {
+            let Some((prefix, name)) = relative.split_once('/') else {
+                bail!("invalid legacy object path");
+            };
+            if !is_hex(prefix, 2)
+                || !is_hex(name, registration.object_id_length - 2)
+                || !is_sha256(digest)
+            {
+                bail!("invalid legacy object binding");
+            }
+            let parent = super::native::SourceDirectory::open(&objects.join(prefix))?;
+            if crate::hash::sha256_bytes(&parent.read_file(Path::new(name), 64 * 1024 * 1024)?)
+                != *digest
+            {
+                bail!("legacy object bytes differ");
+            }
+            oids.insert(format!("{prefix}{name}"));
+        }
+        let mut commit = None;
+        for oid in oids {
+            let kind = String::from_utf8(self.run_in(
+                ReadCommand::ObjectType(&oid),
+                &[],
+                Some(&environment),
+            )?)?
+            .trim()
+            .to_owned();
+            let bytes = self.run_in(
+                ReadCommand::ObjectBytes(&kind, &oid),
+                &[],
+                Some(&environment),
+            )?;
+            let actual = String::from_utf8(self.run_in(
+                ReadCommand::HashObjectBytes(&kind),
+                &bytes,
+                Some(&environment),
+            )?)?;
+            if actual.trim() != oid {
+                bail!("legacy object name/content hash differs");
+            }
+            if oid == candidate.commit {
+                if kind != "commit" {
+                    bail!("legacy commit object has the wrong type");
+                }
+                commit = Some(bytes);
+            }
+        }
+        let commit =
+            String::from_utf8(commit.ok_or_else(|| anyhow::anyhow!("legacy commit missing"))?)?;
+        let (header, message) = commit
+            .split_once("\n\n")
+            .ok_or_else(|| anyhow::anyhow!("invalid legacy commit header"))?;
+        let headers: Vec<_> = header.lines().collect();
+        let author = format!(
+            "author {} <{}> ",
+            binding.identity.name, binding.identity.email
+        );
+        let committer = format!(
+            "committer {} <{}> ",
+            binding.identity.name, binding.identity.email
+        );
+        if headers.len() != 4
+            || headers[0] != format!("tree {}", candidate.tree)
+            || headers[1] != format!("parent {}", candidate.parent)
+            || !headers[2].starts_with(&author)
+            || !headers[3].starts_with(&committer)
+            || headers[2].strip_prefix(&author) != headers[3].strip_prefix(&committer)
+        {
+            bail!("legacy commit parent/tree/identity differs");
+        }
+        let timestamp = headers[2].strip_prefix(&author).unwrap();
+        if !timestamp
+            .strip_suffix(" +0000")
+            .is_some_and(|text| text.parse::<i64>().is_ok())
+        {
+            bail!("invalid legacy commit timestamp");
+        }
+        let message = message
+            .strip_suffix('\n')
+            .ok_or_else(|| anyhow::anyhow!("invalid legacy commit message ending"))?;
+        if message.is_empty()
+            || message.trim() != message
+            || message.chars().count() > 200
+            || message.chars().any(char::is_control)
+        {
+            bail!("invalid legacy commit message");
+        }
+        if crate::source_fingerprint(&self.workspace)? != binding.source_sha256 {
+            bail!("legacy source changed during verification");
+        }
+        // This records a NEW recovery verification, not a reconstructed old Request.
+        if persist_acceptance {
+            crate::file_io::write_json(
+                &acceptance_path,
+                &LegacyAcceptance {
+                    request_sha256: binding.original_digest.into(),
+                    registration_sha256: registration.digest()?,
+                    candidate_sha256: binding.candidate_sha256.into(),
+                    verified_source_sha256: binding.source_sha256.into(),
+                },
+            )?;
+        }
+        Ok(())
     }
 
     pub fn capture(&self, registration: &Registration) -> Result<CommitSnapshot> {
@@ -1197,6 +1693,340 @@ fn parse_entries(
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn with_modify_only_commit_fixture(
+        check: impl FnOnce(&GitInspector<'_>, &Request, &Registration, &CommitCandidate, &Path),
+    ) {
+        let repo = tempfile::tempdir().unwrap();
+        let trusted = tempfile::tempdir().unwrap();
+        let sid = crate::execution_context::execution_context_probe()
+            .principal_sid
+            .unwrap();
+        super::super::native::protect_fixture_directory(trusted.path(), &sid, "").unwrap();
+        let isolation = ProtectedDirectory::open(trusted.path(), &sid).unwrap();
+        let program = PathBuf::from("C:/Program Files/Git/mingw64/bin/git.exe");
+        let run = |args: &[&str]| {
+            let output = std::process::Command::new(&program)
+                .args(args)
+                .current_dir(repo.path())
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        run(&["init", "-b", "main"]);
+        run(&["config", "user.name", "Fixture"]);
+        run(&["config", "user.email", "fixture@example.invalid"]);
+        std::fs::write(repo.path().join(".gitattributes"), b"* text=auto eol=lf\n").unwrap();
+        std::fs::write(repo.path().join("selected.txt"), b"old\n").unwrap();
+        std::fs::write(repo.path().join("preserved.txt"), b"old\n").unwrap();
+        run(&["add", "."]);
+        run(&["-c", "commit.gpgsign=false", "commit", "-m", "fixture"]);
+        std::fs::write(repo.path().join("selected.txt"), b"selected change\r\n").unwrap();
+        std::fs::write(repo.path().join("preserved.txt"), b"unrelated change\r\n").unwrap();
+        let gitdir = repo.path().join(".git");
+        let ref_parent = gitdir.join("refs/heads");
+        // Fresh seeds inherit Modify, while the original files carry an
+        // explicit protected DACL. This forces metadata preservation instead
+        // of the already-equal fast path, without impersonating another SID.
+        for parent in [&gitdir, &ref_parent] {
+            super::super::native::set_fixture_dacl(
+                parent,
+                &format!("D:P(A;OICI;0x1301bf;;;{sid})"),
+            )
+            .unwrap();
+        }
+        for file in [gitdir.join("index"), ref_parent.join("main")] {
+            super::super::native::set_fixture_dacl(&file, &format!("D:P(A;;0x1301bf;;;{sid})"))
+                .unwrap();
+        }
+        let mut registration = super::super::tests::registration();
+        registration.owner_sid = sid;
+        registration.root_identity = super::super::native::SourceDirectory::open(repo.path())
+            .unwrap()
+            .identity()
+            .into();
+        registration.git_common_identity = super::super::native::SourceDirectory::open(&gitdir)
+            .unwrap()
+            .identity()
+            .into();
+        let binding = GitBinding {
+            content_policy: GitContentPolicy::capture(&program, repo.path()).unwrap(),
+            hook_policy: GitHookPolicy::capture(&program, repo.path()).unwrap(),
+            executable_sha256: crate::hash::sha256_file(&program).unwrap(),
+            executable: program,
+            git_directory: gitdir.clone(),
+            common_directory: gitdir.clone(),
+            branch_ref: "refs/heads/main".into(),
+            config_sha256: crate::hash::sha256_file(&gitdir.join("config")).unwrap(),
+        };
+        let git = GitInspector::open(repo.path(), &binding, &registration, &isolation).unwrap();
+        let snapshot = git.capture(&registration).unwrap();
+        let mut request = super::super::tests::request(&registration);
+        request.source_sha256 = crate::source_fingerprint(repo.path()).unwrap();
+        request.operation = Operation::Commit {
+            expected_head: snapshot.head,
+            expected_index_sha256: snapshot.index_sha256,
+            message: "metadata policy fixture".into(),
+            changes: snapshot
+                .changes
+                .into_iter()
+                .filter(|x| x.path == "selected.txt")
+                .collect(),
+            hook_receipt: None,
+        };
+        let candidate = git
+            .prepare_commit(
+                &request,
+                &registration,
+                1000,
+                "Fixture",
+                "fixture@example.invalid",
+            )
+            .unwrap();
+        check(&git, &request, &registration, &candidate, repo.path());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn git_publication_preserves_access_under_modify_only_metadata() {
+        with_modify_only_commit_fixture(|git, request, registration, candidate, repo| {
+            let published = git.publish_commit(request, registration, 1000);
+            assert!(
+                published.is_ok(),
+                "Modify-only metadata publication failed: {published:?}"
+            );
+            let after = git.capture(registration).unwrap();
+            assert_eq!(after.head, candidate.commit);
+            assert_eq!(after.index_sha256, candidate.candidate_index_sha256);
+            assert_eq!(candidate.paths, vec!["selected.txt"]);
+            assert_eq!(
+                after
+                    .changes
+                    .iter()
+                    .map(|x| x.path.as_str())
+                    .collect::<Vec<_>>(),
+                vec!["preserved.txt"]
+            );
+            assert_eq!(
+                std::fs::read(repo.join("selected.txt")).unwrap(),
+                b"selected change\r\n"
+            );
+            assert_eq!(
+                std::fs::read(repo.join("preserved.txt")).unwrap(),
+                b"unrelated change\r\n"
+            );
+        });
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn git_publication_recovers_seed_metadata_object_and_ref_interruptions() {
+        for point in [
+            "attempt_recorded",
+            "index_seed_created",
+            "ref_seed_created",
+            "seeds_recorded",
+            "index_metadata_prepared",
+            "ref_metadata_prepared",
+            "metadata_recorded",
+            "index_lock_claimed",
+            "ref_lock_claimed",
+            "object_attempt_recorded",
+            "object_seed_created",
+            "object_seed_recorded",
+            "object_published",
+            "objects_published",
+            "ref_published",
+            "index_published",
+            "complete",
+        ] {
+            with_modify_only_commit_fixture(|git, request, registration, candidate, repo| {
+                let result = git.publish_commit_inner(request, registration, Some(point));
+                assert!(result.is_err(), "fault point was not reached: {point}");
+                let mut orphans = Vec::new();
+                if matches!(
+                    point,
+                    "index_seed_created" | "ref_seed_created" | "object_seed_created"
+                ) {
+                    let mut parents = vec![repo.join(".git"), repo.join(".git/refs/heads")];
+                    for entry in std::fs::read_dir(repo.join(".git/objects")).unwrap() {
+                        let entry = entry.unwrap();
+                        if entry.file_type().unwrap().is_dir()
+                            && entry.file_name().to_string_lossy().len() == 2
+                        {
+                            parents.push(entry.path());
+                        }
+                    }
+                    for parent in parents {
+                        for entry in std::fs::read_dir(parent).unwrap() {
+                            let entry = entry.unwrap();
+                            if entry.file_name().to_string_lossy().starts_with(".rayman-") {
+                                let path = entry.path();
+                                let identity = super::super::publication::identity(
+                                    &std::fs::File::open(&path).unwrap(),
+                                    &path,
+                                )
+                                .unwrap();
+                                orphans.push((
+                                    path.clone(),
+                                    identity,
+                                    std::fs::read(path).unwrap(),
+                                ));
+                            }
+                        }
+                    }
+                    assert!(!orphans.is_empty(), "no unjournaled seed at {point}");
+                }
+                let recovered = git
+                    .recover_admitted_commit(request, registration)
+                    .unwrap_or_else(|e| panic!("recovery failed at {point}: {e:#}"));
+                assert_eq!(recovered.commit, candidate.commit);
+                let after = git.capture(registration).unwrap();
+                assert_eq!(after.head, candidate.commit);
+                assert_eq!(after.index_sha256, candidate.candidate_index_sha256);
+                assert_eq!(
+                    after
+                        .changes
+                        .iter()
+                        .map(|x| x.path.as_str())
+                        .collect::<Vec<_>>(),
+                    vec!["preserved.txt"]
+                );
+                assert!(!repo.join(".git/index.lock").exists());
+                assert!(!repo.join(".git/refs/heads/main.lock").exists());
+                assert_eq!(
+                    std::fs::read(repo.join("selected.txt")).unwrap(),
+                    b"selected change\r\n"
+                );
+                assert_eq!(
+                    std::fs::read(repo.join("preserved.txt")).unwrap(),
+                    b"unrelated change\r\n"
+                );
+                for (path, identity, bytes) in orphans {
+                    assert_eq!(
+                        std::fs::read(&path).unwrap(),
+                        bytes,
+                        "unknown seed changed at {point}"
+                    );
+                    assert_eq!(
+                        super::super::publication::identity(
+                            &std::fs::File::open(&path).unwrap(),
+                            &path
+                        )
+                        .unwrap(),
+                        identity,
+                        "unknown seed adopted at {point}"
+                    );
+                }
+            });
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn git_recovery_refuses_same_bytes_with_a_replaced_seed_identity() {
+        with_modify_only_commit_fixture(|git, request, registration, candidate, repo| {
+            assert!(
+                git.publish_commit_inner(request, registration, Some("seeds_recorded"))
+                    .is_err()
+            );
+            let journal = git
+                .isolation
+                .join(format!("candidate-{}/publication.json", request.request_id));
+            let record: PublicationRecord = crate::file_io::read_json(&journal).unwrap().unwrap();
+            let seed = repo.join(".git").join(record.index_seed);
+            let bytes = std::fs::read(&seed).unwrap();
+            std::fs::remove_file(&seed).unwrap();
+            std::fs::write(&seed, bytes).unwrap();
+            let replacement =
+                super::super::publication::identity(&std::fs::File::open(&seed).unwrap(), &seed)
+                    .unwrap();
+            assert_ne!(replacement, record.index_identity);
+            assert!(git.recover_admitted_commit(request, registration).is_err());
+            let current = git.capture(registration).unwrap();
+            assert_eq!(current.head, candidate.parent);
+            assert_eq!(current.index_sha256, candidate.original_index_sha256);
+        });
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn git_recovery_preserves_a_foreign_standard_lock() {
+        with_modify_only_commit_fixture(|git, request, registration, candidate, repo| {
+            let lock = repo.join(".git/index.lock");
+            std::fs::write(&lock, b"another Git writer owns this lock").unwrap();
+            assert!(git.publish_commit(request, registration, 1000).is_err());
+            assert_eq!(
+                std::fs::read(&lock).unwrap(),
+                b"another Git writer owns this lock"
+            );
+            assert_eq!(git.capture(registration).unwrap().head, candidate.parent);
+            // The fixture's other writer releases its own lock. The publisher
+            // must never perform this deletion on its behalf.
+            std::fs::remove_file(lock).unwrap();
+            assert_eq!(
+                git.recover_admitted_commit(request, registration)
+                    .unwrap()
+                    .commit,
+                candidate.commit
+            );
+        });
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn git_recovery_reads_legacy_post_metadata_journals() {
+        with_modify_only_commit_fixture(|git, request, registration, candidate, _| {
+            assert!(
+                git.publish_commit_inner(request, registration, Some("metadata_recorded"))
+                    .is_err()
+            );
+            let journal = git
+                .isolation
+                .join(format!("candidate-{}/publication.json", request.request_id));
+            let mut legacy: serde_json::Value =
+                crate::file_io::read_json(&journal).unwrap().unwrap();
+            for key in [
+                "version",
+                "metadata_ready",
+                "object_seeds",
+                "object_attempts",
+            ] {
+                legacy.as_object_mut().unwrap().remove(key);
+            }
+            crate::file_io::write_json(&journal, &legacy).unwrap();
+            assert_eq!(
+                git.recover_admitted_commit(request, registration)
+                    .unwrap()
+                    .commit,
+                candidate.commit
+            );
+        });
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn git_recovery_bounds_unjournaled_staging_attempts() {
+        with_modify_only_commit_fixture(|git, request, registration, candidate, _| {
+            for _ in 0..8 {
+                assert!(
+                    git.publish_commit_inner(request, registration, Some("index_seed_created"))
+                        .is_err()
+                );
+            }
+            let error = git
+                .recover_admitted_commit(request, registration)
+                .unwrap_err();
+            assert!(error.to_string().contains("retry limit reached"));
+            let current = git.capture(registration).unwrap();
+            assert_eq!(current.head, candidate.parent);
+            assert_eq!(current.index_sha256, candidate.original_index_sha256);
+        });
+    }
+
     #[cfg(windows)]
     #[test]
     fn git_tree_and_index_parsers_reject_conflicts_aliases_and_nonfiles() {

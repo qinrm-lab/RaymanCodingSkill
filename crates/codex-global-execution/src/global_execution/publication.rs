@@ -2,6 +2,7 @@
 //! before its identity is journaled; claiming a standard Git lock is a later
 //! no-replace rename, so a crash cannot create an unidentifiable blocking lock.
 use super::*;
+use anyhow::Context;
 use std::os::windows::{fs::OpenOptionsExt, io::AsRawHandle};
 use std::{fs::File, io::Write, path::Path};
 use windows_sys::Win32::Storage::FileSystem::{
@@ -108,9 +109,8 @@ impl PublicationSlot {
         self.copy_security_from(source, true)
     }
 
-    // Routing markers are new owner-created files, not replacements for the
-    // legacy database. Carry its access policy without assigning its historical
-    // owner or primary group to a new object.
+    // Preserve access policy on a new publisher-created object without
+    // assigning the source object's historical owner or primary group.
     pub(super) fn preserve_access_from(&self, source: &Path) -> Result<String> {
         self.copy_security_from(source, false)
     }
@@ -164,9 +164,9 @@ impl PublicationSlot {
         if !preserve_identity {
             let sid = crate::execution_context::execution_context_probe()
                 .principal_sid
-                .ok_or_else(|| anyhow::anyhow!("routing marker owner unavailable"))?;
+                .ok_or_else(|| anyhow::anyhow!("publication owner unavailable"))?;
             if original_target["owner"] != sid {
-                bail!("routing marker staging file is not owned by the current publisher");
+                bail!("publication staging file is not owned by the current publisher");
             }
         }
         let projection = publication_security_target(
@@ -184,7 +184,12 @@ impl PublicationSlot {
             .access_mode(READ_CONTROL | WRITE_DAC | if preserve_identity { WRITE_OWNER } else { 0 })
             .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
             .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
-            .open(self.parent.path().join(&self.name))?;
+            .open(self.parent.path().join(&self.name))
+            .context(if preserve_identity {
+                "open publication metadata handle with WRITE_OWNER"
+            } else {
+                "open publication metadata handle without WRITE_OWNER"
+            })?;
         if identity(&metadata_handle, &self.parent.path().join(&self.name))? != self.identity {
             bail!("publication metadata target changed");
         }

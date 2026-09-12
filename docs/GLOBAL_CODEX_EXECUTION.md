@@ -50,6 +50,25 @@ Malformed, unreadable and conflicting queued packets are reported separately;
 completed results remain immutable. Queue consumption checks the open file
 handle through deletion so a replacement packet is preserved.
 
+Commits retain the original request bytes before ledger admission. A separate
+`recover-commit` request binds the original request ID and a reviewed candidate
+SHA-256. Recovery updates only the original admitted effect after verifying its
+publication, while preserving the original failed queue result. The client
+preview performs the legacy candidate checks without creating a recovery
+acceptance or publication journal.
+
+For older missing-request records, recovery requires the original complete Git
+change snapshot, exact candidate index/tree and object identities, preserved
+unselected changes, and the enrolled author/committer. Unattested hooks are
+refused. A new recovery acceptance explicitly records the fresh verification;
+the missing old request is never fabricated. Unknown seed files are preserved.
+
+Kernel upgrades use a maintenance marker to pause queued operations and startup
+recovery. The paused worker remains observable but is not reported as ready for
+requests. The owner upgrade verifies the new tuple and pinned data before
+activation. After activation may have written a newer state format, recovery
+keeps the new decoder and resumes forward instead of rolling binaries back.
+
 Client result polling tolerates only Windows sharing/lock violations while a
 published result's final handle is closing. It reads the same request result
 within the original timeout and never resubmits an operation. Persistent locks
