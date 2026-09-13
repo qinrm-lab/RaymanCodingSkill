@@ -22,11 +22,11 @@
     ]
   },
   "revision": {
-    "generation": 33,
+    "generation": 34,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 32,
-      "sha256": "9c1ab5eef22ea2df24a07d55d79c79378eeaca22c1ce38a417d408b56b18237d"
+      "generation": 33,
+      "sha256": "cb558b1fe2243fcf92ec095b613152389481d05efcd103fc42db42724cae11f3"
     }
   },
   "tests": [
@@ -118,6 +118,25 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-GLOBAL-RECOVERY-31E0734B9F006F39AC5B",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "TEST-GLOBAL-RECOVERY-31E0734B9F006F39AC5B-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/git/tests.rs::git_recovery_reads_legacy_post_metadata_journals",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/git/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "git_recovery_reads_legacy_post_metadata_journals",
+      "selector_sha256": "850c3c60b2a05a8dab403eff9517a0a8a13e1e011c08671cb767d259842dc085",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-RECOVERY-31E0734B9F006F39AC5B-TESTMODULE",
       "status": "active",
       "retirement": null
     },
@@ -144,6 +163,25 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "TEST-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/worker/tests.rs::maintenance_preserves_queue_and_defers_startup_recovery",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/worker/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "maintenance_preserves_queue_and_defers_startup_recovery",
+      "selector_sha256": "f0484decd3f339eaf1a2ef90eb4f40972b35a509748802b4a98e700f62123d53",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E-TESTMODULE",
       "status": "active",
       "retirement": null
     },
@@ -157,6 +195,25 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "TEST-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/git/tests.rs::git_publication_preserves_access_under_modify_only_metadata",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/git/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "git_publication_preserves_access_under_modify_only_metadata",
+      "selector_sha256": "8cc9c9f4efc4faf5d6b1fe43f5fdae1c0a24874c56effa051533980ed8d70533",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD-TESTMODULE",
       "status": "active",
       "retirement": null
     },
@@ -170,6 +227,25 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "TEST-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/worker/tests.rs::commit_request_archive_preserves_original_bytes_and_refuses_substitution",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/worker/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "commit_request_archive_preserves_original_bytes_and_refuses_substitution",
+      "selector_sha256": "d4dbe3da4c06cdcbd637ff2e642b17643391a96dc0e23ff3ef587b9454eecd2e",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99-TESTMODULE",
       "status": "active",
       "retirement": null
     },
@@ -183,6 +259,25 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-GLOBAL-RECOVERY-B9F4BD26F591EC648C11",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "TEST-GLOBAL-RECOVERY-B9F4BD26F591EC648C11-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/git/tests.rs::git_recovery_bounds_unjournaled_staging_attempts",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/git/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "git_recovery_bounds_unjournaled_staging_attempts",
+      "selector_sha256": "5127c8fdc3312e654af63507013d2cdf226c593c3e14634384913f511e570be1",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-RECOVERY-B9F4BD26F591EC648C11-TESTMODULE",
       "status": "active",
       "retirement": null
     },
@@ -196,6 +291,25 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "TEST-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/worker/tests.rs::recovery_queue_preserves_failed_result_and_uses_retained_original_request",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/worker/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "recovery_queue_preserves_failed_result_and_uses_retained_original_request",
+      "selector_sha256": "76b40ef7187892f63af4d66616e1c848cc774aed2f7e581a3b792f3015d23321",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B-TESTMODULE",
       "status": "active",
       "retirement": null
     },
@@ -209,6 +323,25 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "TEST-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/git/tests.rs::git_publication_recovers_seed_metadata_object_and_ref_interruptions",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/git/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "git_publication_recovers_seed_metadata_object_and_ref_interruptions",
+      "selector_sha256": "4ed2af565d0369add67b35932bc2a7afbe629c2ee1e59bef90e7be54915de42f",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358-TESTMODULE",
       "status": "active",
       "retirement": null
     },
@@ -222,6 +355,25 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "TEST-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/git/tests.rs::git_recovery_refuses_same_bytes_with_a_replaced_seed_identity",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/git/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "git_recovery_refuses_same_bytes_with_a_replaced_seed_identity",
+      "selector_sha256": "97b6ba9e804ddb1518d3993055ef67e89de8afe70a6ccb70c2b7647c6b09c55c",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50-TESTMODULE",
       "status": "active",
       "retirement": null
     },
@@ -235,6 +387,25 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "TEST-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/worker/tests.rs::legacy_queued_recovery_verifies_candidate_without_fabricating_request",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/worker/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "legacy_queued_recovery_verifies_candidate_without_fabricating_request",
+      "selector_sha256": "b837e6e0e7b7011026b9a181a31cccf41342c1113ddb6c205ea90654f4098654",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A-TESTMODULE",
       "status": "active",
       "retirement": null
     },
@@ -248,6 +419,25 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "TEST-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/git/tests.rs::git_recovery_preserves_a_foreign_standard_lock",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/git/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "git_recovery_preserves_a_foreign_standard_lock",
+      "selector_sha256": "aa356aa4211ec2974ca426b936bc57629363d88b51704163c3fba47240e857ca",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA-TESTMODULE",
       "status": "active",
       "retirement": null
     },
@@ -300,6 +490,25 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-GLOBAL-WORKTREE-32B5450EAB54D7CEE13D",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "TEST-GLOBAL-WORKTREE-32B5450EAB54D7CEE13D-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/worker/tests.rs::linked_worktree_queue_requires_owner_policy_and_preserves_parent_authority",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/worker/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "linked_worktree_queue_requires_owner_policy_and_preserves_parent_authority",
+      "selector_sha256": "96992e874ef6ab4268c625cbd865397454bf630eb27c5c3377241db5dc4bff81",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-WORKTREE-32B5450EAB54D7CEE13D-TESTMODULE",
       "status": "active",
       "retirement": null
     },
@@ -326,6 +535,25 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-GLOBAL-WORKTREE-CEA776B5991F3B1620CB",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "TEST-GLOBAL-WORKTREE-CEA776B5991F3B1620CB-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/git/tests.rs::worktree_metadata_rejects_git_execution_and_include_settings",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/git/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "worktree_metadata_rejects_git_execution_and_include_settings",
+      "selector_sha256": "3d6e82d0f261e9951929369f46bf1fbd164fd1d0e23edcb963690313566baa40",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-WORKTREE-CEA776B5991F3B1620CB-TESTMODULE",
       "status": "active",
       "retirement": null
     },
@@ -352,6 +580,25 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-GLOBAL-WORKTREE-F336D0AA238D6ADC31B6",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "TEST-GLOBAL-WORKTREE-F336D0AA238D6ADC31B6-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/git/tests.rs::detached_linked_worktree_commit_preserves_parent_and_recovers_interruption",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/git/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "detached_linked_worktree_commit_preserves_parent_and_recovers_interruption",
+      "selector_sha256": "06c1ee000053d54b74dd66e55331f049796753113dfc0b1a26089497bf3073b3",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-WORKTREE-F336D0AA238D6ADC31B6-TESTMODULE",
       "status": "active",
       "retirement": null
     },
@@ -5952,6 +6199,25 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-RUST-GIT-TREE-AND-INDEX-PARSERS-REJECT-CONFLI-1D2297C844F0-GLOBAL-20260909",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "TEST-RUST-GIT-TREE-AND-INDEX-PARSERS-REJECT-CONFLI-1D2297C844F0-GLOBAL-20260909-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/git/tests.rs::git_tree_and_index_parsers_reject_conflicts_aliases_and_nonfiles",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/git/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "git_tree_and_index_parsers_reject_conflicts_aliases_and_nonfiles",
+      "selector_sha256": "3d949a6bf84a1eca98e58232e0346f04f55127032f0c411101bee9037469d9f2",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-GIT-TREE-AND-INDEX-PARSERS-REJECT-CONFLI-1D2297C844F0-GLOBAL-20260909-TESTMODULE",
       "status": "active",
       "retirement": null
     },
@@ -9789,6 +10055,25 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-RUST-PROTECTED-WORKER-COMMITS-EXACT-REGISTERE-7347D4F302A6-GLOBAL-20260909",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "TEST-RUST-PROTECTED-WORKER-COMMITS-EXACT-REGISTERE-7347D4F302A6-GLOBAL-20260909-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/worker/tests.rs::protected_worker_commits_exact_registered_source_and_replays_after_expiry",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/worker/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "protected_worker_commits_exact_registered_source_and_replays_after_expiry",
+      "selector_sha256": "f88af01b22eb9884ed39062c8c1865d1c7c80a3615ec760290ec624e667a90eb",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-PROTECTED-WORKER-COMMITS-EXACT-REGISTERE-7347D4F302A6-GLOBAL-20260909-TESTMODULE",
       "status": "active",
       "retirement": null
     },
@@ -9802,6 +10087,25 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-RUST-PROTECTED-WORKER-PROCESSES-ENROLLED-STAT-AF219789C484-GLOBAL-20260909",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "TEST-RUST-PROTECTED-WORKER-PROCESSES-ENROLLED-STAT-AF219789C484-GLOBAL-20260909-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/worker/tests.rs::protected_worker_processes_enrolled_state_and_refuses_forged_registration",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/worker/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "protected_worker_processes_enrolled_state_and_refuses_forged_registration",
+      "selector_sha256": "7dfbf1863e1d8d482ee10c64eaeea0e866450a5b598032ce0ad49767b0416b4d",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-PROTECTED-WORKER-PROCESSES-ENROLLED-STAT-AF219789C484-GLOBAL-20260909-TESTMODULE",
       "status": "active",
       "retirement": null
     },
@@ -10484,6 +10788,25 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-RUST-REAL-GIT-SNAPSHOT-PRESERVES-SOURCE-AND-I-7209D78A5D5C-GLOBAL-20260909-ENROLL-R2",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "TEST-RUST-REAL-GIT-SNAPSHOT-PRESERVES-SOURCE-AND-I-7209D78A5D5C-GLOBAL-20260909-ENROLL-R2-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/git/tests.rs::real_git_snapshot_preserves_source_and_index_with_added_crlf_and_deleted_files",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/git/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "real_git_snapshot_preserves_source_and_index_with_added_crlf_and_deleted_files",
+      "selector_sha256": "ffffb1fe9d0aa3796f1f40e0f160ccb26c75110a5b26720bc43f58c9e09bccf6",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-REAL-GIT-SNAPSHOT-PRESERVES-SOURCE-AND-I-7209D78A5D5C-GLOBAL-20260909-ENROLL-R2-TESTMODULE",
       "status": "active",
       "retirement": null
     },

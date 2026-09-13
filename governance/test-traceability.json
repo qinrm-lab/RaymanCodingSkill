@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 36,
+    "generation": 37,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 35,
-      "sha256": "7d9015cb40b38e725ee1346d24eaa95462013738e239444baeca7d56e34455e6"
+      "generation": 36,
+      "sha256": "5c6aec51a20191508981842ef66031567da1490bf0fd07e59bd593bdb4c25c20"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "cb558b1fe2243fcf92ec095b613152389481d05efcd103fc42db42724cae11f3"
+    "sha256": "66425c1527f3101fc5851e4035039a7042ca18d4cace2dbced36fe043969a7c3"
   },
   "sources": [
     {
@@ -128221,7 +128221,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-31E0734B9F006F39AC5B-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -128238,6 +128238,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "bf44b228542e1894838f828dd6793307f7a3ba4453f3367d8152468581f1f822",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-31E0734B9F006F39AC5B-WORKTREE-DISKREBIND-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-31E0734B9F006F39AC5B-WORKTREE-DISKREBIND-TESTMODULE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-31E0734B9F006F39AC5B-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "6612051c4f426c9e78c899224fe836fa99379948689125a0acb02f616d0549ef",
       "retirement": null
     },
     {
@@ -128371,7 +128398,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -128388,6 +128415,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "17f0dd387a0d466802ce374523c2b4893d31f3373629b36550acc28e43333306",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E-WORKTREE-DISKREBIND-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E-WORKTREE-DISKREBIND-TESTMODULE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "8bf3f9b444fd9aa06e6ec68d2c6fdaf662b9e36b8609da7fd8f44356b2952c71",
       "retirement": null
     },
     {
@@ -128446,7 +128500,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -128463,6 +128517,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "47cd8e04b7def9b58d4bff5972cebb456be24718ab43c02c29a15e29bbe48463",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD-WORKTREE-DISKREBIND-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD-WORKTREE-DISKREBIND-TESTMODULE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "4565bc75a45ddfa5d7a77ed730c2c2d8ceac9b6674e04a03b0fdf06a4991339b",
       "retirement": null
     },
     {
@@ -128521,7 +128602,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -128538,6 +128619,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "60e34a0bad7ae63ebe05d9800512d8a865c67b3aebfc1fbb8166d7c536f48ed0",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99-WORKTREE-DISKREBIND-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99-WORKTREE-DISKREBIND-TESTMODULE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "45e3b58b86a4f6ebe75d4ac970421a56fa4b363bf1ee7f6244633095b12f7292",
       "retirement": null
     },
     {
@@ -128596,7 +128704,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-B9F4BD26F591EC648C11-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -128613,6 +128721,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "595fc7c57bee058e96606c2772b320820853647c9ed224c19a0c92cb371609f3",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-B9F4BD26F591EC648C11-WORKTREE-DISKREBIND-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-B9F4BD26F591EC648C11-WORKTREE-DISKREBIND-TESTMODULE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-B9F4BD26F591EC648C11-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "162a3d8462c1bcc66fe1eb0e100b3cdddefa880f177e125c3574b1a313dea1ce",
       "retirement": null
     },
     {
@@ -128671,7 +128806,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -128688,6 +128823,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "02aa0b3e4ab5359635ea987d67526bb516344202a584f107101f7553754e8e7d",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B-WORKTREE-DISKREBIND-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B-WORKTREE-DISKREBIND-TESTMODULE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "1dc4352c702d6aa56bc1394143a118d1189830e388916170a12af0cf6bb3ad96",
       "retirement": null
     },
     {
@@ -128746,7 +128908,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -128763,6 +128925,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "d281a8b045125fc245146d49cdff0cffcff5a23433b6fd5326d4a80a5d9506f1",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358-WORKTREE-DISKREBIND-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358-WORKTREE-DISKREBIND-TESTMODULE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "1f5bea21eb43cc10e2b6124351db75adba6134eaa2e3da06abaf8a1897852232",
       "retirement": null
     },
     {
@@ -128821,7 +129010,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -128838,6 +129027,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "5737fa38c3bd8e0c24f75dcc8b3d9b529e547202e4110c0530e5cf8b977ee51e",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50-WORKTREE-DISKREBIND-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50-WORKTREE-DISKREBIND-TESTMODULE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "f2481c73fce4b4942ae5fa9fb4c8714c248a0799cefdbf48d78b14238e091caa",
       "retirement": null
     },
     {
@@ -128896,7 +129112,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -128913,6 +129129,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "2e8c40cc42b0be9e7cc6f199948462192ec5518cb854f8c4862b6bc29614e832",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A-WORKTREE-DISKREBIND-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A-WORKTREE-DISKREBIND-TESTMODULE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "9ec505d6a9076325589120450075db5bb0945629b4bf82009b8b8686fc82b1b7",
       "retirement": null
     },
     {
@@ -128971,7 +129214,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -128988,6 +129231,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "7c4af75be917239a052c2f819ec89d76cac84e257c0995bc46b79023acc27d81",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA-WORKTREE-DISKREBIND-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA-WORKTREE-DISKREBIND-TESTMODULE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "8dbd17a434265f45f31d6b76f3ef9b568df12abe73e9b5bd44ee6d76af9ba1e4",
       "retirement": null
     },
     {
@@ -129616,7 +129886,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-14FEF5F84CDAF1ED-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -129633,6 +129903,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "3ad275483104370329327bf5506989cc9dfa79af2b419255fe1006e27e3322bf",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-14FEF5F84CDAF1ED-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-14FEF5F84CDAF1ED-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-GIT-TREE-AND-INDEX-PARSERS-REJECT-CONFLI-1D2297C844F0-GLOBAL-20260909-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "44c226121032964bd37bb7b0752de21960fb3e86d8ff633dbebb0023dc6c0e55",
       "retirement": null
     },
     {
@@ -131680,7 +131977,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8B9E25B328749D46-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -131697,6 +131994,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "54261e479780e413c43b3c77b1d9a8e2089b6e568eb381d2735865185d63ddcb",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8B9E25B328749D46-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8B9E25B328749D46-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-WORKER-COMMITS-EXACT-REGISTERE-7347D4F302A6-GLOBAL-20260909-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "49d4efd393e87842211b8fa67fa12a051a75586c158a694444b6c365819bd58d",
       "retirement": null
     },
     {
@@ -131836,7 +132160,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -131853,6 +132177,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "a62da432c5ff2f1d95551d691153410aee57b98580382ff973d714c2f85a6665",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-REAL-GIT-SNAPSHOT-PRESERVES-SOURCE-AND-I-7209D78A5D5C-GLOBAL-20260909-ENROLL-R2-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "b227a5f69f150f6fbe53eef6ecb9824d763343c2250c3930593f69408d4ea7ef",
       "retirement": null
     },
     {
@@ -132223,7 +132574,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-9B7C80D244870C80-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -132240,6 +132591,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "eb721881e72bf7cddca788bfa4465def7d7391de1c44f6a6d5f8607281e1e0cf",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-9B7C80D244870C80-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-9B7C80D244870C80-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-WORKER-PROCESSES-ENROLLED-STAT-AF219789C484-GLOBAL-20260909-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "ee859daf3479e5f760b84440a60d1eba7223dfc9c7054541add27a1e29fdf739",
       "retirement": null
     },
     {
@@ -133915,7 +134293,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-WORKTREE-32B5450EAB54D7CEE13D-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -133932,6 +134310,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "3addd426ee71cbad31963dcf852b14d27bcb35a816437b997eae279e8abe0d00",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "BIND-GLOBAL-WORKTREE-32B5450EAB54D7CEE13D-DISKREBIND-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-32B5450EAB54D7CEE13D-DISKREBIND-TESTMODULE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-32B5450EAB54D7CEE13D-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "5a80ba2881f5438edb1a1fdd8ed026603076840bed2db78dd4d7c47f97b14394",
       "retirement": null
     },
     {
@@ -134011,7 +134416,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-WORKTREE-CEA776B5991F3B1620CB-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -134028,6 +134433,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "5337f5a271fe52340cfb43f6c54cb1bf74ea2641f38d28481e3f76ddff4b958d",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "BIND-GLOBAL-WORKTREE-CEA776B5991F3B1620CB-DISKREBIND-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-CEA776B5991F3B1620CB-DISKREBIND-TESTMODULE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-CEA776B5991F3B1620CB-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "764d9676efac4aab90c192746d4661f57d438aa5f11ed88637dde75719046cc9",
       "retirement": null
     },
     {
@@ -134107,7 +134539,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-WORKTREE-F336D0AA238D6ADC31B6-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -134124,6 +134556,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "83e35036612908df97f1ddbf3302fb84081f383b32ef6cb212c325faf4a7af97",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Move existing private Git and worker tests into child modules, preserving production bytes and test behavior while meeting strict source length policy.",
+        "replaced_by": [
+          "BIND-GLOBAL-WORKTREE-F336D0AA238D6ADC31B6-DISKREBIND-TESTMODULE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-F336D0AA238D6ADC31B6-DISKREBIND-TESTMODULE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-F336D0AA238D6ADC31B6-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "e31fae17508456e25cc8665e1d487513be7ca840164e4b282a7d1c7f931b1b64",
       "retirement": null
     },
     {
