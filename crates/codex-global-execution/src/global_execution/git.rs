@@ -162,11 +162,7 @@ impl<'a> GitInspector<'a> {
         let root = super::native::SourceDirectory::open(workspace)?;
         let git = super::native::SourceDirectory::open(&binding.git_directory)?;
         let common = super::native::SourceDirectory::open(&binding.common_directory)?;
-        if root.identity() != registration.root_identity
-            || common.identity() != registration.git_common_identity
-        {
-            bail!("Git project/common directory identity changed");
-        }
+        super::relocation::check_git(isolation, registration, &root, &git, &common)?;
         let marker = workspace.join(".git");
         let marker_metadata = std::fs::symlink_metadata(&marker)?;
         if crate::file_io::is_link_or_reparse(&marker_metadata) {

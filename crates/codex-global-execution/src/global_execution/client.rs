@@ -196,7 +196,8 @@ impl Client {
         workspace: &Path,
         now: i64,
     ) -> Result<(Request, Enrollment)> {
-        let (workspace, identity, common) = super::worktrees::linked_common_identity(workspace)?;
+        let (workspace, identity, common) =
+            super::worktrees::linked_common_identity(&self.root, workspace)?;
         let mut selected = None;
         let mut count = 0;
         for entry in std::fs::read_dir(self.root.path())? {
@@ -853,9 +854,7 @@ impl Client {
                     bail!("workspace has ambiguous global registrations");
                 }
                 let pin = super::native::SourceDirectory::open(&workspace)?;
-                if pin.identity() != enrollment.registration.root_identity {
-                    bail!("registered workspace was replaced");
-                }
+                super::relocation::check_root(&self.root, &enrollment.registration, &pin)?;
                 found = Some(enrollment);
             }
         }

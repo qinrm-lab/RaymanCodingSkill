@@ -64,6 +64,12 @@ restart a different worker, or force a request through the maintenance boundary.
 
 ## Workflow state
 
+After an explicitly confirmed disk file-copy replacement, a same-path identity
+refusal needs the installed client's `rebind-workspace` preview and exact
+owner-confirmed publication during acknowledged maintenance. Keep logical
+registrations and histories; never delete old registrations or use ordinary
+enrollment to evade the refusal. This physical binding grants no new capability.
+
 Use the application's normal frontend after its owner-published route is
 active. Rayman and SaveStatus keep application validation and collection in
 the sandbox and send typed persistence operations to the owner. Do not hand

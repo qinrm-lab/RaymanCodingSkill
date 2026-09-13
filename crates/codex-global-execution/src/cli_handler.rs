@@ -5,6 +5,28 @@ use std::{fs::File, io::Read, path::Path};
 
 pub fn run(json: bool, command: &GlobalExecutionCmd) -> Result<()> {
     match &command.action {
+        GlobalExecutionAction::RebindWorkspace {
+            root,
+            workspace,
+            expected_sha256,
+            yes,
+        } => {
+            #[cfg(windows)]
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&global::rebind_workspace(
+                    root,
+                    workspace,
+                    expected_sha256.as_deref(),
+                    *yes
+                )?)?
+            );
+            #[cfg(not(windows))]
+            {
+                let _ = (root, workspace, expected_sha256, yes);
+                bail!("physical rebinding requires Windows");
+            }
+        }
         GlobalExecutionAction::InstallWorktreeHook { root, yes } => {
             #[cfg(windows)]
             println!(

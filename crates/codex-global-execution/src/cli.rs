@@ -26,6 +26,17 @@ pub struct GlobalExecutionCmd {
 
 #[derive(Subcommand)]
 pub enum GlobalExecutionAction {
+    /// Preview or owner-confirm a copied workspace's physical identity, retaining its logical history
+    RebindWorkspace {
+        #[arg(long)]
+        root: PathBuf,
+        #[arg(long)]
+        workspace: PathBuf,
+        #[arg(long)]
+        expected_sha256: Option<String>,
+        #[arg(long)]
+        yes: bool,
+    },
     /// Add the fixed SessionStart handler, preserving other global hooks
     InstallWorktreeHook {
         #[arg(long)]

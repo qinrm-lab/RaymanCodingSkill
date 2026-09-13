@@ -103,6 +103,15 @@ successful execution. Completion requires actual recorded outcomes.
 
 ## GLOBAL-ROLLOUT
 
+An owner-confirmed same-path disk copy may replace physical directory identities
+without rewriting logical registrations, policy, ledger evidence or checkpoint
+history. A protected rebind binds the exact previous enrollment and reviewed
+source to current workspace/private/common identities. Publication requires the
+registered owner, installed client, exact preview digest and acknowledged empty
+maintenance queue. Replaced paths, changed Git policy, forged records and stale
+previews fail closed. Linked children retain their original logical common
+repository; physical migration cannot bypass the worker-source commit exclusion.
+
 Keep the Windows elevated sandbox. Prepare and test the installation package
 before requesting a required host registration. Do not repair broad ACLs,
 replace Codex databases or silently enroll other projects. Migration must

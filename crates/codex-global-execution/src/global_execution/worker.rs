@@ -482,9 +482,7 @@ impl Worker {
             return reply(result, transition.replayed);
         }
         let source = super::native::SourceDirectory::open(&enrollment.workspace)?;
-        if source.identity() != enrollment.registration.root_identity {
-            bail!("enrolled workspace directory identity changed");
-        }
+        super::relocation::check_root(&self.root, &enrollment.registration, &source)?;
         self.stage("hash_source")?;
         let before = crate::source_fingerprint(source.path())?;
         if before != request.source_sha256 {

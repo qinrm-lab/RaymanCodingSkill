@@ -22,11 +22,11 @@
     ]
   },
   "revision": {
-    "generation": 32,
+    "generation": 33,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 31,
-      "sha256": "f4b468abe65687ec96327f7c1382332cad1a7c5662784be40c629bc0f64f1864"
+      "generation": 32,
+      "sha256": "9c1ab5eef22ea2df24a07d55d79c79378eeaca22c1ce38a417d408b56b18237d"
     }
   },
   "tests": [
@@ -40,6 +40,19 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/relocation.rs::disk_copy_rebinding_preserves_registration_and_rejects_stale_or_replaced_sources",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/relocation.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "disk_copy_rebinding_preserves_registration_and_rejects_stale_or_replaced_sources",
+      "selector_sha256": "d0bf8542f1ecc3a50646cf51d0bf1303aaec9efa2b2bddcbad15bb6e18bfe428",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-DISKREBIND-7285FB4A63BE7852E5A2",
       "status": "active",
       "retirement": null
     },

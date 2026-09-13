@@ -409,6 +409,9 @@ pub(super) fn verify_member(
             .ok_or_else(|| anyhow::anyhow!("member Git binding missing"))?
             .git_directory,
     )?;
+    if super::relocation::rebound_enrollment(root, source.path())?.is_some() {
+        return Ok(());
+    }
     let expected =
         crate::hash::sha256_bytes(format!("{}:{}", source.identity(), git.identity()).as_bytes());
     if child.registration.worktree_id != expected[..32] {
@@ -550,7 +553,10 @@ pub fn authorize_worktrees(
     Ok(policy)
 }
 
-pub(super) fn linked_common_identity(workspace: &Path) -> Result<(PathBuf, String, String)> {
+pub(super) fn linked_common_identity(
+    protected: &ProtectedDirectory,
+    workspace: &Path,
+) -> Result<(PathBuf, String, String)> {
     let root = native::SourceDirectory::open(workspace)?;
     let marker = root.path().join(".git");
     let bytes = root.read_file(Path::new(".git"), 4096)?;
@@ -574,7 +580,7 @@ pub(super) fn linked_common_identity(workspace: &Path) -> Result<(PathBuf, Strin
     Ok((
         root.path().into(),
         root.identity().into(),
-        common.identity().into(),
+        super::relocation::logical_common_identity(protected, &common)?,
     ))
 }
 
@@ -599,7 +605,7 @@ pub(super) fn enrollment_candidate(
     {
         bail!("worktree is outside its approved root or its identity changed");
     }
-    let (_, observed_root, observed_common) = linked_common_identity(workspace)?;
+    let (_, observed_root, observed_common) = linked_common_identity(root, workspace)?;
     if observed_root != root_identity || observed_common != anchor.registration.git_common_identity
     {
         bail!("worktree is not linked to the owner-approved repository");

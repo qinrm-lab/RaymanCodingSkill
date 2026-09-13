@@ -195,6 +195,33 @@ pub fn enroll(
     }
     let _lock = crate::state_lock::acquire_state_lock(&protected.path().join("registry"))?;
     let source = super::native::SourceDirectory::open(workspace)?;
+    let rebound = super::relocation::rebound_enrollment(&protected, source.path())?;
+    if let Some(existing) = &rebound {
+        if existing.registration.capabilities.formal_state != formal_state
+            || existing.registration.capabilities.local_commit != commit.is_some()
+        {
+            bail!("physical rebinding cannot change enrolled capabilities");
+        }
+        match (commit, &existing.git, &existing.commit_identity) {
+            (Some((program, name, email)), Some(binding), Some(identity)) => {
+                if std::fs::canonicalize(program)? != binding.executable
+                    || name != identity.name
+                    || email != identity.email
+                    || serde_json::to_vec(&GitContentPolicy::capture(program, source.path())?)?
+                        != serde_json::to_vec(&binding.content_policy)?
+                    || serde_json::to_vec(&GitHookPolicy::capture(program, source.path())?)?
+                        != serde_json::to_vec(&binding.hook_policy)?
+                {
+                    bail!("rebound enrollment differs from its unchanged original policy");
+                }
+                GitInspector::open(source.path(), binding, &existing.registration, &protected)?
+                    .capture(&existing.registration)?;
+            }
+            (None, None, None) => {}
+            _ => bail!("rebound enrollment commit binding differs"),
+        }
+        return Ok(existing.clone());
+    }
     let marker = source.path().join(".git");
     let (git, common, branch) = if marker.try_exists()? {
         let path = if std::fs::symlink_metadata(&marker)?.is_dir() {
@@ -226,11 +253,15 @@ pub fn enroll(
         (None, None, None)
     };
     let common_identity = if let Some(common) = &common {
-        super::native::SourceDirectory::open(common)?
-            .identity()
-            .to_owned()
+        super::relocation::logical_common_identity(
+            &protected,
+            &super::native::SourceDirectory::open(common)?,
+        )?
     } else {
-        source.identity().into()
+        rebound
+            .as_ref()
+            .map(|e| e.registration.git_common_identity.clone())
+            .unwrap_or_else(|| source.identity().into())
     };
     let worktree_identity = if let Some(git) = &git {
         super::native::SourceDirectory::open(git)?
@@ -245,10 +276,19 @@ pub fn enroll(
             .to_owned();
     let mut registration = Registration {
         schema_version: 1,
-        project_id: common_identity[..32].into(),
-        worktree_id,
+        project_id: rebound
+            .as_ref()
+            .map(|e| e.registration.project_id.clone())
+            .unwrap_or_else(|| common_identity[..32].into()),
+        worktree_id: rebound
+            .as_ref()
+            .map(|e| e.registration.worktree_id.clone())
+            .unwrap_or(worktree_id),
         owner_sid: sid,
-        root_identity: source.identity().into(),
+        root_identity: rebound
+            .as_ref()
+            .map(|e| e.registration.root_identity.clone())
+            .unwrap_or_else(|| source.identity().into()),
         git_common_identity: common_identity,
         object_id_length: 40,
         policy_sha256: crate::hash::sha256_bytes(b"rayman-global-execution-policy-v1"),

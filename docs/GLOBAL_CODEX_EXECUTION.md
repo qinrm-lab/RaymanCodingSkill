@@ -219,6 +219,30 @@ and the elevated sandbox. The real config was inspected but not modified.
 
 ## Codex workspace ACL recovery
 
+### Replacement disks and file-copy recovery
+
+Copying a workspace to a replacement disk can preserve its bytes and path while
+changing the volume and directory identities. A `registered workspace was
+replaced` refusal must not be bypassed by deleting registrations or re-enrolling
+the same path as a new project. Preserve the live files and protected history.
+
+`rebind-workspace --root <backend> --workspace <exact-path>` produces a read-only
+plan for one existing registration. After the registered desktop owner verifies
+the copy, the installed client accepts `--expected-sha256 <plan-hash> --yes` only
+with a fresh acknowledged maintenance heartbeat, an empty queue and no pending
+installation. Changed preview bytes or physical identities require a fresh plan.
+The protected physical binding preserves original project/worktree IDs, policy,
+capabilities, registration bytes, ledger replay records and checkpoint rows.
+Existing records are retained at unique siblings during a subsequent migration.
+Maintenance stays active until the owner verifies the real application routes.
+
+This command does not install a new kernel, move paths, refresh changed Git
+configuration, broaden an allowed-worktree root, repair registrar trust or grant
+new capabilities. A second physical replacement is rejected again. Older clients
+do not understand these bindings; complete the verified kernel upgrade before
+publication. Include the worker's recorded source repository in the explicit
+migration so its logical source-commit prohibition continues to apply.
+
 Codex protects a writable workspace's `.git` directory during sandbox setup.
 If an older sandbox directly created that directory, its owner can be the
 sandbox principal. A later Desktop refresh then cannot add the protection ACE,

@@ -13,7 +13,11 @@ pub mod checkpoint_store;
 mod enrollment;
 pub use enrollment::*;
 #[cfg(windows)]
+mod relocation;
+#[cfg(windows)]
 mod worktrees;
+#[cfg(windows)]
+pub use relocation::rebind_workspace;
 #[cfg(windows)]
 pub use worktrees::{WorktreePolicy, authorize_worktrees, install_worktree_hook};
 #[cfg(windows)]

@@ -117,9 +117,7 @@ impl ApplicationState {
         self.leases.retain(|_, lease| lease.expires > now);
         let registration = &enrollment.registration;
         let source = super::native::SourceDirectory::open(&enrollment.workspace)?;
-        if source.identity() != registration.root_identity {
-            bail!("application workspace identity changed");
-        }
+        super::relocation::check_root(root, registration, &source)?;
         match action {
             StorageAction::CheckpointApply {
                 lease_id,

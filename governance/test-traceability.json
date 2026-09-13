@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 35,
+    "generation": 36,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 34,
-      "sha256": "44e19e4d5237b88a6f4698781ce32f6760792acb6d37e416f938f47d9a85d411"
+      "generation": 35,
+      "sha256": "7d9015cb40b38e725ee1346d24eaa95462013738e239444baeca7d56e34455e6"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "9c1ab5eef22ea2df24a07d55d79c79378eeaca22c1ce38a417d408b56b18237d"
+    "sha256": "cb558b1fe2243fcf92ec095b613152389481d05efcd103fc42db42724cae11f3"
   },
   "sources": [
     {
@@ -382,11 +382,27 @@
     },
     {
       "source_id": "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "kind": "internal_contract",
       "title": "Global Codex fixed-capability execution contract",
       "path": "governance/sources/global-codex-execution.md",
       "sha256": "16e5383be17c0d5617780487eea597707bae4f8e4d613ae8e4f68c4b666f18b3",
+      "valid_until": "2027-09-09",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "source_id": "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "kind": "internal_contract",
+      "title": "Global Codex fixed-capability execution contract",
+      "path": "governance/sources/global-codex-execution.md",
+      "sha256": "c205ecb03ffe96f69e9d6269527f3ef940085208c9d55da70154cf1331ecc529",
       "valid_until": "2027-09-09",
       "retirement": null
     },
@@ -4507,8 +4523,26 @@
     },
     {
       "link_id": "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE",
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_id": "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND",
       "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
       "relation": "defines",
       "review": {
@@ -122418,7 +122452,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -122435,6 +122469,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "368a8e461ff2d176ca05cd0c9337da2a3450f209db526da6b7f073cf884d6bf1",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "da8e8abe4236868d84811d4e21192e953737b72373d5058989366edd1a7ea716",
       "retirement": null
     },
     {
@@ -123819,6 +123880,27 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "cf2e63d491cf87a562ae55f3d660a099223433d7347fe80c601ebfd5cf82141a",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-DISKREBIND-7285FB4A63BE7852E5A2",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-DISKREBIND-7285FB4A63BE7852E5A2"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "a631f895f56cc99b41ae50608caecfced72a56f86960b141331bf6efc4240e08",
       "retirement": null
     },
     {
@@ -126258,7 +126340,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-GIT-IMAGE-PATH-20260912-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -126275,6 +126357,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "10cb84df2ddf3b2f20b1a9477fbc3514820d50873d620b875219d616381e06e5",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-GIT-IMAGE-PATH-20260912-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-GIT-IMAGE-PATH-20260912-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-GIT-IMAGE-PATH-20260912"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "1c666bf1f65d57e74fe6ee3349a98e0642b159e9b46e4ef236fdd172364ac544",
       "retirement": null
     },
     {
@@ -126360,7 +126469,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-HOOK-OWNER-TRUST-20260911-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -126377,6 +126486,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "74e4a5fa1e4ba9432007dda3aee70f69ee88a16a017d893a5ecfc153632c7c3b",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-HOOK-OWNER-TRUST-20260911-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-HOOK-OWNER-TRUST-20260911-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-HOOK-OWNER-TRUST-20260911"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "9421de5913a06a8274abb472a8f9029978138878862340c75cec7676e964b25f",
       "retirement": null
     },
     {
@@ -126462,7 +126598,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-317A6BB8D5401F11-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -126479,6 +126615,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "e1100bcb5a11312c1ec193d31d0826019911e32c722f619c395f8bdc737a4fab",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-317A6BB8D5401F11-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-317A6BB8D5401F11-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-KERNEL-ROLLS-BACK-FAILURE-AND-REFUS-2D86C853579B"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "69813810864be181a88f9bc5ff729e92e04f3bdc4b07ae3a62e16ad798e586d4",
       "retirement": null
     },
     {
@@ -126564,7 +126727,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-40C32CD7E9809BE3-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -126581,6 +126744,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "f2d29fccc4b510948beb14b6f8cd2b28780dce8e74b4a357fbf4294d9da2fc1e",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-40C32CD7E9809BE3-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-40C32CD7E9809BE3-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-KERNEL-PUBLISHES-EXACT-FILES-AND-RE-115B6AE2F819"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "bcaea99f725df88f7e5fe414f0cf73b7906d3b6bd1587e55ad98742f038396ba",
       "retirement": null
     },
     {
@@ -126666,7 +126856,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-7FB4C693DA187D47-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -126683,6 +126873,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "4e8e056f0c05ab8acdebb233d94dd9e8f64569b1c0e04d2adf110feae64db815",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-7FB4C693DA187D47-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-7FB4C693DA187D47-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-WORKER-DISPATCH-AND-RESTART-RECONCI-20B23FB21FB6"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "68b9136148d34089c3945bf17cf2f4e4bfbe2c5eb08bf4356c467f00cc31c97e",
       "retirement": null
     },
     {
@@ -126768,7 +126985,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-97F43A91A81AD55F-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -126785,6 +127002,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "54776ec065521cca7e9b18a8766b5d7482a33a1afaee0b1ad19f6e0aaa54d600",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-97F43A91A81AD55F-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-97F43A91A81AD55F-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-CRASH-RECOVERY-NEVER-CLAIMS-ROLLBAC-D99CB30A0C3B"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "169e29f139ecbf828ebfe06d6691e7bee97777c6ce3fc3fec2bc72735a822170",
       "retirement": null
     },
     {
@@ -126870,7 +127114,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-AB943ED2B6A98F15-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -126887,6 +127131,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "be3c9a555741cc482503633b95c333950f332f5ba9b185129f205ab48be07609",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-AB943ED2B6A98F15-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-AB943ED2B6A98F15-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-PENDING-INTENT-BLOCKS-OTHER-PUBLICA-B9B5DFDD4956"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "4af068c53d107a20996aa5aed611b51193471a782e571a066428c68bf5293d94",
       "retirement": null
     },
     {
@@ -126972,7 +127243,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-B438D756A765861D-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -126989,6 +127260,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "54110f4c4ce778d6d5a06ce585105e5a46595f46f467b759ec14ba3e03c877c7",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-B438D756A765861D-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-B438D756A765861D-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-BUNDLE-REJECTS-UNREGISTERED-PATHS-V-E68C99B92537"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "a5467597652994b4137719667fad2717dea9e2b7f4c5834138f60aa16c189a0f",
       "retirement": null
     },
     {
@@ -127074,7 +127372,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-BD678F984719CAE3-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -127091,6 +127389,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "4a1603224004b37e0d926e86c1005e40f467c93fc55ed66a50c9e783778186ff",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-BD678F984719CAE3-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-BD678F984719CAE3-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-GLOBAL-SKILL-PUBLICATION-IS-IDEMPOTENT-AND-PRESE-BC93A64317EC"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "5e63711802b17c84c8b3bac217d23e1e0ab0ea32ce147ca0f1c90243045df225",
       "retirement": null
     },
     {
@@ -127203,7 +127528,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-563CDEDE5B59E458-CP1-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -127220,6 +127545,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "29745a1893301742243bce3fd28f6736a4fbb5c8d02fa69451bfe293c949055f",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-563CDEDE5B59E458-CP1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-563CDEDE5B59E458-CP1-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-4DC44102236A-GLOBAL-20260909-CP1"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-ENROLL-GLOBAL-CODEX-PROJECTS-CP1",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "53e0e6c82f14baba0463f9d8f3b551d72a65406ee57d89a7ce866ee52b09ffc9",
       "retirement": null
     },
     {
@@ -127305,7 +127657,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-5BE8CDDBF80D3213-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -127322,6 +127674,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "5ed1baa4549c970ddbdaccb9bc5e6f7751619a557e00f96f8aa4c6348fd19b14",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-5BE8CDDBF80D3213-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-5BE8CDDBF80D3213-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-9865501D815A-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-CONFIGURE-GLOBAL-CODEX-EXECUTION",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "8705b4d34ff3ac5c47c2078c032b71cf3f87d0aeb126f07acbdd3801ca4239bf",
       "retirement": null
     },
     {
@@ -127515,7 +127894,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3-R4-SID-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -127532,6 +127911,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "54c77d6e30d6b9de440b832799f4634ba7c16e44bd88f257cbe530cdff79eb5c",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3-R4-SID-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3-R4-SID-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909-R2-R3-R4-SID-POWER"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION-R2-R3-R4-SID-POWER",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "61ddf93fa971f1ec1b45237d1cbe33ab13055c3ddabb496b7cedc9f0feca9e38",
       "retirement": null
     },
     {
@@ -127617,7 +128023,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-ACL-9B31F4E0C6D2A817-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -127634,11 +128040,38 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "ad27fcfa816e874f70d141dd2abe59cb0d5c60ea906193f0756a8c275e2d12bc",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-ACL-9B31F4E0C6D2A817-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-ACL-9B31F4E0C6D2A817-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-35260E3B3E35"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-REPAIR-CODEX-WORKSPACE-ACL",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "a17950d6c4d45e60bcf64ddef2303de5e6c0e4526527ce630c46db4c9cb33799",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-PUBSAFE-9723074FE2216F5BCBD4",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -127655,11 +128088,38 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "f3ee74f9b293cddf6143269ca428fc31f64403d9cff2f66d8003b29c478757e3",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-PUBSAFE-9723074FE2216F5BCBD4-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PUBSAFE-9723074FE2216F5BCBD4-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-PUBSAFE-9723074FE2216F5BCBD4"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "3149f3363286ce090c388a95b12bbae810ba36de6b36d84ce8e8891b40f2b26e",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-PUBSAFE-EEA47052AC77A04B0862",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -127676,6 +128136,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "0da53f53162d3a2819649c1dfe48156258c95b8e2ea92a98b5d0407e32aa9e66",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-PUBSAFE-EEA47052AC77A04B0862-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PUBSAFE-EEA47052AC77A04B0862-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-PUBSAFE-EEA47052AC77A04B0862"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "9ae1f426cd7159cca96af46c4b88de99a06849828cdd467c3c0c0d44a9e37167",
       "retirement": null
     },
     {
@@ -127707,7 +128194,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-31E0734B9F006F39AC5B-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -127724,6 +128211,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "e7b2c641b06093d1ba1b053323164712b652263fbcd1195dcfa1f4b14b15a8e2",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-31E0734B9F006F39AC5B-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-31E0734B9F006F39AC5B-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-31E0734B9F006F39AC5B"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "bf44b228542e1894838f828dd6793307f7a3ba4453f3367d8152468581f1f822",
       "retirement": null
     },
     {
@@ -127755,7 +128269,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-358A6FF795E1901CCC1F-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -127772,6 +128286,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "a9544e5ca081b4f87166e5919c0c11555d72a03afd6ac3669db1d4f8ed49bb81",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-358A6FF795E1901CCC1F-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-358A6FF795E1901CCC1F-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-358A6FF795E1901CCC1F"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "1d24fbde55974f9c78165d039d2e9aae8f142fffb994e2b3aac0cda346b96f40",
       "retirement": null
     },
     {
@@ -127803,7 +128344,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -127820,6 +128361,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "ed30c8a922c8d810a608d454600832615384c65b41e502f35b3529e92c9ccf85",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "17f0dd387a0d466802ce374523c2b4893d31f3373629b36550acc28e43333306",
       "retirement": null
     },
     {
@@ -127851,7 +128419,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -127868,6 +128436,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "a086663378469de513efc2f5d01f8451a16184da34ae2ba4f60fbab1b696b553",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "47cd8e04b7def9b58d4bff5972cebb456be24718ab43c02c29a15e29bbe48463",
       "retirement": null
     },
     {
@@ -127899,7 +128494,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -127916,6 +128511,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "6ebd091d77f6c8bb1abb2f6ab3565f6f54e038f5a753646f9dd10757fe8decd3",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "60e34a0bad7ae63ebe05d9800512d8a865c67b3aebfc1fbb8166d7c536f48ed0",
       "retirement": null
     },
     {
@@ -127947,7 +128569,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-B9F4BD26F591EC648C11-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -127964,6 +128586,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "a7f8f5097c88314d1e246bdc755dce11c783c7b408c4249331e194017f559668",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-B9F4BD26F591EC648C11-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-B9F4BD26F591EC648C11-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-B9F4BD26F591EC648C11"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "595fc7c57bee058e96606c2772b320820853647c9ed224c19a0c92cb371609f3",
       "retirement": null
     },
     {
@@ -127995,7 +128644,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -128012,6 +128661,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "23f95c4657fc5518b346270ba39bd2666e7c8a10df40be306933a5837ff51412",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "02aa0b3e4ab5359635ea987d67526bb516344202a584f107101f7553754e8e7d",
       "retirement": null
     },
     {
@@ -128043,7 +128719,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -128060,6 +128736,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "05f18d471eb47908036d11ba770df8a6878be09a2c221172d0f6954602b60ac9",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "d281a8b045125fc245146d49cdff0cffcff5a23433b6fd5326d4a80a5d9506f1",
       "retirement": null
     },
     {
@@ -128091,7 +128794,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -128108,6 +128811,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "a0ea21ce019f08ce2e732f262435ccab2c350e6780d38f4fe579742a4f2f3212",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "5737fa38c3bd8e0c24f75dcc8b3d9b529e547202e4110c0530e5cf8b977ee51e",
       "retirement": null
     },
     {
@@ -128139,7 +128869,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -128156,6 +128886,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "231b69a681006b9479b0078cfea0366aced867e1d80a389661b382d105ea7e10",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "2e8c40cc42b0be9e7cc6f199948462192ec5518cb854f8c4862b6bc29614e832",
       "retirement": null
     },
     {
@@ -128187,7 +128944,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -128204,6 +128961,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "754663b6f26999c2dfb4bb874057ed0b6698ebc2bf691e0b42df6e0ae5dd62db",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "7c4af75be917239a052c2f819ec89d76cac84e257c0995bc46b79023acc27d81",
       "retirement": null
     },
     {
@@ -128289,7 +129073,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-REENROLL-ADAPTERS-20260911-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -128306,6 +129090,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "9b1844b03232665081d1c3af411bb177cc4802363f10e6e6067c54cfb6e6f1c4",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-REENROLL-ADAPTERS-20260911-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-REENROLL-ADAPTERS-20260911-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-REENROLL-ADAPTERS-20260911"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "6dc580c7e5569f378c634a77b4021511cfee5f898eed419b0785c6a980126ea6",
       "retirement": null
     },
     {
@@ -128391,7 +129202,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-0A4D994577024965-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -128408,6 +129219,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "f452b2c5aefd96314d293189c7502a8f035c71f8ff757511f0205f4b05279ade",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-0A4D994577024965-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-0A4D994577024965-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-MULTI-PROJECT-PREFLIGHT-IS-ACTIVATION-EX-ACEBF771EA81-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "635568c89f2d069edce2cf221b62532658d088358a9c885c16e48c60a7b5ca90",
       "retirement": null
     },
     {
@@ -128493,7 +129331,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-10BB28AB1DE6EA34-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -128510,6 +129348,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "0fa4040f893b3c126ab9adb3a04d992a8121eedaa73abe1feb6cce44a2234fca",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-10BB28AB1DE6EA34-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-10BB28AB1DE6EA34-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-INTERRUPTED-EFFECT-NEVER-RUNS-AGAIN-AND-26CE591AC48E-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "e8642d74616ad7925f01b0413c5658efa5b11d027cffb7836fc7f24ccf9b1c28",
       "retirement": null
     },
     {
@@ -128595,7 +129460,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-11CEAF74B0B26C45-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -128612,6 +129477,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "11db0f558614ddb51bfa7b87218fc3d65c1fd674b74c55b7f684868ca4839acf",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-11CEAF74B0B26C45-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-11CEAF74B0B26C45-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-EXPIRY-FUTURE-AND-INTEGER-OVERFLOW-FAIL-2491A7831155-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "3601b15c8684abc69a5c2ed13e5251022923bb37b651da60e8a7e9b4bf852396",
       "retirement": null
     },
     {
@@ -128697,7 +129589,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-14FEF5F84CDAF1ED-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -128714,6 +129606,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "e0dd4ca4e67733680d826191323b41d517cc2f723ee8197d650eaeb4a930b55c",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-14FEF5F84CDAF1ED-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-14FEF5F84CDAF1ED-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-GIT-TREE-AND-INDEX-PARSERS-REJECT-CONFLI-1D2297C844F0-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "3ad275483104370329327bf5506989cc9dfa79af2b419255fe1006e27e3322bf",
       "retirement": null
     },
     {
@@ -128799,7 +129718,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-1A1D1FEBC08A65A8-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -128816,6 +129735,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "9333fed74ad2aa1ea71b4af5b46985ac9151cc8e6504dcb388f65f2a11c90ed1",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-1A1D1FEBC08A65A8-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-1A1D1FEBC08A65A8-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-CONTROL-ACCEPTS-LINE-ENDINGS-844097EC9E96-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "feee523dc4b0ac2a164fcc3dc082ef43ba447881eeabc0f977cb37ef6257bb7e",
       "retirement": null
     },
     {
@@ -128901,7 +129847,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-2092D9E411E8ACC3-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -128918,6 +129864,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "540b8df72d597c926775b358a53303ef94d8bdc1bb3208357c25abc3ed40cadb",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-2092D9E411E8ACC3-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-2092D9E411E8ACC3-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-SOURCE-FILE-READER-REJECTS-HARDLINK-ALIA-B5999A2E9275-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "a379fe6998b4a0bb068cee2132f6dec5cae32567fb221cab5f0df1e825ca3c28",
       "retirement": null
     },
     {
@@ -129003,7 +129976,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-2DD5295CC9465193-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -129020,6 +129993,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "8f186a980f05997d81df47bc0d1d29f031f99ff7a77ce4ea898b89a15bb265fd",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-2DD5295CC9465193-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-2DD5295CC9465193-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-ROW-UPDATES-ARE-SCOPED-ATOMIC-958E57AE1B68-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "da92cc1116e3e230b160ce1282a96344871e41e840906782f0b49c4028c3d450",
       "retirement": null
     },
     {
@@ -129105,7 +130105,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-3589F2032B1A9325-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -129122,6 +130122,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "19c89dbea688181d3809ad2293bb1aa1a5175d1156d4d13d5c3a00cbc3d9eba2",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-3589F2032B1A9325-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-3589F2032B1A9325-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-WINDOWS-ALIASES-TRAVERSAL-AND-MANAGED-ST-F6BAF9C62F1B-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "5684db018ff972c6ebaaed89bbc439258200900b89a263ce3d051c90c92ee514",
       "retirement": null
     },
     {
@@ -129207,7 +130234,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-3BCF0BCEFCF772F6-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -129224,6 +130251,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "a42b9982d2c1e1e0ba33ae6e41fa677e7ac20d3f5c73bcfce1305cf9422b6966",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-3BCF0BCEFCF772F6-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-3BCF0BCEFCF772F6-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-GLOBAL-SOURCE-FINGERPRINT-TRACKS-BYTES-A-463FE4EEE120-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "79bc0fdb75fc5a54c9d0520e3e1791070c3b6d09dc2711174370374b501f2aae",
       "retirement": null
     },
     {
@@ -129309,7 +130363,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-40A36BA93D92AA10-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -129326,6 +130380,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "84756d2ece0c0915236a50f4c62218c66d4eb68651225af63286d6815286e8df",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-40A36BA93D92AA10-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-40A36BA93D92AA10-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-QUEUE-CONSUMPTION-PRESERVES-CHANGED-AND-0ECB1E630C8E-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "6d80961988bda70b444c85c24121fe09ae76c145235e8d4fb824ca72d2c2b6ee",
       "retirement": null
     },
     {
@@ -129411,7 +130492,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-4A21E91A102E73B8-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -129428,6 +130509,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "8eaeb2519e46dad6d03cff90166cd24bb0d5324d9b8dab48830c5f3ddf29a4de",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-4A21E91A102E73B8-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-4A21E91A102E73B8-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-STATE-LEASE-RENEWAL-STOPS-PROMPTLY-AND-P-121E03A49D3E-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "46c48aa3b14534291a0cb66465fddd390e714345a5588ea7c7668f616568e8dc",
       "retirement": null
     },
     {
@@ -129513,7 +130621,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-4E87E82148F93C10-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -129530,6 +130638,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "1b19e802e94b4d7f9cd2766800aea75a13db481f104ec624d9bc9bb99215a154",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-4E87E82148F93C10-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-4E87E82148F93C10-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROJECT-WORKTREE-AND-PROTECTED-POLICY-SU-9583082D1FDD-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "c7881ded42c8b359dfcad024776fe08fa7153c455898c86a24f8c58e937664cb",
       "retirement": null
     },
     {
@@ -129615,7 +130750,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-51F1FFC0FF09AE4B-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -129632,6 +130767,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "5bf6db6fd01f424071a07c7f0b9a8610f8abe1dd108cc88b22fe196d87264408",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-51F1FFC0FF09AE4B-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-51F1FFC0FF09AE4B-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-NATIVE-PROCESS-ROUNDTRIPS-QUOTED-UNICODE-FFAAA9F0EFC6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "2d86c4f020f4553b4a5f8f0cd4af308dac59afe0dfbbe4f023d0a6b7dc31e4cd",
       "retirement": null
     },
     {
@@ -129717,7 +130879,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-55B846B8E672D54A-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -129734,6 +130896,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "f9b4b3e6e2bddaef48c40dd025f08ed70b6f953dec296121b7e24f50767a590a",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-55B846B8E672D54A-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-55B846B8E672D54A-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-EXACT-ADDED-MODIFIED-DELETED-COMMIT-IS-V-86716FECCFB8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "6fff3e53fda4f2b1b23710c8d524ebcbbd79359af156bbc94410b5f7a86b4ed6",
       "retirement": null
     },
     {
@@ -129819,7 +131008,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-65D0FE541C219BC9-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -129836,6 +131025,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "6b625521785314f6ab8a25094e8478b0d2f818fe133d020303b090545e9dd2ab",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-65D0FE541C219BC9-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-65D0FE541C219BC9-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-DIRECTORY-REJECTS-INHERITED-OR-80BF39C24C08-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "3caecaff55bb2fc90465174b57ba303259ddbacf2952f39756808117ce4d6607",
       "retirement": null
     },
     {
@@ -129921,7 +131137,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-778DACD69B40A948-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -129938,6 +131154,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "382814b0f71fc794a01e27a87a59ce45c86e31e84dafe3d420dcf274c31568a8",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-778DACD69B40A948-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-778DACD69B40A948-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-JOURNAL-RECOVERS-EXACT-STATE-AND-RETAINS-76954D4112E6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "dbbbcb038b5561f9488b61f571ed647ca0a679ed17f39a1d262f8c1ec7736995",
       "retirement": null
     },
     {
@@ -130023,7 +131266,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-7F123D22A1459EA2-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -130040,6 +131283,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "8d812049dbec9a6c668147ace5000e12611d9416de6c7c789b6a713c04928fb0",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-7F123D22A1459EA2-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-7F123D22A1459EA2-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-ROW-BACKEND-REJECTS-TRIGGER-S-ACBD966D0ECD-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "1c45aea80999994c5b78b05fd8869876aaf0a2c18d28d6bf17f8e6a3e272b9ad",
       "retirement": null
     },
     {
@@ -130125,7 +131395,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8107A30F555E561D-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -130142,6 +131412,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "187de39bf61e0feaba3fa693f8ed9429321d60466a473772c0e9d2bfe7272cd4",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8107A30F555E561D-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8107A30F555E561D-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-GLOBAL-AUTOCRLF-MATCHES-NATIVE-GIT-WITHO-6949F080E3E8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "b0b03d6e615d672fe1bfd7c5637bc5b0311f5eba1950ab35dca56681130af89f",
       "retirement": null
     },
     {
@@ -130227,7 +131524,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-82A077277B69A094-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -130244,6 +131541,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "7277cf7744a1042346c4b5612791a5a66dfdc7fd480311ad08994ca9f13970e6",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-82A077277B69A094-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-82A077277B69A094-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-MIGRATION-NORMALIZES-SQL-WITH-47C5C525C4BA-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "5d0776a04782d901e009622a9d66393c72394ebd2c7fdfd9a3e394a0e511dbf5",
       "retirement": null
     },
     {
@@ -130329,7 +131653,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8B9E25B328749D46-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -130346,6 +131670,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "b01012bd38d4d4149c27cfbe33763fc46932f31e67aa573c0d708bf7f3f19840",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8B9E25B328749D46-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8B9E25B328749D46-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-WORKER-COMMITS-EXACT-REGISTERE-7347D4F302A6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "54261e479780e413c43b3c77b1d9a8e2089b6e568eb381d2735865185d63ddcb",
       "retirement": null
     },
     {
@@ -130458,7 +131809,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -130475,6 +131826,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "1fe1e59c7185df0a3a93c0b1a75a693ae1099c500a0cd89bd5f522091ebe7317",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-REAL-GIT-SNAPSHOT-PRESERVES-SOURCE-AND-I-7209D78A5D5C-GLOBAL-20260909-ENROLL-R2"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "a62da432c5ff2f1d95551d691153410aee57b98580382ff973d714c2f85a6665",
       "retirement": null
     },
     {
@@ -130560,7 +131938,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8F796BF2C1954DE4-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -130577,6 +131955,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "6a28c4d186eb7800387c56537fc6b873812fbedc4d856552562d7963ce26ffd3",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8F796BF2C1954DE4-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8F796BF2C1954DE4-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-CASE-COLLISIONS-ORDER-EMPTY-AND-NONORDIN-2250FE4E9CC8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "2ee6f18896666292f85dd45d62d8f321f480ffb1ef95c029ffcee81c36588e61",
       "retirement": null
     },
     {
@@ -130662,7 +132067,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-96D0F61691F547DD-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -130679,6 +132084,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "8af9202ef0efd4e94a216b89f024e0c60d47deb8d48bdbb42071a4bf3320ad5e",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-96D0F61691F547DD-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-96D0F61691F547DD-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-PUBLICATION-SEED-IDENTITY-SURVIVES-CLAIM-284F43EF08B0-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "db6aecd319448e392b5fda1753dcbd41e33beaf1c44f1222895dd6e7604345dd",
       "retirement": null
     },
     {
@@ -130764,7 +132196,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-9B7C80D244870C80-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -130781,6 +132213,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "21067ee2929c97cb943adb946269a7c7224eb5cd3a4d7c9a18bd681382c3aaed",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-9B7C80D244870C80-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-9B7C80D244870C80-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-WORKER-PROCESSES-ENROLLED-STAT-AF219789C484-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "eb721881e72bf7cddca788bfa4465def7d7391de1c44f6a6d5f8607281e1e0cf",
       "retirement": null
     },
     {
@@ -130866,7 +132325,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-A1D9DC4AE3162DAE-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -130883,6 +132342,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "fda2f7f3d2db404a05655fbf705c646b845cd236a7675551a01531564097edb0",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-A1D9DC4AE3162DAE-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-A1D9DC4AE3162DAE-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-RECEIPT-AND-ROWS-SURVIVE-REOP-FA48F728E2F6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "a52953f370d01a5b3960f5ed0cff96f119d042bd1dda06e51356b69efcc36fbc",
       "retirement": null
     },
     {
@@ -130968,7 +132454,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-A7661C6406541E08-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -130985,6 +132471,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "7ef5ed7a41bceee04b83526e466ba2ca322a574c99a1e862082146f2da5b883f",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-A7661C6406541E08-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-A7661C6406541E08-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-STATE-CAS-REPLAY-AND-PROJECT-NAMESPACES-8A73C6E659A6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "243ce12605466a80b9dcafad3d5d895f0f6394075231c3c122dfea0b452888a4",
       "retirement": null
     },
     {
@@ -131070,7 +132583,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-AFD7A8CDE4C751D9-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -131087,6 +132600,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "00d7dc4c8046985bbf203d676c1f2a63b8072ec26426d4a33fad84b30db67830",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-AFD7A8CDE4C751D9-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-AFD7A8CDE4C751D9-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-STAGE-REUSE-BINDS-ENVIRONMENT-TOOLS-SCOP-76A42F134ED0-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "80736b3f391c0e0641b28f5857d46590ef4dfbe47619d9e90e85dc8686bcfd7d",
       "retirement": null
     },
     {
@@ -131172,7 +132712,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-B7785F6F85CDB43D-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -131189,6 +132729,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "ecaf64f3f21e0cdfbc4b49c1a144735d9418e27514bd3b8f208df46823f0863d",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-B7785F6F85CDB43D-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-B7785F6F85CDB43D-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-SCHEMA-MATCHES-SAVESTATUS-V3-44312854F7BA-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "dd800c51ddc7accf6177f539720a72fdf5c03523e55eb3d117dede90e94065d8",
       "retirement": null
     },
     {
@@ -131274,7 +132841,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-C27ADB994160229E-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -131291,6 +132858,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "000b3c853b795fe22d9c86c1cc12254081e557987aa18cfa3bff9b205adf25a0",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-C27ADB994160229E-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-C27ADB994160229E-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-DIRECTORY-CHECKS-ACTUAL-OWNER-C1ECC8A751D8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "1a06e9d1494deb157fea7dac6066998c84f07e897b8222672923f0666a6986d9",
       "retirement": null
     },
     {
@@ -131376,7 +132970,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-C79022F1FBD299D6-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -131393,6 +132987,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "92f13e102b0e0ad5ba6dd4a27b1526c9a76c50cbe6cf4890c9b0857b70bfbd57",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-C79022F1FBD299D6-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-C79022F1FBD299D6-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-DUPLICATE-CASE-ALIAS-UNKNOWN-FIELDS-AND-AE366264763F-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "21b27b4b06b46c6349d1c9fc0cf196a40014b0c4a79f616646c9522c1da07364",
       "retirement": null
     },
     {
@@ -131478,7 +133099,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-CAF7E4BA8992C0A0-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -131495,6 +133116,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "ebeeee7382d0eab1f13db3bd79c33d915d57911de99d19ab9a2673f1e8ad11f4",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-CAF7E4BA8992C0A0-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-CAF7E4BA8992C0A0-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-FORMAL-STATE-AND-INSTALLATION-USE-TYPED-A2D08663F0F9-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "58ec3415db3a983492e53081dbb8d93b97551e4197d5889387b314c7adab7359",
       "retirement": null
     },
     {
@@ -131580,7 +133228,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-CB866DC002A20C6A-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -131597,6 +133245,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "8f197d725eced2d60ed821e1839897da3f1a62a981fb8cb6fc2a45739639f4e2",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-CB866DC002A20C6A-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-CB866DC002A20C6A-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-GIT-CONTENT-POLICY-PRESERVES-PRECEDENCE-9941B006C139-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "6e62781792ba45b54bf8e6c6f6697e21f4575e444717ca8c31565c8c0890f882",
       "retirement": null
     },
     {
@@ -131682,7 +133357,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-CD1C459C5E11D688-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -131699,6 +133374,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "f347b2e2b602df4bb18c395805c0bbb0a2e2fd14c7e9d3af773c55f4af36fcb8",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-CD1C459C5E11D688-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-CD1C459C5E11D688-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-CAPABILITY-RESTRICTIONS-APPLY-EVEN-WITH-4D12F6EB1DA8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "f47694bc6c5c81626cdddaf3a342846c8eeff953136c2ef00d4c4c83329f2f16",
       "retirement": null
     },
     {
@@ -131784,7 +133486,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-D8D2F9F141ED7925-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -131801,6 +133503,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "2a85a5647c41cb210d726e9f8d92369391734b603ec1e5015cb20d2e7a79ab85",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-D8D2F9F141ED7925-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-D8D2F9F141ED7925-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-DURABLE-STATE-SURVIVES-REOPEN-AND-DOES-N-554FAFBD196F-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "fec7f3d470a54e0586b7b1537a2dd427f99445cc98d8c802a5f555ba2cc7a6cd",
       "retirement": null
     },
     {
@@ -131886,7 +133615,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-F0AF41C7DFBDF26D-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -131903,6 +133632,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "fabaf21ae331da681140aa77fbaf3130113780e2d05295418af93cb5cc6ff658",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-F0AF41C7DFBDF26D-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-F0AF41C7DFBDF26D-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-BACKEND-PRESERVES-OTHER-TENAN-A634550F6A7C-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "b14d754cd98ae78a43b242ec1f896d5cbc44f3a2b307e6ee63bc0d65e768bc5d",
       "retirement": null
     },
     {
@@ -131988,7 +133744,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-FF0AD4B184D6DD85-POWER-RECOVERY-WORKTREE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -132005,11 +133761,38 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "a341478249353f268336c86de46c3d1f300a57803a2964bc639b524ad967723c",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-FF0AD4B184D6DD85-POWER-RECOVERY-WORKTREE-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-FF0AD4B184D6DD85-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-BACKEND-REJECTS-CROSS-TENANT-48A947B850A6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "37b4fa7e13906a8458734ba66eab89e42f5f2a12ebecb862c961f6dffc0c2164",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-WORKTREE-14AF8E64F07E1D8B0CC2",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -132026,11 +133809,38 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "f27853dadfe2046c735bdd098106551dd60568e2ff631cdf32aad61164111bc9",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-WORKTREE-14AF8E64F07E1D8B0CC2-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-14AF8E64F07E1D8B0CC2-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-14AF8E64F07E1D8B0CC2"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "747992d664f5bc320b6aa8897f26b91a165bdd8e9cc51c89331030cab72b0bb9",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-WORKTREE-329D37708BC158C413AD",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -132047,11 +133857,38 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "1ced130e38e2b38885cd1eb6625434fc214df3fc034a9bb7e269ef4ae3372222",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-WORKTREE-329D37708BC158C413AD-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-329D37708BC158C413AD-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-329D37708BC158C413AD"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "457d61d9b8804b7d6b0a7775225118d96c3193f524f5fa38c487ddf319a12b4b",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-WORKTREE-32B5450EAB54D7CEE13D",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -132068,11 +133905,38 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "baf736966411f379b673e6812dcf1575c8781b4afa360d91c1a15179e2071f8d",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-WORKTREE-32B5450EAB54D7CEE13D-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-32B5450EAB54D7CEE13D-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-32B5450EAB54D7CEE13D"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "3addd426ee71cbad31963dcf852b14d27bcb35a816437b997eae279e8abe0d00",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-WORKTREE-53B9B3DC0890DE8BC5C1",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -132089,11 +133953,38 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "079d54e216387cf9012aa03e6f1b5587fd5274dbb188c7e1647d335aa9faad04",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-WORKTREE-53B9B3DC0890DE8BC5C1-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-53B9B3DC0890DE8BC5C1-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-53B9B3DC0890DE8BC5C1"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "9a5cb9da8838365854dfd35c669ad5e2008ae83f00027a975e10b1931fde1de6",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-WORKTREE-CEA776B5991F3B1620CB",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -132110,11 +134001,38 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "887c9d93a0c405ef4a63ee2287fc96fa4fa639c66d64d140e417f871922a664c",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-WORKTREE-CEA776B5991F3B1620CB-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-CEA776B5991F3B1620CB-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-CEA776B5991F3B1620CB"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "5337f5a271fe52340cfb43f6c54cb1bf74ea2641f38d28481e3f76ddff4b958d",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-WORKTREE-ECA0221052E5F21183BC",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -132131,11 +134049,38 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "bb8497a493bc4e9fe95144d9ce9448be6cc449e24d8e792dc37dcd23e84d39f9",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-WORKTREE-ECA0221052E5F21183BC-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-ECA0221052E5F21183BC-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-ECA0221052E5F21183BC"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "44000fd637a8bae19697681e2bb6365380cc8723e47b8efc7822b070eed55372",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-WORKTREE-F336D0AA238D6ADC31B6",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
       ],
@@ -132152,6 +134097,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "09887ec70918303cf1db5ad754aa716bf2cfa3d0c6c86e0fee26c45efe43af10",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review owner-confirmed disk-copy physical binding, unchanged logical history, Git common mapping, maintenance and stale-source rejection.",
+        "replaced_by": [
+          "BIND-GLOBAL-WORKTREE-F336D0AA238D6ADC31B6-DISKREBIND"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-F336D0AA238D6ADC31B6-DISKREBIND",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-F336D0AA238D6ADC31B6"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "83e35036612908df97f1ddbf3302fb84081f383b32ef6cb212c325faf4a7af97",
       "retirement": null
     },
     {
