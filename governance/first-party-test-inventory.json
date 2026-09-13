@@ -5,6 +5,7 @@
     "claim": "Exact role-qualified inventory for every first-party Rust, PowerShell, and eval executable test; generated state/output roots are excluded.",
     "rust_roots": [
       "crates/codex-global-execution/src",
+      "crates/codex-global-execution/tests",
       "crates/rayman/src",
       "crates/rayman/tests",
       "xtask/src",
@@ -21,11 +22,11 @@
     ]
   },
   "revision": {
-    "generation": 31,
+    "generation": 32,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 30,
-      "sha256": "441b97f0e0fdd006c0b2b749ca6d381ec317b09bf8d1709abc298809ec6e9d3d"
+      "generation": 31,
+      "sha256": "f4b468abe65687ec96327f7c1382332cad1a7c5662784be40c629bc0f64f1864"
     }
   },
   "tests": [
@@ -65,6 +66,32 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-GLOBAL-HOOK-OWNER-TRUST-20260911",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/publication.rs::reviewed_publication_preserves_a_concurrent_writer",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/publication.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "reviewed_publication_preserves_a_concurrent_writer",
+      "selector_sha256": "f1c5876a90a593cfcc064b3ee7ec09c69738b5d668203ef0443e4b9132f2c31d",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-PUBSAFE-9723074FE2216F5BCBD4",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/publication.rs::reviewed_publication_preserves_original_and_rolls_back_without_clobbering",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/publication.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "reviewed_publication_preserves_original_and_rolls_back_without_clobbering",
+      "selector_sha256": "2df18d49efc4ba1e9f5cf1e5fb7e6fdf9b89212379d8c3a26d1621abaf4cd129",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-PUBSAFE-EEA47052AC77A04B0862",
       "status": "active",
       "retirement": null
     },
@@ -221,6 +248,97 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-GLOBAL-REENROLL-ADAPTERS-20260911",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/tests/worktree_hook.rs::bootstrap_script_rejects_foreign_routes_and_ambiguous_checkpoint_recovery",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/tests/worktree_hook.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "bootstrap_script_rejects_foreign_routes_and_ambiguous_checkpoint_recovery",
+      "selector_sha256": "9c447a5f2af3c8de71c6c60a80c58bc0431d22abfa0a90acdb3b911f85eee33a",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-WORKTREE-14AF8E64F07E1D8B0CC2",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/worktrees.rs::hook_merge_preserves_foreign_handlers_and_refuses_ambiguous_ownership",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/worktrees.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "hook_merge_preserves_foreign_handlers_and_refuses_ambiguous_ownership",
+      "selector_sha256": "57c9dbec5deca0ed37590be46e3af2ddc5784a77c59b52e020836962b35fb1b0",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-WORKTREE-329D37708BC158C413AD",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/worker.rs::linked_worktree_queue_requires_owner_policy_and_preserves_parent_authority",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/worker.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "linked_worktree_queue_requires_owner_policy_and_preserves_parent_authority",
+      "selector_sha256": "73c4c2f1518b329c57279ab762e59fe9efeca154afaf7a67c7856fe81ebda451",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-WORKTREE-32B5450EAB54D7CEE13D",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/tests/worktree_hook.rs::session_start_hook_errors_are_informational_and_unrelated_projects_are_untouched",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/tests/worktree_hook.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "session_start_hook_errors_are_informational_and_unrelated_projects_are_untouched",
+      "selector_sha256": "e16b33c2ce927ea5e1fcab160dd7e1e8a10d32b7ecd4cc8ae69310e68d0448b3",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-WORKTREE-53B9B3DC0890DE8BC5C1",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/git.rs::worktree_metadata_rejects_git_execution_and_include_settings",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/git.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "worktree_metadata_rejects_git_execution_and_include_settings",
+      "selector_sha256": "8f093bc66ee8e1eb7713fea4075e72ab3748cc6139d47c345d5b11cda3adf75f",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-WORKTREE-CEA776B5991F3B1620CB",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/install.rs::global_skill_upgrade_requires_exact_reviewed_previous_bytes",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/install.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "global_skill_upgrade_requires_exact_reviewed_previous_bytes",
+      "selector_sha256": "a53e015f72a1ae8fa4e29f31083b552f130514dffcfac8fec9dfa74054e9bc2c",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-WORKTREE-ECA0221052E5F21183BC",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/git.rs::detached_linked_worktree_commit_preserves_parent_and_recovers_interruption",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/git.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "detached_linked_worktree_commit_preserves_parent_and_recovers_interruption",
+      "selector_sha256": "ca7b85e2c4f8228d9ddcb69353f4cfa837c455741a1bc21e795c0c5d3dabb8cb",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-WORKTREE-F336D0AA238D6ADC31B6",
       "status": "active",
       "retirement": null
     },
@@ -1174,6 +1292,25 @@
       "cfg": "all",
       "owner": "",
       "test_id": "TEST-PS-SELFTEST-3AF243E44D59-GLOBAL-20260909",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-3AF243E44D59-GLOBAL-20260909-WORKTREE"
+        ]
+      }
+    },
+    {
+      "identity": "powershell::powershell_self_test::scripts/check-test-traceability.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/check-test-traceability.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "9066b2e1198fb4d712309c057eaa2115882c0cc069038a369f032e4b81d1d4a4",
+      "cfg": "all",
+      "owner": "",
+      "test_id": "TEST-PS-SELFTEST-3AF243E44D59-GLOBAL-20260909-WORKTREE",
       "status": "active",
       "retirement": null
     },

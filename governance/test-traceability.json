@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 34,
+    "generation": 35,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 33,
-      "sha256": "69152d8d8f1dfea543112dae1c113cfb557e23d278804bf1388ab8d42f17cc14"
+      "generation": 34,
+      "sha256": "44e19e4d5237b88a6f4698781ce32f6760792acb6d37e416f938f47d9a85d411"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "f4b468abe65687ec96327f7c1382332cad1a7c5662784be40c629bc0f64f1864"
+    "sha256": "9c1ab5eef22ea2df24a07d55d79c79378eeaca22c1ce38a417d408b56b18237d"
   },
   "sources": [
     {
@@ -366,11 +366,27 @@
     },
     {
       "source_id": "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "kind": "internal_contract",
       "title": "Global Codex fixed-capability execution contract",
       "path": "governance/sources/global-codex-execution.md",
       "sha256": "b44fb6770de55b8da257166a3eb2e4730eb3884462cd85774287a29216d5bb92",
+      "valid_until": "2027-09-09",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "source_id": "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "kind": "internal_contract",
+      "title": "Global Codex fixed-capability execution contract",
+      "path": "governance/sources/global-codex-execution.md",
+      "sha256": "16e5383be17c0d5617780487eea597707bae4f8e4d613ae8e4f68c4b666f18b3",
       "valid_until": "2027-09-09",
       "retirement": null
     },
@@ -1537,11 +1553,33 @@
     },
     {
       "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24",
-      "status": "active",
+      "status": "retired",
       "kind": "powershell_self_test",
       "title": "PowerShell self-test: scripts/check-test-traceability.ps1",
       "path": "scripts/check-test-traceability.ps1",
       "sha256": "737829d1a85a9ec84ad663e46f9cdaea6e78bc22f1436a6c845f44d3c4034032",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "target_matrix": [
+        "windows",
+        "linux",
+        "other_unix"
+      ],
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE"
+        ]
+      }
+    },
+    {
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "status": "active",
+      "kind": "powershell_self_test",
+      "title": "PowerShell self-test: scripts/check-test-traceability.ps1",
+      "path": "scripts/check-test-traceability.ps1",
+      "sha256": "9066b2e1198fb4d712309c057eaa2115882c0cc069038a369f032e4b81d1d4a4",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "target_matrix": [
@@ -4451,13 +4489,31 @@
     },
     {
       "link_id": "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY",
       "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
       "relation": "defines",
       "review": {
         "reviewed_at": "2026-09-12",
         "valid_until": "2027-03-12"
+      },
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_id": "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE",
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
       },
       "retirement": null
     },
@@ -107559,7 +107615,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-06E54C51398299146A3F",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
       ],
@@ -107576,6 +107632,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "abcfb4a6e61fab1757113d8f4df61bda69736f924e1d46cb3acd490ce3d00337",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-06E54C51398299146A3F-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-06E54C51398299146A3F-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-RETIRED-ASSET-PRES-B133AAB4635F"
+      ],
+      "rule_id": "RULE-REPO-TEST-ASSOCIATION-R3",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "b0a54a35839382fd6f6861cd74b52f67780f58b29024fe9b29bc93e86ec94a44",
       "retirement": null
     },
     {
@@ -108168,7 +108251,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-0F62AEDE135A9DEEC52C",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
       ],
@@ -108185,6 +108268,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "a059c56c2308d2ae06edd480d4863e123095dac2190cf694eef89d5a136e477c",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-0F62AEDE135A9DEEC52C-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-0F62AEDE135A9DEEC52C-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-TOMBSTONE-RESURREC-605353741F3C"
+      ],
+      "rule_id": "RULE-REPO-TEST-ASSOCIATION-R3",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "c60e17648e623dddfb14434b78e63ea56da82b8833fa2dfc150507ed47edc11e",
       "retirement": null
     },
     {
@@ -108463,7 +108573,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-163D80C5A7B546F26CA5",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
       ],
@@ -108480,6 +108590,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "a95ce7a020ddc562f801dfa8e34576108a4b45d0d70b75cdad2211c99e4aa911",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-163D80C5A7B546F26CA5-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-163D80C5A7B546F26CA5-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-SEMANTIC-LINK-EXPI-49898938F4BB"
+      ],
+      "rule_id": "RULE-REPO-TEST-ASSOCIATION-R3",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "8a1cc619fab9607271cf73176e6b335b32b01ab81fd656c4b70d863571af771d",
       "retirement": null
     },
     {
@@ -108589,7 +108726,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-17BB860322406BD75768",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
       ],
@@ -108606,6 +108743,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "28d2256111270201f74061969d28885d5b6a9216f36e0eba4db761a01e0a61ef",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-17BB860322406BD75768-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-17BB860322406BD75768-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-TEST-INVENTORY-UNC-A1DF5267E4F8"
+      ],
+      "rule_id": "RULE-REPO-TEST-ASSOCIATION-R3",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "5ed377752eeb34c44e62aa4de8fb9ef064c61295164691ed186453bbc1a87634",
       "retirement": null
     },
     {
@@ -108821,7 +108985,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-1A47627015B8EE1748E6",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
       ],
@@ -108838,6 +109002,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "4be5c6d1bb9c832c20f23247c2f08293ebf54204eae66867968d0089abe6fe28",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-1A47627015B8EE1748E6-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-1A47627015B8EE1748E6-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-RETIREMENT-CASCADE-148C635F7664"
+      ],
+      "rule_id": "RULE-REPO-TEST-ASSOCIATION-R3",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "c6a3e2fa80e43b5b86e51fa4af10e9d792a00700bb01f8b894d55fd162600975",
       "retirement": null
     },
     {
@@ -109766,7 +109957,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-272FB5896D56E05A9CFB",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
       ],
@@ -109783,6 +109974,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "43b2c6956bf92237246af363ea66bd4d48e536422dab7621d0075ecb15fd78d8",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-272FB5896D56E05A9CFB-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-272FB5896D56E05A9CFB-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-POWERSHELL-CASE-UN-D80484A74CC6"
+      ],
+      "rule_id": "RULE-REPO-TEST-ASSOCIATION-R3",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "5424b7bdff17e9394305b06d6aa8a65fcaa45a9a38a4b08932e77dd002967a6b",
       "retirement": null
     },
     {
@@ -110186,7 +110404,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-2CD8B380B02793C7F8B1",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
       ],
@@ -110203,6 +110421,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "d2997297cb0c29f8ff6a47b2a345c84a53563eac17d5cd75d424629dd948d1c4",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-2CD8B380B02793C7F8B1-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-2CD8B380B02793C7F8B1-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-RULE-NO-GATE-0E6A27659065"
+      ],
+      "rule_id": "RULE-REPO-TEST-ASSOCIATION-R3",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "2fbc4b4ddf778d3b4cec762aef9af2122e316ff2dd387e6898d2ffbb72e877e7",
       "retirement": null
     },
     {
@@ -110522,7 +110767,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-303F3F2404B609566B09",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
       ],
@@ -110539,6 +110784,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "5c11602128f326c95da9ccf5daf953d765a9fbfecad3a1275e2f3e08adc60adc",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-303F3F2404B609566B09-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-303F3F2404B609566B09-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-3AF243E44D59-GLOBAL-20260909-WORKTREE"
+      ],
+      "rule_id": "RULE-REPO-TEST-ASSOCIATION-R3",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "cc2d81367a91eb54f21793a7484598aa90c34ac71e21f0af6a9d03157737bf7d",
       "retirement": null
     },
     {
@@ -110648,7 +110920,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-31B60C918830DB55345F",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
       ],
@@ -110665,6 +110937,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "6ffadb45149a4522f7bb10225886e0b6ec5f2b6443f1a3619e499c509bbb17a2",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-31B60C918830DB55345F-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-31B60C918830DB55345F-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-SEMANTIC-BINDING-H-E87CF1CB27E3"
+      ],
+      "rule_id": "RULE-REPO-TEST-ASSOCIATION-R3",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "c48ce8986fb02d0db23e08c54af59d0854c6405a31f21cbc84f4fcd3e800bd08",
       "retirement": null
     },
     {
@@ -111258,7 +111557,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-3A6A1E3AD4620E15707D",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-CASCADE-SOURCE-R3"
       ],
@@ -111275,6 +111574,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "1ac9175c148b467303e17dd6ac02aff59b2ce0dfabb537c8989fbfe056eaef26",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-3A6A1E3AD4620E15707D-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-3A6A1E3AD4620E15707D-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-CASCADE-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-ASSET-OWNERSHIP-1980C04F5C41"
+      ],
+      "rule_id": "RULE-REPO-TEST-CASCADE",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "2ee2028507bbf218001b26cbc25073f9fa3d714e01e7374897014638eb9401aa",
       "retirement": null
     },
     {
@@ -111300,7 +111626,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-3ABBFA002964AB38B87F",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
       ],
@@ -111317,6 +111643,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "02f56af43acb5aae9e30bf292574e5d8615738b418d8ca622ace653342f8b39a",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-3ABBFA002964AB38B87F-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-3ABBFA002964AB38B87F-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-BINDING-SHAPE-B102C9DC8310"
+      ],
+      "rule_id": "RULE-REPO-TEST-ASSOCIATION-R3",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "3508b425c603ed0ae6743bd00e2ab7c7bd2b525d3b81078bd58f8c5b844d914d",
       "retirement": null
     },
     {
@@ -111636,7 +111989,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-3E7145C1BBC1A29755A7",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-INVENTORY-SOURCE-R3"
       ],
@@ -111653,6 +112006,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "a181334b5dd92537c3fd624c8c5eccba17581c9c9d49c70bab1c517705b2d21c",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-3E7145C1BBC1A29755A7-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-3E7145C1BBC1A29755A7-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-INVENTORY-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-3AF243E44D59-GLOBAL-20260909-WORKTREE"
+      ],
+      "rule_id": "RULE-REPO-TEST-INVENTORY",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "9f330bc8288ba6055ea0a2a13dae05f4a4a46d852fa6b4a10acb2947f14a86a2",
       "retirement": null
     },
     {
@@ -111678,7 +112058,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-3F6864D936AF925A67CB",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
       ],
@@ -111695,6 +112075,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "a84a0313f80418f008df095c5076b63914b0aa0f08a0764fe1d80e869e2df7fa",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-3F6864D936AF925A67CB-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-3F6864D936AF925A67CB-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-ENFORCEMENT-MISSIN-3EED8A1C31C9"
+      ],
+      "rule_id": "RULE-REPO-TEST-ASSOCIATION-R3",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "9901432c13468d9369e82ea56b0629fedd26a328c9f82535b1aece7036d85ca9",
       "retirement": null
     },
     {
@@ -112035,7 +112442,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-45219FE9259180061912",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
       ],
@@ -112052,6 +112459,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "c8d9f4057da12d0c6c92cddf935696c859c2f266eb250cb8bf046acbe679aab9",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-45219FE9259180061912-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-45219FE9259180061912-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-GATE-PLATFORM-GAP-78B8E7272793"
+      ],
+      "rule_id": "RULE-REPO-TEST-ASSOCIATION-R3",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "7275e375fae482b1f73f5a2474ee467ee79212b8bfa603c54ca9da1654a61900",
       "retirement": null
     },
     {
@@ -112203,7 +112637,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-46FFE72F47A352BD9B4F",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
       ],
@@ -112220,6 +112654,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "9a989547189047c68af33c1bfb2d75d678bddef02113683cc6e7d6d16f47db31",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-46FFE72F47A352BD9B4F-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-46FFE72F47A352BD9B4F-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-ASSET-OWNERSHIP-1980C04F5C41"
+      ],
+      "rule_id": "RULE-REPO-TEST-ASSOCIATION-R3",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "93c4e3bce70a2e0fd9e8e112a06e562321289916d989edcae2c2dba09dbdac37",
       "retirement": null
     },
     {
@@ -112644,7 +113105,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-4B633EEFA8ADCFCCCABC",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-INVENTORY-SOURCE-R3"
       ],
@@ -112661,6 +113122,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "09d41cfdd2ff2dc3d04c52b21319e2c34afa85e7eb95920fa148c945630d2f7d",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-4B633EEFA8ADCFCCCABC-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-4B633EEFA8ADCFCCCABC-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-INVENTORY-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-RUNTIME-INVENTORY-A9B258F15693"
+      ],
+      "rule_id": "RULE-REPO-TEST-INVENTORY",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "4728a72dd3d9992120ad12e09ef8e4b9f0ffa81a78c989f1b15cbbfd8fe2ded9",
       "retirement": null
     },
     {
@@ -113610,7 +114098,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-5B05AB6A0030DA7B9068",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-CASCADE-SOURCE-R3"
       ],
@@ -113627,11 +114115,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "b5b35a6ed33ff2e62771a94f6492e796d69b44708de6e35037edb1f3a29c1bfb",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-5B05AB6A0030DA7B9068-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-5B05AB6A0030DA7B9068-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-CASCADE-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-RETIRED-ASSET-PRES-B133AAB4635F"
+      ],
+      "rule_id": "RULE-REPO-TEST-CASCADE",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "518e486311c05f9a9edef2111139fb490f24c4d6efd5d57d5307ea94ebd36e22",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-5B74BD135C27F35A78E4",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-INVENTORY-SOURCE-R3"
       ],
@@ -113648,6 +114163,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "b39ade509aeca5db1fbc2dc31744351c6f98300305e176859388d9e51be79e0c",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-5B74BD135C27F35A78E4-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-5B74BD135C27F35A78E4-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-INVENTORY-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-TEST-INVENTORY-UNC-A1DF5267E4F8"
+      ],
+      "rule_id": "RULE-REPO-TEST-INVENTORY",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "44e97e673ac8a7d62ba46052b0f832e282d4f56f555034a15153fedb8b2a4a48",
       "retirement": null
     },
     {
@@ -113694,7 +114236,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-5CAA9802EE042FF717AA",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
       ],
@@ -113711,6 +114253,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "8ed5f4da0207232f6a4bc609aca36658c7e3d5faabbe763d4af0cfeb382daf5c",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-5CAA9802EE042FF717AA-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-5CAA9802EE042FF717AA-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-NODE-REMOVED-WITHO-5487A3FC8FE1"
+      ],
+      "rule_id": "RULE-REPO-TEST-ASSOCIATION-R3",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "25210b57d3782af92095bd4a20123cc9cca0c7c55a4b2a3d2144a8a9f8b88a97",
       "retirement": null
     },
     {
@@ -115017,7 +115586,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-6FA41F3C938AD5A27A87",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-CASCADE-SOURCE-R3"
       ],
@@ -115034,6 +115603,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "0be3eb8fe667460c696a379ec294ed66ba8543df81f45e4844f295511293b40b",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-6FA41F3C938AD5A27A87-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-6FA41F3C938AD5A27A87-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-CASCADE-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-3AF243E44D59-GLOBAL-20260909-WORKTREE"
+      ],
+      "rule_id": "RULE-REPO-TEST-CASCADE",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "385207ceeea06c60ae9a5df9bb72f020819f84aee8f62c7473ced99ea90f27df",
       "retirement": null
     },
     {
@@ -115815,7 +116411,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-7AE6ED0BB39ABC930A7F",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
       ],
@@ -115832,6 +116428,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "4f04519319eb5006922be247a184a1a4aa2b8b03e0d2a0d9de5b051013b5b0ae",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-7AE6ED0BB39ABC930A7F-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-7AE6ED0BB39ABC930A7F-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-PREDECESSOR-HASH-419A0012E91E"
+      ],
+      "rule_id": "RULE-REPO-TEST-ASSOCIATION-R3",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "6a0b9a7e99520c4189006ddf0cca361226c42265461a67737fe975ede4bd23b1",
       "retirement": null
     },
     {
@@ -116886,7 +117509,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-8E14DEC2490266E1C31D",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
       ],
@@ -116903,11 +117526,38 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "216d62bec365d0db0606f371d52cd6040a6e1c00140f0c48bdcf44259aeb043b",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-8E14DEC2490266E1C31D-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-8E14DEC2490266E1C31D-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-ACTIVE-ID-MUTATED-EEB4C690A608"
+      ],
+      "rule_id": "RULE-REPO-TEST-ASSOCIATION-R3",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "b67b89da41763e8a4653c8393157dc4ae65d0ac6ab99e442675dcd1a661d07cc",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-8E2B1AD9DA0FBE553A57",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-TRACE-RETIREMENT-SOURCE-R3"
       ],
@@ -116924,6 +117574,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "64284969bbe450c7eb21902e1c4441a45464fadca5dd840d0e10d29eff9288e6",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-8E2B1AD9DA0FBE553A57-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-8E2B1AD9DA0FBE553A57-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-TRACE-RETIREMENT-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-3AF243E44D59-GLOBAL-20260909-WORKTREE"
+      ],
+      "rule_id": "RULE-TRACE-RETIREMENT",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "f13eb6e10c56c57a969f879c8d255df101f246a6082ba4a42cff8610759f57c2",
       "retirement": null
     },
     {
@@ -117033,7 +117710,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-8F7C7882C99C6C247142",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-CASCADE-SOURCE-R3"
       ],
@@ -117050,6 +117727,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "8cf10f860e28acdac3695bd4a99af6bc76a6060bf8c2d32341e2a33bdcbff4d0",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-8F7C7882C99C6C247142-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-8F7C7882C99C6C247142-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-CASCADE-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-TOMBSTONE-MUTATED-3EA480DAE936"
+      ],
+      "rule_id": "RULE-REPO-TEST-CASCADE",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "e1421c9e1689854da30f80d85a6dda35fe5edf9bfa7a1bd79072eb05dae34490",
       "retirement": null
     },
     {
@@ -117223,7 +117927,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-933E621759CAD0F32AA4",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
       ],
@@ -117240,6 +117944,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "84b588f7ac471e49215863782ed54b36d77e8353b8b490a8a4de4488845fed84",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-933E621759CAD0F32AA4-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-933E621759CAD0F32AA4-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-RUNTIME-INVENTORY-A9B258F15693"
+      ],
+      "rule_id": "RULE-REPO-TEST-ASSOCIATION-R3",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "33b221b9306f22ac15418c5240926dd61986f82072fbed12439ed33ddc5d2110",
       "retirement": null
     },
     {
@@ -119177,7 +119908,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-A8902A4E3FC4E988B87B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
       ],
@@ -119194,6 +119925,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "267dffdf91aee906f4e87fc36eb65badedbb5c26aa9c69cec43fb1b44485a763",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-A8902A4E3FC4E988B87B-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-A8902A4E3FC4E988B87B-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-TOMBSTONE-MUTATED-3EA480DAE936"
+      ],
+      "rule_id": "RULE-REPO-TEST-ASSOCIATION-R3",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "ed738d3b5ac9a11f71198f763d1d8d8ebe951a071282afa5ee640f33fa050811",
       "retirement": null
     },
     {
@@ -121342,7 +122100,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-CDF760AD8DFF7EDB05D7",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
       ],
@@ -121359,6 +122117,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "65d1e582be71a1e1ad986c77bc1e31d0465ebeac5c30304bd81b113a11d10a0f",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-CDF760AD8DFF7EDB05D7-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-CDF760AD8DFF7EDB05D7-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-PATH-REPARSE-521A09A6965D"
+      ],
+      "rule_id": "RULE-REPO-TEST-ASSOCIATION-R3",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "2a00a5969785f772fa3513a040dbf42b2a5f167dcb4d9479fb5da833462de3c1",
       "retirement": null
     },
     {
@@ -121606,7 +122391,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -121623,6 +122408,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "9d106d61a2bebe04ea7df2067d693a06861aaf8a2cd510ed5012597873f3a6fc",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "368a8e461ff2d176ca05cd0c9337da2a3450f209db526da6b7f073cf884d6bf1",
       "retirement": null
     },
     {
@@ -121984,7 +122796,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-D3E2FDF7B1C672854532",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
       ],
@@ -122001,6 +122813,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "5662b945ffed891c4d415ff0e331fbe59b8668b1eb2c53c6ff75a46df01652f1",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-D3E2FDF7B1C672854532-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-D3E2FDF7B1C672854532-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-GATE-UNKNOWN-3E5E0EB2066B"
+      ],
+      "rule_id": "RULE-REPO-TEST-ASSOCIATION-R3",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "28abfcaa6454f0cb2cd4c03492e1bcc28bb5a758a90c95f14dc66b971a064143",
       "retirement": null
     },
     {
@@ -122530,7 +123369,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-DABA2D55B9D2E56FBA2D",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-CASCADE-SOURCE-R3"
       ],
@@ -122547,6 +123386,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "7c646103e838fd9d199fe64e52b50c0583509b7847796483702578148cad1364",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-DABA2D55B9D2E56FBA2D-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-DABA2D55B9D2E56FBA2D-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-CASCADE-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-RETIREMENT-CASCADE-148C635F7664"
+      ],
+      "rule_id": "RULE-REPO-TEST-CASCADE",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "d7e447a9bb006e754e2c8f9c0ca77acadb696fc90a8fb69d26e1ec8c50af8738",
       "retirement": null
     },
     {
@@ -122656,7 +123522,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-DBFF0F1A65F5006A89C5",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
       ],
@@ -122673,6 +123539,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "448028285de7a8492d7a2d99380ce9cc8b8c0ee0bf076c47576c93c8b11af5b4",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-DBFF0F1A65F5006A89C5-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-DBFF0F1A65F5006A89C5-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-ASSOCIATION-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-LINK-STATUS-07E3517DADED"
+      ],
+      "rule_id": "RULE-REPO-TEST-ASSOCIATION-R3",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "af204282a0029a15e86bc6ce3192cf9f591ca6e02b2e837e64eb38cce29573fd",
       "retirement": null
     },
     {
@@ -123434,7 +124327,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-E6881539F450A1AA251F",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-CASCADE-SOURCE-R3"
       ],
@@ -123451,6 +124344,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "0ba628bf81ec614c53e67e7dc3fc59ab4d86eec07a056266b285f02219ee9cfb",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-E6881539F450A1AA251F-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-E6881539F450A1AA251F-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-CASCADE-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-TOMBSTONE-RESURREC-605353741F3C"
+      ],
+      "rule_id": "RULE-REPO-TEST-CASCADE",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "3f5e9462cc8af6035443b35a170b33b16f621c3a5523d1040515de2240b15e28",
       "retirement": null
     },
     {
@@ -124653,7 +125573,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-F85A48BF38A06D1FAED1",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-TRACE-ACTIVE-SOURCE-R3"
       ],
@@ -124671,6 +125591,34 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "63aadea65a3c5197009c389c4ace1591d1778898c8caf5c99da832c0f05f96ef",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-F85A48BF38A06D1FAED1-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-F85A48BF38A06D1FAED1-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-TRACE-ACTIVE-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-3AF243E44D59-GLOBAL-20260909-WORKTREE"
+      ],
+      "rule_id": "RULE-TRACE-ACTIVE-GRAPH-R3",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative",
+        "behavioral_positive"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "d81db7065f4705510013bb31e1cc116967f229a33b39b8addd6730f529a59d3e",
       "retirement": null
     },
     {
@@ -124907,7 +125855,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-FB796634B23E66AFB4C3",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-TEST-CASCADE-SOURCE-R3"
       ],
@@ -124924,6 +125872,33 @@
         "valid_until": "2027-03-09"
       },
       "semantic_sha256": "ee80990491b783b964f01642feb566fa671e85a151b7bf64261cd102e7c49cfc",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-FB796634B23E66AFB4C3-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-FB796634B23E66AFB4C3-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-TEST-CASCADE-SOURCE-R3"
+      ],
+      "test_ids": [
+        "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-NODE-REMOVED-WITHO-5487A3FC8FE1"
+      ],
+      "rule_id": "RULE-REPO-TEST-CASCADE",
+      "gate_id": "GATE-GLOBAL-6C8A88DFEA57EA24-WORKTREE",
+      "modes": [
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-12",
+        "valid_until": "2027-03-12"
+      },
+      "semantic_sha256": "cb312773beea8fe213c79c3ac196bc38dbe12e66b53539fed116f54902472fc3",
       "retirement": null
     },
     {
@@ -125256,7 +126231,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-GIT-IMAGE-PATH-20260912-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -125273,6 +126248,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "777ddaf3d2938b2711b4b4bc4e83572260cee842f29be09430fd8840f6fec740",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-GIT-IMAGE-PATH-20260912-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-GIT-IMAGE-PATH-20260912-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-GIT-IMAGE-PATH-20260912"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "10cb84df2ddf3b2f20b1a9477fbc3514820d50873d620b875219d616381e06e5",
       "retirement": null
     },
     {
@@ -125331,7 +126333,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-HOOK-OWNER-TRUST-20260911-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -125348,6 +126350,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "ecfdfbcfe51742cf62d23ba90108dec4c13d3bc5196822e0677a4d134fa0e7ad",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-HOOK-OWNER-TRUST-20260911-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-HOOK-OWNER-TRUST-20260911-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-HOOK-OWNER-TRUST-20260911"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "74e4a5fa1e4ba9432007dda3aee70f69ee88a16a017d893a5ecfc153632c7c3b",
       "retirement": null
     },
     {
@@ -125406,7 +126435,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-317A6BB8D5401F11-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -125423,6 +126452,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "ecea32787f433c3c750077684e4c23f80e1e05e8d8301afb074a814ccd941222",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-317A6BB8D5401F11-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-317A6BB8D5401F11-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-KERNEL-ROLLS-BACK-FAILURE-AND-REFUS-2D86C853579B"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "e1100bcb5a11312c1ec193d31d0826019911e32c722f619c395f8bdc737a4fab",
       "retirement": null
     },
     {
@@ -125481,7 +126537,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-40C32CD7E9809BE3-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -125498,6 +126554,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "0f68176f5b24caff9eaba1b9fb2fe10fb87e14dfe68261df21c9e39f6d20cd05",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-40C32CD7E9809BE3-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-40C32CD7E9809BE3-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-KERNEL-PUBLISHES-EXACT-FILES-AND-RE-115B6AE2F819"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "f2d29fccc4b510948beb14b6f8cd2b28780dce8e74b4a357fbf4294d9da2fc1e",
       "retirement": null
     },
     {
@@ -125556,7 +126639,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-7FB4C693DA187D47-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -125573,6 +126656,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "1389e759109fa42d3a81e23851e593c05e370efbd1339c4ed603838609da923e",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-7FB4C693DA187D47-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-7FB4C693DA187D47-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-WORKER-DISPATCH-AND-RESTART-RECONCI-20B23FB21FB6"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "4e8e056f0c05ab8acdebb233d94dd9e8f64569b1c0e04d2adf110feae64db815",
       "retirement": null
     },
     {
@@ -125631,7 +126741,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-97F43A91A81AD55F-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -125648,6 +126758,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "c1b8b1944727828eb6a45d81a73a65f4ed475d6de3052820b32c04089ced8e19",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-97F43A91A81AD55F-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-97F43A91A81AD55F-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-CRASH-RECOVERY-NEVER-CLAIMS-ROLLBAC-D99CB30A0C3B"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "54776ec065521cca7e9b18a8766b5d7482a33a1afaee0b1ad19f6e0aaa54d600",
       "retirement": null
     },
     {
@@ -125706,7 +126843,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-AB943ED2B6A98F15-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -125723,6 +126860,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "c759b1d30e2cccfa06d66564953d51a1edf64a3b083337248981c0373dc76982",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-AB943ED2B6A98F15-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-AB943ED2B6A98F15-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-PENDING-INTENT-BLOCKS-OTHER-PUBLICA-B9B5DFDD4956"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "be3c9a555741cc482503633b95c333950f332f5ba9b185129f205ab48be07609",
       "retirement": null
     },
     {
@@ -125781,7 +126945,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-B438D756A765861D-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -125798,6 +126962,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "b0f258b4d42295122a899fe8a6815ce8e381bcb732a133d57cd098dae077c41b",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-B438D756A765861D-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-B438D756A765861D-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-BUNDLE-REJECTS-UNREGISTERED-PATHS-V-E68C99B92537"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "54110f4c4ce778d6d5a06ce585105e5a46595f46f467b759ec14ba3e03c877c7",
       "retirement": null
     },
     {
@@ -125856,7 +127047,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-BD678F984719CAE3-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -125873,6 +127064,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "49c0dd55ebfac07b0ec155ae8a0965db91b6743d91353c971b1498f068508fa2",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-BD678F984719CAE3-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-BD678F984719CAE3-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-GLOBAL-SKILL-PUBLICATION-IS-IDEMPOTENT-AND-PRESE-BC93A64317EC"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "4a1603224004b37e0d926e86c1005e40f467c93fc55ed66a50c9e783778186ff",
       "retirement": null
     },
     {
@@ -125958,7 +127176,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-563CDEDE5B59E458-CP1-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -125975,6 +127193,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "47a48898ad9607c93f814c410305e71b08cefef829afcce267b2b30b8feb794d",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-563CDEDE5B59E458-CP1-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-563CDEDE5B59E458-CP1-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-4DC44102236A-GLOBAL-20260909-CP1"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-ENROLL-GLOBAL-CODEX-PROJECTS-CP1",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "29745a1893301742243bce3fd28f6736a4fbb5c8d02fa69451bfe293c949055f",
       "retirement": null
     },
     {
@@ -126033,7 +127278,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-5BE8CDDBF80D3213-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -126050,6 +127295,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "56d45391ff764e085c6e252ff0cabff77064189061d10005b205d1d63c1299ee",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-5BE8CDDBF80D3213-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-5BE8CDDBF80D3213-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-9865501D815A-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-CONFIGURE-GLOBAL-CODEX-EXECUTION",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "5ed1baa4549c970ddbdaccb9bc5e6f7751619a557e00f96f8aa4c6348fd19b14",
       "retirement": null
     },
     {
@@ -126216,7 +127488,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3-R4-SID-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -126233,6 +127505,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "dd417dbdbf757062a1c9ad78c486d601aa5a17db11f4da4f4aad72bf18ce21e5",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3-R4-SID-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3-R4-SID-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909-R2-R3-R4-SID-POWER"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION-R2-R3-R4-SID-POWER",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "54c77d6e30d6b9de440b832799f4634ba7c16e44bd88f257cbe530cdff79eb5c",
       "retirement": null
     },
     {
@@ -126291,7 +127590,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-ACL-9B31F4E0C6D2A817-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -126308,11 +127607,80 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "eb5eb45b6703e62e4c2bf9a876b4ec4b5eb84535e5697098f55ddc6c9c1c422d",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-ACL-9B31F4E0C6D2A817-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-ACL-9B31F4E0C6D2A817-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-35260E3B3E35"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-REPAIR-CODEX-WORKSPACE-ACL",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "ad27fcfa816e874f70d141dd2abe59cb0d5c60ea906193f0756a8c275e2d12bc",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PUBSAFE-9723074FE2216F5BCBD4",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-PUBSAFE-9723074FE2216F5BCBD4"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "f3ee74f9b293cddf6143269ca428fc31f64403d9cff2f66d8003b29c478757e3",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PUBSAFE-EEA47052AC77A04B0862",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-PUBSAFE-EEA47052AC77A04B0862"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "0da53f53162d3a2819649c1dfe48156258c95b8e2ea92a98b5d0407e32aa9e66",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-31E0734B9F006F39AC5B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -126329,11 +127697,38 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "09648b2912d5c780fdccece12e5c176b2b7d05b7000c912c399a5e855d85f860",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-31E0734B9F006F39AC5B-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-31E0734B9F006F39AC5B-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-31E0734B9F006F39AC5B"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "e7b2c641b06093d1ba1b053323164712b652263fbcd1195dcfa1f4b14b15a8e2",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-358A6FF795E1901CCC1F",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -126350,11 +127745,38 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "13529e17fb6a74741d09150306e01295ff8ff47e21f084fb3a31054c69d880da",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-358A6FF795E1901CCC1F-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-358A6FF795E1901CCC1F-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-358A6FF795E1901CCC1F"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "a9544e5ca081b4f87166e5919c0c11555d72a03afd6ac3669db1d4f8ed49bb81",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -126371,11 +127793,38 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "7c91236ed9975816d6149ae32bf448a4506ee18b855ef0b36cea76439b4ef0e5",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "ed30c8a922c8d810a608d454600832615384c65b41e502f35b3529e92c9ccf85",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -126392,11 +127841,38 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "dbb5b4dee7a364b5e1aa45fe5922ce66da0978f241bb6ffe07b2cda83ce72e70",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "a086663378469de513efc2f5d01f8451a16184da34ae2ba4f60fbab1b696b553",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -126413,11 +127889,38 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "5b1a6f903fd3e3f51f439affc71f53d056cc18c704c6d89e137dea3121fd8cd3",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "6ebd091d77f6c8bb1abb2f6ab3565f6f54e038f5a753646f9dd10757fe8decd3",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-B9F4BD26F591EC648C11",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -126434,11 +127937,38 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "28f419daf8124d116bdae55d039914ea3f68dabb44f616a038783dc7ad664968",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-B9F4BD26F591EC648C11-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-B9F4BD26F591EC648C11-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-B9F4BD26F591EC648C11"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "a7f8f5097c88314d1e246bdc755dce11c783c7b408c4249331e194017f559668",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -126455,11 +127985,38 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "11a43655c9feeb1573e2c5d4cf5a6d5900716c817b952d3dd04c062f302b0b44",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "23f95c4657fc5518b346270ba39bd2666e7c8a10df40be306933a5837ff51412",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -126476,11 +128033,38 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "cda53f55cf866f621fd0f590a6ff1bb24f92155d957e461ea59d9d53913b4112",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "05f18d471eb47908036d11ba770df8a6878be09a2c221172d0f6954602b60ac9",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -126497,11 +128081,38 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "32b1d277ef2584bbc4225567932e41eb04cf300a50acffec6c46f0451185139f",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "a0ea21ce019f08ce2e732f262435ccab2c350e6780d38f4fe579742a4f2f3212",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -126518,11 +128129,38 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "b5b5a16e841747737f49d0ab0644b97e5d7451c9c8418e956573edbf66455151",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "231b69a681006b9479b0078cfea0366aced867e1d80a389661b382d105ea7e10",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -126539,6 +128177,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "44da2241f6e3ff8b26f3bcb0bceccaff2f3e5becd44bc6b6337065253a9f6652",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "754663b6f26999c2dfb4bb874057ed0b6698ebc2bf691e0b42df6e0ae5dd62db",
       "retirement": null
     },
     {
@@ -126597,7 +128262,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-REENROLL-ADAPTERS-20260911-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -126614,6 +128279,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "624b94880fc8be05e250348867b2cd6b49472484e7213b3ddcb31a95d2a89c92",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-REENROLL-ADAPTERS-20260911-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-REENROLL-ADAPTERS-20260911-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-REENROLL-ADAPTERS-20260911"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "9b1844b03232665081d1c3af411bb177cc4802363f10e6e6067c54cfb6e6f1c4",
       "retirement": null
     },
     {
@@ -126672,7 +128364,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-0A4D994577024965-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -126689,6 +128381,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "b70496ef76a5db8029644cd1eb4736120fa1da1bfc2b3fe8ce52a9e342e6f9e6",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-0A4D994577024965-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-0A4D994577024965-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-MULTI-PROJECT-PREFLIGHT-IS-ACTIVATION-EX-ACEBF771EA81-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "f452b2c5aefd96314d293189c7502a8f035c71f8ff757511f0205f4b05279ade",
       "retirement": null
     },
     {
@@ -126747,7 +128466,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-10BB28AB1DE6EA34-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -126764,6 +128483,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "c128730c02879a1fd5d6e8df406856e1d11db51219a2bb4629ae31a4e0cf4bcc",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-10BB28AB1DE6EA34-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-10BB28AB1DE6EA34-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-INTERRUPTED-EFFECT-NEVER-RUNS-AGAIN-AND-26CE591AC48E-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "0fa4040f893b3c126ab9adb3a04d992a8121eedaa73abe1feb6cce44a2234fca",
       "retirement": null
     },
     {
@@ -126822,7 +128568,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-11CEAF74B0B26C45-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -126839,6 +128585,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "8c2ba9e3d4135c0aec77e72bfebeb797fca38d14ea2e2d573a518d0b3aaf1029",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-11CEAF74B0B26C45-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-11CEAF74B0B26C45-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-EXPIRY-FUTURE-AND-INTEGER-OVERFLOW-FAIL-2491A7831155-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "11db0f558614ddb51bfa7b87218fc3d65c1fd674b74c55b7f684868ca4839acf",
       "retirement": null
     },
     {
@@ -126897,7 +128670,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-14FEF5F84CDAF1ED-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -126914,6 +128687,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "ea5e512eaabf6530bab6637a8e8bd366d157ed0cacb35923b3c0b7dee67a909a",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-14FEF5F84CDAF1ED-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-14FEF5F84CDAF1ED-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-GIT-TREE-AND-INDEX-PARSERS-REJECT-CONFLI-1D2297C844F0-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "e0dd4ca4e67733680d826191323b41d517cc2f723ee8197d650eaeb4a930b55c",
       "retirement": null
     },
     {
@@ -126972,7 +128772,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-1A1D1FEBC08A65A8-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -126989,6 +128789,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "de072b9b4f45e7953618421c6b2538c680e612490ffdd36e4001c4dac1c7a376",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-1A1D1FEBC08A65A8-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-1A1D1FEBC08A65A8-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-CONTROL-ACCEPTS-LINE-ENDINGS-844097EC9E96-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "9333fed74ad2aa1ea71b4af5b46985ac9151cc8e6504dcb388f65f2a11c90ed1",
       "retirement": null
     },
     {
@@ -127047,7 +128874,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-2092D9E411E8ACC3-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -127064,6 +128891,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "e03ddce89db29e6ae4e2d7ee8e243d1a52364f19e01e10bf97044d467b23b123",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-2092D9E411E8ACC3-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-2092D9E411E8ACC3-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-SOURCE-FILE-READER-REJECTS-HARDLINK-ALIA-B5999A2E9275-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "540b8df72d597c926775b358a53303ef94d8bdc1bb3208357c25abc3ed40cadb",
       "retirement": null
     },
     {
@@ -127122,7 +128976,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-2DD5295CC9465193-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -127139,6 +128993,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "4e5527de5c92b61661371ec1cc93bca9923d89dc5e76cf7836758382edbe16ac",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-2DD5295CC9465193-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-2DD5295CC9465193-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-ROW-UPDATES-ARE-SCOPED-ATOMIC-958E57AE1B68-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "8f186a980f05997d81df47bc0d1d29f031f99ff7a77ce4ea898b89a15bb265fd",
       "retirement": null
     },
     {
@@ -127197,7 +129078,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-3589F2032B1A9325-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -127214,6 +129095,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "3464ea707d2874d779e34ee686d5b93210675048702875532ecc96857d2dca0c",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-3589F2032B1A9325-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-3589F2032B1A9325-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-WINDOWS-ALIASES-TRAVERSAL-AND-MANAGED-ST-F6BAF9C62F1B-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "19c89dbea688181d3809ad2293bb1aa1a5175d1156d4d13d5c3a00cbc3d9eba2",
       "retirement": null
     },
     {
@@ -127272,7 +129180,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-3BCF0BCEFCF772F6-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -127289,6 +129197,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "52a6e820ef2d302ad01cbb701f1c2f811abaa79d9834d7ee68f04ac36680a9d6",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-3BCF0BCEFCF772F6-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-3BCF0BCEFCF772F6-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-GLOBAL-SOURCE-FINGERPRINT-TRACKS-BYTES-A-463FE4EEE120-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "a42b9982d2c1e1e0ba33ae6e41fa677e7ac20d3f5c73bcfce1305cf9422b6966",
       "retirement": null
     },
     {
@@ -127347,7 +129282,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-40A36BA93D92AA10-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -127364,6 +129299,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "95a05c3fb83e43f7734d2c70e30e0eb1dac0cd2c9925fba0a34ea823e5d1a7fe",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-40A36BA93D92AA10-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-40A36BA93D92AA10-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-QUEUE-CONSUMPTION-PRESERVES-CHANGED-AND-0ECB1E630C8E-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "84756d2ece0c0915236a50f4c62218c66d4eb68651225af63286d6815286e8df",
       "retirement": null
     },
     {
@@ -127422,7 +129384,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-4A21E91A102E73B8-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -127439,6 +129401,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "1313209855dc4bad08f1fab0935e5859d2a81353de90120001f2a04c7ca7e029",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-4A21E91A102E73B8-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-4A21E91A102E73B8-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-STATE-LEASE-RENEWAL-STOPS-PROMPTLY-AND-P-121E03A49D3E-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "8eaeb2519e46dad6d03cff90166cd24bb0d5324d9b8dab48830c5f3ddf29a4de",
       "retirement": null
     },
     {
@@ -127497,7 +129486,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-4E87E82148F93C10-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -127514,6 +129503,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "ba62a3552e1d08580f52d7a7cc9c8365ea12900b57c84de963891ef39a1e5ba3",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-4E87E82148F93C10-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-4E87E82148F93C10-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROJECT-WORKTREE-AND-PROTECTED-POLICY-SU-9583082D1FDD-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "1b19e802e94b4d7f9cd2766800aea75a13db481f104ec624d9bc9bb99215a154",
       "retirement": null
     },
     {
@@ -127572,7 +129588,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-51F1FFC0FF09AE4B-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -127589,6 +129605,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "f16a4a5b36f6a7cfdcd481c99188b1d2bd50a98a99bdca88be72100c33f0d8d2",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-51F1FFC0FF09AE4B-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-51F1FFC0FF09AE4B-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-NATIVE-PROCESS-ROUNDTRIPS-QUOTED-UNICODE-FFAAA9F0EFC6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "5bf6db6fd01f424071a07c7f0b9a8610f8abe1dd108cc88b22fe196d87264408",
       "retirement": null
     },
     {
@@ -127647,7 +129690,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-55B846B8E672D54A-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -127664,6 +129707,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "47284372c2cb9c16c3910ff49e5bf9c26f4c96e86be45f305106c0ac005413cd",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-55B846B8E672D54A-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-55B846B8E672D54A-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-EXACT-ADDED-MODIFIED-DELETED-COMMIT-IS-V-86716FECCFB8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "f9b4b3e6e2bddaef48c40dd025f08ed70b6f953dec296121b7e24f50767a590a",
       "retirement": null
     },
     {
@@ -127722,7 +129792,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-65D0FE541C219BC9-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -127739,6 +129809,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "fe57a8bbf8d5cf534720b2a41f3cd626f10b5040e7357308c6c1114db2712460",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-65D0FE541C219BC9-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-65D0FE541C219BC9-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-DIRECTORY-REJECTS-INHERITED-OR-80BF39C24C08-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "6b625521785314f6ab8a25094e8478b0d2f818fe133d020303b090545e9dd2ab",
       "retirement": null
     },
     {
@@ -127797,7 +129894,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-778DACD69B40A948-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -127814,6 +129911,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "c86d56ffb119ec58eb669c7094b0528b5f70b85c1df4bd013356967b3698fdd1",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-778DACD69B40A948-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-778DACD69B40A948-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-JOURNAL-RECOVERS-EXACT-STATE-AND-RETAINS-76954D4112E6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "382814b0f71fc794a01e27a87a59ce45c86e31e84dafe3d420dcf274c31568a8",
       "retirement": null
     },
     {
@@ -127872,7 +129996,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-7F123D22A1459EA2-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -127889,6 +130013,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "114ecc66becbe7d646409aa5ba457b96a400ee6cdae3325dd0087d4f350b56e6",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-7F123D22A1459EA2-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-7F123D22A1459EA2-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-ROW-BACKEND-REJECTS-TRIGGER-S-ACBD966D0ECD-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "8d812049dbec9a6c668147ace5000e12611d9416de6c7c789b6a713c04928fb0",
       "retirement": null
     },
     {
@@ -127947,7 +130098,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8107A30F555E561D-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -127964,6 +130115,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "836337dbb155f802d639bb50c3a29b723dd54ca632fbbf881777609ae5aa4757",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8107A30F555E561D-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8107A30F555E561D-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-GLOBAL-AUTOCRLF-MATCHES-NATIVE-GIT-WITHO-6949F080E3E8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "187de39bf61e0feaba3fa693f8ed9429321d60466a473772c0e9d2bfe7272cd4",
       "retirement": null
     },
     {
@@ -128022,7 +130200,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-82A077277B69A094-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -128039,6 +130217,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "20eebae92c410924bcfaa4caf189655bba9ea77ff6abeb408a4489463707137e",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-82A077277B69A094-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-82A077277B69A094-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-MIGRATION-NORMALIZES-SQL-WITH-47C5C525C4BA-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "7277cf7744a1042346c4b5612791a5a66dfdc7fd480311ad08994ca9f13970e6",
       "retirement": null
     },
     {
@@ -128097,7 +130302,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8B9E25B328749D46-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -128114,6 +130319,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "264483d9d5d6608dfc38d246e047a274a7327837b7e221505ef964739ebb5e05",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8B9E25B328749D46-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8B9E25B328749D46-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-WORKER-COMMITS-EXACT-REGISTERE-7347D4F302A6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "b01012bd38d4d4149c27cfbe33763fc46932f31e67aa573c0d708bf7f3f19840",
       "retirement": null
     },
     {
@@ -128199,7 +130431,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -128216,6 +130448,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "47078000399cfe9bf9bf6f73f35ddb1feecb3518d9581044b85510bcb016fd6a",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-REAL-GIT-SNAPSHOT-PRESERVES-SOURCE-AND-I-7209D78A5D5C-GLOBAL-20260909-ENROLL-R2"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "1fe1e59c7185df0a3a93c0b1a75a693ae1099c500a0cd89bd5f522091ebe7317",
       "retirement": null
     },
     {
@@ -128274,7 +130533,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8F796BF2C1954DE4-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -128291,6 +130550,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "a7da02aa1888ffb494696c28135c57dc190c3615aa4087e0a45c7a7abf8104d7",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8F796BF2C1954DE4-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8F796BF2C1954DE4-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-CASE-COLLISIONS-ORDER-EMPTY-AND-NONORDIN-2250FE4E9CC8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "6a28c4d186eb7800387c56537fc6b873812fbedc4d856552562d7963ce26ffd3",
       "retirement": null
     },
     {
@@ -128349,7 +130635,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-96D0F61691F547DD-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -128366,6 +130652,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "de2885d0745001768c0bc7397b69a025c6a6e23038bac7e480e511a09cec9447",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-96D0F61691F547DD-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-96D0F61691F547DD-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-PUBLICATION-SEED-IDENTITY-SURVIVES-CLAIM-284F43EF08B0-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "8af9202ef0efd4e94a216b89f024e0c60d47deb8d48bdbb42071a4bf3320ad5e",
       "retirement": null
     },
     {
@@ -128424,7 +130737,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-9B7C80D244870C80-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -128441,6 +130754,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "c615508ef61ae43a5669ce3dcc08b45b01c0a6623170f1138eb1a009de20e25b",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-9B7C80D244870C80-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-9B7C80D244870C80-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-WORKER-PROCESSES-ENROLLED-STAT-AF219789C484-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "21067ee2929c97cb943adb946269a7c7224eb5cd3a4d7c9a18bd681382c3aaed",
       "retirement": null
     },
     {
@@ -128499,7 +130839,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-A1D9DC4AE3162DAE-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -128516,6 +130856,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "c3fdab692b867914a12dcd1ab7e2a3006fc6ba5f49ac1003482573fdb01f58d0",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-A1D9DC4AE3162DAE-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-A1D9DC4AE3162DAE-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-RECEIPT-AND-ROWS-SURVIVE-REOP-FA48F728E2F6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "fda2f7f3d2db404a05655fbf705c646b845cd236a7675551a01531564097edb0",
       "retirement": null
     },
     {
@@ -128574,7 +130941,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-A7661C6406541E08-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -128591,6 +130958,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "e7e9c1cabee2b8e2781ddf7f228b12ff0e17f7bd8e7a3cb357d92a490c4992b5",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-A7661C6406541E08-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-A7661C6406541E08-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-STATE-CAS-REPLAY-AND-PROJECT-NAMESPACES-8A73C6E659A6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "7ef5ed7a41bceee04b83526e466ba2ca322a574c99a1e862082146f2da5b883f",
       "retirement": null
     },
     {
@@ -128649,7 +131043,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-AFD7A8CDE4C751D9-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -128666,6 +131060,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "6e0e1cca0dcca3b7d397a1dc98c0f1d7a9ee7ef64f60aa1881e7c0aa222b0df8",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-AFD7A8CDE4C751D9-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-AFD7A8CDE4C751D9-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-STAGE-REUSE-BINDS-ENVIRONMENT-TOOLS-SCOP-76A42F134ED0-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "00d7dc4c8046985bbf203d676c1f2a63b8072ec26426d4a33fad84b30db67830",
       "retirement": null
     },
     {
@@ -128724,7 +131145,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-B7785F6F85CDB43D-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -128741,6 +131162,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "595c15ff97d80964557554415594502bbcdd2baf16742e45e29dc837d8119c2c",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-B7785F6F85CDB43D-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-B7785F6F85CDB43D-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-SCHEMA-MATCHES-SAVESTATUS-V3-44312854F7BA-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "ecaf64f3f21e0cdfbc4b49c1a144735d9418e27514bd3b8f208df46823f0863d",
       "retirement": null
     },
     {
@@ -128799,7 +131247,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-C27ADB994160229E-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -128816,6 +131264,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "1424395c3d6d0cb89ec4e419cbea295d6c535d7481d846ff43ef33a213d21fb1",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-C27ADB994160229E-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-C27ADB994160229E-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-DIRECTORY-CHECKS-ACTUAL-OWNER-C1ECC8A751D8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "000b3c853b795fe22d9c86c1cc12254081e557987aa18cfa3bff9b205adf25a0",
       "retirement": null
     },
     {
@@ -128874,7 +131349,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-C79022F1FBD299D6-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -128891,6 +131366,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "98f27336bda74bd28d34ffdf2d1a93e02fbf976f9120ee30fd071f5c57c22593",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-C79022F1FBD299D6-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-C79022F1FBD299D6-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-DUPLICATE-CASE-ALIAS-UNKNOWN-FIELDS-AND-AE366264763F-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "92f13e102b0e0ad5ba6dd4a27b1526c9a76c50cbe6cf4890c9b0857b70bfbd57",
       "retirement": null
     },
     {
@@ -128949,7 +131451,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-CAF7E4BA8992C0A0-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -128966,6 +131468,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "108a5067b2826ccb619a29442d637ec4f9d81a9d5cd576ae9a988f4e5ad321f8",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-CAF7E4BA8992C0A0-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-CAF7E4BA8992C0A0-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-FORMAL-STATE-AND-INSTALLATION-USE-TYPED-A2D08663F0F9-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "ebeeee7382d0eab1f13db3bd79c33d915d57911de99d19ab9a2673f1e8ad11f4",
       "retirement": null
     },
     {
@@ -129024,7 +131553,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-CB866DC002A20C6A-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -129041,6 +131570,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "d7d27feea48441d35e8d88324b489a11249ce1bec3617004d09ebc4e31256579",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-CB866DC002A20C6A-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-CB866DC002A20C6A-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-GIT-CONTENT-POLICY-PRESERVES-PRECEDENCE-9941B006C139-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "8f197d725eced2d60ed821e1839897da3f1a62a981fb8cb6fc2a45739639f4e2",
       "retirement": null
     },
     {
@@ -129099,7 +131655,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-CD1C459C5E11D688-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -129116,6 +131672,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "bfb7c0726a9c4a704911b51abf601882e37dfadb83c2cd757187a10f60cd17d1",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-CD1C459C5E11D688-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-CD1C459C5E11D688-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-CAPABILITY-RESTRICTIONS-APPLY-EVEN-WITH-4D12F6EB1DA8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "f347b2e2b602df4bb18c395805c0bbb0a2e2fd14c7e9d3af773c55f4af36fcb8",
       "retirement": null
     },
     {
@@ -129174,7 +131757,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-D8D2F9F141ED7925-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -129191,6 +131774,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "0fa11299c84b0cb8f8cf99e9434ededa46357fd4e8d7ab7813e8b43731663a1c",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-D8D2F9F141ED7925-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-D8D2F9F141ED7925-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-DURABLE-STATE-SURVIVES-REOPEN-AND-DOES-N-554FAFBD196F-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "2a85a5647c41cb210d726e9f8d92369391734b603ec1e5015cb20d2e7a79ab85",
       "retirement": null
     },
     {
@@ -129249,7 +131859,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-F0AF41C7DFBDF26D-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -129266,6 +131876,33 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "bef0d1190aa091b2a33a2b6453986d5731ba044fd1867cdacedc589207bf6ef9",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-F0AF41C7DFBDF26D-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-F0AF41C7DFBDF26D-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-BACKEND-PRESERVES-OTHER-TENAN-A634550F6A7C-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "fabaf21ae331da681140aa77fbaf3130113780e2d05295418af93cb5cc6ff658",
       "retirement": null
     },
     {
@@ -129324,7 +131961,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-FF0AD4B184D6DD85-POWER-RECOVERY",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY"
       ],
@@ -129341,6 +131978,180 @@
         "valid_until": "2027-03-12"
       },
       "semantic_sha256": "e1861d392fc0cd9868b0e73be787047774928e5475adb5d3a7917781b82ec87a",
+      "retirement": {
+        "retired_at": "2026-09-12",
+        "reason": "Review detached linked-worktree publication, owner-bound automatic enrollment, local state bootstrap, and non-blocking hook integration.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-FF0AD4B184D6DD85-POWER-RECOVERY-WORKTREE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-FF0AD4B184D6DD85-POWER-RECOVERY-WORKTREE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-BACKEND-REJECTS-CROSS-TENANT-48A947B850A6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "a341478249353f268336c86de46c3d1f300a57803a2964bc639b524ad967723c",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-14AF8E64F07E1D8B0CC2",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-14AF8E64F07E1D8B0CC2"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "f27853dadfe2046c735bdd098106551dd60568e2ff631cdf32aad61164111bc9",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-329D37708BC158C413AD",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-329D37708BC158C413AD"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "1ced130e38e2b38885cd1eb6625434fc214df3fc034a9bb7e269ef4ae3372222",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-32B5450EAB54D7CEE13D",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-32B5450EAB54D7CEE13D"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "baf736966411f379b673e6812dcf1575c8781b4afa360d91c1a15179e2071f8d",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-53B9B3DC0890DE8BC5C1",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-53B9B3DC0890DE8BC5C1"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "079d54e216387cf9012aa03e6f1b5587fd5274dbb188c7e1647d335aa9faad04",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-CEA776B5991F3B1620CB",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-CEA776B5991F3B1620CB"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "887c9d93a0c405ef4a63ee2287fc96fa4fa639c66d64d140e417f871922a664c",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-ECA0221052E5F21183BC",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-ECA0221052E5F21183BC"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "bb8497a493bc4e9fe95144d9ce9448be6cc449e24d8e792dc37dcd23e84d39f9",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-F336D0AA238D6ADC31B6",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-F336D0AA238D6ADC31B6"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "09887ec70918303cf1db5ad754aa716bf2cfa3d0c6c86e0fee26c45efe43af10",
       "retirement": null
     },
     {

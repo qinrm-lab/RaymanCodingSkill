@@ -1,7 +1,7 @@
 # Global Codex execution
 
-Implementation is in progress. No global worker or project migration is
-installed by this source change.
+Deployment is explicit. A source checkout alone does not attest an installed
+worker, migrated projects or a functioning desktop hook.
 
 ## Ownership
 
@@ -73,6 +73,42 @@ Client result polling tolerates only Windows sharing/lock violations while a
 published result's final handle is closing. It reads the same request result
 within the original timeout and never resubmits an operation. Persistent locks
 still time out; permissions, malformed data and identity failures remain errors.
+
+## Linked worktrees
+
+The desktop owner opts in a registered repository with `authorize-worktrees`,
+binding an exact allowed worktree directory and its strong identity. The
+`enroll-linked-worktree` request is carried through the existing queue under
+that anchor. It verifies the actual Git worktree back-link and common directory,
+creates a distinct registration, and does not inherit installation adapters.
+Unknown, outside-root, replaced or ambiguously authorized worktrees are refused.
+
+`bootstrap-worktree` previews by default. Its owner-context execution uses only
+hash-pinned installed Rayman/SaveStatus product roles, regenerates local managed
+paths through their normal frontends, and uses the native owner migration
+operations. It does not copy the parent database. Existing routes must match
+the new identity; interrupted checkpoint publication resumes its protected
+journal. Normal editing, testing and subsequent frontend collection remain
+sandbox work. The owner worker itself does not run product programs.
+
+Codex's documented global SessionStart hook is the automatic entrypoint:
+https://learn.chatgpt.com/docs/hooks . `install-worktree-hook` must run through
+the matching installed client as the desktop owner. It preserves unrelated
+handlers, backs up the old hook document and refuses conflicting owned entries.
+Hook and global-skill upgrades recheck the reviewed bytes through a held file
+identity, move that original object to a unique `.previous` sibling, and publish
+without replacement. A concurrent destination is preserved. Publication failure
+restores the original only when its name is still absent; otherwise both the
+original sibling and candidate remain for explicit recovery. Preserve these
+siblings after a crash and inspect their bytes before any manual restoration.
+The host's hook review and a real new-worktree session remain separate acceptance
+steps. Plan-mode events and ordinary checkout roots are no-ops; setup errors do
+not instruct Codex to block opening the thread.
+
+Detached HEAD is supported without attaching a branch. Publication uses private
+worktree HEAD/index paths and the existing journal. Only inert Codex
+localEnvironmentConfigPath worktree metadata is accepted; arbitrary Git
+worktree settings remain outside this adapter.
 
 ## Checkpoint adapter
 

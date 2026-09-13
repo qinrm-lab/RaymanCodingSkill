@@ -18,6 +18,19 @@ to launch an arbitrary command as the desktop user or to change ACLs.
 
 ## Local commits
 
+For a Codex linked worktree, the owner's `authorize-worktrees` policy and global
+SessionStart hook can initialize its own registration and state. An existing
+parent registration alone is insufficient. Use `bootstrap-worktree --root
+<root> --workspace <worktree>` for a read-only preview; `--yes` requires the
+already authorized desktop-owner frontend context when application setup is
+needed. Do not bypass this using an alternate-identity shell.
+
+Read the current worktree's AGENTS.md after setup. Never use a cached parent's
+checkpoint executable or vault arguments. Detached HEAD commits retain that
+mode and publish only the worktree's private HEAD/index. Do not create a branch
+just to make enrollment pass. Hook installation preserves other handlers and
+does not attest the app's hook trust review or actual SessionStart execution.
+
 Keep the workspace's own validation and review requirements. After the user
 authorizes a local commit and the relevant checks pass, preview its exact
 paths with:

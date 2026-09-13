@@ -269,6 +269,52 @@ impl PublicationSlot {
         Ok(())
     }
 
+    /// Publish reviewed user metadata without overwriting a concurrent edit.
+    /// The original object is retained at a unique sibling for crash recovery.
+    pub(super) fn publish_reviewed(&mut self, name: &str, previous: Option<&[u8]>) -> Result<()> {
+        self.publish_reviewed_inner(name, previous, || Ok(()))
+    }
+
+    fn publish_reviewed_inner(
+        &mut self,
+        name: &str,
+        previous: Option<&[u8]>,
+        before_publish: impl FnOnce() -> Result<()>,
+    ) -> Result<()> {
+        safe_leaf(name)?;
+        let Some(previous) = previous else {
+            before_publish()?;
+            return self.rename(name, false);
+        };
+        let pin = self.parent.pin_file(Path::new(name))?;
+        let original_identity = identity(&pin.file, &pin.path)?;
+        drop(pin);
+        // Reopen with delete access, deny writers/renames, and recheck both
+        // identity and reviewed bytes before touching the original name.
+        let mut original = Self::resume_with_limit(
+            self.parent.path(),
+            name,
+            &original_identity,
+            &crate::hash::sha256_bytes(previous),
+            previous.len() as u64,
+        )?;
+        let backup = format!("{}.previous", self.name);
+        original.rename(&backup, false)?;
+        let result = before_publish().and_then(|()| self.rename(name, false));
+        if let Err(error) = result {
+            // Never overwrite a file that appeared after displacement. If
+            // rollback is blocked, retain the original backup and candidate.
+            if let Err(rollback) = original.rename(name, false) {
+                bail!(
+                    "publication failed: {error:#}; original preserved at {}: {rollback:#}",
+                    self.parent.path().join(&backup).display()
+                );
+            }
+            return Err(error.context("publication failed; original restored"));
+        }
+        Ok(())
+    }
+
     pub(super) fn resume(
         parent: &Path,
         name: &str,
@@ -515,5 +561,59 @@ mod tests {
             b"candidate"
         );
         assert!(!temp.path().join("index.lock").exists());
+    }
+
+    #[test]
+    fn reviewed_publication_preserves_a_concurrent_writer() {
+        let temp = tempfile::tempdir().unwrap();
+        let target = temp.path().join("hooks.json");
+        std::fs::write(&target, b"reviewed").unwrap();
+        let mut stage = PublicationSlot::create(temp.path(), "hook-stage", b"candidate").unwrap();
+        assert_eq!(std::fs::read(&target).unwrap(), b"reviewed");
+        std::fs::write(&target, b"concurrent editor").unwrap();
+        let result = stage.publish_reviewed("hooks.json", Some(b"reviewed"));
+        assert!(result.is_err(), "publication overwrote a concurrent edit");
+        assert_eq!(std::fs::read(&target).unwrap(), b"concurrent editor");
+    }
+
+    #[test]
+    fn reviewed_publication_preserves_original_and_rolls_back_without_clobbering() {
+        for concurrent in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let target = temp.path().join("hooks.json");
+            std::fs::write(&target, b"reviewed").unwrap();
+            let mut stage =
+                PublicationSlot::create(temp.path(), "hook-stage", b"candidate").unwrap();
+            let result = stage.publish_reviewed_inner("hooks.json", Some(b"reviewed"), || {
+                if concurrent {
+                    std::fs::write(&target, b"concurrent editor")?;
+                    Ok(())
+                } else {
+                    bail!("injected publication failure")
+                }
+            });
+            assert!(result.is_err());
+            if concurrent {
+                assert_eq!(std::fs::read(&target).unwrap(), b"concurrent editor");
+                assert_eq!(
+                    std::fs::read(temp.path().join("hook-stage.previous")).unwrap(),
+                    b"reviewed"
+                );
+            } else {
+                assert_eq!(std::fs::read(&target).unwrap(), b"reviewed");
+            }
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let target = temp.path().join("hooks.json");
+        std::fs::write(&target, b"reviewed").unwrap();
+        let mut stage = PublicationSlot::create(temp.path(), "hook-stage", b"candidate").unwrap();
+        stage
+            .publish_reviewed("hooks.json", Some(b"reviewed"))
+            .unwrap();
+        assert_eq!(std::fs::read(&target).unwrap(), b"candidate");
+        assert_eq!(
+            std::fs::read(temp.path().join("hook-stage.previous")).unwrap(),
+            b"reviewed"
+        );
     }
 }

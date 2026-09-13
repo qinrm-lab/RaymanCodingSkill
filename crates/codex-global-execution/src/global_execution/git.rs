@@ -21,7 +21,6 @@ enum ReadCommand<'a> {
     ObjectBytes(&'a str, &'a str),
     HashObjectBytes(&'a str),
     Head,
-    Branch,
     Index,
     HeadTree,
     Status,
@@ -137,6 +136,7 @@ pub struct GitInspector<'a> {
     _git: super::native::SourceDirectory,
     _common: super::native::SourceDirectory,
     _executable: std::fs::File,
+    _worktree_config: Option<super::native::SourceFile>,
     _protected: &'a ProtectedDirectory,
 }
 
@@ -154,7 +154,7 @@ impl<'a> GitInspector<'a> {
         if !binding.executable.is_absolute()
             || !is_sha256(&binding.executable_sha256)
             || !is_sha256(&binding.config_sha256)
-            || !binding.branch_ref.starts_with("refs/heads/")
+            || (binding.branch_ref != "HEAD" && !binding.branch_ref.starts_with("refs/heads/"))
             || binding.branch_ref.contains(['\0', '\n', '\r'])
         {
             bail!("invalid fixed Git binding");
@@ -234,9 +234,13 @@ impl<'a> GitInspector<'a> {
                 bail!("linked worktree backlink does not match enrolled workspace");
             }
         }
-        if git.path().join("config.worktree").try_exists()? {
-            bail!("per-worktree Git configuration requires a reviewed adapter");
-        }
+        let worktree_config = if git.path().join("config.worktree").try_exists()? {
+            let pin = git.pin_file(Path::new("config.worktree"))?;
+            validate_codex_worktree_metadata(&git.read_file(Path::new("config.worktree"), 65536)?)?;
+            Some(pin)
+        } else {
+            None
+        };
         let config = common.read_file(Path::new("config"), 1024 * 1024)?;
         if crate::hash::sha256_bytes(&config) != binding.config_sha256 {
             bail!("registered Git config changed");
@@ -293,6 +297,7 @@ impl<'a> GitInspector<'a> {
             _git: git,
             _common: common,
             _executable: file,
+            _worktree_config: worktree_config,
             _protected: isolation,
         })
     }
@@ -324,6 +329,13 @@ impl<'a> GitInspector<'a> {
         input: &[u8],
         candidate: Option<&CandidateEnvironment<'_>>,
     ) -> Result<Vec<u8>> {
+        if self._worktree_config.is_none()
+            && self._git.path().join("config.worktree").try_exists()?
+        {
+            bail!(
+                "worktree configuration appeared during the operation; retry from a fresh binding"
+            );
+        }
         let common = [
             "core.hooksPath",
             "core.fsmonitor",
@@ -394,7 +406,6 @@ impl<'a> GitInspector<'a> {
                 ]
             }
             ReadCommand::Head => vec!["rev-parse".into(), "--verify".into(), "HEAD".into()],
-            ReadCommand::Branch => vec!["symbolic-ref".into(), "-q".into(), "HEAD".into()],
             ReadCommand::Index => vec!["ls-files".into(), "--stage".into(), "-z".into()],
             ReadCommand::HeadTree => vec![
                 "ls-tree".into(),
@@ -971,8 +982,16 @@ impl<'a> GitInspector<'a> {
         if let Some(binding) = legacy {
             self.accept_legacy_candidate(&directory, &candidate, registration, binding, true)?;
         }
+        self.verify_head_binding(registration)?;
         validate_relative_path(&self.binding.branch_ref)?;
-        let ref_path = self.binding.common_directory.join(&self.binding.branch_ref);
+        // Detached HEAD belongs to this worktree's private Git directory,
+        // never to the common directory or the parent checkout's HEAD.
+        let ref_root = if self.binding.branch_ref == "HEAD" {
+            &self._git
+        } else {
+            &self._common
+        };
+        let ref_path = ref_root.path().join(&self.binding.branch_ref);
         let ref_parent = ref_path
             .parent()
             .ok_or_else(|| anyhow::anyhow!("branch parent missing"))?;
@@ -995,11 +1014,9 @@ impl<'a> GitInspector<'a> {
             {
                 bail!("HEAD/index changed before publication");
             }
-            let raw_ref = self
-                ._common
-                .read_file(Path::new(&self.binding.branch_ref), 4096)?;
+            let raw_ref = ref_root.read_file(Path::new(&self.binding.branch_ref), 4096)?;
             if std::str::from_utf8(&raw_ref)?.trim() != candidate.parent {
-                bail!("publication requires the exact registered loose branch ref");
+                bail!("publication requires the exact registered reference value");
             }
             let index_bytes = std::fs::read(directory.join("index"))?;
             if crate::hash::sha256_bytes(&index_bytes) != candidate.candidate_index_sha256 {
@@ -1532,11 +1549,21 @@ impl<'a> GitInspector<'a> {
         Ok(())
     }
 
-    pub fn capture(&self, registration: &Registration) -> Result<CommitSnapshot> {
-        let branch = String::from_utf8(self.run(ReadCommand::Branch, &[])?)?;
-        if branch.trim() != self.binding.branch_ref {
+    fn verify_head_binding(&self, registration: &Registration) -> Result<()> {
+        let bytes = self._git.read_file(Path::new("HEAD"), 4096)?;
+        let head = std::str::from_utf8(&bytes)?.trim();
+        if self.binding.branch_ref == "HEAD" {
+            if !is_hex(head, registration.object_id_length) {
+                bail!("registered detached HEAD is no longer detached");
+            }
+        } else if head.strip_prefix("ref: ") != Some(self.binding.branch_ref.as_str()) {
             bail!("registered branch changed");
         }
+        Ok(())
+    }
+
+    pub fn capture(&self, registration: &Registration) -> Result<CommitSnapshot> {
+        self.verify_head_binding(registration)?;
         let head = String::from_utf8(self.run(ReadCommand::Head, &[])?)?
             .trim()
             .to_string();
@@ -1629,6 +1656,38 @@ impl<'a> GitInspector<'a> {
     }
 }
 
+fn validate_codex_worktree_metadata(bytes: &[u8]) -> Result<()> {
+    let text = std::str::from_utf8(bytes)?;
+    let mut section = false;
+    let mut value_seen = false;
+    for line in text.lines().map(str::trim) {
+        if line.is_empty() || line.starts_with(['#', ';']) {
+            continue;
+        }
+        if line.contains('\0') || line.ends_with('\\') {
+            bail!("unsupported worktree config continuation");
+        }
+        if line.eq_ignore_ascii_case("[codex]") && !section {
+            section = true;
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            bail!("unsupported worktree Git configuration");
+        };
+        if !section
+            || value_seen
+            || !key
+                .trim()
+                .eq_ignore_ascii_case("localEnvironmentConfigPath")
+            || value.trim().is_empty()
+        {
+            bail!("only Codex localEnvironmentConfigPath metadata is allowed in worktree config");
+        }
+        value_seen = true;
+    }
+    Ok(())
+}
+
 fn is_protected_workflow_path(path: &str) -> bool {
     let first = path.split('/').next().unwrap_or_default();
     first.eq_ignore_ascii_case(".agent-checkpoints")
@@ -1693,6 +1752,168 @@ fn parse_entries(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    #[test]
+    fn worktree_metadata_rejects_git_execution_and_include_settings() {
+        for value in [
+            "[codex]\nlocalEnvironmentConfigPath = __none__\n",
+            "[codex]\r\n\tlocalEnvironmentConfigPath = .codex/environments/environment.toml\r\n",
+            "# comment\n",
+        ] {
+            validate_codex_worktree_metadata(value.as_bytes()).unwrap();
+        }
+        for value in [
+            "[core]\nfsmonitor = !helper",
+            "[include]\npath = elsewhere",
+            "[codex]\nlocalEnvironmentConfigPath=x\n[core]\nworktree=y",
+            "[codex]\nlocalEnvironmentConfigPath=x\\\n",
+            "[codex]\nlocalEnvironmentConfigPath=x\nlocalEnvironmentConfigPath=y",
+            "[codex]\nother=value",
+        ] {
+            assert!(
+                validate_codex_worktree_metadata(value.as_bytes()).is_err(),
+                "{value}"
+            );
+        }
+    }
+    #[cfg(windows)]
+    #[test]
+    fn detached_linked_worktree_commit_preserves_parent_and_recovers_interruption() {
+        let base = tempfile::tempdir().unwrap();
+        let repo = base.path().join("parent");
+        let linked = base.path().join("linked");
+        let trusted = base.path().join("trusted");
+        std::fs::create_dir(&repo).unwrap();
+        std::fs::create_dir(&trusted).unwrap();
+        let program = PathBuf::from("C:/Program Files/Git/mingw64/bin/git.exe");
+        let run = |cwd: &Path, args: &[&str]| {
+            let out = std::process::Command::new(&program)
+                .args(args)
+                .current_dir(cwd)
+                .output()
+                .unwrap();
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            String::from_utf8(out.stdout).unwrap().trim().to_owned()
+        };
+        run(&repo, &["init", "-b", "main"]);
+        run(&repo, &["config", "user.name", "Fixture"]);
+        run(&repo, &["config", "user.email", "fixture@example.invalid"]);
+        std::fs::write(repo.join(".gitattributes"), b"* text eol=lf\n").unwrap();
+        std::fs::write(repo.join("selected.txt"), b"old\n").unwrap();
+        std::fs::write(repo.join("preserved.txt"), b"old\n").unwrap();
+        run(&repo, &["add", "."]);
+        run(
+            &repo,
+            &["-c", "commit.gpgsign=false", "commit", "-m", "baseline"],
+        );
+        let parent_head = run(&repo, &["rev-parse", "HEAD"]);
+        let parent_index = std::fs::read(repo.join(".git/index")).unwrap();
+        let parent_ref = std::fs::read(repo.join(".git/refs/heads/main")).unwrap();
+        run(&repo, &["config", "extensions.worktreeConfig", "true"]);
+        run(
+            &repo,
+            &[
+                "worktree",
+                "add",
+                "--detach",
+                linked.to_str().unwrap(),
+                "HEAD",
+            ],
+        );
+        let linked_gitdir = PathBuf::from(run(&linked, &["rev-parse", "--absolute-git-dir"]));
+        std::fs::write(
+            linked_gitdir.join("config.worktree"),
+            b"[codex]\r\n\tlocalEnvironmentConfigPath = __none__\r\n",
+        )
+        .unwrap();
+        std::fs::write(linked.join("selected.txt"), b"selected change\r\n").unwrap();
+        std::fs::write(linked.join("preserved.txt"), b"unrelated change\r\n").unwrap();
+        let sid = crate::execution_context::execution_context_probe()
+            .principal_sid
+            .unwrap();
+        super::super::native::protect_fixture_directory(&trusted, &sid, "").unwrap();
+        let isolation = ProtectedDirectory::open(&trusted, &sid).unwrap();
+        std::fs::write(trusted.join("worker.exe"), b"fixture worker").unwrap();
+        std::fs::write(trusted.join("client.exe"), b"fixture client").unwrap();
+        let installation = Installation {
+            schema_version: 1,
+            installation_id: "a".repeat(32),
+            owner_sid: sid,
+            root_identity: isolation.identity().into(),
+            worker_sha256: crate::hash::sha256_bytes(b"fixture worker"),
+            client_sha256: crate::hash::sha256_bytes(b"fixture client"),
+            source_project_id: "b".repeat(32),
+        };
+        crate::file_io::write_json(&trusted.join("installation.json"), &installation).unwrap();
+        let enrolled = enroll(
+            &trusted,
+            &linked,
+            Some((&program, "Fixture", "fixture@example.invalid")),
+            true,
+            true,
+        )
+        .expect("detached linked worktree enrollment must succeed without attaching a branch");
+        let binding = enrolled.git.as_ref().unwrap();
+        assert_eq!(binding.branch_ref, "HEAD");
+        let inspector =
+            GitInspector::open(&linked, binding, &enrolled.registration, &isolation).unwrap();
+        let snapshot = inspector.capture(&enrolled.registration).unwrap();
+        let mut request = super::super::tests::request(&enrolled.registration);
+        request.source_sha256 = crate::source_fingerprint(&linked).unwrap();
+        request.operation = Operation::Commit {
+            expected_head: snapshot.head,
+            expected_index_sha256: snapshot.index_sha256,
+            message: "detached worktree fixture".into(),
+            changes: snapshot
+                .changes
+                .into_iter()
+                .filter(|c| c.path == "selected.txt")
+                .collect(),
+            hook_receipt: None,
+        };
+        let candidate = inspector
+            .prepare_commit(
+                &request,
+                &enrolled.registration,
+                1000,
+                "Fixture",
+                "fixture@example.invalid",
+            )
+            .unwrap();
+        assert!(
+            inspector
+                .test_publish_cut(&request, &enrolled.registration, "ref_published")
+                .is_err()
+        );
+        let published = inspector
+            .publish_commit(&request, &enrolled.registration, 1000)
+            .unwrap();
+        assert_eq!(published.commit, candidate.commit);
+        assert_eq!(run(&linked, &["rev-parse", "HEAD"]), candidate.commit);
+        assert_eq!(run(&repo, &["rev-parse", "HEAD"]), parent_head);
+        assert_eq!(
+            std::fs::read(repo.join(".git/index")).unwrap(),
+            parent_index
+        );
+        assert_eq!(
+            std::fs::read(repo.join(".git/refs/heads/main")).unwrap(),
+            parent_ref
+        );
+        assert_eq!(
+            std::fs::read(linked.join("selected.txt")).unwrap(),
+            b"selected change\r\n"
+        );
+        assert_eq!(
+            std::fs::read(linked.join("preserved.txt")).unwrap(),
+            b"unrelated change\r\n"
+        );
+        run(&linked, &["switch", "-c", "later-branch"]);
+        assert!(inspector.capture(&enrolled.registration).is_err());
+    }
     fn with_modify_only_commit_fixture(
         check: impl FnOnce(&GitInspector<'_>, &Request, &Registration, &CommitCandidate, &Path),
     ) {

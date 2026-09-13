@@ -24,6 +24,7 @@ $script:InventoryRelativePath = 'governance/first-party-test-inventory.json'
 $script:Utf8 = [Text.UTF8Encoding]::new($false, $true)
 $script:RustRoots = @(
     'crates/codex-global-execution/src',
+    'crates/codex-global-execution/tests',
     'crates/rayman/src',
     'crates/rayman/tests',
     'xtask/src',

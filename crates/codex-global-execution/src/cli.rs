@@ -26,6 +26,51 @@ pub struct GlobalExecutionCmd {
 
 #[derive(Subcommand)]
 pub enum GlobalExecutionAction {
+    /// Add the fixed SessionStart handler, preserving other global hooks
+    InstallWorktreeHook {
+        #[arg(long)]
+        root: PathBuf,
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Initialize a linked worktree under owner policy, without adopting parent history
+    BootstrapWorktree {
+        #[arg(long)]
+        root: PathBuf,
+        #[arg(long)]
+        workspace: PathBuf,
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Non-blocking SessionStart adapter; reads the event from stdin
+    WorktreeHook {
+        #[arg(long)]
+        root: PathBuf,
+    },
+    /// Opt one registered repository into enrollment of linked worktrees beneath an exact root
+    AuthorizeWorktrees {
+        #[arg(long)]
+        root: PathBuf,
+        #[arg(long)]
+        workspace: PathBuf,
+        #[arg(long)]
+        allowed_root: PathBuf,
+        #[arg(long)]
+        formal_state: bool,
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Request fixed-capability enrollment through the existing owner worker
+    EnrollLinkedWorktree {
+        #[arg(long)]
+        root: PathBuf,
+        #[arg(long)]
+        workspace: PathBuf,
+        #[arg(long)]
+        yes: bool,
+        #[arg(long, default_value_t = 120)]
+        timeout_seconds: u64,
+    },
     /// Recover one admitted commit; an execution binds the reviewed candidate bytes
     RecoverCommit {
         #[arg(long)]
@@ -47,6 +92,8 @@ pub enum GlobalExecutionAction {
         root: PathBuf,
         #[arg(long)]
         yes: bool,
+        #[arg(long)]
+        expected_sha256: Option<String>,
     },
     /// Register fixed file destinations as the installation owner, before first use
     RegisterInstallAdapter {

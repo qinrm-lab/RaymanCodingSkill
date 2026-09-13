@@ -13,6 +13,243 @@ pub struct Client {
 }
 
 impl Client {
+    pub fn bootstrap_linked_worktree(
+        &self,
+        workspace: &Path,
+        publish: bool,
+    ) -> Result<serde_json::Value> {
+        let (request, anchor) =
+            self.prepare_linked_worktree_request(workspace, chrono::Utc::now().timestamp())?;
+        let Operation::EnrollLinkedWorktree {
+            workspace,
+            policy_sha256,
+            ..
+        } = &request.operation
+        else {
+            unreachable!()
+        };
+        let _target = super::native::SourceDirectory::open(workspace)?;
+        let _git_marker = _target.pin_file(Path::new(".git"))?;
+        let marker_bytes = _target.read_file(Path::new(".git"), 4096)?;
+        let git_path = std::str::from_utf8(&marker_bytes)?
+            .trim()
+            .strip_prefix("gitdir: ")
+            .ok_or_else(|| anyhow::anyhow!("linked Git marker changed"))?;
+        let _private_git = super::native::SourceDirectory::open(&_target.path().join(git_path))?;
+        let anchor_git = anchor
+            .git
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("anchor Git missing"))?;
+        let git_parent = super::native::SourceDirectory::open(
+            anchor_git
+                .executable
+                .parent()
+                .ok_or_else(|| anyhow::anyhow!("Git executable parent missing"))?,
+        )?;
+        // The official Git image has legitimate hard-link aliases. Deny all
+        // writes through the executable handle rather than requiring link count 1.
+        use std::os::windows::fs::OpenOptionsExt;
+        let git_program = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(windows_sys::Win32::Storage::FileSystem::FILE_SHARE_READ)
+            .custom_flags(windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(&anchor_git.executable)?;
+        let metadata = git_program.metadata()?;
+        if !metadata.is_file()
+            || crate::file_io::is_link_or_reparse(&metadata)
+            || metadata.len() > 128 * 1024 * 1024
+        {
+            bail!("invalid anchor Git executable");
+        }
+        let bytes = crate::file_io::read_bytes_from_handle(
+            &git_program,
+            metadata.len(),
+            &anchor_git.executable,
+            "bootstrap Git executable",
+        )?;
+        if crate::hash::sha256_bytes(&bytes) != anchor_git.executable_sha256 {
+            bail!("anchor Git executable changed");
+        }
+        let common = super::native::SourceDirectory::open(&anchor_git.common_directory)?;
+        let _git_config = common.pin_file(Path::new("config"))?;
+        if crate::hash::sha256_file(&anchor_git.common_directory.join("config"))?
+            != anchor_git.config_sha256
+        {
+            bail!("anchor Git configuration changed");
+        }
+        let registry = super::native::SourceDirectory::open(self.root.path())?;
+        let _anchor = registry.pin_file(Path::new(&format!(
+            "project-{}.json",
+            anchor.registration.worktree_id
+        )))?;
+        let _policy = registry.pin_file(Path::new(&format!(
+            "worktree-policy-{}.json",
+            anchor.registration.worktree_id
+        )))?;
+        let (policy, digest) =
+            super::worktrees::checked_policy(&self.root, &self.installation, &anchor)?;
+        if digest != *policy_sha256 {
+            bail!("worktree policy changed before bootstrap");
+        }
+        let existing = self.lookup_enrollment(workspace)?;
+        if let Some(child) = &existing {
+            super::worktrees::verify_member(&self.root, child, &digest)?;
+        }
+        let _products = super::worktrees::pin_products(&policy)?;
+        if !publish {
+            return Ok(
+                serde_json::json!({"preview":true,"executed":false,"already_enrolled":existing.is_some(),"rayman_requested":policy.rayman.is_some(),"checkpoint_requested":policy.checkpoint.is_some(),"desktop_owner_required":policy.rayman.is_some() || policy.checkpoint.is_some()}),
+            );
+        }
+        if policy.rayman.is_none() && policy.checkpoint.is_none() {
+            if existing.is_none() {
+                self.submit(
+                    &request,
+                    &anchor.registration,
+                    chrono::Utc::now().timestamp(),
+                )?;
+                self.wait(&request, Duration::from_secs(120), |_| {})?;
+            }
+            let child = self.enrollment(workspace)?;
+            return Ok(
+                serde_json::json!({"initialized":true,"worktree_id":child.registration.worktree_id,"rayman":false,"checkpoint":false,"parent_history_copied":false}),
+            );
+        }
+        let context = crate::execution_context::execution_context_probe();
+        if context.principal_sid.as_deref() != Some(self.installation.owner_sid.as_str()) {
+            bail!(
+                "application initialization requires the already authorized desktop-owner hook context; no state initialization was attempted"
+            );
+        }
+        let shell = policy
+            .powershell
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("owner-pinned PowerShell missing"))?;
+        let _client = registry.pin_file(Path::new("client.exe"))?;
+        let contract = serde_json::json!({"root":self.root.path(),"workspace":workspace,"owner_sid":self.installation.owner_sid,"policy":policy,"already_enrolled":existing.is_some(),"worktree_id":existing.as_ref().map(|e| &e.registration.worktree_id)});
+        let args = vec![
+            "-NoProfile".into(),
+            "-NonInteractive".into(),
+            "-Command".into(),
+            include_str!("../../../../scripts/bootstrap-global-codex-worktree.ps1").into(),
+        ];
+        let mut environment = std::collections::BTreeMap::new();
+        // Initialization must not register a watchdog before routing is ready.
+        // The normal post-bootstrap auto call owns session registration.
+        for key in [
+            "SystemRoot",
+            "USERPROFILE",
+            "LOCALAPPDATA",
+            "APPDATA",
+            "HOMEDRIVE",
+            "HOMEPATH",
+            "TEMP",
+            "TMP",
+            "TMPDIR",
+            "RAYMAN_VALIDATION_TEMP_ROOT",
+        ] {
+            if let Ok(value) = std::env::var(key) {
+                environment.insert(key.into(), value);
+            }
+        }
+        let system = PathBuf::from(
+            environment
+                .get("SystemRoot")
+                .ok_or_else(|| anyhow::anyhow!("Windows system root missing"))?,
+        );
+        environment.insert(
+            "PATH".into(),
+            std::env::join_paths([
+                git_parent.path().to_path_buf(),
+                shell.path.parent().unwrap().to_path_buf(),
+                system.join("System32"),
+                system,
+            ])
+            .map_err(|e| anyhow::anyhow!("invalid trusted helper path: {e}"))?
+            .to_string_lossy()
+            .into(),
+        );
+        environment.insert("NoDefaultCurrentDirectoryInExePath".into(), "1".into());
+        environment.insert(
+            "RAYMAN_GLOBAL_EXECUTION_ROOT".into(),
+            crate::pathfmt::display_path(self.root.path()),
+        );
+        let output = super::process::run_sandbox_process_tree(
+            &shell.path,
+            &args,
+            workspace,
+            &environment,
+            &serde_json::to_vec(&contract)?,
+            600_000,
+            1024 * 1024,
+        )?;
+        if output.exit_code != 0 {
+            bail!(
+                "worktree state bootstrap failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        decode_json(&output.stdout)
+    }
+    pub fn prepare_linked_worktree_request(
+        &self,
+        workspace: &Path,
+        now: i64,
+    ) -> Result<(Request, Enrollment)> {
+        let (workspace, identity, common) = super::worktrees::linked_common_identity(workspace)?;
+        let mut selected = None;
+        let mut count = 0;
+        for entry in std::fs::read_dir(self.root.path())? {
+            let entry = entry?;
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let Some(id) = name
+                .strip_prefix("worktree-policy-")
+                .and_then(|s| s.strip_suffix(".json"))
+            else {
+                continue;
+            };
+            if !is_id(id) {
+                bail!("invalid protected worktree policy filename");
+            }
+            count += 1;
+            if count > 1024 {
+                bail!("worktree policy registry exceeds limit");
+            }
+            let anchor: Enrollment = decode_json(
+                &self
+                    .root
+                    .read_file(&format!("project-{id}.json"), MAX_REQUEST_BYTES as u64)?,
+            )?;
+            anchor.validate(&self.installation)?;
+            if anchor.registration.git_common_identity != common {
+                continue;
+            }
+            let (policy, digest) =
+                super::worktrees::checked_policy(&self.root, &self.installation, &anchor)?;
+            let allowed = super::native::SourceDirectory::open(&policy.allowed_root)?;
+            if workspace == allowed.path() || !workspace.starts_with(allowed.path()) {
+                continue;
+            }
+            if selected.is_some() {
+                bail!("ambiguous owner worktree delegations");
+            }
+            selected = Some((anchor, digest));
+        }
+        let (anchor, digest) = selected.ok_or_else(|| {
+            anyhow::anyhow!("no owner-approved policy covers this linked worktree")
+        })?;
+        let request = self.request(
+            &anchor,
+            Operation::EnrollLinkedWorktree {
+                workspace,
+                root_identity: identity,
+                policy_sha256: digest,
+            },
+            now,
+        )?;
+        Ok((request, anchor))
+    }
+
     pub fn prepare_commit_recovery_request(
         &self,
         workspace: &Path,
@@ -575,6 +812,11 @@ impl Client {
     }
 
     pub fn enrollment(&self, workspace: &Path) -> Result<Enrollment> {
+        self.lookup_enrollment(workspace)?
+            .ok_or_else(|| anyhow::anyhow!("workspace is not enrolled in global execution"))
+    }
+
+    fn lookup_enrollment(&self, workspace: &Path) -> Result<Option<Enrollment>> {
         let workspace = std::fs::canonicalize(workspace)?;
         let mut found = None;
         let mut count = 0;
@@ -617,7 +859,7 @@ impl Client {
                 found = Some(enrollment);
             }
         }
-        found.ok_or_else(|| anyhow::anyhow!("workspace is not enrolled in global execution"))
+        Ok(found)
     }
 
     pub fn request(
@@ -637,7 +879,10 @@ impl Client {
             project_id: enrollment.registration.project_id.clone(),
             worktree_id: enrollment.registration.worktree_id.clone(),
             registration_sha256: enrollment.registration.digest()?,
-            source_sha256: if matches!(operation, Operation::Storage { .. }) {
+            source_sha256: if matches!(
+                operation,
+                Operation::Storage { .. } | Operation::EnrollLinkedWorktree { .. }
+            ) {
                 "0".repeat(64)
             } else {
                 crate::source_fingerprint(&enrollment.workspace)?

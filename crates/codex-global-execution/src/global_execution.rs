@@ -13,11 +13,15 @@ pub mod checkpoint_store;
 mod enrollment;
 pub use enrollment::*;
 #[cfg(windows)]
+mod worktrees;
+#[cfg(windows)]
+pub use worktrees::{WorktreePolicy, authorize_worktrees, install_worktree_hook};
+#[cfg(windows)]
 mod install;
 #[cfg(windows)]
 pub use install::{
     InstallAdapter, InstallBundle, InstallBundleFile, InstallTarget, decode_install_sources,
-    publish_global_skill, register_install_adapter,
+    publish_global_skill, publish_global_skill_checked, register_install_adapter,
 };
 #[cfg(windows)]
 mod worker;
@@ -64,7 +68,7 @@ pub fn decode_registration(bytes: &[u8]) -> Result<Registration> {
     Ok(registration)
 }
 
-fn decode_json<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T> {
+pub(crate) fn decode_json<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T> {
     if bytes.is_empty() || bytes.len() > MAX_REQUEST_BYTES {
         bail!("global request size is outside the permitted range");
     }
@@ -113,6 +117,20 @@ pub(crate) fn validate_request_structure(
         bail!("invalid source digest");
     }
     match &request.operation {
+        Operation::EnrollLinkedWorktree {
+            workspace,
+            root_identity,
+            policy_sha256,
+        } => {
+            if !registration.capabilities.local_commit
+                || request.source_sha256 != "0".repeat(64)
+                || !workspace.is_absolute()
+                || !is_sha256(root_identity)
+                || !is_sha256(policy_sha256)
+            {
+                bail!("invalid linked-worktree enrollment request");
+            }
+        }
         Operation::Storage { action } => {
             if !registration.capabilities.formal_state || request.source_sha256 != "0".repeat(64) {
                 bail!("storage traffic requires the enrolled non-authoritative storage scope");

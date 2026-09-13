@@ -263,14 +263,19 @@ pub fn enroll(
     let (binding, identity) = if let Some((program, name, email)) = commit {
         let git = git.ok_or_else(|| anyhow::anyhow!("local commits require a Git worktree"))?;
         let common = common.ok_or_else(|| anyhow::anyhow!("Git common directory missing"))?;
-        let branch =
-            branch.ok_or_else(|| anyhow::anyhow!("enroll an attached branch for local commits"))?;
+        let branch = branch.unwrap_or_else(|| "HEAD".into());
         validate_relative_path(&branch)?;
         let common_pin = super::native::SourceDirectory::open(&common)?;
-        let oid = common_pin.read_file(Path::new(&branch), 4096)?;
+        let git_pin = super::native::SourceDirectory::open(&git)?;
+        let ref_pin = if branch == "HEAD" {
+            &git_pin
+        } else {
+            &common_pin
+        };
+        let oid = ref_pin.read_file(Path::new(&branch), 4096)?;
         let oid = std::str::from_utf8(&oid)?.trim();
         if !is_hex(oid, 40) && !is_hex(oid, 64) {
-            bail!("enrollment needs a valid existing loose branch ref");
+            bail!("enrollment needs a valid loose branch ref or detached HEAD");
         }
         registration.object_id_length = oid.len();
         for value in [name, email] {

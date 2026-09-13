@@ -14,6 +14,18 @@ Worktrees have distinct IDs and share a Git-common-directory commit lock.
 Registration cannot be inferred from project text, a remote URL, or a request.
 No global or cross-project registration is enabled by default.
 
+The owner's linked-worktree policy binds an existing registration and an exact
+directory identity. Every automatic enrollment must recheck the Git-common
+identity, worktree back-link, root identity and policy digest. It gives the new
+worktree its own registration, never its parent's installation capabilities.
+An interrupted enrollment keeps its protected membership intent for exact retry.
+SessionStart is only a trigger; hook text and project trust do not grant this
+capability. Unrelated projects remain untouched and hook errors are informational.
+Hook and global-skill publication must not overwrite a concurrent editor. Hold
+and recheck the reviewed original identity and bytes, preserve its displaced
+object, publish without replacement, and roll back only into an absent name.
+Conflicting recovery keeps both the concurrent file and the original backup.
+
 ## GLOBAL-PROTOCOL
 
 Requests are bounded UTF-8 JSON with exact fields and duplicate-key rejection.
@@ -31,6 +43,12 @@ Unlisted changes are preserved. Staged changes, unsafe path aliases, content
 drift, non-ordinary files and concurrent ref/index writers fail closed.
 Fixed Git plumbing cannot execute hooks, filters, helpers or network commands
 as the desktop user. Ref/index publication is journaled and recoverable.
+
+A detached HEAD publishes through the worktree's private Git directory and
+must not update the parent branch or index. Changing attachment mode invalidates
+the binding. The only accepted worktree-local configuration is inert Codex
+localEnvironmentConfigPath metadata; execution, include and other Git settings
+remain rejected. Accepted metadata is pinned throughout inspection.
 
 New Git metadata files retain the publisher's owner/group while preserving the
 source access policy; publication must not demand assignment of a historical
@@ -55,6 +73,15 @@ destination is accepted. CAS revisions reject lost updates. Request replay
 returns the recorded outcome only when the request digest is identical.
 Migration preserves a verified backup and all records; it never synthesizes
 successful validation or copies stale evidence into new requirements.
+
+New-worktree application initialization is a fixed frontend operation in the
+desktop owner's existing least-privilege context. Programs and source packages
+come from protected owner-registered product roles and are byte-pinned; no
+program or argument vector comes from the hook event. The worker still never
+executes a product application or project script. Parent vault paths and history
+are not reused. Existing foreign/inactive state fails closed; checkpoint
+publication resumes its exact protected transaction. Watchdog registration is
+deferred to the normal post-routing session flow.
 
 ## GLOBAL-INSTALL
 

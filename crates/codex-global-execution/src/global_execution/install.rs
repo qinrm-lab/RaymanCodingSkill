@@ -19,6 +19,17 @@ const GLOBAL_SKILL: &str = include_str!("../../../../global-skill/SKILL.md");
 /// Publish only the compiled global entrypoint; project input cannot select
 /// the skill text or destination. Existing different content is preserved.
 pub fn publish_global_skill(root: &Path) -> Result<serde_json::Value> {
+    publish_global_skill_checked(root, None)
+}
+
+pub fn publish_global_skill_checked(
+    root: &Path,
+    expected_sha256: Option<&str>,
+) -> Result<serde_json::Value> {
+    super::native::require_unelevated_worker()?;
+    if expected_sha256.is_some_and(|hash| !is_sha256(hash)) {
+        bail!("invalid expected global skill digest");
+    }
     let client = Client::open(root)?;
     let status = client.status()?;
     let context = crate::execution_context::execution_context_probe();
@@ -33,10 +44,18 @@ pub fn publish_global_skill(root: &Path) -> Result<serde_json::Value> {
             .token_profile
             .ok_or_else(|| anyhow::anyhow!("owner profile unavailable"))?,
     );
-    publish_skill_in_profile(&profile)
+    publish_skill_in_profile_checked(&profile, expected_sha256)
 }
 
+#[cfg(test)]
 fn publish_skill_in_profile(profile: &Path) -> Result<serde_json::Value> {
+    publish_skill_in_profile_checked(profile, None)
+}
+
+fn publish_skill_in_profile_checked(
+    profile: &Path,
+    expected_sha256: Option<&str>,
+) -> Result<serde_json::Value> {
     let parent = super::native::SourceDirectory::open(&profile.join(".codex/skills"))?;
     let destination = parent.path().join("codex-global-execution");
     match std::fs::create_dir(&destination) {
@@ -46,14 +65,20 @@ fn publish_skill_in_profile(profile: &Path) -> Result<serde_json::Value> {
     }
     let directory = super::native::SourceDirectory::open(&destination)?;
     let expected = GLOBAL_SKILL.as_bytes();
-    if directory.path().join("SKILL.md").try_exists()? {
-        if directory.read_file(Path::new("SKILL.md"), 65536)? != expected {
+    let previous = if directory.path().join("SKILL.md").try_exists()? {
+        let bytes = directory.read_file(Path::new("SKILL.md"), 65536)?;
+        if bytes != expected && expected_sha256 != Some(sha256_bytes(&bytes).as_str()) {
             bail!("existing global skill differs; preserve it for explicit upgrade");
         }
-        return Ok(
-            serde_json::json!({"published":true,"already_current":true,"path":directory.path().join("SKILL.md"),"sha256":sha256_bytes(expected)}),
-        );
-    }
+        if bytes == expected {
+            return Ok(
+                serde_json::json!({"published":true,"already_current":true,"path":directory.path().join("SKILL.md"),"sha256":sha256_bytes(expected)}),
+            );
+        }
+        Some(bytes)
+    } else {
+        None
+    };
     let mut nonce = [0u8; 16];
     getrandom::fill(&mut nonce)
         .map_err(|e| anyhow::anyhow!("skill publication entropy unavailable: {e}"))?;
@@ -62,7 +87,13 @@ fn publish_skill_in_profile(profile: &Path) -> Result<serde_json::Value> {
         nonce.iter().map(|b| format!("{b:02x}")).collect::<String>()
     );
     let mut slot = super::publication::PublicationSlot::create(directory.path(), &seed, expected)?;
-    slot.rename("SKILL.md", false)?;
+    if let Some(before) = &previous {
+        slot.preserve_access_from(&directory.path().join("SKILL.md"))?;
+        if directory.read_file(Path::new("SKILL.md"), 65536)? != *before {
+            bail!("global skill changed concurrently");
+        }
+    }
+    slot.publish_reviewed("SKILL.md", previous.as_deref())?;
     Ok(
         serde_json::json!({"published":true,"already_current":false,"path":directory.path().join("SKILL.md"),"sha256":sha256_bytes(expected)}),
     )
@@ -908,6 +939,25 @@ mod tests {
         std::fs::write(&target, b"user maintained entry").unwrap();
         assert!(publish_skill_in_profile(profile.path()).is_err());
         assert_eq!(std::fs::read(target).unwrap(), b"user maintained entry");
+    }
+    #[cfg(windows)]
+    #[test]
+    fn global_skill_upgrade_requires_exact_reviewed_previous_bytes() {
+        let profile = tempfile::tempdir().unwrap();
+        let directory = profile.path().join(".codex/skills/codex-global-execution");
+        std::fs::create_dir_all(&directory).unwrap();
+        let target = directory.join("SKILL.md");
+        let previous = b"reviewed previous skill\r\n";
+        std::fs::write(&target, previous).unwrap();
+        assert!(publish_skill_in_profile_checked(profile.path(), Some(&"0".repeat(64))).is_err());
+        assert_eq!(std::fs::read(&target).unwrap(), previous);
+        publish_skill_in_profile_checked(profile.path(), Some(&sha256_bytes(previous))).unwrap();
+        assert_eq!(std::fs::read(&target).unwrap(), GLOBAL_SKILL.as_bytes());
+        assert_eq!(
+            publish_skill_in_profile_checked(profile.path(), Some(&sha256_bytes(previous)))
+                .unwrap()["already_current"],
+            true
+        );
     }
     #[cfg(windows)]
     #[test]

@@ -131,7 +131,7 @@ impl Ledger {
                     }
                 }
             }
-            Operation::Storage { .. } => {
+            Operation::Storage { .. } | Operation::EnrollLinkedWorktree { .. } => {
                 bail!("application storage uses its own file transaction handler")
             }
             Operation::RecoverCommit { .. } => {

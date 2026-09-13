@@ -5,18 +5,167 @@ use std::{fs::File, io::Read, path::Path};
 
 pub fn run(json: bool, command: &GlobalExecutionCmd) -> Result<()> {
     match &command.action {
-        GlobalExecutionAction::PublishSkill { root, yes } => {
+        GlobalExecutionAction::InstallWorktreeHook { root, yes } => {
+            #[cfg(windows)]
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&global::install_worktree_hook(root, *yes)?)?
+            );
+            #[cfg(not(windows))]
+            {
+                let _ = (root, yes);
+                bail!("worktree hook installation requires Windows");
+            }
+        }
+        GlobalExecutionAction::BootstrapWorktree {
+            root,
+            workspace,
+            yes,
+        } => {
+            #[cfg(windows)]
+            println!(
+                "{}",
+                serde_json::to_string_pretty(
+                    &global::Client::open(root)?.bootstrap_linked_worktree(workspace, *yes)?
+                )?
+            );
+            #[cfg(not(windows))]
+            {
+                let _ = (root, workspace, yes);
+                bail!("worktree bootstrap requires Windows");
+            }
+        }
+        GlobalExecutionAction::WorktreeHook { root } => {
+            #[cfg(windows)]
+            {
+                let outcome = (|| -> Result<serde_json::Value> {
+                    let mut bytes = Vec::new();
+                    std::io::stdin()
+                        .take((global::MAX_REQUEST_BYTES + 1) as u64)
+                        .read_to_end(&mut bytes)?;
+                    if bytes.len() > global::MAX_REQUEST_BYTES {
+                        bail!("hook event exceeds bound");
+                    }
+                    let event: serde_json::Value = global::decode_json(&bytes)?;
+                    if event["hook_event_name"] != "SessionStart"
+                        || event["permission_mode"] == "plan"
+                    {
+                        return Ok(serde_json::json!({"applicable":false}));
+                    }
+                    let cwd = event["cwd"]
+                        .as_str()
+                        .ok_or_else(|| anyhow::anyhow!("hook cwd missing"))?;
+                    let mut workspace = std::path::PathBuf::from(cwd);
+                    if !workspace.is_absolute() {
+                        bail!("hook cwd must be absolute");
+                    }
+                    for _ in 0..64 {
+                        let marker = workspace.join(".git");
+                        if marker.is_dir() {
+                            return Ok(serde_json::json!({"applicable":false}));
+                        }
+                        if marker.try_exists()? {
+                            return global::Client::open(root)?
+                                .bootstrap_linked_worktree(&workspace, true);
+                        }
+                        if !workspace.pop() {
+                            break;
+                        }
+                    }
+                    Ok(serde_json::json!({"applicable":false}))
+                })();
+                let context = match outcome {
+                    Ok(value) if value["initialized"] == true => {
+                        "The linked worktree has its own registered identity and state. Read this worktree's current AGENTS.md; use its current local runtime and vault paths, not cached paths from the parent checkout."
+                    }
+                    Ok(_) => "",
+                    Err(error) => {
+                        eprintln!("Global worktree bootstrap: {error:#}");
+                        "Automatic linked-worktree setup did not complete. Preserve the current files and do not use cached parent-checkout state paths. Inspect the hook diagnostic and global worktree bootstrap preview before claiming commit or checkpoint readiness."
+                    }
+                };
+                println!(
+                    "{}",
+                    serde_json::json!({"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":context}})
+                );
+            }
+            #[cfg(not(windows))]
+            {
+                let _ = root;
+                println!("{{}}");
+            }
+        }
+        GlobalExecutionAction::AuthorizeWorktrees {
+            root,
+            workspace,
+            allowed_root,
+            formal_state,
+            yes,
+        } => {
+            #[cfg(windows)]
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&global::authorize_worktrees(
+                    root,
+                    workspace,
+                    allowed_root,
+                    *formal_state,
+                    *yes
+                )?)?
+            );
+            #[cfg(not(windows))]
+            {
+                let _ = (root, workspace, allowed_root, formal_state, yes);
+                bail!("worktree authorization requires Windows");
+            }
+        }
+        GlobalExecutionAction::EnrollLinkedWorktree {
+            root,
+            workspace,
+            yes,
+            timeout_seconds,
+        } => {
+            #[cfg(windows)]
+            {
+                let client = global::Client::open(root)?;
+                let (request, anchor) = client
+                    .prepare_linked_worktree_request(workspace, chrono::Utc::now().timestamp())?;
+                if *yes {
+                    submit_and_wait(&client, &request, &anchor.registration, *timeout_seconds)?;
+                } else {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(
+                            &serde_json::json!({"preview":true,"executed":false,"request":request,"state_initialization_required":true})
+                        )?
+                    );
+                }
+            }
+            #[cfg(not(windows))]
+            {
+                let _ = (root, workspace, yes, timeout_seconds);
+                bail!("worktree enrollment requires Windows");
+            }
+        }
+        GlobalExecutionAction::PublishSkill {
+            root,
+            yes,
+            expected_sha256,
+        } => {
             if !yes {
                 bail!("global skill publication requires explicit --yes");
             }
             #[cfg(windows)]
             println!(
                 "{}",
-                serde_json::to_string_pretty(&global::publish_global_skill(root)?)?
+                serde_json::to_string_pretty(&global::publish_global_skill_checked(
+                    root,
+                    expected_sha256.as_deref()
+                )?)?
             );
             #[cfg(not(windows))]
             {
-                let _ = root;
+                let _ = (root, expected_sha256);
                 bail!("global skill publication requires Windows");
             }
         }

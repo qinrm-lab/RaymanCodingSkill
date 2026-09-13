@@ -273,6 +273,36 @@ impl Worker {
             super::decode_json(&self.root.read_file(&name, MAX_REQUEST_BYTES as u64)?)?;
         enrollment.validate(&self.installation)?;
         validate_request_structure(&request, &enrollment.registration)?;
+        super::worktrees::verify_existing_member(&self.root, &enrollment)?;
+        if let Operation::EnrollLinkedWorktree {
+            workspace,
+            root_identity,
+            policy_sha256,
+        } = &request.operation
+        {
+            validate_request(&request, &enrollment.registration, now)?;
+            self.stage("worktree_enrollment")?;
+            let linked = super::worktrees::register_linked(
+                &self.root,
+                &self.installation,
+                &enrollment,
+                workspace,
+                root_identity,
+                policy_sha256,
+            )?;
+            return Ok(WorkerResult {
+                schema: "rayman.global-worker-result.v1".into(),
+                installation_id: self.installation.installation_id.clone(),
+                request_id: request.request_id.clone(),
+                request_sha256: request.digest()?,
+                registration_sha256: enrollment.registration.digest()?,
+                executor_sid: self.installation.owner_sid.clone(),
+                replayed: false,
+                result: RecordedResult::Storage {
+                    details: serde_json::json!({"worktree_id":linked.registration.worktree_id,"registered":true,"state_initialized":false,"installation_capabilities_inherited":false}),
+                },
+            });
+        }
         if matches!(
             request.operation,
             Operation::Commit { .. } | Operation::RecoverCommit { .. }
@@ -777,6 +807,223 @@ pub fn serve(root: &Path, once: bool) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    #[test]
+    fn linked_worktree_queue_requires_owner_policy_and_preserves_parent_authority() {
+        let base = tempfile::tempdir().unwrap();
+        let root = base.path().join("backend");
+        let parent = base.path().join("parent");
+        let allowed = base.path().join("allowed");
+        for path in [&root, &parent, &allowed] {
+            std::fs::create_dir(path).unwrap();
+        }
+        let program = std::path::PathBuf::from("C:/Program Files/Git/mingw64/bin/git.exe");
+        let git = |cwd: &Path, args: &[&str]| {
+            let output = std::process::Command::new(&program)
+                .args(args)
+                .current_dir(cwd)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        git(&parent, &["init", "-b", "main"]);
+        git(&parent, &["config", "user.name", "Fixture"]);
+        git(
+            &parent,
+            &["config", "user.email", "fixture@example.invalid"],
+        );
+        std::fs::write(parent.join("file.txt"), b"baseline\n").unwrap();
+        git(&parent, &["add", "."]);
+        git(
+            &parent,
+            &["-c", "commit.gpgsign=false", "commit", "-m", "baseline"],
+        );
+        let linked = allowed.join("工作树 含空格");
+        git(
+            &parent,
+            &[
+                "worktree",
+                "add",
+                "--detach",
+                linked.to_str().unwrap(),
+                "HEAD",
+            ],
+        );
+        let sid = crate::execution_context::execution_context_probe()
+            .principal_sid
+            .unwrap();
+        super::super::native::protect_fixture_directory(&root, &sid, "").unwrap();
+        let pin = ProtectedDirectory::open(&root, &sid).unwrap();
+        let binary = root.join("worker.exe");
+        std::fs::write(&binary, b"worker fixture").unwrap();
+        std::fs::write(root.join("client.exe"), b"client fixture").unwrap();
+        std::fs::create_dir(root.join("requests")).unwrap();
+        let installation = Installation {
+            schema_version: 1,
+            installation_id: "a".repeat(32),
+            owner_sid: sid,
+            root_identity: pin.identity().into(),
+            worker_sha256: sha256_bytes(b"worker fixture"),
+            client_sha256: sha256_bytes(b"client fixture"),
+            source_project_id: "b".repeat(32),
+        };
+        crate::file_io::write_json(&root.join("installation.json"), &installation).unwrap();
+        let mut anchor = enroll(
+            &root,
+            &parent,
+            Some((&program, "Fixture", "fixture@example.invalid")),
+            true,
+            true,
+        )
+        .unwrap();
+        anchor
+            .install_policies
+            .insert("fixture-product".into(), "c".repeat(64));
+        anchor
+            .registration
+            .capabilities
+            .install_adapters
+            .insert("fixture-product".into());
+        anchor.registration.policy_sha256 = anchor.policy_digest().unwrap();
+        let anchor_path = root.join(format!("project-{}.json", anchor.registration.worktree_id));
+        crate::file_io::write_json(&anchor_path, &anchor).unwrap();
+        let anchor_bytes = std::fs::read(&anchor_path).unwrap();
+        let parent_index = std::fs::read(parent.join(".git/index")).unwrap();
+        let client = Client::open(&root).unwrap();
+        assert!(
+            client
+                .prepare_linked_worktree_request(&linked, 1000)
+                .is_err()
+        );
+        authorize_worktrees(&root, &parent, &allowed, true, false).unwrap();
+        assert!(
+            client
+                .prepare_linked_worktree_request(&linked, 1000)
+                .is_err()
+        );
+        authorize_worktrees(&root, &parent, &allowed, true, true).unwrap();
+        let worker = Worker::open_with_executable(&root, &binary).unwrap();
+        let (request, parent_enrollment) = client
+            .prepare_linked_worktree_request(&linked, 1000)
+            .unwrap();
+        client
+            .submit(&request, &parent_enrollment.registration, 1000)
+            .unwrap();
+        assert_eq!(worker.cycle(1000).unwrap(), 1);
+        let result = client.result(&request).unwrap().unwrap();
+        assert!(matches!(result.result, RecordedResult::Storage { .. }));
+        let child = client.enrollment(&linked).unwrap();
+        assert_ne!(
+            child.registration.worktree_id,
+            anchor.registration.worktree_id
+        );
+        assert_ne!(
+            child.registration.root_identity,
+            anchor.registration.root_identity
+        );
+        assert_eq!(
+            child.registration.git_common_identity,
+            anchor.registration.git_common_identity
+        );
+        assert!(child.registration.capabilities.install_adapters.is_empty());
+        assert!(child.install_policies.is_empty());
+        assert!(!linked.join(".RaymanCodingSkill").exists());
+        assert!(!linked.join(".agent-checkpoints").exists());
+        let project_path = root.join(format!("project-{}.json", child.registration.worktree_id));
+        let project_bytes = std::fs::read(&project_path).unwrap();
+        let (retry, _) = client
+            .prepare_linked_worktree_request(&linked, 1001)
+            .unwrap();
+        worker
+            .process(&serde_json::to_vec(&retry).unwrap(), 1001)
+            .unwrap();
+        assert_eq!(std::fs::read(&project_path).unwrap(), project_bytes);
+        let member_path = root.join(format!(
+            "worktree-member-{}.json",
+            child.registration.worktree_id
+        ));
+        let member_bytes = std::fs::read(&member_path).unwrap();
+        let mut interrupted: serde_json::Value = serde_json::from_slice(&member_bytes).unwrap();
+        interrupted["registered"] = false.into();
+        crate::file_io::write_json(&member_path, &interrupted).unwrap();
+        worker
+            .process(&serde_json::to_vec(&retry).unwrap(), 1001)
+            .unwrap();
+        assert_eq!(std::fs::read(&member_path).unwrap(), member_bytes);
+        let impostor = allowed.join("impostor");
+        std::fs::create_dir(&impostor).unwrap();
+        std::fs::copy(linked.join(".git"), impostor.join(".git")).unwrap();
+        assert!(
+            client
+                .prepare_linked_worktree_request(&impostor, 1002)
+                .is_err()
+        );
+        let mut forged = retry.clone();
+        if let Operation::EnrollLinkedWorktree {
+            workspace,
+            root_identity,
+            ..
+        } = &mut forged.operation
+        {
+            *workspace = impostor.clone();
+            *root_identity = super::super::native::SourceDirectory::open(&impostor)
+                .unwrap()
+                .identity()
+                .into();
+        }
+        assert!(
+            worker
+                .process(&serde_json::to_vec(&forged).unwrap(), 1002)
+                .is_err()
+        );
+        let outside = base.path().join("outside");
+        git(
+            &parent,
+            &[
+                "worktree",
+                "add",
+                "--detach",
+                outside.to_str().unwrap(),
+                "HEAD",
+            ],
+        );
+        assert!(
+            client
+                .prepare_linked_worktree_request(&outside, 1002)
+                .is_err()
+        );
+        if let Operation::EnrollLinkedWorktree {
+            workspace,
+            root_identity,
+            ..
+        } = &mut forged.operation
+        {
+            *workspace = outside.clone();
+            *root_identity = super::super::native::SourceDirectory::open(&outside)
+                .unwrap()
+                .identity()
+                .into();
+        }
+        assert!(
+            worker
+                .process(&serde_json::to_vec(&forged).unwrap(), 1002)
+                .is_err()
+        );
+        assert!(
+            worker
+                .process(&serde_json::to_vec(&retry).unwrap(), 9999)
+                .is_err()
+        );
+        assert_eq!(std::fs::read(&anchor_path).unwrap(), anchor_bytes);
+        assert_eq!(
+            std::fs::read(parent.join(".git/index")).unwrap(),
+            parent_index
+        );
+    }
     #[cfg(windows)]
     #[test]
     fn maintenance_preserves_queue_and_defers_startup_recovery() {
