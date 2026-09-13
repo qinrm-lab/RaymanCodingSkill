@@ -1,5 +1,115 @@
-
 use super::*;
+
+#[cfg(windows)]
+#[test]
+fn storage_owner_attestation_preserves_registration_and_rejects_replaced_roots() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+    let base = tempfile::tempdir().unwrap();
+    let root = base.path().join("backend");
+    let workspace = base.path().join("workspace");
+    std::fs::create_dir(&root).unwrap();
+    std::fs::create_dir(&workspace).unwrap();
+    std::fs::create_dir(root.join("requests")).unwrap();
+    let sid = crate::execution_context::execution_context_probe()
+        .principal_sid
+        .unwrap();
+    super::super::native::protect_fixture_directory(&root, &sid, "").unwrap();
+    let pin = ProtectedDirectory::open(&root, &sid).unwrap();
+    let binary = root.join("worker.exe");
+    std::fs::write(&binary, b"fixture worker").unwrap();
+    std::fs::write(root.join("client.exe"), b"fixture client").unwrap();
+    let installation = Installation {
+        schema_version: 1,
+        installation_id: "a".repeat(32),
+        owner_sid: sid,
+        root_identity: pin.identity().into(),
+        worker_sha256: sha256_bytes(b"fixture worker"),
+        client_sha256: sha256_bytes(b"fixture client"),
+        source_project_id: "b".repeat(32),
+    };
+    crate::file_io::write_json(&root.join("installation.json"), &installation).unwrap();
+    let enrolled = enroll(&root, &workspace, None, true, true).unwrap();
+    let registration_path = root.join(format!(
+        "project-{}.json",
+        enrolled.registration.worktree_id
+    ));
+    let original = std::fs::read(&registration_path).unwrap();
+    let client = Client::open(&root).unwrap();
+    let worker = Worker::open_with_executable(&root, &binary).unwrap();
+    let mut forged = client
+        .request(
+            &enrolled,
+            Operation::Storage {
+                action: StorageAction::InspectWorkspace,
+            },
+            chrono::Utc::now().timestamp(),
+        )
+        .unwrap();
+    forged.registration_sha256 = "0".repeat(64);
+    assert!(
+        worker
+            .process(
+                &serde_json::to_vec(&forged).unwrap(),
+                chrono::Utc::now().timestamp()
+            )
+            .is_err()
+    );
+    drop(worker);
+    struct Running {
+        stop: Arc<AtomicBool>,
+        thread: Option<std::thread::JoinHandle<()>>,
+    }
+    impl Drop for Running {
+        fn drop(&mut self) {
+            self.stop.store(true, Ordering::SeqCst);
+            if let Some(thread) = self.thread.take() {
+                thread.join().unwrap();
+            }
+        }
+    }
+    let stop = Arc::new(AtomicBool::new(false));
+    let signal = stop.clone();
+    let worker_root = root.clone();
+    let thread = std::thread::spawn(move || {
+        let worker = Worker::open_with_executable(&worker_root, &binary).unwrap();
+        while !signal.load(Ordering::SeqCst) {
+            worker.cycle(chrono::Utc::now().timestamp()).unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    });
+    let _running = Running {
+        stop,
+        thread: Some(thread),
+    };
+    let observed = client.storage_enrollment(&workspace).unwrap();
+    assert_eq!(
+        observed.registration.digest().unwrap(),
+        enrolled.registration.digest().unwrap()
+    );
+    assert_eq!(std::fs::read(&registration_path).unwrap(), original);
+    assert!(
+        !workspace.join(".RaymanCodingSkill").exists(),
+        "inspection must not initialize state"
+    );
+    let unregistered = base.path().join("unregistered");
+    std::fs::create_dir(&unregistered).unwrap();
+    assert!(client.storage_enrollment(&unregistered).is_err());
+    std::fs::rename(&workspace, base.path().join("original-workspace")).unwrap();
+    std::fs::create_dir(&workspace).unwrap();
+    assert!(
+        client.enrollment(&workspace).is_err(),
+        "strict source lookup remains enforced"
+    );
+    assert!(
+        client.storage_enrollment(&workspace).is_err(),
+        "owner must reject replacement before returning storage identity"
+    );
+    assert!(!workspace.join(".RaymanCodingSkill").exists());
+    assert_eq!(std::fs::read(&registration_path).unwrap(), original);
+}
 #[cfg(windows)]
 #[test]
 fn linked_worktree_queue_requires_owner_policy_and_preserves_parent_authority() {

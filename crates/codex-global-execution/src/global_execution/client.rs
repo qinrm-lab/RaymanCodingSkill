@@ -818,6 +818,32 @@ impl Client {
     }
 
     fn lookup_enrollment(&self, workspace: &Path) -> Result<Option<Enrollment>> {
+        let found = self.lookup_registered_workspace(workspace)?;
+        if let Some(enrollment) = &found {
+            let pin = super::native::SourceDirectory::open(&enrollment.workspace)?;
+            super::relocation::check_root(&self.root, &enrollment.registration, &pin)?;
+        }
+        Ok(found)
+    }
+
+    /// Fixed storage is executed by the owner, who can pin ancestors that the
+    /// sandbox cannot open. Authenticate that same owner-side check explicitly;
+    /// never use this route to relax client-side commit/install inspection.
+    pub(crate) fn storage_enrollment(&self, workspace: &Path) -> Result<Enrollment> {
+        let enrollment = self
+            .lookup_registered_workspace(workspace)?
+            .ok_or_else(|| anyhow::anyhow!("workspace is not enrolled in global execution"))?;
+        let result = self.storage_call(&enrollment, StorageAction::InspectWorkspace)?;
+        if result["workspace_identity_verified"] != true
+            || result["worktree_id"] != enrollment.registration.worktree_id
+            || result["registration_sha256"] != enrollment.registration.digest()?
+        {
+            bail!("owner storage workspace attestation differs");
+        }
+        Ok(enrollment)
+    }
+
+    fn lookup_registered_workspace(&self, workspace: &Path) -> Result<Option<Enrollment>> {
         let workspace = std::fs::canonicalize(workspace)?;
         let mut found = None;
         let mut count = 0;
@@ -853,8 +879,6 @@ impl Client {
                 if found.is_some() {
                     bail!("workspace has ambiguous global registrations");
                 }
-                let pin = super::native::SourceDirectory::open(&workspace)?;
-                super::relocation::check_root(&self.root, &enrollment.registration, &pin)?;
                 found = Some(enrollment);
             }
         }

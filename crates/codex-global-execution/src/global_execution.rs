@@ -148,6 +148,7 @@ pub(crate) fn validate_request_structure(
                 }
             };
             match action {
+                StorageAction::InspectWorkspace => {}
                 StorageAction::CheckpointApply {
                     lease_id,
                     transaction_id,

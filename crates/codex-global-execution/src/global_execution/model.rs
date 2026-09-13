@@ -136,6 +136,7 @@ pub enum StateObject {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum StorageAction {
+    InspectWorkspace,
     CheckpointApply {
         lease_id: String,
         transaction_id: String,

@@ -172,6 +172,19 @@ uses the same fixed endpoint as the global configuration.
 
 ## Fixed file installation adapter
 
+Fixed application-storage frontends resolve only the owner-protected registration
+and request an explicit `inspect_workspace` attestation. The desktop worker pins
+and verifies the complete workspace ancestry before returning the exact registered
+worktree/digest pair, then repeats its strict checks for every storage operation.
+This supports sandbox threads whose workspace is readable but whose profile
+ancestors cannot be opened by the sandbox token. Commit and installation source
+inspection retain their existing client-side checks. No ACL expansion or
+permission-error fallback is used; older workers reject the new inspection action.
+
+Hook publication releases its own write handle before strict readback. A hook
+already published when an older installer reported a sharing violation can be
+verified through the unchanged/idempotent install path before continuing bootstrap.
+
 The worker now has a file publication handler, separate from application
 execution and release acceptance. The desktop owner registers a JSON adapter
 specification with `adapter_id` and a `targets` map of role names to absolute

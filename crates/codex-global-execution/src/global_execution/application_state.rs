@@ -119,6 +119,11 @@ impl ApplicationState {
         let source = super::native::SourceDirectory::open(&enrollment.workspace)?;
         super::relocation::check_root(root, registration, &source)?;
         match action {
+            StorageAction::InspectWorkspace => Ok(serde_json::json!({
+                "workspace_identity_verified":true,
+                "worktree_id":registration.worktree_id,
+                "registration_sha256":registration.digest()?
+            })),
             StorageAction::CheckpointApply {
                 lease_id,
                 transaction_id,

@@ -22,11 +22,11 @@
     ]
   },
   "revision": {
-    "generation": 34,
+    "generation": 35,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 33,
-      "sha256": "cb558b1fe2243fcf92ec095b613152389481d05efcd103fc42db42724cae11f3"
+      "generation": 34,
+      "sha256": "66425c1527f3101fc5851e4035039a7042ca18d4cace2dbced36fe043969a7c3"
     }
   },
   "tests": [
@@ -79,6 +79,32 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-GLOBAL-HOOK-OWNER-TRUST-20260911",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/worktrees.rs::hook_publication_strict_readback_releases_its_own_write_handle",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/worktrees.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "hook_publication_strict_readback_releases_its_own_write_handle",
+      "selector_sha256": "c08e54bcf6d2cb943f19fd98e7b9da50b73230374b54ecd092998511004a1443",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-HOOKSTORAGE-DB03967A72972E782FA2",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/worker/tests.rs::storage_owner_attestation_preserves_registration_and_rejects_replaced_roots",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/worker/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "storage_owner_attestation_preserves_registration_and_rejects_replaced_roots",
+      "selector_sha256": "37a60c30097f86bf67ca9b43907623b0aba10922e25b4db245ca9cc2f1c3f176",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-HOOKSTORAGE-E501DBAC538A11BED97D",
       "status": "active",
       "retirement": null
     },

@@ -100,7 +100,7 @@ pub fn install_worktree_hook(root: &Path, publish: bool) -> Result<serde_json::V
                 .timestamp_nanos_opt()
                 .ok_or_else(|| anyhow::anyhow!("hook staging clock invalid"))?
         );
-        let mut stage = super::publication::PublicationSlot::create(
+        let stage = super::publication::PublicationSlot::create(
             directory.path(),
             &format!(".worktree-hook-{nonce}"),
             &bytes,
@@ -130,19 +130,63 @@ pub fn install_worktree_hook(root: &Path, publish: bool) -> Result<serde_json::V
         } else if target.try_exists()? {
             bail!("hook configuration appeared concurrently");
         }
-        stage.publish_reviewed("hooks.json", before.as_deref())?;
-        if directory.read_file(Path::new("hooks.json"), 1024 * 1024)? != bytes {
-            bail!("hook publication readback differs");
-        }
+        publish_hook_and_verify(stage, &directory, before.as_deref(), &bytes)?;
     }
     Ok(
         serde_json::json!({"installed":publish,"preview":!publish,"changed":changed,"path":target,"hook_review_required":changed,"other_handlers_preserved":true}),
     )
 }
 
+fn publish_hook_and_verify(
+    mut stage: super::publication::PublicationSlot,
+    directory: &native::SourceDirectory,
+    before: Option<&[u8]>,
+    bytes: &[u8],
+) -> Result<()> {
+    stage.publish_reviewed("hooks.json", before)?;
+    // Strict reads deny existing writers too. Release our publication handle
+    // before reopening the published file; the directory remains pinned.
+    drop(stage);
+    if directory.read_file(Path::new("hooks.json"), 1024 * 1024)? != bytes {
+        bail!("hook publication readback differs");
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    #[test]
+    fn hook_publication_strict_readback_releases_its_own_write_handle() {
+        for existing in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let old = b"previous hook document";
+            if existing {
+                std::fs::write(temp.path().join("hooks.json"), old).unwrap();
+            }
+            let directory = native::SourceDirectory::open(temp.path()).unwrap();
+            let bytes = br#"{"hooks":{"SessionStart":[]}}"#;
+            let stage = super::super::publication::PublicationSlot::create(
+                temp.path(),
+                "hook-stage",
+                bytes,
+            )
+            .unwrap();
+            publish_hook_and_verify(stage, &directory, existing.then_some(old.as_slice()), bytes)
+                .unwrap();
+            assert_eq!(
+                directory.read_file(Path::new("hooks.json"), 1024).unwrap(),
+                bytes
+            );
+            if existing {
+                assert_eq!(
+                    std::fs::read(temp.path().join("hook-stage.previous")).unwrap(),
+                    old
+                );
+            }
+        }
+    }
     #[cfg(windows)]
     #[test]
     fn hook_merge_preserves_foreign_handlers_and_refuses_ambiguous_ownership() {

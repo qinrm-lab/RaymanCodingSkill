@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 37,
+    "generation": 38,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 36,
-      "sha256": "5c6aec51a20191508981842ef66031567da1490bf0fd07e59bd593bdb4c25c20"
+      "generation": 37,
+      "sha256": "caea0d9efd2b1198c0a33f76f16b501eac3f1334f7f905405cb8a0dd773ea7db"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "66425c1527f3101fc5851e4035039a7042ca18d4cace2dbced36fe043969a7c3"
+    "sha256": "51eb9ed36a29d077bff531a08b314d520b9b98a19a1ba88c63f7686f8b5c4e91"
   },
   "sources": [
     {
@@ -398,11 +398,27 @@
     },
     {
       "source_id": "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "kind": "internal_contract",
       "title": "Global Codex fixed-capability execution contract",
       "path": "governance/sources/global-codex-execution.md",
       "sha256": "c205ecb03ffe96f69e9d6269527f3ef940085208c9d55da70154cf1331ecc529",
+      "valid_until": "2027-09-09",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "source_id": "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "kind": "internal_contract",
+      "title": "Global Codex fixed-capability execution contract",
+      "path": "governance/sources/global-codex-execution.md",
+      "sha256": "5b24a92775f48df6d19299caac2af75d9830fd8bcbc781dcec8ab33d26c2dec5",
       "valid_until": "2027-09-09",
       "retirement": null
     },
@@ -4541,8 +4557,26 @@
     },
     {
       "link_id": "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND",
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_id": "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
       "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
       "relation": "defines",
       "review": {
@@ -122479,7 +122513,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -122496,6 +122530,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "da8e8abe4236868d84811d4e21192e953737b72373d5058989366edd1a7ea716",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "6ac38042e1e47547ebde16666c03b1d3b9ff63ed0fda32ee78c051bf92ec092a",
       "retirement": null
     },
     {
@@ -123884,7 +123945,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-DISKREBIND-7285FB4A63BE7852E5A2",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -123901,6 +123962,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "a631f895f56cc99b41ae50608caecfced72a56f86960b141331bf6efc4240e08",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-DISKREBIND-7285FB4A63BE7852E5A2-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-DISKREBIND-7285FB4A63BE7852E5A2-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-DISKREBIND-7285FB4A63BE7852E5A2"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "500cbab51e1f6b4f5189617f00ee9700570b5c725a625aaff6e2f455a2e3ef2f",
       "retirement": null
     },
     {
@@ -126367,7 +126455,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-GIT-IMAGE-PATH-20260912-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -126384,6 +126472,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "1c666bf1f65d57e74fe6ee3349a98e0642b159e9b46e4ef236fdd172364ac544",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-GIT-IMAGE-PATH-20260912-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-GIT-IMAGE-PATH-20260912-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-GIT-IMAGE-PATH-20260912"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "26118f422df9803c5b5f367943b52555aa753db45a25f23fdd50783afb2cca99",
       "retirement": null
     },
     {
@@ -126496,7 +126611,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-HOOK-OWNER-TRUST-20260911-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -126513,6 +126628,75 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "9421de5913a06a8274abb472a8f9029978138878862340c75cec7676e964b25f",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-HOOK-OWNER-TRUST-20260911-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-HOOK-OWNER-TRUST-20260911-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-HOOK-OWNER-TRUST-20260911"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "0f1abea76551edf25253941e93ffadeadae9731cca6aa98294a021247b48b939",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-HOOKSTORAGE-DB03967A72972E782FA2",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-HOOKSTORAGE-DB03967A72972E782FA2"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "5e34ec41b1231ded74e1835facdc83f2e731cfe76d5b6bef7b2d6e32c1259480",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-HOOKSTORAGE-E501DBAC538A11BED97D",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-HOOKSTORAGE-E501DBAC538A11BED97D"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "fec2f932e7205ea5bd949569266a646d071f5eb422a151eebc2b0cdb0e54066c",
       "retirement": null
     },
     {
@@ -126625,7 +126809,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-317A6BB8D5401F11-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -126642,6 +126826,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "69813810864be181a88f9bc5ff729e92e04f3bdc4b07ae3a62e16ad798e586d4",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-317A6BB8D5401F11-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-317A6BB8D5401F11-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-KERNEL-ROLLS-BACK-FAILURE-AND-REFUS-2D86C853579B"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "b62cb840fc65adfb6b2affc7f14a0675efb1bfd67530935451b055b2dcfe74a0",
       "retirement": null
     },
     {
@@ -126754,7 +126965,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-40C32CD7E9809BE3-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -126771,6 +126982,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "bcaea99f725df88f7e5fe414f0cf73b7906d3b6bd1587e55ad98742f038396ba",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-40C32CD7E9809BE3-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-40C32CD7E9809BE3-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-KERNEL-PUBLISHES-EXACT-FILES-AND-RE-115B6AE2F819"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "997b849dd3f3a6c81b55469eb650194f2498101c66989a305f096480ea2b9b77",
       "retirement": null
     },
     {
@@ -126883,7 +127121,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-7FB4C693DA187D47-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -126900,6 +127138,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "68b9136148d34089c3945bf17cf2f4e4bfbe2c5eb08bf4356c467f00cc31c97e",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-7FB4C693DA187D47-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-7FB4C693DA187D47-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-WORKER-DISPATCH-AND-RESTART-RECONCI-20B23FB21FB6"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "80fb911fa29bedea3f988a7e8b992b37f5aa1510be930d75bd41fcdc660eb6f9",
       "retirement": null
     },
     {
@@ -127012,7 +127277,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-97F43A91A81AD55F-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -127029,6 +127294,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "169e29f139ecbf828ebfe06d6691e7bee97777c6ce3fc3fec2bc72735a822170",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-97F43A91A81AD55F-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-97F43A91A81AD55F-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-CRASH-RECOVERY-NEVER-CLAIMS-ROLLBAC-D99CB30A0C3B"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "cc2ae8662d2817491a2b81f08dc00f3305131f41eff83d1b6012ad50452dfe64",
       "retirement": null
     },
     {
@@ -127141,7 +127433,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-AB943ED2B6A98F15-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -127158,6 +127450,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "4af068c53d107a20996aa5aed611b51193471a782e571a066428c68bf5293d94",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-AB943ED2B6A98F15-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-AB943ED2B6A98F15-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-PENDING-INTENT-BLOCKS-OTHER-PUBLICA-B9B5DFDD4956"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "1b49ddcd24c357b4f1095ab2453783f29b539d2d4b658ba9d01851d9ddb57509",
       "retirement": null
     },
     {
@@ -127270,7 +127589,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-B438D756A765861D-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -127287,6 +127606,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "a5467597652994b4137719667fad2717dea9e2b7f4c5834138f60aa16c189a0f",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-B438D756A765861D-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-B438D756A765861D-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-BUNDLE-REJECTS-UNREGISTERED-PATHS-V-E68C99B92537"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "1f4cc1741fbe88748f405b5dd7b0de53c8922b3243dd941b2e6096ef1115becd",
       "retirement": null
     },
     {
@@ -127399,7 +127745,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-BD678F984719CAE3-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -127416,6 +127762,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "5e63711802b17c84c8b3bac217d23e1e0ab0ea32ce147ca0f1c90243045df225",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-BD678F984719CAE3-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-BD678F984719CAE3-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-GLOBAL-SKILL-PUBLICATION-IS-IDEMPOTENT-AND-PRESE-BC93A64317EC"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "6e97090b1507711669b7cadf4d36c75263bf579c2be390a38e3e9da6aa6f2653",
       "retirement": null
     },
     {
@@ -127555,7 +127928,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-563CDEDE5B59E458-CP1-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -127572,6 +127945,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "53e0e6c82f14baba0463f9d8f3b551d72a65406ee57d89a7ce866ee52b09ffc9",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-563CDEDE5B59E458-CP1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-563CDEDE5B59E458-CP1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-4DC44102236A-GLOBAL-20260909-CP1"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-ENROLL-GLOBAL-CODEX-PROJECTS-CP1",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "9c36adedc23c94a901624c85788579aee5404656f7e6ae52b9a0d8e40ea0105b",
       "retirement": null
     },
     {
@@ -127684,7 +128084,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-5BE8CDDBF80D3213-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -127701,6 +128101,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "8705b4d34ff3ac5c47c2078c032b71cf3f87d0aeb126f07acbdd3801ca4239bf",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-5BE8CDDBF80D3213-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-5BE8CDDBF80D3213-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-9865501D815A-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-CONFIGURE-GLOBAL-CODEX-EXECUTION",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "a55b0ad3f7f03ca6ff7b4ce410fa662b0fa405a7896691dd3acb847ba741dfa9",
       "retirement": null
     },
     {
@@ -127921,7 +128348,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3-R4-SID-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -127938,6 +128365,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "61ddf93fa971f1ec1b45237d1cbe33ab13055c3ddabb496b7cedc9f0feca9e38",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3-R4-SID-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3-R4-SID-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909-R2-R3-R4-SID-POWER"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION-R2-R3-R4-SID-POWER",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "2c5f2e43132e88e0d149cc0166f12ee71fdf080e6e7b25b20eca6860f6b5a7ca",
       "retirement": null
     },
     {
@@ -128050,7 +128504,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-ACL-9B31F4E0C6D2A817-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -128067,6 +128521,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "a17950d6c4d45e60bcf64ddef2303de5e6c0e4526527ce630c46db4c9cb33799",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-ACL-9B31F4E0C6D2A817-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-ACL-9B31F4E0C6D2A817-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-35260E3B3E35"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-REPAIR-CODEX-WORKSPACE-ACL",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "f3ca7f4612b55ba2130427cb7a52ebe286d6ee94afdc844f7eb3d35836cf147a",
       "retirement": null
     },
     {
@@ -128098,7 +128579,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PUBSAFE-9723074FE2216F5BCBD4-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -128115,6 +128596,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "3149f3363286ce090c388a95b12bbae810ba36de6b36d84ce8e8891b40f2b26e",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-PUBSAFE-9723074FE2216F5BCBD4-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PUBSAFE-9723074FE2216F5BCBD4-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-PUBSAFE-9723074FE2216F5BCBD4"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "8d0265becdc2e82c62731a7203fc6b19db14deb8344a7cdfe1c6d33fb7ce17a1",
       "retirement": null
     },
     {
@@ -128146,7 +128654,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PUBSAFE-EEA47052AC77A04B0862-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -128163,6 +128671,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "9ae1f426cd7159cca96af46c4b88de99a06849828cdd467c3c0c0d44a9e37167",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-PUBSAFE-EEA47052AC77A04B0862-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PUBSAFE-EEA47052AC77A04B0862-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-PUBSAFE-EEA47052AC77A04B0862"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "fcd4d73804c87cbfee7a486dfe27102224418df7d6da50517b05d59fbbe130f9",
       "retirement": null
     },
     {
@@ -128248,7 +128783,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-31E0734B9F006F39AC5B-WORKTREE-DISKREBIND-TESTMODULE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -128265,6 +128800,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "6612051c4f426c9e78c899224fe836fa99379948689125a0acb02f616d0549ef",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-31E0734B9F006F39AC5B-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-31E0734B9F006F39AC5B-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-31E0734B9F006F39AC5B-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "9fc2e89c2546777b1d7e5f268f88f2f12eefa5d91d67703343e71a339d20913d",
       "retirement": null
     },
     {
@@ -128323,7 +128885,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-358A6FF795E1901CCC1F-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -128340,6 +128902,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "1d24fbde55974f9c78165d039d2e9aae8f142fffb994e2b3aac0cda346b96f40",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-358A6FF795E1901CCC1F-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-358A6FF795E1901CCC1F-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-358A6FF795E1901CCC1F"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "144a34eeb728751aa4c823bf730cfa2e6dcd7997d72dc8fe0c55934a81219109",
       "retirement": null
     },
     {
@@ -128425,7 +129014,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E-WORKTREE-DISKREBIND-TESTMODULE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -128442,6 +129031,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "8bf3f9b444fd9aa06e6ec68d2c6fdaf662b9e36b8609da7fd8f44356b2952c71",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "56e7704970b44af879e5131a701b3b889c61a3a1d1afa434e0f4490f972b17ef",
       "retirement": null
     },
     {
@@ -128527,7 +129143,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD-WORKTREE-DISKREBIND-TESTMODULE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -128544,6 +129160,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "4565bc75a45ddfa5d7a77ed730c2c2d8ceac9b6674e04a03b0fdf06a4991339b",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "7c6030798e5c2129e1cf3833ea453731adb1a18b8042052fa703bfe65fc68a3a",
       "retirement": null
     },
     {
@@ -128629,7 +129272,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99-WORKTREE-DISKREBIND-TESTMODULE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -128646,6 +129289,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "45e3b58b86a4f6ebe75d4ac970421a56fa4b363bf1ee7f6244633095b12f7292",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "f7da230b962227ef76ecc7c785487027601aff6b4f79c1993300d458800c5e08",
       "retirement": null
     },
     {
@@ -128731,7 +129401,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-B9F4BD26F591EC648C11-WORKTREE-DISKREBIND-TESTMODULE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -128748,6 +129418,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "162a3d8462c1bcc66fe1eb0e100b3cdddefa880f177e125c3574b1a313dea1ce",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-B9F4BD26F591EC648C11-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-B9F4BD26F591EC648C11-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-B9F4BD26F591EC648C11-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "7b2ecaaf94318bdf4ec8b9ac02087af66abbe1c22133725401dce810aeae3c3b",
       "retirement": null
     },
     {
@@ -128833,7 +129530,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B-WORKTREE-DISKREBIND-TESTMODULE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -128850,6 +129547,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "1dc4352c702d6aa56bc1394143a118d1189830e388916170a12af0cf6bb3ad96",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "6307c33727dfdffee3be6100fbcb19029e288f06cf185c0e00989ede0bef9afb",
       "retirement": null
     },
     {
@@ -128935,7 +129659,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358-WORKTREE-DISKREBIND-TESTMODULE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -128952,6 +129676,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "1f5bea21eb43cc10e2b6124351db75adba6134eaa2e3da06abaf8a1897852232",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "698200ed82233de98a9bbc327f6daa657cb8dfebe497ced40d915c93a4702503",
       "retirement": null
     },
     {
@@ -129037,7 +129788,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50-WORKTREE-DISKREBIND-TESTMODULE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -129054,6 +129805,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "f2481c73fce4b4942ae5fa9fb4c8714c248a0799cefdbf48d78b14238e091caa",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "9502c01f46e84af47f71ff62d2d82947f04e19df8daf3eb26bb2e7e947aebf4d",
       "retirement": null
     },
     {
@@ -129139,7 +129917,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A-WORKTREE-DISKREBIND-TESTMODULE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -129156,6 +129934,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "9ec505d6a9076325589120450075db5bb0945629b4bf82009b8b8686fc82b1b7",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "1f52a2a8d97e2aa7ddbd31cfc92190a1ac255b320e57acb0c3bb19d29b6f54a2",
       "retirement": null
     },
     {
@@ -129241,7 +130046,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA-WORKTREE-DISKREBIND-TESTMODULE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -129258,6 +130063,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "8dbd17a434265f45f31d6b76f3ef9b568df12abe73e9b5bd44ee6d76af9ba1e4",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "5532ea6533e450bb0d5fde6ccf54c4df2fbed1ef2368c07c8036717986007d01",
       "retirement": null
     },
     {
@@ -129370,7 +130202,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-REENROLL-ADAPTERS-20260911-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -129387,6 +130219,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "6dc580c7e5569f378c634a77b4021511cfee5f898eed419b0785c6a980126ea6",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-REENROLL-ADAPTERS-20260911-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-REENROLL-ADAPTERS-20260911-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-REENROLL-ADAPTERS-20260911"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "954efdc566a4d266b26e31b3640cb276090a9ced5a401aec3b72ee8360ef6845",
       "retirement": null
     },
     {
@@ -129499,7 +130358,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-0A4D994577024965-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -129516,6 +130375,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "635568c89f2d069edce2cf221b62532658d088358a9c885c16e48c60a7b5ca90",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-0A4D994577024965-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-0A4D994577024965-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-MULTI-PROJECT-PREFLIGHT-IS-ACTIVATION-EX-ACEBF771EA81-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "e6feba99d12a856c505cef9f7bf7461707cf43bef8be26c6081d4e29b2da5e58",
       "retirement": null
     },
     {
@@ -129628,7 +130514,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-10BB28AB1DE6EA34-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -129645,6 +130531,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "e8642d74616ad7925f01b0413c5658efa5b11d027cffb7836fc7f24ccf9b1c28",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-10BB28AB1DE6EA34-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-10BB28AB1DE6EA34-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-INTERRUPTED-EFFECT-NEVER-RUNS-AGAIN-AND-26CE591AC48E-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "b8d941363b0a5fd31324dab0019d8f9e2220ace8ea2e6e9051a49f6ce3648efb",
       "retirement": null
     },
     {
@@ -129757,7 +130670,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-11CEAF74B0B26C45-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -129774,6 +130687,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "3601b15c8684abc69a5c2ed13e5251022923bb37b651da60e8a7e9b4bf852396",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-11CEAF74B0B26C45-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-11CEAF74B0B26C45-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-EXPIRY-FUTURE-AND-INTEGER-OVERFLOW-FAIL-2491A7831155-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "2db973dd1f890a471f6e0206cc39ce5aa1187b91bc70153b2eb90b5ef19a45a2",
       "retirement": null
     },
     {
@@ -129913,7 +130853,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-14FEF5F84CDAF1ED-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -129930,6 +130870,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "44c226121032964bd37bb7b0752de21960fb3e86d8ff633dbebb0023dc6c0e55",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-14FEF5F84CDAF1ED-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-14FEF5F84CDAF1ED-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-GIT-TREE-AND-INDEX-PARSERS-REJECT-CONFLI-1D2297C844F0-GLOBAL-20260909-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "e388a85f04ac0beadf3adb7fdf6308600efab587c8f72adc8ea660f97451f622",
       "retirement": null
     },
     {
@@ -130042,7 +131009,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-1A1D1FEBC08A65A8-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -130059,6 +131026,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "feee523dc4b0ac2a164fcc3dc082ef43ba447881eeabc0f977cb37ef6257bb7e",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-1A1D1FEBC08A65A8-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-1A1D1FEBC08A65A8-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-CONTROL-ACCEPTS-LINE-ENDINGS-844097EC9E96-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "3ebef3104901229bdc99d0de69d0e54df27fafb9130a0822833d982c30eecf92",
       "retirement": null
     },
     {
@@ -130171,7 +131165,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-2092D9E411E8ACC3-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -130188,6 +131182,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "a379fe6998b4a0bb068cee2132f6dec5cae32567fb221cab5f0df1e825ca3c28",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-2092D9E411E8ACC3-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-2092D9E411E8ACC3-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-SOURCE-FILE-READER-REJECTS-HARDLINK-ALIA-B5999A2E9275-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "4749d7b0d3b91b869f1616b9b56f7e17d384c861c1b379f9ed4a054d9fc1dd86",
       "retirement": null
     },
     {
@@ -130300,7 +131321,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-2DD5295CC9465193-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -130317,6 +131338,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "da92cc1116e3e230b160ce1282a96344871e41e840906782f0b49c4028c3d450",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-2DD5295CC9465193-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-2DD5295CC9465193-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-ROW-UPDATES-ARE-SCOPED-ATOMIC-958E57AE1B68-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "0e037dfbc17edff3f6510d95cd06cd88f7e3c8c343e81c8795efb6b6aa1409ce",
       "retirement": null
     },
     {
@@ -130429,7 +131477,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-3589F2032B1A9325-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -130446,6 +131494,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "5684db018ff972c6ebaaed89bbc439258200900b89a263ce3d051c90c92ee514",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-3589F2032B1A9325-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-3589F2032B1A9325-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-WINDOWS-ALIASES-TRAVERSAL-AND-MANAGED-ST-F6BAF9C62F1B-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "05c5193d341a0a46c836727154a01a9a7fc2de7a98ba0f061dbf0e8f461a78a7",
       "retirement": null
     },
     {
@@ -130558,7 +131633,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-3BCF0BCEFCF772F6-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -130575,6 +131650,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "79bc0fdb75fc5a54c9d0520e3e1791070c3b6d09dc2711174370374b501f2aae",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-3BCF0BCEFCF772F6-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-3BCF0BCEFCF772F6-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-GLOBAL-SOURCE-FINGERPRINT-TRACKS-BYTES-A-463FE4EEE120-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "005ee88350241907f05873d15aacaf224b27bc2b9f3ce359469b15b67e358e87",
       "retirement": null
     },
     {
@@ -130687,7 +131789,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-40A36BA93D92AA10-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -130704,6 +131806,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "6d80961988bda70b444c85c24121fe09ae76c145235e8d4fb824ca72d2c2b6ee",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-40A36BA93D92AA10-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-40A36BA93D92AA10-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-QUEUE-CONSUMPTION-PRESERVES-CHANGED-AND-0ECB1E630C8E-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "aec56c9965032cf34cf74e6c6c3146fdf09f35ed701b93293e1de5188c8ceb8e",
       "retirement": null
     },
     {
@@ -130816,7 +131945,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-4A21E91A102E73B8-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -130833,6 +131962,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "46c48aa3b14534291a0cb66465fddd390e714345a5588ea7c7668f616568e8dc",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-4A21E91A102E73B8-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-4A21E91A102E73B8-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-STATE-LEASE-RENEWAL-STOPS-PROMPTLY-AND-P-121E03A49D3E-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "7c49d2d348eda3a876ae5cd6bf1e88417d8755c94ac193a266fc67238359172b",
       "retirement": null
     },
     {
@@ -130945,7 +132101,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-4E87E82148F93C10-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -130962,6 +132118,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "c7881ded42c8b359dfcad024776fe08fa7153c455898c86a24f8c58e937664cb",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-4E87E82148F93C10-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-4E87E82148F93C10-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROJECT-WORKTREE-AND-PROTECTED-POLICY-SU-9583082D1FDD-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "5e0243443449d6bd0589a2b1f86175c55085498ed7518fbeb2c83e576e53db1b",
       "retirement": null
     },
     {
@@ -131074,7 +132257,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-51F1FFC0FF09AE4B-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -131091,6 +132274,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "2d86c4f020f4553b4a5f8f0cd4af308dac59afe0dfbbe4f023d0a6b7dc31e4cd",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-51F1FFC0FF09AE4B-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-51F1FFC0FF09AE4B-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-NATIVE-PROCESS-ROUNDTRIPS-QUOTED-UNICODE-FFAAA9F0EFC6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "f365ef7127b3cb81c62c3d43a7b9bbdd58eff0615872410fc5d7ce9ac6f7c2a7",
       "retirement": null
     },
     {
@@ -131203,7 +132413,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-55B846B8E672D54A-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -131220,6 +132430,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "6fff3e53fda4f2b1b23710c8d524ebcbbd79359af156bbc94410b5f7a86b4ed6",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-55B846B8E672D54A-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-55B846B8E672D54A-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-EXACT-ADDED-MODIFIED-DELETED-COMMIT-IS-V-86716FECCFB8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "9bd56f0016afcb02a88a45ad60812ad496315d8be6e6e32266601d29e8aa52bc",
       "retirement": null
     },
     {
@@ -131332,7 +132569,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-65D0FE541C219BC9-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -131349,6 +132586,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "3caecaff55bb2fc90465174b57ba303259ddbacf2952f39756808117ce4d6607",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-65D0FE541C219BC9-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-65D0FE541C219BC9-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-DIRECTORY-REJECTS-INHERITED-OR-80BF39C24C08-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "344d53c55cfc131df0f59e819e0636003b47b800c44f585adc3a679f62b544ce",
       "retirement": null
     },
     {
@@ -131461,7 +132725,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-778DACD69B40A948-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -131478,6 +132742,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "dbbbcb038b5561f9488b61f571ed647ca0a679ed17f39a1d262f8c1ec7736995",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-778DACD69B40A948-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-778DACD69B40A948-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-JOURNAL-RECOVERS-EXACT-STATE-AND-RETAINS-76954D4112E6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "41056a6eb9e20dd70fac2e335945dd662cb51fafa8e2aa2cc77d0176defd84d5",
       "retirement": null
     },
     {
@@ -131590,7 +132881,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-7F123D22A1459EA2-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -131607,6 +132898,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "1c45aea80999994c5b78b05fd8869876aaf0a2c18d28d6bf17f8e6a3e272b9ad",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-7F123D22A1459EA2-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-7F123D22A1459EA2-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-ROW-BACKEND-REJECTS-TRIGGER-S-ACBD966D0ECD-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "9de5653d22309a275759df89409b20756c0751c980377c3400c5c99f5fa31190",
       "retirement": null
     },
     {
@@ -131719,7 +133037,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8107A30F555E561D-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -131736,6 +133054,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "b0b03d6e615d672fe1bfd7c5637bc5b0311f5eba1950ab35dca56681130af89f",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8107A30F555E561D-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8107A30F555E561D-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-GLOBAL-AUTOCRLF-MATCHES-NATIVE-GIT-WITHO-6949F080E3E8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "970e894dd1432d8fc995aecf8231dc321e208144d358f1765907989b0e56fe38",
       "retirement": null
     },
     {
@@ -131848,7 +133193,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-82A077277B69A094-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -131865,6 +133210,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "5d0776a04782d901e009622a9d66393c72394ebd2c7fdfd9a3e394a0e511dbf5",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-82A077277B69A094-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-82A077277B69A094-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-MIGRATION-NORMALIZES-SQL-WITH-47C5C525C4BA-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "231706b22da2769bab310817a3e156e217ccfb1f638218b2c528d152220fbc54",
       "retirement": null
     },
     {
@@ -132004,7 +133376,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8B9E25B328749D46-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -132021,6 +133393,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "49d4efd393e87842211b8fa67fa12a051a75586c158a694444b6c365819bd58d",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8B9E25B328749D46-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8B9E25B328749D46-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-WORKER-COMMITS-EXACT-REGISTERE-7347D4F302A6-GLOBAL-20260909-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "c9c7a8385f36c86bd021d52a27e7d48af999b8d06b76137299d9ebe8f8c4139b",
       "retirement": null
     },
     {
@@ -132187,7 +133586,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -132204,6 +133603,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "b227a5f69f150f6fbe53eef6ecb9824d763343c2250c3930593f69408d4ea7ef",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-REAL-GIT-SNAPSHOT-PRESERVES-SOURCE-AND-I-7209D78A5D5C-GLOBAL-20260909-ENROLL-R2-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "1e29bbb2e294af72a8297d8c9b021c7424005326ca9d861f5b4a818080b6c616",
       "retirement": null
     },
     {
@@ -132316,7 +133742,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8F796BF2C1954DE4-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -132333,6 +133759,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "2ee6f18896666292f85dd45d62d8f321f480ffb1ef95c029ffcee81c36588e61",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8F796BF2C1954DE4-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8F796BF2C1954DE4-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-CASE-COLLISIONS-ORDER-EMPTY-AND-NONORDIN-2250FE4E9CC8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "3a1ec0d70f11050b6d64c45d0f9511ab1f37db6954509b31b477e13d948521a2",
       "retirement": null
     },
     {
@@ -132445,7 +133898,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-96D0F61691F547DD-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -132462,6 +133915,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "db6aecd319448e392b5fda1753dcbd41e33beaf1c44f1222895dd6e7604345dd",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-96D0F61691F547DD-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-96D0F61691F547DD-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-PUBLICATION-SEED-IDENTITY-SURVIVES-CLAIM-284F43EF08B0-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "696ffa0ae2e6f41ed0b9594dce382d5468a1e8dc1652f1ffaaa221609c24fcc5",
       "retirement": null
     },
     {
@@ -132601,7 +134081,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-9B7C80D244870C80-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -132618,6 +134098,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "ee859daf3479e5f760b84440a60d1eba7223dfc9c7054541add27a1e29fdf739",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-9B7C80D244870C80-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-9B7C80D244870C80-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-WORKER-PROCESSES-ENROLLED-STAT-AF219789C484-GLOBAL-20260909-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "f917c9e8d3d0e2ecd91f69881db0dbb7b0afc599f57bc8de3c04cc72b5058935",
       "retirement": null
     },
     {
@@ -132730,7 +134237,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-A1D9DC4AE3162DAE-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -132747,6 +134254,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "a52953f370d01a5b3960f5ed0cff96f119d042bd1dda06e51356b69efcc36fbc",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-A1D9DC4AE3162DAE-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-A1D9DC4AE3162DAE-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-RECEIPT-AND-ROWS-SURVIVE-REOP-FA48F728E2F6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "460221aaf4f9615938c2ffb6478c69524b20bb6f8e1fc5b00f45f738c788efca",
       "retirement": null
     },
     {
@@ -132859,7 +134393,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-A7661C6406541E08-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -132876,6 +134410,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "243ce12605466a80b9dcafad3d5d895f0f6394075231c3c122dfea0b452888a4",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-A7661C6406541E08-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-A7661C6406541E08-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-STATE-CAS-REPLAY-AND-PROJECT-NAMESPACES-8A73C6E659A6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "5679e09016c91ff0c2f767df747e229a53716b62528be33cfe40ca9ed6839c45",
       "retirement": null
     },
     {
@@ -132988,7 +134549,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-AFD7A8CDE4C751D9-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -133005,6 +134566,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "80736b3f391c0e0641b28f5857d46590ef4dfbe47619d9e90e85dc8686bcfd7d",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-AFD7A8CDE4C751D9-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-AFD7A8CDE4C751D9-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-STAGE-REUSE-BINDS-ENVIRONMENT-TOOLS-SCOP-76A42F134ED0-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "50b07fa9a18b97111a9bbeacd68ac1ccf52dac56c4604f1ec7c2d07f76f46f4d",
       "retirement": null
     },
     {
@@ -133117,7 +134705,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-B7785F6F85CDB43D-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -133134,6 +134722,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "dd800c51ddc7accf6177f539720a72fdf5c03523e55eb3d117dede90e94065d8",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-B7785F6F85CDB43D-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-B7785F6F85CDB43D-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-SCHEMA-MATCHES-SAVESTATUS-V3-44312854F7BA-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "d7673ceccd0897025d6300a29048724c828d50604d96a166892bcd5f8ffaaa8b",
       "retirement": null
     },
     {
@@ -133246,7 +134861,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-C27ADB994160229E-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -133263,6 +134878,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "1a06e9d1494deb157fea7dac6066998c84f07e897b8222672923f0666a6986d9",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-C27ADB994160229E-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-C27ADB994160229E-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-DIRECTORY-CHECKS-ACTUAL-OWNER-C1ECC8A751D8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "3b23d3c6e4ee4f2a72c2ae440d6839807c60357a57458a5811c2efea14ac329c",
       "retirement": null
     },
     {
@@ -133375,7 +135017,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-C79022F1FBD299D6-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -133392,6 +135034,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "21b27b4b06b46c6349d1c9fc0cf196a40014b0c4a79f616646c9522c1da07364",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-C79022F1FBD299D6-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-C79022F1FBD299D6-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-DUPLICATE-CASE-ALIAS-UNKNOWN-FIELDS-AND-AE366264763F-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "07d909581db100a8ad8256c980ccd8a5655a8cac8b16010d80233e189d1c2571",
       "retirement": null
     },
     {
@@ -133504,7 +135173,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-CAF7E4BA8992C0A0-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -133521,6 +135190,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "58ec3415db3a983492e53081dbb8d93b97551e4197d5889387b314c7adab7359",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-CAF7E4BA8992C0A0-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-CAF7E4BA8992C0A0-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-FORMAL-STATE-AND-INSTALLATION-USE-TYPED-A2D08663F0F9-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "c6829d66e64d055dd5a84d9660f0a2fb24a99556f07ef4bc6b80941dc006f177",
       "retirement": null
     },
     {
@@ -133633,7 +135329,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-CB866DC002A20C6A-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -133650,6 +135346,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "6e62781792ba45b54bf8e6c6f6697e21f4575e444717ca8c31565c8c0890f882",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-CB866DC002A20C6A-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-CB866DC002A20C6A-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-GIT-CONTENT-POLICY-PRESERVES-PRECEDENCE-9941B006C139-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "497e8af9db3129c73e2e7a22685dd405cd76d3685992cf4b7f41b2da794c7a46",
       "retirement": null
     },
     {
@@ -133762,7 +135485,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-CD1C459C5E11D688-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -133779,6 +135502,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "f47694bc6c5c81626cdddaf3a342846c8eeff953136c2ef00d4c4c83329f2f16",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-CD1C459C5E11D688-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-CD1C459C5E11D688-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-CAPABILITY-RESTRICTIONS-APPLY-EVEN-WITH-4D12F6EB1DA8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "71b08150c7de1e1e57308005c9f4a02f20f320a7ecb3cb8f92c6dc2a4892d2ce",
       "retirement": null
     },
     {
@@ -133891,7 +135641,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-D8D2F9F141ED7925-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -133908,6 +135658,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "fec7f3d470a54e0586b7b1537a2dd427f99445cc98d8c802a5f555ba2cc7a6cd",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-D8D2F9F141ED7925-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-D8D2F9F141ED7925-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-DURABLE-STATE-SURVIVES-REOPEN-AND-DOES-N-554FAFBD196F-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "25f6b1df5553f4f85ba6de8a5b802eba71d20b0e529dfbd2c0920c165aacba15",
       "retirement": null
     },
     {
@@ -134020,7 +135797,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-F0AF41C7DFBDF26D-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -134037,6 +135814,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "b14d754cd98ae78a43b242ec1f896d5cbc44f3a2b307e6ee63bc0d65e768bc5d",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-F0AF41C7DFBDF26D-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-F0AF41C7DFBDF26D-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-BACKEND-PRESERVES-OTHER-TENAN-A634550F6A7C-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "4750299fe9bc69869ff68284c26957114881844707d0ad5a68c6a4cfb6ceba75",
       "retirement": null
     },
     {
@@ -134149,7 +135953,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-FF0AD4B184D6DD85-POWER-RECOVERY-WORKTREE-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -134166,6 +135970,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "37b4fa7e13906a8458734ba66eab89e42f5f2a12ebecb862c961f6dffc0c2164",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-FF0AD4B184D6DD85-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-FF0AD4B184D6DD85-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-BACKEND-REJECTS-CROSS-TENANT-48A947B850A6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "921f9c95d7babde4234de573ae3bc59b292a75be5e0c8dd3a0da52333134b0ca",
       "retirement": null
     },
     {
@@ -134197,7 +136028,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-WORKTREE-14AF8E64F07E1D8B0CC2-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -134214,6 +136045,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "747992d664f5bc320b6aa8897f26b91a165bdd8e9cc51c89331030cab72b0bb9",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-WORKTREE-14AF8E64F07E1D8B0CC2-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-14AF8E64F07E1D8B0CC2-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-14AF8E64F07E1D8B0CC2"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "99b2cb1fa23dd919d3ccf4af2eacbc4fcaad25e14a653aa5182632dea724f18d",
       "retirement": null
     },
     {
@@ -134245,7 +136103,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-WORKTREE-329D37708BC158C413AD-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -134262,6 +136120,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "457d61d9b8804b7d6b0a7775225118d96c3193f524f5fa38c487ddf319a12b4b",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-WORKTREE-329D37708BC158C413AD-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-329D37708BC158C413AD-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-329D37708BC158C413AD"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "432ccf7303dd088eeda2f5e75db20c3d9f4b28c700afd0f3f545ca6067dbcd9e",
       "retirement": null
     },
     {
@@ -134320,7 +136205,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-WORKTREE-32B5450EAB54D7CEE13D-DISKREBIND-TESTMODULE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -134337,6 +136222,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "5a80ba2881f5438edb1a1fdd8ed026603076840bed2db78dd4d7c47f97b14394",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-WORKTREE-32B5450EAB54D7CEE13D-DISKREBIND-TESTMODULE-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-32B5450EAB54D7CEE13D-DISKREBIND-TESTMODULE-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-32B5450EAB54D7CEE13D-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "878a2945c9ca05703e3e9af3f9ef11b0c5400e1f1eb1d31a0ee765e46dc69830",
       "retirement": null
     },
     {
@@ -134368,7 +136280,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-WORKTREE-53B9B3DC0890DE8BC5C1-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -134385,6 +136297,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "9a5cb9da8838365854dfd35c669ad5e2008ae83f00027a975e10b1931fde1de6",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-WORKTREE-53B9B3DC0890DE8BC5C1-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-53B9B3DC0890DE8BC5C1-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-53B9B3DC0890DE8BC5C1"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "34f9637997b8cdbb39f5941937d8b666ca5bcf70053f15454d4de141443b0d8d",
       "retirement": null
     },
     {
@@ -134443,7 +136382,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-WORKTREE-CEA776B5991F3B1620CB-DISKREBIND-TESTMODULE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -134460,6 +136399,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "764d9676efac4aab90c192746d4661f57d438aa5f11ed88637dde75719046cc9",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-WORKTREE-CEA776B5991F3B1620CB-DISKREBIND-TESTMODULE-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-CEA776B5991F3B1620CB-DISKREBIND-TESTMODULE-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-CEA776B5991F3B1620CB-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "406960762ac161013ec0bfa7dd3160c12218ae6562833eeeddccc6c5d1e994d1",
       "retirement": null
     },
     {
@@ -134491,7 +136457,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-WORKTREE-ECA0221052E5F21183BC-DISKREBIND",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -134508,6 +136474,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "44000fd637a8bae19697681e2bb6365380cc8723e47b8efc7822b070eed55372",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-WORKTREE-ECA0221052E5F21183BC-DISKREBIND-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-ECA0221052E5F21183BC-DISKREBIND-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-ECA0221052E5F21183BC"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "e78d785944c2ff48e83c599aec20b4bdf5af70179040ddc00f23e77fff907d4d",
       "retirement": null
     },
     {
@@ -134566,7 +136559,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-WORKTREE-F336D0AA238D6ADC31B6-DISKREBIND-TESTMODULE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND"
       ],
@@ -134583,6 +136576,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "e31fae17508456e25cc8665e1d487513be7ca840164e4b282a7d1c7f931b1b64",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review publication handle release and explicit owner storage attestation; retain strong root, membership and registration rejection without client ancestor permissions.",
+        "replaced_by": [
+          "BIND-GLOBAL-WORKTREE-F336D0AA238D6ADC31B6-DISKREBIND-TESTMODULE-HOOKSTORAGE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-F336D0AA238D6ADC31B6-DISKREBIND-TESTMODULE-HOOKSTORAGE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-F336D0AA238D6ADC31B6-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "883ed962636dbafb2e798d0d9d4fd789aa45e23fd4a928580798df9b1584d9bc",
       "retirement": null
     },
     {

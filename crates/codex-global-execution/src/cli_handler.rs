@@ -414,7 +414,7 @@ pub fn run(json: bool, command: &GlobalExecutionCmd) -> Result<()> {
             #[cfg(windows)]
             {
                 let client = global::Client::open(root)?;
-                let enrollment = client.enrollment(workspace)?;
+                let enrollment = client.storage_enrollment(workspace)?;
                 client.copy_checkpoint(&enrollment, destination)?;
                 println!(
                     "{}",
@@ -438,7 +438,7 @@ pub fn run(json: bool, command: &GlobalExecutionCmd) -> Result<()> {
             #[cfg(windows)]
             {
                 let client = global::Client::open(root)?;
-                let enrollment = client.enrollment(workspace)?;
+                let enrollment = client.storage_enrollment(workspace)?;
                 let result = client.apply_checkpoint_copies(
                     &enrollment,
                     before,
@@ -467,7 +467,7 @@ pub fn run(json: bool, command: &GlobalExecutionCmd) -> Result<()> {
             {
                 use crate::cli::StateAction;
                 let client = global::Client::open(root)?;
-                let enrollment = client.enrollment(workspace)?;
+                let enrollment = client.storage_enrollment(workspace)?;
                 let key = || -> Result<global::StateObject> {
                     match object.as_deref() {
                         Some("goals-store") => Ok(global::StateObject::GoalsStore),

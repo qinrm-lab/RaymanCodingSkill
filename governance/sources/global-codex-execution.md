@@ -85,6 +85,17 @@ deferred to the normal post-routing session flow.
 
 ## GLOBAL-INSTALL
 
+Strict hook readback must run after the publisher releases its own write handle;
+otherwise successful publication can falsely report a sharing violation. Preserve
+the existing document and backups during idempotent recovery.
+
+Fixed storage clients may resolve a protected registration without opening user
+profile ancestors only after an explicit owner-worker workspace attestation.
+The worker performs unchanged strong directory/member/registration checks before
+attestation and each subsequent storage action. A replaced root or forged binding
+must fail, and the inspection must not create application state. This does not
+relax the client source validation used for commits or file installation.
+
 Installation uses a protected, registered adapter and fixed destinations.
 It never executes an unreviewed project script as the desktop user. Source,
 artifact and tool identities are checked before reuse or continuation.
