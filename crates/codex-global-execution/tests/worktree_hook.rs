@@ -1,5 +1,100 @@
 #[cfg(windows)]
 #[test]
+fn no_wait_release_queues_without_a_running_worker() {
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+    let fixture = tempfile::tempdir().unwrap();
+    let root = fixture.path().join("backend");
+    let source = fixture.path().join("source");
+    let workspace = fixture.path().join("workspace");
+    std::fs::create_dir(&root).unwrap();
+    std::fs::create_dir_all(source.join(".git")).unwrap();
+    std::fs::create_dir(&workspace).unwrap();
+    let script = fixture.path().join("protect.ps1");
+    std::fs::write(&script, r#"
+param([string]$Root)
+$ErrorActionPreference='Stop'
+$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User
+$acl=[Security.AccessControl.DirectorySecurity]::new()
+$acl.SetAccessRuleProtection($true,$false);$acl.SetOwner($sid)
+foreach($id in @($sid.Value,'S-1-5-18','S-1-5-32-544')){
+$acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($id),[Security.AccessControl.FileSystemRights]::FullControl,[Security.AccessControl.InheritanceFlags]'ContainerInherit,ObjectInherit',[Security.AccessControl.PropagationFlags]::None,[Security.AccessControl.AccessControlType]::Allow))
+}
+Set-Acl -LiteralPath $Root -AclObject $acl
+"#).unwrap();
+    let protected = Command::new("C:/Program Files/PowerShell/7/pwsh.exe")
+        .args(["-NoProfile", "-NonInteractive", "-File"])
+        .arg(&script)
+        .arg("-Root")
+        .arg(&root)
+        .output()
+        .unwrap();
+    assert!(
+        protected.status.success(),
+        "{}",
+        String::from_utf8_lossy(&protected.stderr)
+    );
+    std::fs::create_dir(root.join("requests")).unwrap();
+    let worker = root.join("worker.exe");
+    let client = root.join("client.exe");
+    std::fs::copy(env!("CARGO_BIN_EXE_rayman-global-worker"), &worker).unwrap();
+    std::fs::copy(env!("CARGO_BIN_EXE_rayman-global"), &client).unwrap();
+    let init = Command::new(&worker)
+        .args(["initialize", "--root"])
+        .arg(&root)
+        .arg("--source-workspace")
+        .arg(&source)
+        .arg("--yes")
+        .output()
+        .unwrap();
+    assert!(
+        init.status.success(),
+        "{}",
+        String::from_utf8_lossy(&init.stderr)
+    );
+    rayman_global_execution::global_execution::enroll(&root, &workspace, None, true, true).unwrap();
+    let lease = "a".repeat(32);
+    let mut child = Command::new(&client)
+        .args(["app-state", "--root"])
+        .arg(&root)
+        .arg("--workspace")
+        .arg(&workspace)
+        .args(["--action", "release", "--lease-id", &lease, "--no-wait"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let start = Instant::now();
+    while child.try_wait().unwrap().is_none() {
+        if start.elapsed() > Duration::from_secs(10) {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            panic!("no-wait release waited for a worker response");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["queued"], true);
+    let packets: Vec<_> = std::fs::read_dir(root.join("requests"))
+        .unwrap()
+        .map(|e| e.unwrap())
+        .collect();
+    assert_eq!(packets.len(), 1);
+    let request: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(packets[0].path()).unwrap()).unwrap();
+    assert_eq!(request["operation"]["action"]["kind"], "release");
+    assert_eq!(request["operation"]["action"]["lease_id"], lease);
+    assert!(!workspace.join(".RaymanCodingSkill").exists());
+}
+
+#[cfg(windows)]
+#[test]
 fn session_start_hook_errors_are_informational_and_unrelated_projects_are_untouched() {
     use std::io::Write;
     use std::process::{Command, Stdio};

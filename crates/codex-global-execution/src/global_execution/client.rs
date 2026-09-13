@@ -843,6 +843,24 @@ impl Client {
         Ok(enrollment)
     }
 
+    /// Cleanup only queues an unconfirmed release. No state is returned and
+    /// the worker still validates the workspace before processing the packet.
+    pub(crate) fn enqueue_storage_release(
+        &self,
+        workspace: &Path,
+        lease_id: &str,
+    ) -> Result<String> {
+        let enrollment = self
+            .lookup_registered_workspace(workspace)?
+            .ok_or_else(|| anyhow::anyhow!("workspace is not enrolled in global execution"))?;
+        self.enqueue_storage(
+            &enrollment,
+            StorageAction::Release {
+                lease_id: lease_id.into(),
+            },
+        )
+    }
+
     fn lookup_registered_workspace(&self, workspace: &Path) -> Result<Option<Enrollment>> {
         let workspace = std::fs::canonicalize(workspace)?;
         let mut found = None;

@@ -22,11 +22,11 @@
     ]
   },
   "revision": {
-    "generation": 35,
+    "generation": 36,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 34,
-      "sha256": "66425c1527f3101fc5851e4035039a7042ca18d4cace2dbced36fe043969a7c3"
+      "generation": 35,
+      "sha256": "51eb9ed36a29d077bff531a08b314d520b9b98a19a1ba88c63f7686f8b5c4e91"
     }
   },
   "tests": [
@@ -105,6 +105,19 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-GLOBAL-HOOKSTORAGE-E501DBAC538A11BED97D",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/tests/worktree_hook.rs::no_wait_release_queues_without_a_running_worker",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/tests/worktree_hook.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "no_wait_release_queues_without_a_running_worker",
+      "selector_sha256": "b8fc6d180fa2697bc2ac93885b8ef7c55acf7d18a1b9ee7180fcf64b0103d8f0",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-GLOBAL-NOWAIT-DFD4C9C6EDF6C4829035",
       "status": "active",
       "retirement": null
     },

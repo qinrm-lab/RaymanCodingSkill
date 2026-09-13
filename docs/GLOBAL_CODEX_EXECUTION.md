@@ -180,6 +180,10 @@ This supports sandbox threads whose workspace is readable but whose profile
 ancestors cannot be opened by the sandbox token. Commit and installation source
 inspection retain their existing client-side checks. No ACL expansion or
 permission-error fallback is used; older workers reject the new inspection action.
+The `app-state --no-wait --action release` cleanup path only queues an
+unconfirmed release and performs no synchronous attestation. It returns no
+workspace state and does not claim release success; the worker applies the same
+strict checks when it eventually processes that packet.
 
 Hook publication releases its own write handle before strict readback. A hook
 already published when an older installer reported a sharing violation can be

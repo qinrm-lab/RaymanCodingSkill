@@ -467,7 +467,6 @@ pub fn run(json: bool, command: &GlobalExecutionCmd) -> Result<()> {
             {
                 use crate::cli::StateAction;
                 let client = global::Client::open(root)?;
-                let enrollment = client.storage_enrollment(workspace)?;
                 let key = || -> Result<global::StateObject> {
                     match object.as_deref() {
                         Some("goals-store") => Ok(global::StateObject::GoalsStore),
@@ -489,15 +488,11 @@ pub fn run(json: bool, command: &GlobalExecutionCmd) -> Result<()> {
                     if !matches!(action, StateAction::Release) {
                         bail!("only lease release may be queued without waiting");
                     }
-                    let id = client.enqueue_storage(
-                        &enrollment,
-                        global::StorageAction::Release {
-                            lease_id: lease()?.into(),
-                        },
-                    )?;
+                    let id = client.enqueue_storage_release(workspace, lease()?)?;
                     println!("{}", serde_json::json!({"queued":true,"request_id":id}));
                     return Ok(());
                 }
+                let enrollment = client.storage_enrollment(workspace)?;
                 let reply = match action {
                     StateAction::Acquire => client.storage_call(
                         &enrollment,

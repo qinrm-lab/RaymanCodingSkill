@@ -95,6 +95,9 @@ The worker performs unchanged strong directory/member/registration checks before
 attestation and each subsequent storage action. A replaced root or forged binding
 must fail, and the inspection must not create application state. This does not
 relax the client source validation used for commits or file installation.
+No-wait lease cleanup must return after queuing only a release request, including
+when no worker is running. Queued is not executed or authenticated storage data;
+the owner performs the unchanged validation before any eventual release effect.
 
 Installation uses a protected, registered adapter and fixed destinations.
 It never executes an unreviewed project script as the desktop user. Source,

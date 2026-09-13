@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 38,
+    "generation": 39,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 37,
-      "sha256": "caea0d9efd2b1198c0a33f76f16b501eac3f1334f7f905405cb8a0dd773ea7db"
+      "generation": 38,
+      "sha256": "89d84e24ac9ed684a7deef62d612bd3bfffe5de7a397a5526aec18c36fe91413"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "51eb9ed36a29d077bff531a08b314d520b9b98a19a1ba88c63f7686f8b5c4e91"
+    "sha256": "066f235112cbbbe81006ab5e8b1f04f0e4164527d730d54a64d19cca5f5b5b11"
   },
   "sources": [
     {
@@ -414,11 +414,27 @@
     },
     {
       "source_id": "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "kind": "internal_contract",
       "title": "Global Codex fixed-capability execution contract",
       "path": "governance/sources/global-codex-execution.md",
       "sha256": "5b24a92775f48df6d19299caac2af75d9830fd8bcbc781dcec8ab33d26c2dec5",
+      "valid_until": "2027-09-09",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "source_id": "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "kind": "internal_contract",
+      "title": "Global Codex fixed-capability execution contract",
+      "path": "governance/sources/global-codex-execution.md",
+      "sha256": "e0521c8337f4a5fa2057f1ed4e464a7aad9be71b577fc110928a403079bf0d85",
       "valid_until": "2027-09-09",
       "retirement": null
     },
@@ -4575,8 +4591,26 @@
     },
     {
       "link_id": "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_id": "SRC-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
       "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
       "relation": "defines",
       "review": {
@@ -122540,7 +122574,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -122557,6 +122591,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "6ac38042e1e47547ebde16666c03b1d3b9ff63ed0fda32ee78c051bf92ec092a",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-CHECKPOINT-MARKER-ACCESS-20260911"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "798f65910ee19dbd7c9e64e4fdc0927457ee4c15817419b844522e930616c375",
       "retirement": null
     },
     {
@@ -123972,7 +124033,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-DISKREBIND-7285FB4A63BE7852E5A2-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -123989,6 +124050,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "500cbab51e1f6b4f5189617f00ee9700570b5c725a625aaff6e2f455a2e3ef2f",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-DISKREBIND-7285FB4A63BE7852E5A2-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-DISKREBIND-7285FB4A63BE7852E5A2-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-DISKREBIND-7285FB4A63BE7852E5A2"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "e75e4cca018c11f5f9cf88664d0289890184ac813bef11a7e0a02b4ab8415d61",
       "retirement": null
     },
     {
@@ -126482,7 +126570,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-GIT-IMAGE-PATH-20260912-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -126499,6 +126587,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "26118f422df9803c5b5f367943b52555aa753db45a25f23fdd50783afb2cca99",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-GIT-IMAGE-PATH-20260912-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-GIT-IMAGE-PATH-20260912-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-GIT-IMAGE-PATH-20260912"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "da2a8c8217f86f1ad87ea4de918f33bf51aa87f668c2a33292910e47ebfd1b48",
       "retirement": null
     },
     {
@@ -126638,7 +126753,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-HOOK-OWNER-TRUST-20260911-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -126655,11 +126770,38 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "0f1abea76551edf25253941e93ffadeadae9731cca6aa98294a021247b48b939",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-HOOK-OWNER-TRUST-20260911-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-HOOK-OWNER-TRUST-20260911-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-HOOK-OWNER-TRUST-20260911"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "9600763ea1b4292522d6064ff8f21f95ea67daa7d63bd49d69d31f6e7806f4a8",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-HOOKSTORAGE-DB03967A72972E782FA2",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -126676,11 +126818,38 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "5e34ec41b1231ded74e1835facdc83f2e731cfe76d5b6bef7b2d6e32c1259480",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-HOOKSTORAGE-DB03967A72972E782FA2-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-HOOKSTORAGE-DB03967A72972E782FA2-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-HOOKSTORAGE-DB03967A72972E782FA2"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "80f7fdbeee487bd2225339b9b18dc9e85543713c6df99ea67f4185fde5518516",
       "retirement": null
     },
     {
       "binding_id": "BIND-GLOBAL-HOOKSTORAGE-E501DBAC538A11BED97D",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -126697,6 +126866,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "fec2f932e7205ea5bd949569266a646d071f5eb422a151eebc2b0cdb0e54066c",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-HOOKSTORAGE-E501DBAC538A11BED97D-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-HOOKSTORAGE-E501DBAC538A11BED97D-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-HOOKSTORAGE-E501DBAC538A11BED97D"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "35f9b9d2234033bfe8ab4e75e4120216aa3f21acf2ecbb496b5867769d6fcd28",
       "retirement": null
     },
     {
@@ -126836,7 +127032,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-317A6BB8D5401F11-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -126853,6 +127049,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "b62cb840fc65adfb6b2affc7f14a0675efb1bfd67530935451b055b2dcfe74a0",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-317A6BB8D5401F11-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-317A6BB8D5401F11-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-KERNEL-ROLLS-BACK-FAILURE-AND-REFUS-2D86C853579B"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "c3f227bd083f134997ba63f3ac7a8883f856f81564d25fa81515a8f02ac1107f",
       "retirement": null
     },
     {
@@ -126992,7 +127215,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-40C32CD7E9809BE3-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -127009,6 +127232,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "997b849dd3f3a6c81b55469eb650194f2498101c66989a305f096480ea2b9b77",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-40C32CD7E9809BE3-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-40C32CD7E9809BE3-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-KERNEL-PUBLISHES-EXACT-FILES-AND-RE-115B6AE2F819"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "6a4c0baccea3c5d19a5d17f70d5b95e96ffa63a31cf09581401d94782577b569",
       "retirement": null
     },
     {
@@ -127148,7 +127398,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-7FB4C693DA187D47-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -127165,6 +127415,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "80fb911fa29bedea3f988a7e8b992b37f5aa1510be930d75bd41fcdc660eb6f9",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-7FB4C693DA187D47-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-7FB4C693DA187D47-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-WORKER-DISPATCH-AND-RESTART-RECONCI-20B23FB21FB6"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "09780c466166f740876a4498b741545e4e36c26bf92a360e243c20b6d8c6409e",
       "retirement": null
     },
     {
@@ -127304,7 +127581,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-97F43A91A81AD55F-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -127321,6 +127598,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "cc2ae8662d2817491a2b81f08dc00f3305131f41eff83d1b6012ad50452dfe64",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-97F43A91A81AD55F-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-97F43A91A81AD55F-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-CRASH-RECOVERY-NEVER-CLAIMS-ROLLBAC-D99CB30A0C3B"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "ce09bd60c30fab3f181e86248df594676252ef3801aac11a45925e264e53a0df",
       "retirement": null
     },
     {
@@ -127460,7 +127764,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-AB943ED2B6A98F15-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -127477,6 +127781,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "1b49ddcd24c357b4f1095ab2453783f29b539d2d4b658ba9d01851d9ddb57509",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-AB943ED2B6A98F15-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-AB943ED2B6A98F15-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-PENDING-INTENT-BLOCKS-OTHER-PUBLICA-B9B5DFDD4956"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "b6e54f74b4488abed8e299fa1376c9ea5447ec9d6c4598f98f38c9175362b437",
       "retirement": null
     },
     {
@@ -127616,7 +127947,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-B438D756A765861D-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -127633,6 +127964,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "1f4cc1741fbe88748f405b5dd7b0de53c8922b3243dd941b2e6096ef1115becd",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-B438D756A765861D-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-B438D756A765861D-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-INSTALLATION-BUNDLE-REJECTS-UNREGISTERED-PATHS-V-E68C99B92537"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "f7a462b4db8916346caffa93a9c20b7090e12f6d78b0cf27164109cb93cb2b21",
       "retirement": null
     },
     {
@@ -127772,7 +128130,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-INSTALL-BD678F984719CAE3-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -127789,6 +128147,54 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "6e97090b1507711669b7cadf4d36c75263bf579c2be390a38e3e9da6aa6f2653",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-INSTALL-BD678F984719CAE3-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-INSTALL-BD678F984719CAE3-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-GLOBAL-SKILL-PUBLICATION-IS-IDEMPOTENT-AND-PRESE-BC93A64317EC"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "e1fb8487f973a4cf25ff3135896ced3c13e708c0cb11ce904bfe437b355bdace",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-GLOBAL-NOWAIT-DFD4C9C6EDF6C4829035",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-NOWAIT-DFD4C9C6EDF6C4829035"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "d5aa84380550b3157827e21027d619e8055f846bd2c16085605732dd8e9c60bb",
       "retirement": null
     },
     {
@@ -127955,7 +128361,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-563CDEDE5B59E458-CP1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -127972,6 +128378,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "9c36adedc23c94a901624c85788579aee5404656f7e6ae52b9a0d8e40ea0105b",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-563CDEDE5B59E458-CP1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-563CDEDE5B59E458-CP1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-4DC44102236A-GLOBAL-20260909-CP1"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-ENROLL-GLOBAL-CODEX-PROJECTS-CP1",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "3ec11deb7946b267a045be1e783b8bbc91ccd3be800389535eace01722577ba8",
       "retirement": null
     },
     {
@@ -128111,7 +128544,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-5BE8CDDBF80D3213-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -128128,6 +128561,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "a55b0ad3f7f03ca6ff7b4ce410fa662b0fa405a7896691dd3acb847ba741dfa9",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-5BE8CDDBF80D3213-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-5BE8CDDBF80D3213-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-9865501D815A-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-CONFIGURE-GLOBAL-CODEX-EXECUTION",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "6f118285887880753bc97d7344e09bf32b0864f464869abd4bf51e2de91ec7f5",
       "retirement": null
     },
     {
@@ -128375,7 +128835,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3-R4-SID-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -128392,6 +128852,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "2c5f2e43132e88e0d149cc0166f12ee71fdf080e6e7b25b20eca6860f6b5a7ca",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3-R4-SID-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-879DE0B35A4B8E01-R2-R3-R4-SID-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-E79AB1AC8E80-GLOBAL-20260909-R2-R3-R4-SID-POWER"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-INSTALL-GLOBAL-CODEX-EXECUTION-R2-R3-R4-SID-POWER",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "a85f86e6edf681507bbea24207f8400239d95ce2c7f4222ee8b6c8acdd713faa",
       "retirement": null
     },
     {
@@ -128531,7 +129018,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PS-ACL-9B31F4E0C6D2A817-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -128548,6 +129035,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "f3ca7f4612b55ba2130427cb7a52ebe286d6ee94afdc844f7eb3d35836cf147a",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-PS-ACL-9B31F4E0C6D2A817-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PS-ACL-9B31F4E0C6D2A817-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-PS-SELFTEST-35260E3B3E35"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-PS-REPAIR-CODEX-WORKSPACE-ACL",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "7a474b6e8b7a189f5fd86f94e766674eb9f16df5ddaf48b495fd37936b735f02",
       "retirement": null
     },
     {
@@ -128606,7 +129120,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PUBSAFE-9723074FE2216F5BCBD4-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -128623,6 +129137,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "8d0265becdc2e82c62731a7203fc6b19db14deb8344a7cdfe1c6d33fb7ce17a1",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-PUBSAFE-9723074FE2216F5BCBD4-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PUBSAFE-9723074FE2216F5BCBD4-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-PUBSAFE-9723074FE2216F5BCBD4"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "ff69af11f7de91d5f683021da3c6b50f6ee89dcf00b0330a8a4c6e3e2a16144c",
       "retirement": null
     },
     {
@@ -128681,7 +129222,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-PUBSAFE-EEA47052AC77A04B0862-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -128698,6 +129239,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "fcd4d73804c87cbfee7a486dfe27102224418df7d6da50517b05d59fbbe130f9",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-PUBSAFE-EEA47052AC77A04B0862-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-PUBSAFE-EEA47052AC77A04B0862-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-PUBSAFE-EEA47052AC77A04B0862"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "3ee67a828c2b6075d2e0eba6ceeca0eadfcc289dc9e22bdb4b8cc6ff435f5e9e",
       "retirement": null
     },
     {
@@ -128810,7 +129378,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-31E0734B9F006F39AC5B-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -128827,6 +129395,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "9fc2e89c2546777b1d7e5f268f88f2f12eefa5d91d67703343e71a339d20913d",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-31E0734B9F006F39AC5B-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-31E0734B9F006F39AC5B-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-31E0734B9F006F39AC5B-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "3614b1e109bb9fb54b5b9983e67b95d143328ae939fc1015855bb527dabd07c8",
       "retirement": null
     },
     {
@@ -128912,7 +129507,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-358A6FF795E1901CCC1F-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -128929,6 +129524,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "144a34eeb728751aa4c823bf730cfa2e6dcd7997d72dc8fe0c55934a81219109",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-358A6FF795E1901CCC1F-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-358A6FF795E1901CCC1F-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-358A6FF795E1901CCC1F"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "c5ab7b675a2a567616b322c6ac604b68d68d97ae3387b74a9c4172021eaac5be",
       "retirement": null
     },
     {
@@ -129041,7 +129663,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -129058,6 +129680,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "56e7704970b44af879e5131a701b3b889c61a3a1d1afa434e0f4490f972b17ef",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-3A53DD3B5AB14657BC9E-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "415d88ab28133f8ec6c0d1206071ed9d1e81631c34b27a1a21c6cca40ff09357",
       "retirement": null
     },
     {
@@ -129170,7 +129819,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -129187,6 +129836,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "7c6030798e5c2129e1cf3833ea453731adb1a18b8042052fa703bfe65fc68a3a",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-7E1C9496F5A0147EEEAD-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "4a720f1a302be5bcf9c274db85074cd8927e4188967dbf614fa89d7e0f83ed0c",
       "retirement": null
     },
     {
@@ -129299,7 +129975,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -129316,6 +129992,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "f7da230b962227ef76ecc7c785487027601aff6b4f79c1993300d458800c5e08",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-9A3BEE8F72512FDC5C99-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "e6445a505556bc6adad6a16756b6352ac7c208e84f19bd08117fb1910a380f37",
       "retirement": null
     },
     {
@@ -129428,7 +130131,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-B9F4BD26F591EC648C11-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -129445,6 +130148,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "7b2ecaaf94318bdf4ec8b9ac02087af66abbe1c22133725401dce810aeae3c3b",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-B9F4BD26F591EC648C11-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-B9F4BD26F591EC648C11-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-B9F4BD26F591EC648C11-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "16db4e28ccde94239b18342807818eb5129cb8da3c1e4f1d443883dabdf526c6",
       "retirement": null
     },
     {
@@ -129557,7 +130287,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -129574,6 +130304,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "6307c33727dfdffee3be6100fbcb19029e288f06cf185c0e00989ede0bef9afb",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-CC6EF1D55DA6EDCDFB1B-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "9dae615ad633a3c130f981f36b22b420225f66de120fdc0db0d95d12457b41a4",
       "retirement": null
     },
     {
@@ -129686,7 +130443,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -129703,6 +130460,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "698200ed82233de98a9bbc327f6daa657cb8dfebe497ced40d915c93a4702503",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-D06BDB5EBB4E8A227358-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "3abf39cdceaa0233226c1219ddddf5f6b839f44bab80a8b9b0fae701848d3a04",
       "retirement": null
     },
     {
@@ -129815,7 +130599,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -129832,6 +130616,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "9502c01f46e84af47f71ff62d2d82947f04e19df8daf3eb26bb2e7e947aebf4d",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-D5BB08F51713BDE3DE50-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "ce5065d5ebc405df39500c7cc31fee02ccc3b7892c52f0cd7d83116d75bd57d2",
       "retirement": null
     },
     {
@@ -129944,7 +130755,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -129961,6 +130772,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "1f52a2a8d97e2aa7ddbd31cfc92190a1ac255b320e57acb0c3bb19d29b6f54a2",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-E3AE221A49FCDCE9A23A-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "5506030491a408c6b14df618ea7b0891f585c85862c8e496df6d8fb329175b70",
       "retirement": null
     },
     {
@@ -130073,7 +130911,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -130090,6 +130928,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "5532ea6533e450bb0d5fde6ccf54c4df2fbed1ef2368c07c8036717986007d01",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-RECOVERY-EBBBF11F820D64EC06DA-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "1a4f0ee75aedfb32c0f6ca71abf325d37e961720ab2e8aeadeb5947096028c03",
       "retirement": null
     },
     {
@@ -130229,7 +131094,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-REENROLL-ADAPTERS-20260911-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -130246,6 +131111,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "954efdc566a4d266b26e31b3640cb276090a9ced5a401aec3b72ee8360ef6845",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-REENROLL-ADAPTERS-20260911-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-REENROLL-ADAPTERS-20260911-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-REENROLL-ADAPTERS-20260911"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "cbba6543f95b9cc96740d8c9a3d820f015a6c5d51641f8c482a046b49297a770",
       "retirement": null
     },
     {
@@ -130385,7 +131277,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-0A4D994577024965-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -130402,6 +131294,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "e6feba99d12a856c505cef9f7bf7461707cf43bef8be26c6081d4e29b2da5e58",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-0A4D994577024965-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-0A4D994577024965-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-MULTI-PROJECT-PREFLIGHT-IS-ACTIVATION-EX-ACEBF771EA81-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "961e7c726e568e2dd1331b8d0608b35db576bd7639c2aeae2522fb440542bfed",
       "retirement": null
     },
     {
@@ -130541,7 +131460,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-10BB28AB1DE6EA34-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -130558,6 +131477,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "b8d941363b0a5fd31324dab0019d8f9e2220ace8ea2e6e9051a49f6ce3648efb",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-10BB28AB1DE6EA34-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-10BB28AB1DE6EA34-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-INTERRUPTED-EFFECT-NEVER-RUNS-AGAIN-AND-26CE591AC48E-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "be292030e1acc3cc197ee06300b02afb22b583c8f8664bb6177389a2cecc9bac",
       "retirement": null
     },
     {
@@ -130697,7 +131643,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-11CEAF74B0B26C45-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -130714,6 +131660,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "2db973dd1f890a471f6e0206cc39ce5aa1187b91bc70153b2eb90b5ef19a45a2",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-11CEAF74B0B26C45-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-11CEAF74B0B26C45-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-EXPIRY-FUTURE-AND-INTEGER-OVERFLOW-FAIL-2491A7831155-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "4ae297d2b33d9888e8129a1adaf0afc1145ba0216a55ea8bbb4ad923e8f51630",
       "retirement": null
     },
     {
@@ -130880,7 +131853,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-14FEF5F84CDAF1ED-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -130897,6 +131870,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "e388a85f04ac0beadf3adb7fdf6308600efab587c8f72adc8ea660f97451f622",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-14FEF5F84CDAF1ED-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-14FEF5F84CDAF1ED-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-GIT-TREE-AND-INDEX-PARSERS-REJECT-CONFLI-1D2297C844F0-GLOBAL-20260909-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "c2cee195fc92be0c29425c45bd9629adb5550f1c134bfdebcb71886883691fbd",
       "retirement": null
     },
     {
@@ -131036,7 +132036,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-1A1D1FEBC08A65A8-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -131053,6 +132053,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "3ebef3104901229bdc99d0de69d0e54df27fafb9130a0822833d982c30eecf92",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-1A1D1FEBC08A65A8-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-1A1D1FEBC08A65A8-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-CONTROL-ACCEPTS-LINE-ENDINGS-844097EC9E96-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "abf6deefe1575bdfbd264df0a533a552c57c8c51b60e66559d7d1ddd55e9ea4f",
       "retirement": null
     },
     {
@@ -131192,7 +132219,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-2092D9E411E8ACC3-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -131209,6 +132236,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "4749d7b0d3b91b869f1616b9b56f7e17d384c861c1b379f9ed4a054d9fc1dd86",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-2092D9E411E8ACC3-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-2092D9E411E8ACC3-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-SOURCE-FILE-READER-REJECTS-HARDLINK-ALIA-B5999A2E9275-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "bf935a02e59726a064742013e62add77ba7ef0d67cb5ab1a5b770890342ff720",
       "retirement": null
     },
     {
@@ -131348,7 +132402,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-2DD5295CC9465193-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -131365,6 +132419,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "0e037dfbc17edff3f6510d95cd06cd88f7e3c8c343e81c8795efb6b6aa1409ce",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-2DD5295CC9465193-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-2DD5295CC9465193-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-ROW-UPDATES-ARE-SCOPED-ATOMIC-958E57AE1B68-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "1c65ab96deb0636448c250bd3898945b53715744781182c01a9eba533a686b05",
       "retirement": null
     },
     {
@@ -131504,7 +132585,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-3589F2032B1A9325-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -131521,6 +132602,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "05c5193d341a0a46c836727154a01a9a7fc2de7a98ba0f061dbf0e8f461a78a7",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-3589F2032B1A9325-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-3589F2032B1A9325-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-WINDOWS-ALIASES-TRAVERSAL-AND-MANAGED-ST-F6BAF9C62F1B-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "f0c7f16e68923de43db24d83e709266c00795e09a73202b81b59452526c4ed32",
       "retirement": null
     },
     {
@@ -131660,7 +132768,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-3BCF0BCEFCF772F6-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -131677,6 +132785,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "005ee88350241907f05873d15aacaf224b27bc2b9f3ce359469b15b67e358e87",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-3BCF0BCEFCF772F6-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-3BCF0BCEFCF772F6-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-GLOBAL-SOURCE-FINGERPRINT-TRACKS-BYTES-A-463FE4EEE120-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "5cf6cd27c2ac52f18ee3a32894686ea10d4d9c66965fb1159764685ee2086da6",
       "retirement": null
     },
     {
@@ -131816,7 +132951,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-40A36BA93D92AA10-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -131833,6 +132968,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "aec56c9965032cf34cf74e6c6c3146fdf09f35ed701b93293e1de5188c8ceb8e",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-40A36BA93D92AA10-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-40A36BA93D92AA10-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-QUEUE-CONSUMPTION-PRESERVES-CHANGED-AND-0ECB1E630C8E-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "b2708b73726d35dba4c7c53e0a2e0db9aee07e76ede1e69dda0174c4d79bea2e",
       "retirement": null
     },
     {
@@ -131972,7 +133134,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-4A21E91A102E73B8-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -131989,6 +133151,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "7c49d2d348eda3a876ae5cd6bf1e88417d8755c94ac193a266fc67238359172b",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-4A21E91A102E73B8-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-4A21E91A102E73B8-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-STATE-LEASE-RENEWAL-STOPS-PROMPTLY-AND-P-121E03A49D3E-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "ae65926ddb397716af4d875f6a7a0e59e5b3c965677db1ddcd53ec9803b0c157",
       "retirement": null
     },
     {
@@ -132128,7 +133317,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-4E87E82148F93C10-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -132145,6 +133334,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "5e0243443449d6bd0589a2b1f86175c55085498ed7518fbeb2c83e576e53db1b",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-4E87E82148F93C10-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-4E87E82148F93C10-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROJECT-WORKTREE-AND-PROTECTED-POLICY-SU-9583082D1FDD-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "7f12e529f2780f8238c16d7ba104d298b485c7f8ddf2d5f1c6d3d4ccdade8f55",
       "retirement": null
     },
     {
@@ -132284,7 +133500,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-51F1FFC0FF09AE4B-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -132301,6 +133517,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "f365ef7127b3cb81c62c3d43a7b9bbdd58eff0615872410fc5d7ce9ac6f7c2a7",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-51F1FFC0FF09AE4B-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-51F1FFC0FF09AE4B-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-NATIVE-PROCESS-ROUNDTRIPS-QUOTED-UNICODE-FFAAA9F0EFC6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "bc77e71aa065f92900f8b0b21dd61f1d582045bdf110664d4b1f1264d3565754",
       "retirement": null
     },
     {
@@ -132440,7 +133683,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-55B846B8E672D54A-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -132457,6 +133700,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "9bd56f0016afcb02a88a45ad60812ad496315d8be6e6e32266601d29e8aa52bc",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-55B846B8E672D54A-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-55B846B8E672D54A-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-EXACT-ADDED-MODIFIED-DELETED-COMMIT-IS-V-86716FECCFB8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "dbb3f8bb8404763b2b7a44f3d4093cc791e3f0e650e828691135ceea4920d78f",
       "retirement": null
     },
     {
@@ -132596,7 +133866,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-65D0FE541C219BC9-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -132613,6 +133883,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "344d53c55cfc131df0f59e819e0636003b47b800c44f585adc3a679f62b544ce",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-65D0FE541C219BC9-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-65D0FE541C219BC9-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-DIRECTORY-REJECTS-INHERITED-OR-80BF39C24C08-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "3bac60e6da173643a7b62e74ce496d11f24f95455ed69745f1fb597ca60314f4",
       "retirement": null
     },
     {
@@ -132752,7 +134049,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-778DACD69B40A948-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -132769,6 +134066,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "41056a6eb9e20dd70fac2e335945dd662cb51fafa8e2aa2cc77d0176defd84d5",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-778DACD69B40A948-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-778DACD69B40A948-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-JOURNAL-RECOVERS-EXACT-STATE-AND-RETAINS-76954D4112E6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "2f00967e40a4c1a29f199e845be801b50aa5069a8c74ea582443f4baa509849a",
       "retirement": null
     },
     {
@@ -132908,7 +134232,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-7F123D22A1459EA2-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -132925,6 +134249,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "9de5653d22309a275759df89409b20756c0751c980377c3400c5c99f5fa31190",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-7F123D22A1459EA2-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-7F123D22A1459EA2-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-ROW-BACKEND-REJECTS-TRIGGER-S-ACBD966D0ECD-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "69b5ab55a0a1ddd458d916bfa0239d1fda1d8a81a6bffee7f8a9cd980dfc2ec7",
       "retirement": null
     },
     {
@@ -133064,7 +134415,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8107A30F555E561D-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -133081,6 +134432,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "970e894dd1432d8fc995aecf8231dc321e208144d358f1765907989b0e56fe38",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8107A30F555E561D-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8107A30F555E561D-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-GLOBAL-AUTOCRLF-MATCHES-NATIVE-GIT-WITHO-6949F080E3E8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "5fdfa9244f2db5481aeb25e164007449c99bc024c3ff05a818da61e3ff9f1a12",
       "retirement": null
     },
     {
@@ -133220,7 +134598,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-82A077277B69A094-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -133237,6 +134615,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "231706b22da2769bab310817a3e156e217ccfb1f638218b2c528d152220fbc54",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-82A077277B69A094-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-82A077277B69A094-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-MIGRATION-NORMALIZES-SQL-WITH-47C5C525C4BA-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "2d6bea27f75974e54a4b3c33c35322de68ce352501852233489b2a9764c4b544",
       "retirement": null
     },
     {
@@ -133403,7 +134808,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8B9E25B328749D46-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -133420,6 +134825,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "c9c7a8385f36c86bd021d52a27e7d48af999b8d06b76137299d9ebe8f8c4139b",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8B9E25B328749D46-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8B9E25B328749D46-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-WORKER-COMMITS-EXACT-REGISTERE-7347D4F302A6-GLOBAL-20260909-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "e0db51c4169f321f4a0a649b0329f8e4e6116f8b1b80a252f1ff698f5bfcd8a7",
       "retirement": null
     },
     {
@@ -133613,7 +135045,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -133630,6 +135062,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "1e29bbb2e294af72a8297d8c9b021c7424005326ca9d861f5b4a818080b6c616",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-REAL-GIT-SNAPSHOT-PRESERVES-SOURCE-AND-I-7209D78A5D5C-GLOBAL-20260909-ENROLL-R2-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "bf4e02736a1b86962d4bdd584927419be8f29ad033b88bc6eb9f8c768a8a33b7",
       "retirement": null
     },
     {
@@ -133769,7 +135228,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8F796BF2C1954DE4-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -133786,6 +135245,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "3a1ec0d70f11050b6d64c45d0f9511ab1f37db6954509b31b477e13d948521a2",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8F796BF2C1954DE4-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8F796BF2C1954DE4-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-CASE-COLLISIONS-ORDER-EMPTY-AND-NONORDIN-2250FE4E9CC8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "e74bb6f78b26a8aa168ca532adddd25dd7fd96c9812f5d49693e439da0f55f21",
       "retirement": null
     },
     {
@@ -133925,7 +135411,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-96D0F61691F547DD-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -133942,6 +135428,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "696ffa0ae2e6f41ed0b9594dce382d5468a1e8dc1652f1ffaaa221609c24fcc5",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-96D0F61691F547DD-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-96D0F61691F547DD-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-PUBLICATION-SEED-IDENTITY-SURVIVES-CLAIM-284F43EF08B0-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "58bb70bec68c206e775cf37196e3a319b848fd733d6390b7b22e97ad8d8848b5",
       "retirement": null
     },
     {
@@ -134108,7 +135621,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-9B7C80D244870C80-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -134125,6 +135638,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "f917c9e8d3d0e2ecd91f69881db0dbb7b0afc599f57bc8de3c04cc72b5058935",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-9B7C80D244870C80-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-9B7C80D244870C80-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-WORKER-PROCESSES-ENROLLED-STAT-AF219789C484-GLOBAL-20260909-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "de67ccb4317ebf9d31b7f9c39722ee28aba62d9916908f5391b8af6865df8cf4",
       "retirement": null
     },
     {
@@ -134264,7 +135804,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-A1D9DC4AE3162DAE-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -134281,6 +135821,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "460221aaf4f9615938c2ffb6478c69524b20bb6f8e1fc5b00f45f738c788efca",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-A1D9DC4AE3162DAE-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-A1D9DC4AE3162DAE-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-RECEIPT-AND-ROWS-SURVIVE-REOP-FA48F728E2F6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "f49e8477983e5b70c53e70cf0328610b7ad084ef517e2d0a27fca159ae51b7e2",
       "retirement": null
     },
     {
@@ -134420,7 +135987,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-A7661C6406541E08-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -134437,6 +136004,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "5679e09016c91ff0c2f767df747e229a53716b62528be33cfe40ca9ed6839c45",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-A7661C6406541E08-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-A7661C6406541E08-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-STATE-CAS-REPLAY-AND-PROJECT-NAMESPACES-8A73C6E659A6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "31da8b0ed23eee9da2dfec2185756fed8295fc55e83de61982ebe09f8341b4b0",
       "retirement": null
     },
     {
@@ -134576,7 +136170,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-AFD7A8CDE4C751D9-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -134593,6 +136187,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "50b07fa9a18b97111a9bbeacd68ac1ccf52dac56c4604f1ec7c2d07f76f46f4d",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-AFD7A8CDE4C751D9-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-AFD7A8CDE4C751D9-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-STAGE-REUSE-BINDS-ENVIRONMENT-TOOLS-SCOP-76A42F134ED0-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "9a86d0ee56c71bbbb609ec44cbfd3158c9cf6fb36f9e95ece02516179ca2a1e1",
       "retirement": null
     },
     {
@@ -134732,7 +136353,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-B7785F6F85CDB43D-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -134749,6 +136370,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "d7673ceccd0897025d6300a29048724c828d50604d96a166892bcd5f8ffaaa8b",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-B7785F6F85CDB43D-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-B7785F6F85CDB43D-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-SCHEMA-MATCHES-SAVESTATUS-V3-44312854F7BA-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "7fff67433213f06c2b9df1cb93ed9657e6c86af65011910b422fd94a95efb1d4",
       "retirement": null
     },
     {
@@ -134888,7 +136536,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-C27ADB994160229E-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -134905,6 +136553,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "3b23d3c6e4ee4f2a72c2ae440d6839807c60357a57458a5811c2efea14ac329c",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-C27ADB994160229E-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-C27ADB994160229E-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-PROTECTED-DIRECTORY-CHECKS-ACTUAL-OWNER-C1ECC8A751D8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "9def15ce3a85a9c88ec4d70869622256e7cbce23016cb7e9eb3c5113741d9412",
       "retirement": null
     },
     {
@@ -135044,7 +136719,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-C79022F1FBD299D6-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -135061,6 +136736,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "07d909581db100a8ad8256c980ccd8a5655a8cac8b16010d80233e189d1c2571",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-C79022F1FBD299D6-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-C79022F1FBD299D6-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-DUPLICATE-CASE-ALIAS-UNKNOWN-FIELDS-AND-AE366264763F-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "f680b5d755a05826f0663191930860b6285deb89ea3575cb91d34b8e2f0b41c1",
       "retirement": null
     },
     {
@@ -135200,7 +136902,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-CAF7E4BA8992C0A0-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -135217,6 +136919,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "c6829d66e64d055dd5a84d9660f0a2fb24a99556f07ef4bc6b80941dc006f177",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-CAF7E4BA8992C0A0-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-CAF7E4BA8992C0A0-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-FORMAL-STATE-AND-INSTALLATION-USE-TYPED-A2D08663F0F9-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "59e5f47dc215d140f63f0e783354e4c0c0d70c8fe96305bc6e61ce1648d9d8f8",
       "retirement": null
     },
     {
@@ -135356,7 +137085,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-CB866DC002A20C6A-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -135373,6 +137102,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "497e8af9db3129c73e2e7a22685dd405cd76d3685992cf4b7f41b2da794c7a46",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-CB866DC002A20C6A-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-CB866DC002A20C6A-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-GIT-CONTENT-POLICY-PRESERVES-PRECEDENCE-9941B006C139-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "f6b6972382d346e6373d14e0f3f7588bcca406f7200f880679628cf2c03265e0",
       "retirement": null
     },
     {
@@ -135512,7 +137268,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-CD1C459C5E11D688-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -135529,6 +137285,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "71b08150c7de1e1e57308005c9f4a02f20f320a7ecb3cb8f92c6dc2a4892d2ce",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-CD1C459C5E11D688-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-CD1C459C5E11D688-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-CAPABILITY-RESTRICTIONS-APPLY-EVEN-WITH-4D12F6EB1DA8-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "b1d4f50218b3bbb632423092f323464e071a0156091719e0db917baa1a4bfd46",
       "retirement": null
     },
     {
@@ -135668,7 +137451,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-D8D2F9F141ED7925-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -135685,6 +137468,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "25f6b1df5553f4f85ba6de8a5b802eba71d20b0e529dfbd2c0920c165aacba15",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-D8D2F9F141ED7925-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-D8D2F9F141ED7925-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-DURABLE-STATE-SURVIVES-REOPEN-AND-DOES-N-554FAFBD196F-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "a350f0b0f68c8c37cbad4d688e55aad6e8dbb323e8ebc5bbb0dd456e1efc8c7e",
       "retirement": null
     },
     {
@@ -135824,7 +137634,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-F0AF41C7DFBDF26D-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -135841,6 +137651,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "4750299fe9bc69869ff68284c26957114881844707d0ad5a68c6a4cfb6ceba75",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-F0AF41C7DFBDF26D-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-F0AF41C7DFBDF26D-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-BACKEND-PRESERVES-OTHER-TENAN-A634550F6A7C-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "a7b6b1b754d3cc3b93faa277b28555cafc4c7fa5d485ada01823837edbb77f20",
       "retirement": null
     },
     {
@@ -135980,7 +137817,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-FF0AD4B184D6DD85-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -135997,6 +137834,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "921f9c95d7babde4234de573ae3bc59b292a75be5e0c8dd3a0da52333134b0ca",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-FF0AD4B184D6DD85-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-FF0AD4B184D6DD85-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHECKPOINT-BACKEND-REJECTS-CROSS-TENANT-48A947B850A6-GLOBAL-20260909"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "6350b942be0af0a30ffc2d7a855da370e720cf269faa641a930745f973a5cd04",
       "retirement": null
     },
     {
@@ -136055,7 +137919,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-WORKTREE-14AF8E64F07E1D8B0CC2-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -136072,6 +137936,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "99b2cb1fa23dd919d3ccf4af2eacbc4fcaad25e14a653aa5182632dea724f18d",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-WORKTREE-14AF8E64F07E1D8B0CC2-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-14AF8E64F07E1D8B0CC2-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-14AF8E64F07E1D8B0CC2"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "69e4b101fb6560c87528d938caab25151455240e18a6dd4a68179d9921ccc768",
       "retirement": null
     },
     {
@@ -136130,7 +138021,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-WORKTREE-329D37708BC158C413AD-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -136147,6 +138038,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "432ccf7303dd088eeda2f5e75db20c3d9f4b28c700afd0f3f545ca6067dbcd9e",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-WORKTREE-329D37708BC158C413AD-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-329D37708BC158C413AD-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-329D37708BC158C413AD"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "7bfec4455fd2efebcb341c3ab3b3b842ba54e4c1aad69589b14ae111d65c87fd",
       "retirement": null
     },
     {
@@ -136232,7 +138150,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-WORKTREE-32B5450EAB54D7CEE13D-DISKREBIND-TESTMODULE-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -136249,6 +138167,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "878a2945c9ca05703e3e9af3f9ef11b0c5400e1f1eb1d31a0ee765e46dc69830",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-WORKTREE-32B5450EAB54D7CEE13D-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-32B5450EAB54D7CEE13D-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-32B5450EAB54D7CEE13D-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "44d092b50aabd7c3d0209657e3e82f69c9849d29e7ee8872747185095cef245b",
       "retirement": null
     },
     {
@@ -136307,7 +138252,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-WORKTREE-53B9B3DC0890DE8BC5C1-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -136324,6 +138269,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "34f9637997b8cdbb39f5941937d8b666ca5bcf70053f15454d4de141443b0d8d",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-WORKTREE-53B9B3DC0890DE8BC5C1-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-53B9B3DC0890DE8BC5C1-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-53B9B3DC0890DE8BC5C1"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "97ad22c4aa7fe03fe0d4428f6b11d4d72274508b97975664e7858a2a8560b657",
       "retirement": null
     },
     {
@@ -136409,7 +138381,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-WORKTREE-CEA776B5991F3B1620CB-DISKREBIND-TESTMODULE-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -136426,6 +138398,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "406960762ac161013ec0bfa7dd3160c12218ae6562833eeeddccc6c5d1e994d1",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-WORKTREE-CEA776B5991F3B1620CB-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-CEA776B5991F3B1620CB-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-CEA776B5991F3B1620CB-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "4f007c9c86d308b3e961b276e38072d66f2f7a2d35ce512e62c21b2cd05c15a4",
       "retirement": null
     },
     {
@@ -136484,7 +138483,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-WORKTREE-ECA0221052E5F21183BC-DISKREBIND-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -136501,6 +138500,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "e78d785944c2ff48e83c599aec20b4bdf5af70179040ddc00f23e77fff907d4d",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-WORKTREE-ECA0221052E5F21183BC-DISKREBIND-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-ECA0221052E5F21183BC-DISKREBIND-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-ECA0221052E5F21183BC"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "e11e1169219a2d9c17a3ab3e6d18d88f9a7dbe981f32b830c8912000bd195b94",
       "retirement": null
     },
     {
@@ -136586,7 +138612,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-WORKTREE-F336D0AA238D6ADC31B6-DISKREBIND-TESTMODULE-HOOKSTORAGE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE"
       ],
@@ -136603,6 +138629,33 @@
         "valid_until": "2027-03-13"
       },
       "semantic_sha256": "883ed962636dbafb2e798d0d9d4fd789aa45e23fd4a928580798df9b1584d9bc",
+      "retirement": {
+        "retired_at": "2026-09-13",
+        "reason": "Review nonblocking lease release: queue only a validated release without a worker reply; retain owner checks before any later effect.",
+        "replaced_by": [
+          "BIND-GLOBAL-WORKTREE-F336D0AA238D6ADC31B6-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-WORKTREE-F336D0AA238D6ADC31B6-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-GLOBAL-WORKTREE-F336D0AA238D6ADC31B6-TESTMODULE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-13",
+        "valid_until": "2027-03-13"
+      },
+      "semantic_sha256": "ce967040c0265edef3a1153f6e99e43bbc8c650fc88986a0190355db8697b2cb",
       "retirement": null
     },
     {
