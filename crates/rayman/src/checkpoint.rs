@@ -1020,6 +1020,8 @@ fn verify_manifest_tree(tree: &Path, manifest: &Manifest) -> Result<()> {
     Ok(())
 }
 
+mod legacy_autosave;
+pub use legacy_autosave::configured_legacy_dir;
 mod restore;
 
 pub use restore::*;

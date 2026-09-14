@@ -6351,15 +6351,82 @@ fn goal_plan_and_review_receipts_close_a_real_two_file_delta() {
 }
 
 #[test]
-fn autosave_is_reachable_as_a_top_level_command() {
-    // 发布校验器不再从 --help 文本里断言命令面，所以 autosave 的 CLI 可达性
-    // 需要在这里覆盖：此前它只有 in-crate 单元测试，没走过 CLI dispatch。
+fn manual_recovery_discovers_the_legacy_autosave_store() {
+    let workspace = tempfile::tempdir().unwrap();
+    let store = tempfile::tempdir().unwrap();
+    let root = workspace.path();
+    let dir = store.path().to_str().unwrap();
+    write(root, "payload.txt", "preserved snapshot");
+    let legacy = serde_json::json!({
+        "active": true, "interval_min": 30, "keep": 3, "dir": dir,
+        "auto_stop": true, "task_name": "RaymanCheckpoint-retired-fixture",
+        "started_at": "2026-09-14T00:00:00Z"
+    })
+    .to_string();
+    write(root, ".RaymanCodingSkill/autosave.json", &legacy);
+    let saved = run_json(root, &["checkpoint", "--dir", dir, "save"]);
+    let id = saved["id"].as_str().unwrap();
+    write(root, "payload.txt", "later contents");
+    run_json(root, &["checkpoint", "--dir", dir, "restore", id, "--yes"]);
+    assert_eq!(
+        std::fs::read_to_string(root.join("payload.txt")).unwrap(),
+        "preserved snapshot"
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.join(".RaymanCodingSkill/autosave.json")).unwrap(),
+        legacy
+    );
+    let goal = run_json(
+        root,
+        &[
+            "goal",
+            "start",
+            "manual recovery",
+            "--must",
+            "continue safely",
+        ],
+    );
+    let prepared = run_json(root, &["prepare", "--goal", goal["id"].as_str().unwrap()]);
+    assert_eq!(prepared["latest_verified_checkpoint"]["id"], id);
+    assert_eq!(prepared["latest_verified_checkpoint"]["store_dir"], dir);
+}
+
+#[test]
+fn retired_autosave_commands_preserve_workspace_and_legacy_state() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    let status = run_json(root, &["autosave", "status"]);
-    assert!(status["message"].is_string(), "status={status}");
-    // 未注册的工作区没有持久化状态。
-    assert!(status["state"].is_null(), "status={status}");
+    for args in [
+        vec!["autosave", "start", "--interval", "1"],
+        vec!["autosave", "tick", "--workspace", "missing-workspace"],
+        vec!["autosave", "stop", "--status", "success"],
+        vec!["autosave", "status"],
+    ] {
+        let rejected = run_raw(root, &args);
+        assert_eq!(rejected.status, 1, "{}", rejected.stderr);
+        assert!(
+            rejected.stderr.contains("save-work-status"),
+            "{}",
+            rejected.stderr
+        );
+        assert!(!root.join(".RaymanCodingSkill").exists());
+    }
+    write(
+        root,
+        ".RaymanCodingSkill/autosave.json",
+        "{\"active\":true,\"dir\":\"old-store\"}",
+    );
+    let before = state_snapshot(root);
+    let rejected = run_raw(root, &["--language", "en", "autosave", "start"]);
+    assert_eq!(rejected.status, 1);
+    assert!(
+        rejected.stderr.contains("is retired"),
+        "{}",
+        rejected.stderr
+    );
+    assert_eq!(state_snapshot(root), before);
+    let help = run_raw(root, &["--language", "en", "--help"]);
+    assert_eq!(help.status, 0);
+    assert!(!help.stdout.contains("autosave"), "{}", help.stdout);
 }
 
 #[test]

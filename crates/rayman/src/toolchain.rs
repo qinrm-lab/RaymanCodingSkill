@@ -1,6 +1,6 @@
 //! Which external programs this process can actually reach.
 //!
-//! Rayman shells out to `git`, `cargo`, and (on Windows) `schtasks`. Each call
+//! Rayman shells out to `git` and `cargo`. Each call
 //! site used to invent its own policy for "the program is not there", ranging
 //! from a silent degrade to blocking the entire workspace, and none of them
 //! told the operator up front. The most common real failure is not a broken
@@ -159,18 +159,14 @@ pub fn toolchain_probe(root: &Path) -> Vec<ToolProbe> {
     let cargo_relevant = root.join("Cargo.toml").is_file()
         || root.join("crates").is_dir()
         || root.join("Cargo.lock").is_file();
-    let mut probes = vec![
+    vec![
         probe("git", "源码状态、跟踪文件枚举与 clean-worktree 判定", true),
         probe(
             "cargo",
             "Cargo 拓扑权威确认（standard/release 就绪的硬前提）",
             cargo_relevant,
         ),
-    ];
-    if cfg!(windows) {
-        probes.push(probe("schtasks", "autosave 计划任务注册与注销", true));
-    }
-    probes
+    ]
 }
 
 fn probe(name: &'static str, required_for: &'static str, relevant: bool) -> ToolProbe {

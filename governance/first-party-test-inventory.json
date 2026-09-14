@@ -22,11 +22,11 @@
     ]
   },
   "revision": {
-    "generation": 38,
+    "generation": 39,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 37,
-      "sha256": "991247a5e79043761664ced4f2f57cfd28b0bebe36190d06a5bb0a1bcc2c1846"
+      "generation": 38,
+      "sha256": "041fff29c3eadf0f2c3800d6a36f951afa16bf9cb3b056770a37f9b035c970b0"
     }
   },
   "tests": [
@@ -2504,7 +2504,7 @@
     },
     {
       "test_id": "TEST-RUST-A-SUCCESSFUL-TICK-CLEARS-A-PREVIOUS-FAILURE-STRE-EAC95433AC4B",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/autosave.rs::a_successful_tick_clears_a_previous_failure_streak",
       "role": "root_cargo",
       "path": "crates/rayman/src/autosave.rs",
@@ -2513,7 +2513,11 @@
       "selector_sha256": "c435031900d909f9f7721d88a4a8bdd34cd48d256399dc3369eede5c76bfc170",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire scheduled snapshots per user decision; preserve manual and legacy checkpoint recovery.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-A-USER-TITLE-MADE-OF-COMMON-WORDS-IS-NEVER-PARTI-F58A00BA9E27",
@@ -2679,7 +2683,7 @@
     },
     {
       "test_id": "TEST-RUST-ACTIVATION-FAILURE-NEVER-PERSISTS-A-PHANTOM-ACTI-EB61D9189A2E",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/autosave.rs::activation_failure_never_persists_a_phantom_active_state",
       "role": "root_cargo",
       "path": "crates/rayman/src/autosave.rs",
@@ -2688,7 +2692,11 @@
       "selector_sha256": "bb33136c0c0a3714f76f64cb13fe6e7b5fcb7134f0e873eefe7eb99cc80e27fe",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire scheduled snapshots per user decision; preserve manual and legacy checkpoint recovery.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-ACTIVATION-IS-BOUND-TO-THE-RUNNING-CLI-CONTRACT-17F51DEC6937",
@@ -3258,7 +3266,7 @@
     },
     {
       "test_id": "TEST-RUST-AUTOSAVE-IS-REACHABLE-AS-A-TOP-LEVEL-COMMAND-86D4B98DFBC6",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/tests/cli.rs::autosave_is_reachable_as_a_top_level_command",
       "role": "root_cargo",
       "path": "crates/rayman/tests/cli.rs",
@@ -3267,7 +3275,11 @@
       "selector_sha256": "69eaf50059744e4ca0ba4c801e99d801e81eb5b8b0cef2dc3d82d14ae3404467",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire scheduled snapshots per user decision; preserve manual and legacy checkpoint recovery.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-BACKEND-SCHEMA-REJECTS-UNKNOWN-FIELDS-7AC1B997CCD8",
@@ -5044,7 +5056,7 @@
     },
     {
       "test_id": "TEST-RUST-CORRUPT-AUTOSAVE-STATE-IS-NEVER-OVERWRITTEN-BY-L-2F475D657817",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/autosave.rs::corrupt_autosave_state_is_never_overwritten_by_lifecycle_actions",
       "role": "root_cargo",
       "path": "crates/rayman/src/autosave.rs",
@@ -5053,7 +5065,11 @@
       "selector_sha256": "b37d57f4f448cde1644ef2740c4db229a1405d07e9ecc92e0dcd9071d669d830",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire scheduled snapshots per user decision; preserve manual and legacy checkpoint recovery.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-CORRUPT-CACHE-IS-PRESERVED-AS-AN-ERROR-BE415CD0E34B",
@@ -5778,7 +5794,7 @@
     },
     {
       "test_id": "TEST-RUST-EXEMPTED-ENTRYPOINTS-DO-NOT-MINT-STATE-IN-UNACTI-383A9879344E",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/autosave.rs::exempted_entrypoints_do_not_mint_state_in_unactivated_dirs",
       "role": "root_cargo",
       "path": "crates/rayman/src/autosave.rs",
@@ -5787,7 +5803,11 @@
       "selector_sha256": "bd202f4467a6e119fbcd2d8c86ce48325bad790f344ad2b1ff478a4712c259b1",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire scheduled snapshots per user decision; preserve manual and legacy checkpoint recovery.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-EXISTING-GOAL-MUTATORS-KEEP-LOGICAL-TIME-MONOTON-5D79F4E66FD2",
@@ -7489,13 +7509,32 @@
     },
     {
       "test_id": "TEST-RUST-KNOWN-FRAGMENTS-STILL-TRANSLATE-FRAMEWORK-TEXT-1A54BDF7A830",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/i18n.rs::known_fragments_still_translate_framework_text",
       "role": "root_cargo",
       "path": "crates/rayman/src/i18n.rs",
       "selector_kind": "rust_test_fn",
       "selector": "known_fragments_still_translate_framework_text",
       "selector_sha256": "240e475f4c9e828a269b72b53a66625a4d19cdcef81302fe6b37927b06e237be",
+      "cfg": "all",
+      "owner": null,
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Reviewed test successor after scheduler removal; surviving assertions remain.",
+        "replaced_by": [
+          "TEST-RUST-KNOWN-FRAGMENTS-STILL-TRANSLATE-FRAMEWORK-TEXT-1A54BDF7A830-P3A"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-KNOWN-FRAGMENTS-STILL-TRANSLATE-FRAMEWORK-TEXT-1A54BDF7A830-P3A",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/i18n.rs::known_fragments_still_translate_framework_text",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/i18n.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "known_fragments_still_translate_framework_text",
+      "selector_sha256": "9500e61ac828f7449ae5729a2576af56d824bbe668da63df79bff478a22d8b3a",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -7628,6 +7667,32 @@
       "selector_sha256": "a6988b27ead4b330d162274f9030ca62cec3a99d8102db86ce37c2ab067fbb02",
       "cfg": "all",
       "owner": null,
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/rayman/src/checkpoint/legacy_autosave.rs::legacy_autosave_lock_remains_compatible_with_restoration",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/checkpoint/legacy_autosave.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "legacy_autosave_lock_remains_compatible_with_restoration",
+      "selector_sha256": "48c669f410925118b16d9cca2b9db8cbe2a5dd3a732ce0886609b1e05262e217",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-LEGACY-AUTOSAVE-LOCK-REMAINS-COMPATIBLE-WITH-RES-F99B876BAC1D-P3A",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/rayman/src/checkpoint/legacy_autosave.rs::legacy_checkpoint_hint_preserves_existing_bytes",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/checkpoint/legacy_autosave.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "legacy_checkpoint_hint_preserves_existing_bytes",
+      "selector_sha256": "db092954558c10194eeb8c6d2cbab0f427ccc491c72a0687bd48518a1fa2d343",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-LEGACY-CHECKPOINT-HINT-PRESERVES-EXISTING-BYTES-D4E8E6E70630-P3A",
+      "status": "active",
       "retirement": null
     },
     {
@@ -8343,6 +8408,19 @@
       "selector_sha256": "e6c6945c49b050fe716d57eedb4e9fca0946daebc9ea4e24263a306bc98f1ca0",
       "cfg": "windows",
       "owner": null,
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/rayman/tests/cli.rs::manual_recovery_discovers_the_legacy_autosave_store",
+      "role": "root_cargo",
+      "path": "crates/rayman/tests/cli.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "manual_recovery_discovers_the_legacy_autosave_store",
+      "selector_sha256": "5e0d822b97f143bf87f77101433577e9fd548b09d511c60a525ab0c1b658b3b9",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-MANUAL-RECOVERY-DISCOVERS-THE-LEGACY-AUTOSAVE-ST-6EE92154B202-P3A",
+      "status": "active",
       "retirement": null
     },
     {
@@ -11506,7 +11584,7 @@
     },
     {
       "test_id": "TEST-RUST-REPEATED-TICK-FAILURES-ARE-COUNTED-PRESERVED-AND-45293BF5315C",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/autosave.rs::repeated_tick_failures_are_counted_preserved_and_surfaced_in_status",
       "role": "root_cargo",
       "path": "crates/rayman/src/autosave.rs",
@@ -11515,7 +11593,11 @@
       "selector_sha256": "05356586e32e54383ab1306aa85cf3bcdaedaa98e2aabbde3fccdf2b8d0de341",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire scheduled snapshots per user decision; preserve manual and legacy checkpoint recovery.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-REPLACEMENT-AND-SUPERSESSION-TIMES-FOLLOW-EVERY-37E42575334B",
@@ -11820,6 +11902,19 @@
       "selector_sha256": "61dd8cfb2662161672148780b4d906cbaabdb07b4ae67b5f915c3dc75b7bda67",
       "cfg": "all",
       "owner": null,
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/rayman/tests/cli.rs::retired_autosave_commands_preserve_workspace_and_legacy_state",
+      "role": "root_cargo",
+      "path": "crates/rayman/tests/cli.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "retired_autosave_commands_preserve_workspace_and_legacy_state",
+      "selector_sha256": "03f1840bfb69ec57e4b1703e901993755fd5952d50f398224e38061712d496ef",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-RETIRED-AUTOSAVE-COMMANDS-PRESERVE-WORKSPACE-AND-5020508298FB-P3A",
+      "status": "active",
       "retirement": null
     },
     {
@@ -12252,7 +12347,7 @@
     },
     {
       "test_id": "TEST-RUST-SCHEDULER-NOT-FOUND-CLASSIFICATION-ACCEPTS-PATH-4FDED5F4FEF4",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/autosave.rs::scheduler_not_found_classification_accepts_path_missing_but_not_generic_failures",
       "role": "root_cargo",
       "path": "crates/rayman/src/autosave.rs",
@@ -12261,7 +12356,11 @@
       "selector_sha256": "e6100af38a9764358768950b81a160b743ba33c355040d8a7c790ccd7f86d3de",
       "cfg": "windows",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire scheduled snapshots per user decision; preserve manual and legacy checkpoint recovery.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-SCRATCH-CREATE-STATUS-AND-CLEANUP-034C0E170E74",
@@ -12921,7 +13020,7 @@
     },
     {
       "test_id": "TEST-RUST-STATE-ROUNDTRIPS-AND-STOP-MARKS-INACTIVE-F61991F1A13B",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/autosave.rs::state_roundtrips_and_stop_marks_inactive",
       "role": "root_cargo",
       "path": "crates/rayman/src/autosave.rs",
@@ -12930,7 +13029,11 @@
       "selector_sha256": "b9ecf18a81a76e2ab82dd564c72a0c63874945b436e0c9d39030ce9bfbbc8ea9",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire scheduled snapshots per user decision; preserve manual and legacy checkpoint recovery.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-STATE-VALIDATION-REJECTS-BAD-SCHEMA-INTERVAL-AND-870D5C80847D",
@@ -12947,7 +13050,7 @@
     },
     {
       "test_id": "TEST-RUST-STATE-WRITE-FAILURE-AFTER-UNREGISTER-REREGISTERS-00DDF8A4E1C5",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/autosave.rs::state_write_failure_after_unregister_reregisters_and_stays_active",
       "role": "root_cargo",
       "path": "crates/rayman/src/autosave.rs",
@@ -12956,7 +13059,11 @@
       "selector_sha256": "ac00c45efee879988c43b903fd9905151e3e7c71eba7fc7062285999c36a8aec",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire scheduled snapshots per user decision; preserve manual and legacy checkpoint recovery.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-STATE-WRITE-PROBE-REFUSES-A-PLANTED-LINK-AT-THE-8EE67E3C5207",
@@ -13051,7 +13158,7 @@
     },
     {
       "test_id": "TEST-RUST-STOP-ON-BROKEN-ACTIVATION-UNREGISTERS-WITHOUT-MI-537BE1F672AC",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/autosave.rs::stop_on_broken_activation_unregisters_without_minting_a_snapshot",
       "role": "root_cargo",
       "path": "crates/rayman/src/autosave.rs",
@@ -13060,7 +13167,11 @@
       "selector_sha256": "d5816fdf4edae5f654f67e99f5c344ff80f6a13fba50251cd91ec91a6d356fb6",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire scheduled snapshots per user decision; preserve manual and legacy checkpoint recovery.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-STOP-REQUIRES-THE-COMPLETE-WORKSPACE-AGGREGATE-1A8A2C457B51",
@@ -13389,7 +13500,7 @@
     },
     {
       "test_id": "TEST-RUST-TASK-NAME-IS-STABLE-AND-SAFE-8E70DC96DD27",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/autosave.rs::task_name_is_stable_and_safe",
       "role": "root_cargo",
       "path": "crates/rayman/src/autosave.rs",
@@ -13398,7 +13509,11 @@
       "selector_sha256": "b2506d61c4237e8de2e403a9d1ccf7c9fea7e3adb45569c8d25d56f34846025d",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire scheduled snapshots per user decision; preserve manual and legacy checkpoint recovery.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-TASK-PROOF-BLOCKERS-USE-STRUCTURED-GOAL-OWNERSHI-50C5CEF669AC",
@@ -13415,7 +13530,7 @@
     },
     {
       "test_id": "TEST-RUST-TASK-XML-CONTAINS-KEY-FIELDS-B98A919CE7AB",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/autosave.rs::task_xml_contains_key_fields",
       "role": "root_cargo",
       "path": "crates/rayman/src/autosave.rs",
@@ -13424,11 +13539,15 @@
       "selector_sha256": "e2b37580ced39a8c3e717f75005ce92e376ceb653283f04579e42ed2ba378316",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire scheduled snapshots per user decision; preserve manual and legacy checkpoint recovery.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-TASK-XML-IS-CREATED-EXCLUSIVELY-UNDER-THE-MANAGE-5E940E0662C4",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/autosave.rs::task_xml_is_created_exclusively_under_the_managed_temp_root",
       "role": "root_cargo",
       "path": "crates/rayman/src/autosave.rs",
@@ -13437,11 +13556,15 @@
       "selector_sha256": "f1a3d6bf6b73e763e4613e5ce2be5d9f0b5808cb99a949896afc5d479a60648c",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire scheduled snapshots per user decision; preserve manual and legacy checkpoint recovery.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-TASK-XML-REFUSES-A-SYMLINKED-MANAGED-TEMP-ROOT-75AEBA10BF8F",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/autosave.rs::task_xml_refuses_a_symlinked_managed_temp_root",
       "role": "root_cargo",
       "path": "crates/rayman/src/autosave.rs",
@@ -13450,7 +13573,11 @@
       "selector_sha256": "be7ba4c893bf063137106c7342cb90af82e432218b8927877fc857dc969d5447",
       "cfg": "unix",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire scheduled snapshots per user decision; preserve manual and legacy checkpoint recovery.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-TEMP-SCRATCH-PATHS-DO-NOT-LEAK-THE-WINDOWS-VERBA-3303231C1994",
@@ -13545,7 +13672,7 @@
     },
     {
       "test_id": "TEST-RUST-TICK-PERSISTS-FAILURE-WHEN-ACTIVATION-IS-BROKEN-03AEF8ADACD0",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/autosave.rs::tick_persists_failure_when_activation_is_broken",
       "role": "root_cargo",
       "path": "crates/rayman/src/autosave.rs",
@@ -13554,7 +13681,11 @@
       "selector_sha256": "7c885ea5287c0cd9465bbda1e6792d5fd7cbf7c62f92f8cdeb99473fd0edd348",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire scheduled snapshots per user decision; preserve manual and legacy checkpoint recovery.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-TOOL-INPUT-VALIDATION-REJECTS-MISSING-AND-UNKNOW-027043EA0B2F",
@@ -13792,7 +13923,7 @@
     },
     {
       "test_id": "TEST-RUST-UNREGISTER-FAILURE-KEEPS-PERSISTED-STATE-ACTIVE-680052684A49",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/autosave.rs::unregister_failure_keeps_persisted_state_active_and_returns_error",
       "role": "root_cargo",
       "path": "crates/rayman/src/autosave.rs",
@@ -13801,7 +13932,11 @@
       "selector_sha256": "ed223e3e1f188722cf196ee5826e90e912c80f218d14735620ad67fe0cfddd6c",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire scheduled snapshots per user decision; preserve manual and legacy checkpoint recovery.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-UNRELATED-CARGO-FIXTURE-DOES-NOT-BLOCK-JAVASCRIP-33FC23E9D516",
@@ -14312,7 +14447,7 @@
     },
     {
       "test_id": "TEST-RUST-WORK-IS-COMPLETE-AGREES-WITH-THE-STANDARD-GATE-O-21AA54A5A24E",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/autosave.rs::work_is_complete_agrees_with_the_standard_gate_on_undeclared_drift",
       "role": "root_cargo",
       "path": "crates/rayman/src/autosave.rs",
@@ -14321,11 +14456,15 @@
       "selector_sha256": "d415084c274c22b268e9070ade802adb2b7bfa74813881f594d2be1ffc8da44e",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire scheduled snapshots per user decision; preserve manual and legacy checkpoint recovery.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-WORK-IS-COMPLETE-IGNORES-PENDING-BOUND-TO-RETIRE-39F31791BBE8",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/autosave.rs::work_is_complete_ignores_pending_bound_to_retired_goal",
       "role": "root_cargo",
       "path": "crates/rayman/src/autosave.rs",
@@ -14334,11 +14473,15 @@
       "selector_sha256": "fdb8100097130f6c9aaee52a33295fa1535553ae5880ea9638ce75ca0b9f4680",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire scheduled snapshots per user decision; preserve manual and legacy checkpoint recovery.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-WORK-IS-COMPLETE-IGNORES-REASONED-HISTORY-BUT-RE-36EC3E07DC0C",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/autosave.rs::work_is_complete_ignores_reasoned_history_but_requires_fresh_current_receipt",
       "role": "root_cargo",
       "path": "crates/rayman/src/autosave.rs",
@@ -14347,11 +14490,15 @@
       "selector_sha256": "43e7abbd992a645934adf8bcd36ac93ca70c2fb218f642c395f2ca1cb98558d2",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire scheduled snapshots per user decision; preserve manual and legacy checkpoint recovery.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-WORK-IS-COMPLETE-NEEDS-GOALS-NONE-ACTIVE-NO-PEND-0B76ED52C129",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/autosave.rs::work_is_complete_needs_goals_none_active_no_pending",
       "role": "root_cargo",
       "path": "crates/rayman/src/autosave.rs",
@@ -14360,11 +14507,15 @@
       "selector_sha256": "bde4b4f4f724b9e7a5772332e281610b56844dbc4a6420ca86fb03b25df8126d",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire scheduled snapshots per user decision; preserve manual and legacy checkpoint recovery.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-WORK-IS-COMPLETE-REJECTS-A-SEMANTICALLY-INVALID-3416BA207824",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/autosave.rs::work_is_complete_rejects_a_semantically_invalid_success_goal",
       "role": "root_cargo",
       "path": "crates/rayman/src/autosave.rs",
@@ -14373,11 +14524,15 @@
       "selector_sha256": "763a72b8f060151f81e71c80526df782a4f04d31c1deb37fadc07c630230a7fc",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire scheduled snapshots per user decision; preserve manual and legacy checkpoint recovery.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-WORK-IS-COMPLETE-REJECTS-LEGACY-SUCCESS-WITHOUT-79ED78552562",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/autosave.rs::work_is_complete_rejects_legacy_success_without_a_current_receipt",
       "role": "root_cargo",
       "path": "crates/rayman/src/autosave.rs",
@@ -14386,11 +14541,15 @@
       "selector_sha256": "3e6832065b6d3216daf5e73cbe9aaa4d4559e19cc4fddbe67d670cbc305b378b",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire scheduled snapshots per user decision; preserve manual and legacy checkpoint recovery.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-WORK-IS-COMPLETE-REJECTS-PARTIAL-BLOCKED-AND-UNK-D8CDCA8D8E22",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/autosave.rs::work_is_complete_rejects_partial_blocked_and_unknown_statuses",
       "role": "root_cargo",
       "path": "crates/rayman/src/autosave.rs",
@@ -14399,7 +14558,11 @@
       "selector_sha256": "08af656cc78d58832a63dfc1ad06df501f9233b233de6c78effc153a76614a37",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire scheduled snapshots per user decision; preserve manual and legacy checkpoint recovery.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-WORK-PACKAGES-REJECT-CYCLES-AND-PROGRESS-NEVER-S-677A624FC593",
@@ -14741,7 +14904,7 @@
     },
     {
       "test_id": "TEST-RUST-XML-ESCAPE-HANDLES-AMPERSAND-AND-ANGLES-653B02AE0F6C",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/autosave.rs::xml_escape_handles_ampersand_and_angles",
       "role": "root_cargo",
       "path": "crates/rayman/src/autosave.rs",
@@ -14750,7 +14913,11 @@
       "selector_sha256": "885fe84a8ad0dfb6cde1d60189ed22c45473195a503a880b9bf40cb9ff2e3415",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire scheduled snapshots per user decision; preserve manual and legacy checkpoint recovery.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-XTASK-AUTHORITY-ACCEPTS-ONLY-THE-CANONICAL-EXPLI-344CEBDCCD10",
@@ -15075,9 +15242,24 @@
     },
     {
       "asset_id": "ASSET-FILE-R13-72D82EBD3834",
-      "status": "active",
+      "status": "retired",
       "path": "crates/rayman/tests/cli.rs",
       "sha256": "72d82ebd3834c03f6330bd78999b2858354455f8fd6ea0832f602dd90f2b79a9",
+      "kind": "dedicated_file",
+      "cleanup_policy": "delete_on_last_reference",
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Shared CLI fixture bytes changed; retained active ownership.",
+        "replaced_by": [
+          "ASSET-FILE-R13-72D82EBD3834-P3A"
+        ]
+      }
+    },
+    {
+      "asset_id": "ASSET-FILE-R13-72D82EBD3834-P3A",
+      "status": "active",
+      "path": "crates/rayman/tests/cli.rs",
+      "sha256": "a4083d6080a4a6981d896bb6e5954b64a52c549b810e426deab6dea31648ffc9",
       "kind": "dedicated_file",
       "cleanup_policy": "delete_on_last_reference",
       "retirement": null

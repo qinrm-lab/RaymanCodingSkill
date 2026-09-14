@@ -98,7 +98,7 @@ bytes were rebuilt locally from the checkout.
 - `goal`, `prepare`, `check --goal`, and `finish` preserve caller-authored
   requirements, immutable baselines/plans, current receipts, lifecycle history,
   and the task/workspace distinction defined by the shared workflow contract.
-- `checkpoint`, `autosave`, `state`, `assets`, and `temp` keep recovery,
+- `checkpoint`, `state`, `assets`, and `temp` keep recovery,
   read-only inspection, and deletion authority separate. A status or scan never
   silently becomes cleanup authority.
 - `codex-hook`, `doctor`, and `workspace` preserve the host/identity boundaries:
@@ -119,3 +119,16 @@ The exact command families above may delegate to focused modules, but every
 public exit status and JSON object remains one end-to-end CLI integration
 contract. Retired commands must fail with an actionable migration rather than
 silently emulating current behavior.
+
+## Retired scheduled snapshots
+
+`rayman autosave` is retired. Automatic agent recovery belongs to the separate
+save-work-status skill; Rayman does not invoke or configure that skill.
+Manual `checkpoint save`, listing, verification and restoration remain available.
+Old snapshots and the custom-store hint in `autosave.json` remain readable;
+restoring old metadata does not register or reactivate a scheduled task.
+
+Before upgrading a workspace that still runs an old `RaymanCheckpoint-*` task,
+use the old installed CLI's `rayman autosave stop --status success` and verify
+that its task is absent. Keep its snapshot store. The new CLI rejects old
+start/tick/stop/status calls without changing files or scheduled tasks.

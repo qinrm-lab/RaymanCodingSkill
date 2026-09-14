@@ -38,18 +38,6 @@ When scanning live or captured files, report obsolete-name candidates and real w
 
 Atomic file IO verifies parent and temporary-file identities, preserves the previous complete target on failure, and distinguishes missing data from corruption or read-time drift.
 
-### AUTOSAVE-COMPLETION
-
-An autosave completion decision requires all current goals to have current valid success evidence and no active pending boundary; historical pending is retained but does not block.
-
-### AUTOSAVE-SCHEDULE
-
-When constructing an autosave scheduled task, use stable safe names and escaped arguments in exclusively created managed files; unsafe paths and generic scheduler failures are rejected.
-
-### AUTOSAVE-STATE
-
-Autosave lifecycle operations preserve activation and persisted scheduler state; failed ticks remain visible, failed registration or unregistration cannot produce a false active or stopped state.
-
 ### CHECKPOINT-ORPHAN
 
 Checkpoint transaction recovery reclaims only provably empty or committed orphan state; backups or ambiguous incomplete transactions remain fail closed.
@@ -277,3 +265,12 @@ Ordinary changed-path validation retains its established impact scope encoding; 
 ### WORKSPACE-WALK
 
 Workspace discovery honors tracked files and ignore rules while excluding managed state and build output; submodules, path case and no-follow failures must not silently remove eligible source from the capture.
+
+## Scheduled snapshot retirement
+
+The user selected the independent SaveStatus skill for automatic recovery.
+Rayman scheduler creation, ticking, stopping and status reporting are removed,
+together with tests whose sole requirement was that scheduler. Old spellings
+remain rejection-only migration entries under CLI-MIGRATION. Manual snapshot
+recovery keeps its legacy custom-store hint and stable autosave.lock contract;
+it cannot register tasks or mutate SaveStatus configuration.

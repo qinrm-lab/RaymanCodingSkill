@@ -22,11 +22,11 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 
 use cli::{
-    AutosaveAction, AutosaveCmd, CheckCmd, CheckpointAction, CheckpointCmd, Cli, Command,
-    ContextAction, ContextCmd, Format, GoalAction, GoalCmd, HandoffAction, MapAction, MapCmd,
-    QualityProfile, StateAction, StateCmd, TempAction, TempCmd, WorkspaceAction, WorkspaceCmd,
+    CheckCmd, CheckpointAction, CheckpointCmd, Cli, Command, ContextAction, ContextCmd, Format,
+    GoalAction, GoalCmd, HandoffAction, MapAction, MapCmd, QualityProfile, StateAction, StateCmd,
+    TempAction, TempCmd, WorkspaceAction, WorkspaceCmd,
 };
-use rayman::{assets, autosave, context, goal, map, source_state, temp, workspace, workspace_root};
+use rayman::{assets, context, goal, map, source_state, temp, workspace, workspace_root};
 
 fn main() {
     i18n::preconfigure_from_process_args();
@@ -105,17 +105,7 @@ fn run(cli: Cli) -> Result<()> {
             | Command::Context(ContextCmd {
                 action: ContextAction::LegacyOs { .. } | ContextAction::LegacyTask { .. }
             })
-            // tick/status/stop 不能走顶层门禁：tick 由计划任务触发，激活一破
-            // （升级 CLI、SKILL.md 变动）就会在失败落盘之前 exit 1，autosave
-            // 的"每次结果必须持久化"契约失效，status 无法暴露死亡、stop 无法
-            // 注销任务。激活检查在 autosave 内部对目标工作区执行并记账。
-            // start 仍要求激活。
-            | Command::Autosave(AutosaveCmd {
-                action: AutosaveAction::Tick { .. }
-                    | AutosaveAction::Status
-                    | AutosaveAction::Stop { .. },
-                ..
-            })
+            | Command::LegacyAutosave(_)
     ) {
         workspace::require_active(&root)?;
     }
@@ -363,7 +353,9 @@ fn run(cli: Cli) -> Result<()> {
 
         Command::Checkpoint(cmd) => return checkpoint_cli::run_checkpoint(&root, json, cmd),
 
-        Command::Autosave(cmd) => return run_autosave(&root, json, cmd),
+        Command::LegacyAutosave(_) => bail!(
+            "`rayman autosave` 已退役；自动保存使用独立的 save-work-status 技能，手动快照与恢复使用 `rayman checkpoint`"
+        ),
 
         Command::Doctor(cmd) => return doctor::run(&root, json, cmd),
         Command::GlobalExecution(_) => unreachable!(),
@@ -924,32 +916,6 @@ fn quality_config_for(
         QualityProfile::Standard => Ok(map::QualityConfig::standard()),
         QualityProfile::Strict => map::load_quality_config(root, "strict"),
     }
-}
-
-fn run_autosave(root: &std::path::Path, json: bool, cmd: AutosaveCmd) -> Result<()> {
-    let outcome = match cmd.action {
-        AutosaveAction::Start {
-            interval,
-            keep,
-            no_auto_stop,
-            dir,
-        } => autosave::start(root, interval, keep, !no_auto_stop, dir.as_deref())?,
-        AutosaveAction::Tick { workspace } => {
-            let ws = autosave::resolve_workspace(workspace.as_deref())?;
-            autosave::tick(&ws)?
-        }
-        AutosaveAction::Stop { status } => autosave::stop(root, &status)?,
-        AutosaveAction::Status => autosave::status(root)?,
-    };
-    if json {
-        print(&json!({
-            "message": outcome.message,
-            "state": outcome.state.as_ref().map(|s| serde_json::to_value(s).unwrap_or(serde_json::Value::Null)),
-        }));
-    } else {
-        println!("{}", outcome.message);
-    }
-    Ok(())
 }
 
 #[derive(Serialize)]

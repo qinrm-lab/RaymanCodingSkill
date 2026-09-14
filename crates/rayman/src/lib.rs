@@ -6,7 +6,6 @@ pub mod assets;
 pub const CLI_CONTRACT: &str = "rayman-cli-contract-v18";
 pub const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub mod autosave;
 pub mod checkpoint;
 pub mod codex_hook;
 pub mod codex_host;

@@ -59,7 +59,7 @@ fn restore_impl_with_options(
     // without one has no autosave writer to race, and minting state from a
     // read-shaped step is its own defect.
     let _autosave_lock = match crate::state_paths::managed_state_root(&root, false)? {
-        Some(_) => Some(crate::autosave::acquire_lock(&root)?),
+        Some(_) => Some(super::legacy_autosave::acquire_lock(&root)?),
         None => None,
     };
     let _lock = CheckpointLock::acquire(&ws_dir)?;
@@ -633,7 +633,7 @@ fn rollback_restore_transaction(root: &Path, transaction: &mut RestoreTransactio
             // 崩溃点落在"Planned 落盘"与"Created 落盘"之间时，目录是本事务刚
             // create_dir 出来的空目录：安全回收（remove_dir 天然拒绝非空目录，
             // 不会误删第三方内容）。此前这里无条件拒绝，孤儿 journal 会让之后
-            // 每一次 save/restore/autosave 永久报错且不给任何解除路径。
+            // 每一次 save/restore 永久报错且不给任何解除路径。
             match fs::remove_dir(&path) {
                 Ok(()) => {}
                 Err(error) if error.kind() == io::ErrorKind::NotFound => {}
@@ -701,7 +701,7 @@ fn rollback_restore_entry(
                 // the journal-less branch does, instead of leaving the operator
                 // with a wedge and no documented way out.
                 bail!(
-                    "回滚目标已被第三方修改，拒绝覆盖: {}。原件仍在该 transaction 的 backups/ 子目录中；取回仍需要的内容后删除整个 transaction 目录即可解除对 save/restore/autosave 的阻塞，salvage-save 不受阻塞",
+                    "回滚目标已被第三方修改，拒绝覆盖: {}。原件仍在该 transaction 的 backups/ 子目录中；取回仍需要的内容后删除整个 transaction 目录即可解除对 save/restore 的阻塞，salvage-save 不受阻塞",
                     display_path(&destination)
                 );
             }
@@ -891,11 +891,11 @@ fn reap_journalless_restore_transaction(ws_dir: &Path, path: &Path) -> Result<bo
         // Fail closed: the backups/ subtree can be the only copy of content a publish
         // already overwrote, and without a journal there is no way to know which entries
         // those are, so we never guess. But name the concrete recovery path — this branch
-        // otherwise blocks every save/restore/autosave until the user acts, and the old
+        // otherwise blocks every save/restore until the user acts, and the old
         // message did not say how. Recovery is manual by design (not auto-reaped) so the
         // user decides what in backups/ is still needed before it is discarded.
         bail!(
-            "orphan restore transaction 没有 journal 却仍存有备份文件，无从判断该回滚哪些目标；已保留供人工恢复。恢复步骤：检查该目录 backups/ 子目录中的原件、取回仍需要的文件，再删除整个目录以解除对 save/restore/autosave 的阻塞：{}",
+            "orphan restore transaction 没有 journal 却仍存有备份文件，无从判断该回滚哪些目标；已保留供人工恢复。恢复步骤：检查该目录 backups/ 子目录中的原件、取回仍需要的文件，再删除整个目录以解除对 save/restore 的阻塞：{}",
             display_path(path)
         );
     }

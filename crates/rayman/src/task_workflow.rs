@@ -126,7 +126,7 @@ fn latest_checkpoint_across_stores(
     )>,
 > {
     let mut stores: Vec<Option<std::path::PathBuf>> = vec![None];
-    if let Some(dir) = rayman::autosave::configured_checkpoint_dir(root) {
+    if let Some(dir) = rayman::checkpoint::configured_legacy_dir(root) {
         stores.push(Some(dir));
     }
     let workspace_local = std::path::PathBuf::from(".RaymanCodingSkill/checkpoints");

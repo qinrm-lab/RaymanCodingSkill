@@ -105,7 +105,7 @@
     {
       "path": "crates/rayman/src/timefmt.rs",
       "kind": "high_fan_in",
-      "reason": "UTC receipt timestamps are intentionally centralized in one tiny helper; goal, pending, checkpoint, and autosave behavior tests plus the full root suite cover every consumer."
+      "reason": "UTC receipt timestamps are intentionally centralized in one tiny helper; goal, pending, checkpoint, and legacy recovery behavior tests plus the full root suite cover every consumer."
     },
     {
       "path": "crates/rayman/tests/cli.rs",
@@ -145,7 +145,7 @@
     {
       "path": "crates/rayman/src/temp.rs",
       "kind": "high_fan_in",
-      "reason": "Managed scratch and manifest-owned pytest leases intentionally share one temp contract across the CLI, autosave, state audit, and goal validation; focused temp and pytest-isolation tests, cross-process CLI tests, and the full root suite cover all consumers."
+      "reason": "Managed scratch and manifest-owned pytest leases intentionally share one temp contract across the CLI, checkpoint recovery, state audit, and goal validation; focused temp and pytest-isolation tests, cross-process CLI tests, and the full root suite cover all consumers."
     },
     {
       "path": "crates/rayman/src/temp.rs",

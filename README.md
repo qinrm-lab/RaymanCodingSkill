@@ -460,7 +460,6 @@ rayman checkpoint salvage-save                            # activation-exempt re
 rayman checkpoint verify [id|latest]                      # read-only v3 manifest/path/per-file hash verification
 rayman checkpoint restore [id|latest] --yes               # only a verified complete snapshot; journaled all-or-nothing
 rayman checkpoint restore <recovery-id> --yes --allow-recovery-only # also requires repaired active contract
-rayman autosave start | stop | status                     # scheduled auto-snapshots (see tools/README.md)
 rayman doctor [--check] [--probe-writes]                  # identity read-only by default
 ```
 
