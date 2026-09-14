@@ -511,6 +511,23 @@ fn git_tree_and_index_parsers_reject_conflicts_aliases_and_nonfiles() {
 #[cfg(windows)]
 #[test]
 fn real_git_snapshot_preserves_source_and_index_with_added_crlf_and_deleted_files() {
+    for (key, value) in [
+        ("=C:", "C:\\Users\\fixture"),
+        ("=E:", "E:\\work"),
+        ("", "value"),
+        ("BAD=NAME", "value"),
+        ("BAD\0NAME", "value"),
+        ("NAME", "bad\0value"),
+        ("git_dir", "untrusted"),
+        ("API_TOKEN", "private"),
+        ("MY_SECRET", "private"),
+        ("AUTH_KEY", "private"),
+    ] {
+        assert!(!hook_environment_entry_allowed(key, value));
+    }
+    assert!(hook_environment_entry_allowed("PATH", "C:\\tools"));
+    assert!(hook_environment_entry_allowed("TEMP", "E:\\临时目录"));
+    assert!(hook_environment_entry_allowed("EMPTY", ""));
     let repo = tempfile::tempdir().unwrap();
     let trusted = tempfile::tempdir().unwrap();
     let sid = crate::execution_context::execution_context_probe()

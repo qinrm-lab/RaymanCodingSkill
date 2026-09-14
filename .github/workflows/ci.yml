@@ -77,6 +77,22 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo check --locked -p rayman --target aarch64-unknown-linux-gnu --all-targets
 
+      - name: Checkout pinned checkpoint integration frontend
+        if: runner.os == 'Windows'
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: qinrm-lab/RaymanSaveStatusSkill
+          ref: 348e8bf527b2c01662a581f13543468e3af885df
+          path: target/checkpoint-source
+          persist-credentials: false
+
+      - name: Bind checkpoint integration source
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8 `
+            -Value "RAYMAN_TEST_SAVE_SOURCE=$(Join-Path $env:GITHUB_WORKSPACE 'target/checkpoint-source')"
+
       - name: Source-bound Rust repository gate
         shell: pwsh
         run: cargo run --locked --manifest-path xtask/Cargo.toml -- repository-gate

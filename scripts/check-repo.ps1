@@ -32,6 +32,7 @@ if ($IsWindows) {
     & (Join-Path $PSScriptRoot 'install-global-codex-execution.ps1') -SelfTest
     & (Join-Path $PSScriptRoot 'enroll-global-codex-projects.ps1') -SelfTest
     & (Join-Path $PSScriptRoot 'repair-codex-workspace-acl.ps1') -SelfTest
+    & (Join-Path $PSScriptRoot 'check-checkpoint-integration.ps1')
 }
 & (Join-Path $PSScriptRoot 'codex-powershell-broker.ps1') -SelfTest
 & (Join-Path $PSScriptRoot 'install-codex-powershell-broker.ps1') -SelfTest

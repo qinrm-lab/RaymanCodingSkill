@@ -135,10 +135,13 @@ and withdrawal commands now preserve a verified baseline and carry the latest
 checkpoint rows back during withdrawal. Interrupted publication and withdrawal
 are tested against real file identities. Production rollout is not installed.
 
-`scripts/test-global-checkpoint-adapter.py --save-runtime <candidate.exe>`
+`scripts/check-checkpoint-integration.ps1`, required by the Windows repository gate,
 exercises real initialization, capture, verification and SQLite write-conflict
-failure in a newly protected fixture. It needs the separately built candidate
-SaveStatus adapter. It never installs a production worker or changes Codex
+failure in a newly protected fixture. Set `RAYMAN_TEST_SAVE_SOURCE` to the clean
+commit pinned in `governance/checkpoint-integration.json`. The gate builds that
+frontend and this checkout's backend, uses their Cargo artifact paths and records
+the frontend SHA-256. Missing or changed candidates fail; the suite is not
+optional and has no pytest-only entrypoint. It never installs a production worker or changes Codex
 configuration. Same-identity sandbox simulation does not prove qinrm deployment.
 
 ## Remaining deployment gates

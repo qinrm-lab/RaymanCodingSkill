@@ -717,8 +717,25 @@ function Get-PowerShellTestInventory {
     return @($rows)
 }
 
+function Get-PythonTestInventory {
+    # Govern the complete script bytes, including helpers and the main entry.
+    # Every Python file in this executable scripts root must be registered;
+    # introducing a helper cannot silently create an ungoverned test surface.
+    foreach ($file in @(Get-OrdinaryInventoryFiles -RootRelativePath 'scripts' -Extension '.py')) {
+        $path = ConvertTo-RelativeTracePath -Path $file
+        $identity = "python::python_acceptance::$path::<script>"
+        [pscustomobject]@{
+            identity = $identity; role = 'python_acceptance'; path = $path
+            selector_kind = 'python_script'; selector = '<script>'
+            selector_sha256 = Get-Sha256Bytes (Get-FileBytes $file)
+            cfg = 'windows'; owner = $null
+            suggested_test_id = 'TEST-PYTHON-' + (Get-Sha256Text $identity).Substring(0, 16).ToUpperInvariant()
+        }
+    }
+}
+
 function Get-FirstPartyTestInventory {
-    $rows = @((Get-RustTestInventory) + (Get-PowerShellTestInventory) | Sort-Object identity)
+    $rows = @((Get-RustTestInventory) + (Get-PowerShellTestInventory) + @(Get-PythonTestInventory) | Sort-Object identity)
     $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($row in $rows) {
         if (-not $seen.Add([string]$row.identity)) {
@@ -1148,6 +1165,16 @@ function Assert-TestGateCompatibility {
             [string]$Gate.selector_kind -ceq 'rust_symbol' -and
             [string]$Gate.selector -ceq 'verify_grade_observation' -and
             (@($Gate.target_matrix) -join ',') -ceq 'windows,eval_runtime'
+    } elseif ($role -eq 'python_acceptance') {
+        $compatible = [string]$Test.path -ceq 'scripts/test-global-checkpoint-adapter.py' -and
+            [string]$Test.selector_kind -ceq 'python_script' -and [string]$Test.selector -ceq '<script>' -and
+            [string]$Gate.kind -ceq 'python_acceptance' -and
+            [string]$Gate.path -ceq 'scripts/check-checkpoint-integration.ps1' -and
+            [string]$Gate.selector_kind -ceq 'powershell_function' -and
+            [string]$Gate.selector -ceq 'Invoke-CheckpointIntegration'
+        if (-not $compatible) {
+            Throw-TraceError 'TRACE_PYTHON_GATE' 'Python acceptance is not bound to its direct integration gate.'
+        }
     } elseif ($role -in @('powershell_self_test', 'powershell_named_case')) {
         $expectedPath = if ([string]$Test.path -ceq 'scripts/check-test-traceability-v2.ps1') {
             'scripts/check-test-traceability.ps1'
@@ -1204,7 +1231,7 @@ function Assert-InventoryDocument {
             'selector_sha256', 'cfg', 'owner', 'retirement'
         ) -Label "test $($test.test_id)"
         Assert-Retirement -Retirement $test.retirement -Status ([string]$test.status) -Label "test $($test.test_id)"
-        if ([string]$test.identity -cnotmatch '^(?:rust|powershell)::' -or
+        if ([string]$test.identity -cnotmatch '^(?:rust|powershell|python)::' -or
             [string]$test.selector_sha256 -cnotmatch '^[0-9a-f]{64}$') {
             Throw-TraceError 'TRACE_TEST_SHAPE' "test $($test.test_id) is incomplete"
         }
@@ -1445,6 +1472,14 @@ function Assert-GateSelector {
         if ([string]$Gate.kind -in @('cargo_root_suite', 'cargo_evals_suite')) {
             Assert-CargoGateCommandContract -Gate $Gate
         }
+        if ([string]$Gate.kind -eq 'python_acceptance') {
+            $checkRepo = [IO.File]::ReadAllText((Resolve-TracePath 'scripts/check-repo.ps1'), $script:Utf8)
+            $runner = [IO.File]::ReadAllText($path, $script:Utf8)
+            if (-not $checkRepo.Contains("& (Join-Path `$PSScriptRoot 'check-checkpoint-integration.ps1')") -or
+                -not $runner.Contains("'test-global-checkpoint-adapter.py'")) {
+                Throw-TraceError 'TRACE_ENFORCEMENT_MISSING' 'Python acceptance must be directly dispatched by the repository gate.'
+            }
+        }
     } elseif ([string]$Gate.selector_kind -eq 'powershell_self_test_suite') {
         if ((Get-PowerShellSelectorCount -Path $path -Kind 'powershell_self_test_suite' -Selector '-SelfTest') -ne 1) {
             Throw-TraceError 'TRACE_ENFORCEMENT_MISSING' "PowerShell self-test gate is missing: $($Gate.gate_id)"
@@ -1599,7 +1634,7 @@ function Assert-TraceabilityDocument {
             'selector', 'target_matrix', 'retirement'
         ) -Label "gate $($gate.gate_id)"
         Assert-Retirement -Retirement $gate.retirement -Status ([string]$gate.status) -Label "gate $($gate.gate_id)"
-        if ([string]$gate.kind -notin @('cargo_root_suite', 'cargo_evals_suite', 'powershell_self_test', 'eval_oracle') -or
+        if ([string]$gate.kind -notin @('cargo_root_suite', 'cargo_evals_suite', 'powershell_self_test', 'eval_oracle', 'python_acceptance') -or
             $gate.target_matrix -isnot [array] -or @($gate.target_matrix).Count -eq 0 -or
             @($gate.target_matrix | Where-Object { $_ -notin @('windows', 'linux', 'other_unix', 'eval_runtime') }).Count -ne 0) {
             Throw-TraceError 'TRACE_GATE_TYPE' "gate $($gate.gate_id) is incomplete"
@@ -2035,6 +2070,18 @@ if ($SelfTest) { Write-Output 'no cases dispatched' }
     $unreachableFunctions = Get-SelfTestReachablePowerShellFunctions -Ast $unreachableAst
     Assert-SelfTestRejected -Code 'TRACE_POWERSHELL_CASE_UNREACHABLE' -Action {
         Assert-PowerShellNamedCaseReachable -Command $unreachableCommand -ReachableFunctions $unreachableFunctions -Path 'scripts/unreachable.ps1'
+    }
+    $pythonGateMismatch = [pscustomobject]@{
+        test_id = 'TEST-PYTHON-UNREGISTERED'; role = 'python_acceptance'
+        path = 'scripts/test-global-checkpoint-adapter.py'; selector_kind = 'python_script'
+        selector = '<script>'; cfg = 'windows'
+    }
+    Assert-SelfTestRejected -Code 'TRACE_PYTHON_GATE' -Action {
+        Assert-TestGateCompatibility -Test $pythonGateMismatch -Gate ([pscustomobject]@{
+            gate_id = 'GATE-WRONG-PYTHON'; kind = 'cargo_root_suite'
+            path = 'scripts/check-repo.ps1'; selector_kind = 'powershell_function'
+            selector = 'Get-RepositoryQualityCommands'; target_matrix = @('windows')
+        })
     }
     foreach ($excluded in @('target/generated.rs', 'crates/rayman/target/generated.rs', 'evals/.runs-123/task/src/lib.rs')) {
         if (-not (Test-InventoryPathExcluded -RelativePath $excluded)) {

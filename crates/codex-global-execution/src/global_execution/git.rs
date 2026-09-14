@@ -15,6 +15,20 @@ pub struct CommitSnapshot {
     pub changes: Vec<Change>,
 }
 
+fn hook_environment_entry_allowed(key: &str, value: &str) -> bool {
+    // Windows exposes drive-current-directory pseudo variables such as =C:.
+    // The hook already has an explicit absolute cwd and must not inherit these
+    // shell bookkeeping entries into the fixed-process environment contract.
+    let upper = key.to_ascii_uppercase();
+    !key.is_empty()
+        && !key.contains(['=', '\0'])
+        && !value.contains('\0')
+        && !upper.starts_with("GIT_")
+        && !upper.contains("SECRET")
+        && !upper.contains("TOKEN")
+        && !upper.ends_with("_KEY")
+}
+
 enum ReadCommand<'a> {
     Tree(&'a str),
     ObjectType(&'a str),
@@ -615,13 +629,7 @@ impl<'a> GitInspector<'a> {
             bail!("sandbox hook candidate tree identity is invalid");
         }
         let mut environment: BTreeMap<String, String> = std::env::vars()
-            .filter(|(key, _)| {
-                let upper = key.to_ascii_uppercase();
-                !upper.starts_with("GIT_")
-                    && !upper.contains("SECRET")
-                    && !upper.contains("TOKEN")
-                    && !upper.ends_with("_KEY")
-            })
+            .filter(|(key, value)| hook_environment_entry_allowed(key, value))
             .collect();
         for (key, value) in [
             (

@@ -12,6 +12,16 @@ The scope is `repository_first_party_executable_tests`. There is no legacy
 first-party escape hatch: a newly discovered test is unregistered and fails the
 gate until it receives a real semantic binding, or is deleted as an orphan.
 
+Python files under `scripts/` are inventoried as complete executable acceptance
+scripts, including helper bytes. They require a registered direct Windows gate;
+an unregistered script fails discovery instead of disappearing behind a missing
+pytest invocation. The checkpoint adapter suite is executed by
+`check-checkpoint-integration.ps1` from the Windows repository gate. It builds
+the clean SaveStatus commit in `governance/checkpoint-integration.json`, uses
+Cargo-reported artifacts, and fails when the candidate is missing or differs.
+Set `RAYMAN_TEST_SAVE_SOURCE` to that checkout for local Windows gates. The
+repository gate does not download dependencies or accept an arbitrary runtime.
+
 ## Byte source versus semantic source
 
 A **byte source** answers “which exact bytes were used?” Examples are a path

@@ -2,7 +2,7 @@
   "schema": "rayman.first-party-test-inventory.v1",
   "scope": {
     "name": "repository_first_party_executable_tests",
-    "claim": "Exact role-qualified inventory for every first-party Rust, PowerShell, and eval executable test; generated state/output roots are excluded.",
+    "claim": "Exact role-qualified inventory for first-party Rust, PowerShell, eval tests and complete scripts-root Python acceptance suites; generated output is excluded.",
     "rust_roots": [
       "crates/codex-global-execution/src",
       "crates/codex-global-execution/tests",
@@ -22,11 +22,11 @@
     ]
   },
   "revision": {
-    "generation": 36,
+    "generation": 37,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 35,
-      "sha256": "51eb9ed36a29d077bff531a08b314d520b9b98a19a1ba88c63f7686f8b5c4e91"
+      "generation": 36,
+      "sha256": "066f235112cbbbe81006ab5e8b1f04f0e4164527d730d54a64d19cca5f5b5b11"
     }
   },
   "tests": [
@@ -876,6 +876,19 @@
       "retirement": null
     },
     {
+      "identity": "powershell::powershell_named_case::scripts/check-test-traceability-v2.ps1::powershell_named_case::Assert-SelfTestRejected::TRACE_PYTHON_GATE",
+      "role": "powershell_named_case",
+      "path": "scripts/check-test-traceability-v2.ps1",
+      "selector_kind": "powershell_named_case",
+      "selector": "Assert-SelfTestRejected::TRACE_PYTHON_GATE",
+      "selector_sha256": "79c00be85d7bd78391fb9a7418b791eac1a0a20efde4410e397bdee40c596274",
+      "cfg": "all",
+      "owner": "",
+      "test_id": "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-PYTHON-GATE-E4EF5DE1F233",
+      "status": "active",
+      "retirement": null
+    },
+    {
       "test_id": "TEST-PS-ASSERT-SELFTESTREJECTED-TRACE-RETIRED-ASSET-PRES-B133AAB4635F",
       "status": "active",
       "identity": "powershell::powershell_named_case::scripts/check-test-traceability-v2.ps1::powershell_named_case::Assert-SelfTestRejected::TRACE_RETIRED_ASSET_PRESENT",
@@ -1610,6 +1623,25 @@
       "cfg": "all",
       "owner": "",
       "test_id": "TEST-PS-SELFTEST-3AF243E44D59-GLOBAL-20260909-WORKTREE",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Reviewed phase 1 executable acceptance and current byte dependency binding",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-3AF243E44D59-GLOBAL-20260909-WORKTREE-P1-20260914"
+        ]
+      }
+    },
+    {
+      "identity": "powershell::powershell_self_test::scripts/check-test-traceability.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/check-test-traceability.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "32124e0d019c89268096a1d2a554924f6dbc1205972168468d705770cfae1f80",
+      "cfg": "all",
+      "owner": "",
+      "test_id": "TEST-PS-SELFTEST-3AF243E44D59-GLOBAL-20260909-WORKTREE-P1-20260914",
       "status": "active",
       "retirement": null
     },
@@ -2299,6 +2331,19 @@
       "selector_sha256": "bcfd29a8a3fe3b7b3322331b45d3191ee730dd499ec270b07de87475ba9ac123",
       "cfg": "all",
       "owner": "",
+      "retirement": null
+    },
+    {
+      "identity": "python::python_acceptance::scripts/test-global-checkpoint-adapter.py::<script>",
+      "role": "python_acceptance",
+      "path": "scripts/test-global-checkpoint-adapter.py",
+      "selector_kind": "python_script",
+      "selector": "<script>",
+      "selector_sha256": "027b90ccdedef061e9491b551330e16498c782fcd1a4163074c5c32db1b95859",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-PYTHON-ADBD2E5A04B3899D",
+      "status": "active",
       "retirement": null
     },
     {
@@ -10846,6 +10891,25 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-RUST-REAL-GIT-SNAPSHOT-PRESERVES-SOURCE-AND-I-7209D78A5D5C-GLOBAL-20260909-ENROLL-R2-TESTMODULE",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Reviewed phase 1 executable acceptance and current byte dependency binding",
+        "replaced_by": [
+          "TEST-RUST-REAL-GIT-SNAPSHOT-PRESERVES-SOURCE-AND-I-7209D78A5D5C-GLOBAL-20260909-ENROLL-R2-TESTMODULE-P1-20260914"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/git/tests.rs::real_git_snapshot_preserves_source_and_index_with_added_crlf_and_deleted_files",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/git/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "real_git_snapshot_preserves_source_and_index_with_added_crlf_and_deleted_files",
+      "selector_sha256": "23007dfa071cbc8b60e93a89ec2bbbc0422b9ac826d25c126a135d7903634925",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-REAL-GIT-SNAPSHOT-PRESERVES-SOURCE-AND-I-7209D78A5D5C-GLOBAL-20260909-ENROLL-R2-TESTMODULE-P1-20260914",
       "status": "active",
       "retirement": null
     },

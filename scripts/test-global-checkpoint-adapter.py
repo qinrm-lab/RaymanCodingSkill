@@ -4,16 +4,6 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 
-def test_global_checkpoint_adapter(monkeypatch):
-    """Pytest entrypoint requires the independently built SaveStatus candidate."""
-    import sys
-    runtime = os.environ.get('RAYMAN_TEST_SAVE_RUNTIME')
-    assert runtime, 'Set RAYMAN_TEST_SAVE_RUNTIME to the candidate SaveStatus executable'
-    assert Path(runtime).is_file(), 'Candidate SaveStatus executable is missing'
-    monkeypatch.setattr(sys, 'argv', [__file__, '--save-runtime', runtime])
-    main()
-
-
 @contextlib.contextmanager
 def database(path):
     connection=sqlite3.connect(path)
@@ -27,6 +17,8 @@ def database(path):
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--save-runtime',type=Path,required=True)
+    parser.add_argument('--worker',type=Path,required=True)
+    parser.add_argument('--client',type=Path,required=True)
     args=parser.parse_args()
     repo=Path(__file__).resolve().parents[1]
     runtime=args.save_runtime.resolve()
@@ -36,7 +28,7 @@ def main():
         result=subprocess.run([str(x) for x in argv],cwd=repo,env=env,capture_output=True,text=True,encoding='utf-8',timeout=90)
         assert result.returncode==expect,(argv,result.returncode,result.stdout,result.stderr)
         return json.loads(result.stdout)
-    simulation=run(['pwsh','-NoProfile','-File',repo/'scripts/install-global-codex-execution.ps1','-Simulate','-WorkerPath',repo/'target/debug/rayman-global-worker.exe','-ClientPath',repo/'target/debug/rayman-global.exe'])
+    simulation=run(['pwsh','-NoProfile','-File',repo/'scripts/install-global-codex-execution.ps1','-Simulate','-WorkerPath',args.worker.resolve(),'-ClientPath',args.client.resolve()])
     root=Path(simulation['simulation_root'])
     project=root/'checkpoint-project';project.mkdir()
     project.joinpath('mixed.txt').write_bytes(b'LF\nCRLF\r\n'+b'archive-content\0'*14000)

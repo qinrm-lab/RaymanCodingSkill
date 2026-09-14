@@ -23,7 +23,7 @@ if (-not (Test-Path -LiteralPath $implementation -PathType Leaf)) {
     throw "Traceability implementation is missing: $implementation"
 }
 $implementationHash = (Get-FileHash -LiteralPath $implementation -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($implementationHash -cne '69ca7a3d112340bd83bc801d615369ff566dbf0385e5d17c739e1c9085af631f') {
+if ($implementationHash -cne '432df5031f08dae7cdab583ac2698e9841f9f8f2f8538df315903aaec7ac5a13') {
     throw "Traceability implementation hash drifted: $implementationHash"
 }
 & $implementation @PSBoundParameters
