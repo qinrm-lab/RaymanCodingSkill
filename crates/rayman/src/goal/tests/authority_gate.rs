@@ -1379,12 +1379,12 @@ fn runtime_powershell_path_literals_do_not_pollute_gate_dependency_closure() {
     write(
         root,
         "scripts/check-repo.ps1",
-        ". (Join-Path $PSScriptRoot 'install-codex-powershell-broker.ps1')\n",
+        ". (Join-Path $PSScriptRoot 'fixture-installer.ps1')\n",
     );
     write(
         root,
-        "scripts/install-codex-powershell-broker.ps1",
-        "$installerPath = Assert-ChildPath -Child (Join-Path $script:RepositoryRoot 'scripts\\install-codex-powershell-broker.ps1')\n$deepestWorker = Join-Path $caseRoot ('versions\\' + 'abc' + '\\codex-powershell-broker.ps1')\n$receipt = [pscustomobject]@{ worker_path = 'C:\\ProgramData\\Rayman\\CodexPowerShellBroker\\versions\\abc\\codex-powershell-broker.ps1' }\n",
+        "scripts/fixture-installer.ps1",
+        "$installerPath = Assert-ChildPath -Child (Join-Path $script:RepositoryRoot 'scripts\\fixture-installer.ps1')\n$deepestWorker = Join-Path $caseRoot ('versions\\' + 'abc' + '\\fixture-worker.ps1')\n$receipt = [pscustomobject]@{ worker_path = 'C:\\ProgramData\\Rayman\\FixtureRuntime\\versions\\abc\\fixture-worker.ps1' }\n",
     );
     let store = GoalStore::new(root);
     let goal = store
@@ -1401,7 +1401,7 @@ fn runtime_powershell_path_literals_do_not_pollute_gate_dependency_closure() {
     assert!(
         binding
             .dependency_sha256
-            .contains_key("scripts/install-codex-powershell-broker.ps1")
+            .contains_key("scripts/fixture-installer.ps1")
     );
     assert!(
         binding

@@ -1811,9 +1811,7 @@ if ($PSCmdlet.ParameterSetName -eq 'Audit') {
             'release-closeout.ps1',
             'install-rayman.ps1',
             'verify-release-contract.ps1',
-            'repair-rayman-powershell-profile.ps1',
-            'codex-powershell-broker.ps1',
-            'install-codex-powershell-broker.ps1'
+            'repair-rayman-powershell-profile.ps1'
         )) {
             $scriptPath = Join-Path $PSScriptRoot $scriptName
             if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) {

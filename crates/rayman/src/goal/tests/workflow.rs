@@ -2030,7 +2030,7 @@ fn a_retired_non_success_goal_is_never_accepted_as_evidence() {
 }
 
 #[test]
-fn codex_broker_installation_proof_requires_the_exact_installer_and_write_flags() {
+fn retired_broker_cannot_supply_live_installation_proof() {
     let dir = tempfile::tempdir().unwrap();
     let scripts = dir.path().join("scripts");
     let tools = dir.path().join("tools");
@@ -2050,7 +2050,7 @@ fn codex_broker_installation_proof_requires_the_exact_installer_and_write_flags(
     let installed = "pwsh -NoProfile -File scripts/install-codex-powershell-broker.ps1 -Install -Yes -UserAccount QIN5521\\qinrm";
     assert_eq!(
         validation_proof_kind(dir.path(), installed).unwrap(),
-        ProofKind::Installation
+        ProofKind::Generic
     );
     for rejected in [
         "pwsh -NoProfile -File scripts/install-codex-powershell-broker.ps1 -SelfTest",
@@ -2069,7 +2069,7 @@ fn codex_broker_installation_proof_requires_the_exact_installer_and_write_flags(
         assert_eq!(
             validation_proof_kind(dir.path(), rejected).unwrap(),
             ProofKind::Generic,
-            "non-installing or decoy broker command minted installation proof: {rejected}"
+            "retired or decoy broker command minted installation proof: {rejected}"
         );
     }
 }

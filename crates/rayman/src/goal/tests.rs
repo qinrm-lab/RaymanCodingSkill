@@ -639,7 +639,7 @@ fn captured_powershell_validation_uses_a_unique_captured_workspace_script_withou
 }
 
 #[test]
-fn captured_broker_installation_proof_binds_the_executed_script_key() {
+fn captured_retired_broker_cannot_supply_installation_proof() {
     let root = tempfile::tempdir().unwrap();
     let captured_files = BTreeMap::from([
         (
@@ -655,7 +655,7 @@ fn captured_broker_installation_proof_binds_the_executed_script_key() {
 
     assert_eq!(
         validation_proof_kind_with_context(&decision, real).unwrap(),
-        ProofKind::Installation
+        ProofKind::Generic
     );
     assert_eq!(
         validation_proof_kind_with_context(&decision, decoy).unwrap(),

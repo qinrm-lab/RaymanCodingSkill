@@ -22,11 +22,11 @@
     ]
   },
   "revision": {
-    "generation": 41,
+    "generation": 42,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 40,
-      "sha256": "5e620be5e9f63da881c26bb5cbf9eb285aac99b861d5cd99cb93a16be72142be"
+      "generation": 41,
+      "sha256": "b8f4591c10dcd81062fc7288dd077c07548a0c7a24e7355bff95683e0e8f4b2c"
     }
   },
   "tests": [
@@ -1538,7 +1538,7 @@
     },
     {
       "test_id": "TEST-PS-SELFTEST-1CE180031456-V2-R3-AUDIT-20260908-SB1",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/audit-repository.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/audit-repository.ps1",
@@ -1547,6 +1547,25 @@
       "selector_sha256": "70e79912a41b3680094844519580bdd012a799a262bfa5003d86fcaed39d4e1e",
       "cfg": "all",
       "owner": "",
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Reviewed current behavior successor; legacy installation is now rejected as proof.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-1CE180031456-V2-R3-AUDIT-20260908-SB1-P3B"
+        ]
+      }
+    },
+    {
+      "identity": "powershell::powershell_self_test::scripts/audit-repository.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/audit-repository.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "f48e706985c0599fef4ead51d9d5ee06aa1dd7cd587ede46b0953d97c7cf9b31",
+      "cfg": "all",
+      "owner": "",
+      "test_id": "TEST-PS-SELFTEST-1CE180031456-V2-R3-AUDIT-20260908-SB1-P3B",
+      "status": "active",
       "retirement": null
     },
     {
@@ -1857,7 +1876,7 @@
     },
     {
       "test_id": "TEST-PS-SELFTEST-61C6537DDEBC-R7",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/codex-powershell-broker.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/codex-powershell-broker.ps1",
@@ -1866,7 +1885,11 @@
       "selector_sha256": "dda1362f27e371bb6bb806fdd7bc20b7bba8db0c57630497faaf656986954509",
       "cfg": "all",
       "owner": "",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire the legacy PowerShell broker after scoped commit and recovery acceptance of the global execution backend; preserve installed legacy state.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-PS-SELFTEST-6209A42C1826",
@@ -1997,7 +2020,7 @@
     },
     {
       "test_id": "TEST-PS-SELFTEST-6BB97440C533-R7",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/install-codex-powershell-broker.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/install-codex-powershell-broker.ps1",
@@ -2006,7 +2029,11 @@
       "selector_sha256": "17920817260fb2f96b49763ca16134faf8d1f6752c91047d84bd4ba48fe96625",
       "cfg": "all",
       "owner": "",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire the legacy PowerShell broker after scoped commit and recovery acceptance of the global execution backend; preserve installed legacy state.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-PS-SELFTEST-7EBA611DF16F",
@@ -3165,7 +3192,7 @@
     },
     {
       "test_id": "TEST-RUST-AUDIT-ORCHESTRATION-HAS-NO-ENVIRONMENT-BYPASS-OR-565B2A9F1C31-R7-AUDIT-20260908",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/tests/audit_script.rs::audit_orchestration_has_no_environment_bypass_or_implicit_provisioning",
       "role": "root_cargo",
       "path": "crates/rayman/tests/audit_script.rs",
@@ -3174,6 +3201,25 @@
       "selector_sha256": "ce1b139faa9862ce05cfaaed4fa19a9373e0e4043f7afaf1bda7ab487cd68364",
       "cfg": "all",
       "owner": null,
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Reviewed current behavior successor; legacy installation is now rejected as proof.",
+        "replaced_by": [
+          "TEST-RUST-AUDIT-ORCHESTRATION-HAS-NO-ENVIRONMENT-BYPASS-OR-565B2A9F1C31-R7-AUDIT-20260908-P3B"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/rayman/tests/audit_script.rs::audit_orchestration_has_no_environment_bypass_or_implicit_provisioning",
+      "role": "root_cargo",
+      "path": "crates/rayman/tests/audit_script.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "audit_orchestration_has_no_environment_bypass_or_implicit_provisioning",
+      "selector_sha256": "8cb7157284c3552b153c19870dac50c02c06f5571c47711826eb7defcfcb6459",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-AUDIT-ORCHESTRATION-HAS-NO-ENVIRONMENT-BYPASS-OR-565B2A9F1C31-R7-AUDIT-20260908-P3B",
+      "status": "active",
       "retirement": null
     },
     {
@@ -3614,7 +3660,7 @@
     },
     {
       "test_id": "TEST-RUST-CAPTURED-BROKER-INSTALLATION-PROOF-BINDS-THE-EXE-E0ABF48C66FC",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/goal/tests.rs::captured_broker_installation_proof_binds_the_executed_script_key",
       "role": "root_cargo",
       "path": "crates/rayman/src/goal/tests.rs",
@@ -3623,6 +3669,25 @@
       "selector_sha256": "a71749ab38c79f0f47101e049d92472007d4fea07dd07755025c8740394e5af3",
       "cfg": "all",
       "owner": null,
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Reviewed current behavior successor; legacy installation is now rejected as proof.",
+        "replaced_by": [
+          "TEST-RUST-CAPTURED-BROKER-INSTALLATION-PROOF-BINDS-THE-EXE-E0ABF48C66FC-P3B"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/rayman/src/goal/tests.rs::captured_retired_broker_cannot_supply_installation_proof",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/goal/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "captured_retired_broker_cannot_supply_installation_proof",
+      "selector_sha256": "8cecfb997cf73b5698415519189fcc571b00c24a33b6ba5a57729769aa6cbca0",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-CAPTURED-BROKER-INSTALLATION-PROOF-BINDS-THE-EXE-E0ABF48C66FC-P3B",
+      "status": "active",
       "retirement": null
     },
     {
@@ -4498,7 +4563,7 @@
     },
     {
       "test_id": "TEST-RUST-CODEX-BROKER-INSTALLATION-PROOF-REQUIRES-THE-EXA-D1037405CA6E",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/goal/tests/workflow.rs::codex_broker_installation_proof_requires_the_exact_installer_and_write_flags",
       "role": "root_cargo",
       "path": "crates/rayman/src/goal/tests/workflow.rs",
@@ -4507,11 +4572,30 @@
       "selector_sha256": "14026081584d33310b085298719b73fb943701f3fcf5121c4bfbf165f50b57ba",
       "cfg": "all",
       "owner": null,
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Reviewed current behavior successor; legacy installation is now rejected as proof.",
+        "replaced_by": [
+          "TEST-RUST-CODEX-BROKER-INSTALLATION-PROOF-REQUIRES-THE-EXA-D1037405CA6E-P3B"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/rayman/src/goal/tests/workflow.rs::retired_broker_cannot_supply_live_installation_proof",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/goal/tests/workflow.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "retired_broker_cannot_supply_live_installation_proof",
+      "selector_sha256": "f1c5b2d5f669321da66b0a8ba333c7ff90b89466bdf2e50cda341d7beb2f30e0",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-CODEX-BROKER-INSTALLATION-PROOF-REQUIRES-THE-EXA-D1037405CA6E-P3B",
+      "status": "active",
       "retirement": null
     },
     {
       "test_id": "TEST-RUST-CODEX-BROKER-SHARED-RUNSPACE-R4",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/tests/audit_script.rs::codex_powershell_broker_self_tests_execute_the_task_xml_contract",
       "role": "root_cargo",
       "path": "crates/rayman/tests/audit_script.rs",
@@ -4520,11 +4604,15 @@
       "selector_sha256": "3bc1e4463b0273c4be620b17b7179fd4892805898d5e8b9c3ce7654a960aa0fb",
       "cfg": "windows",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire the legacy PowerShell broker after scoped commit and recovery acceptance of the global execution backend; preserve installed legacy state.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-CODEX-POWERSHELL-BROKER-PRODUCTION-REJECTS-EXPLI-E36B74A06220",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/tests/audit_script.rs::codex_powershell_broker_production_rejects_explicit_false_confirmation",
       "role": "root_cargo",
       "path": "crates/rayman/tests/audit_script.rs",
@@ -4533,7 +4621,11 @@
       "selector_sha256": "db1ff73f03f4f8179ddbbea216264d66e04f599ee7a1caa13b3309c978d23e35",
       "cfg": "windows",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retire the legacy PowerShell broker after scoped commit and recovery acceptance of the global execution backend; preserve installed legacy state.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-CODEX-POWERSHELL-BROKER-SELF-TESTS-EXECUTE-THE-T-0A1EA798D244",
@@ -12243,7 +12335,7 @@
     },
     {
       "test_id": "TEST-RUST-RUNTIME-POWERSHELL-PATH-LITERALS-DO-NOT-POLLUTE-819D7934D048",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/goal/tests/authority_gate.rs::runtime_powershell_path_literals_do_not_pollute_gate_dependency_closure",
       "role": "root_cargo",
       "path": "crates/rayman/src/goal/tests/authority_gate.rs",
@@ -12252,6 +12344,25 @@
       "selector_sha256": "1b43758bff9bf2f8d209bc8e60bd5905ff02dbe35111eec16125f62eaacc4deb",
       "cfg": "all",
       "owner": null,
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Reviewed current behavior successor; legacy installation is now rejected as proof.",
+        "replaced_by": [
+          "TEST-RUST-RUNTIME-POWERSHELL-PATH-LITERALS-DO-NOT-POLLUTE-819D7934D048-P3B"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/rayman/src/goal/tests/authority_gate.rs::runtime_powershell_path_literals_do_not_pollute_gate_dependency_closure",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/goal/tests/authority_gate.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "runtime_powershell_path_literals_do_not_pollute_gate_dependency_closure",
+      "selector_sha256": "4ba5d0713a5fedf2bb30e1fe2fc9dd211bd4d012d6fe35f187fa75bca94f665d",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-RUNTIME-POWERSHELL-PATH-LITERALS-DO-NOT-POLLUTE-819D7934D048-P3B",
+      "status": "active",
       "retirement": null
     },
     {
@@ -15470,9 +15581,24 @@
     },
     {
       "asset_id": "ASSET-FILE-R4-9BDB5C4AB657-R7-AUDIT-20260908-SB1",
-      "status": "active",
+      "status": "retired",
       "path": "crates/rayman/tests/audit_script.rs",
       "sha256": "eb563d2609e80bfa075dbb7195a705425ee0199549945d077b0245686441bfd7",
+      "kind": "dedicated_file",
+      "cleanup_policy": "delete_on_last_reference",
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Retain shared test asset with surviving assertions.",
+        "replaced_by": [
+          "ASSET-FILE-R4-9BDB5C4AB657-R7-AUDIT-20260908-SB1-P3B"
+        ]
+      }
+    },
+    {
+      "asset_id": "ASSET-FILE-R4-9BDB5C4AB657-R7-AUDIT-20260908-SB1-P3B",
+      "status": "active",
+      "path": "crates/rayman/tests/audit_script.rs",
+      "sha256": "8a99022dbfce2a612bb7879b817e122bfc5027159a10094c6923380caffcff12",
       "kind": "dedicated_file",
       "cleanup_policy": "delete_on_last_reference",
       "retirement": null

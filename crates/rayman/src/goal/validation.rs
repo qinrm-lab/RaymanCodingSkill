@@ -7,10 +7,7 @@ mod pytest_isolation;
 mod receipts;
 
 pub use cargo_isolation::ValidationExecutionSession;
-use installation::{
-    broker_install_invocation, broker_install_invocation_with_context,
-    release_installer_invocation, release_installer_invocation_with_context,
-};
+use installation::{release_installer_invocation, release_installer_invocation_with_context};
 pub use process_temp::{
     run_with_managed_validation_temp, test_invocation_requires_pytest_isolation,
 };
@@ -357,10 +354,6 @@ pub fn validation_proof_kind(root: &Path, command: &str) -> Result<ProofKind> {
     let parsed = parse_validation_command(command)?;
     let script = trusted_gate_script(root, &parsed).unwrap_or_default();
 
-    if broker_install_invocation(root, &parsed)? {
-        return Ok(ProofKind::Installation);
-    }
-
     if trusted_xtask_repository_gate(root, &parsed)? {
         return Ok(ProofKind::RepositoryGate);
     }
@@ -393,9 +386,6 @@ pub(crate) fn validation_proof_kind_with_context(
 ) -> Result<ProofKind> {
     let parsed = parse_validation_command(command)?;
     let script = trusted_gate_script_with_context(decision, &parsed)?.unwrap_or_default();
-    if broker_install_invocation_with_context(decision, &parsed)? {
-        return Ok(ProofKind::Installation);
-    }
     if trusted_xtask_repository_gate_with_context(decision, &parsed)? {
         return Ok(ProofKind::RepositoryGate);
     }

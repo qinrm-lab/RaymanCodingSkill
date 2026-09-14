@@ -34,8 +34,6 @@ if ($IsWindows) {
     & (Join-Path $PSScriptRoot 'repair-codex-workspace-acl.ps1') -SelfTest
     & (Join-Path $PSScriptRoot 'check-checkpoint-integration.ps1')
 }
-& (Join-Path $PSScriptRoot 'codex-powershell-broker.ps1') -SelfTest
-& (Join-Path $PSScriptRoot 'install-codex-powershell-broker.ps1') -SelfTest
 # Runs the audit script self-test plus the isolated-advisory-DB dependency
 # policy checks before the multi-minute fmt/clippy/test stages.
 & (Join-Path $PSScriptRoot 'audit-repository.ps1') -DependencyPolicyOnly

@@ -73,11 +73,11 @@ configuration. Summary is a non-authoritative view of the complete ledger.
 Run the same check immediately before creating a commit request. An optional
 ordinary Git adapter is provided in `.githooks/pre-commit`; enabling it is a
 separate local configuration choice and must preserve existing hooks. On Unix
-the adapter must be executable. Protected `git_local_commit_v1` deliberately
-disables Git hooks: do not weaken that capability or ask its privileged worker
-to execute mutable repository scripts. Its caller runs the preflight; existing
-worktree SHA-256 and filtered index-blob checks remain authoritative for commit
-identity. CI executes the source gate even if an ordinary local hook is absent.
+the adapter must be executable. The global execution backend binds sandbox-side
+hook results to the exact commit request and never executes mutable repository
+scripts as the desktop owner. Worktree SHA-256 and filtered Git blob checks
+remain separate evidence for the committed bytes. CI runs the source gate even
+when an ordinary local hook is absent.
 
 ## Hash contract
 
