@@ -644,7 +644,12 @@ fn real_git_snapshot_preserves_source_and_index_with_added_crlf_and_deleted_file
         hook_receipt: None,
     };
     let receipt = reader
-        .run_hook_preflight(&q, &r, binding.hook_policy.as_ref().unwrap())
+        .run_hook_preflight(
+            &q.operation,
+            &q.source_sha256,
+            &r,
+            binding.hook_policy.as_ref().unwrap(),
+        )
         .unwrap();
     let Operation::Commit { hook_receipt, .. } = &mut q.operation else {
         unreachable!()

@@ -57,6 +57,14 @@ publication, while preserving the original failed queue result. The client
 preview performs the legacy candidate checks without creating a recovery
 acceptance or publication journal.
 
+Commit preflight operates on an unsigned intent, not an expiring request. The
+client runs the real sandbox hook, then reopens and compares installation and
+enrollment, captures HEAD/index/all changes again, and rechecks hook policy and
+source bytes. Only then does it generate a new request ID and the unchanged
+120-second lifetime. Failure or drift yields no request; neither the preview
+nor the submitting path retimestamps an existing packet. The worker still
+independently checks expiry, source, registration and the exact hook candidate.
+
 For older missing-request records, recovery requires the original complete Git
 change snapshot, exact candidate index/tree and object identities, preserved
 unselected changes, and the enrolled author/committer. Unattested hooks are

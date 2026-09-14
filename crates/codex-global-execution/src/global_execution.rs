@@ -85,6 +85,63 @@ pub(crate) fn decode_json<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Resul
     Ok(serde_json::from_slice(bytes)?)
 }
 
+/// Validate the unsigned commit intent before executing a hook. Request
+/// identity and time are deliberately absent until preflight has completed.
+pub(crate) fn validate_commit_operation(
+    operation: &Operation,
+    registration: &Registration,
+) -> Result<()> {
+    let Operation::Commit {
+        expected_head,
+        expected_index_sha256,
+        message,
+        changes,
+        hook_receipt,
+    } = operation
+    else {
+        bail!("not a commit intent");
+    };
+
+    if !registration.capabilities.local_commit {
+        bail!("local commit capability is not enrolled");
+    }
+    if !is_hex(expected_head, registration.object_id_length)
+        || !is_sha256(expected_index_sha256)
+        || message.trim() != message
+        || message.is_empty()
+        || message.chars().count() > 200
+        || message.chars().any(char::is_control)
+        || changes.is_empty()
+        || changes.len() > 1024
+    {
+        bail!("invalid exact commit request");
+    }
+    if hook_receipt.as_ref().is_some_and(|receipt| {
+        !is_sha256(&receipt.policy_sha256)
+            || !is_hex(&receipt.candidate_tree_oid, registration.object_id_length)
+            || !is_sha256(&receipt.source_sha256)
+            || !is_sha256(&receipt.stdout_sha256)
+            || !is_sha256(&receipt.stderr_sha256)
+            || !is_sha256(&receipt.environment_sha256)
+            || receipt.exit_code != 0
+    }) {
+        bail!("invalid sandbox hook receipt");
+    }
+    let mut previous: Option<&str> = None;
+    let mut folded = BTreeSet::new();
+    for change in changes {
+        validate_relative_path(&change.path)?;
+        if previous.is_some_and(|path| path >= change.path.as_str())
+            || !folded.insert(change.path.to_lowercase())
+        {
+            bail!("commit paths must be sorted, unique and case-disjoint");
+        }
+        previous = Some(&change.path);
+        change.validate(registration)?;
+    }
+    Ok(())
+}
+
 /// Validate only against a registration already authenticated by the worker.
 /// `now` is the worker's clock, never a timestamp supplied by the client.
 pub fn validate_request(request: &Request, registration: &Registration, now: i64) -> Result<()> {
@@ -224,51 +281,7 @@ pub(crate) fn validate_request_structure(
                 bail!("invalid enrolled commit recovery request");
             }
         }
-        Operation::Commit {
-            expected_head,
-            expected_index_sha256,
-            message,
-            changes,
-            hook_receipt,
-        } => {
-            if !registration.capabilities.local_commit {
-                bail!("local commit capability is not enrolled");
-            }
-            if !is_hex(expected_head, registration.object_id_length)
-                || !is_sha256(expected_index_sha256)
-                || message.trim() != message
-                || message.is_empty()
-                || message.chars().count() > 200
-                || message.chars().any(char::is_control)
-                || changes.is_empty()
-                || changes.len() > 1024
-            {
-                bail!("invalid exact commit request");
-            }
-            if hook_receipt.as_ref().is_some_and(|receipt| {
-                !is_sha256(&receipt.policy_sha256)
-                    || !is_hex(&receipt.candidate_tree_oid, registration.object_id_length)
-                    || !is_sha256(&receipt.source_sha256)
-                    || !is_sha256(&receipt.stdout_sha256)
-                    || !is_sha256(&receipt.stderr_sha256)
-                    || !is_sha256(&receipt.environment_sha256)
-                    || receipt.exit_code != 0
-            }) {
-                bail!("invalid sandbox hook receipt");
-            }
-            let mut previous: Option<&str> = None;
-            let mut folded = BTreeSet::new();
-            for change in changes {
-                validate_relative_path(&change.path)?;
-                if previous.is_some_and(|path| path >= change.path.as_str())
-                    || !folded.insert(change.path.to_lowercase())
-                {
-                    bail!("commit paths must be sorted, unique and case-disjoint");
-                }
-                previous = Some(&change.path);
-                change.validate(registration)?;
-            }
-        }
+        Operation::Commit { .. } => validate_commit_operation(&request.operation, registration)?,
         Operation::State {
             task_id,
             expected_revision,

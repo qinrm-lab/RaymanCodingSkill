@@ -565,16 +565,20 @@ impl<'a> GitInspector<'a> {
 
     pub(super) fn run_hook_preflight(
         &self,
-        request: &Request,
+        operation: &Operation,
+        source_sha256: &str,
         registration: &Registration,
         policy: &GitHookPolicy,
     ) -> Result<HookReceipt> {
-        validate_request(request, registration, request.created_at)?;
+        validate_commit_operation(operation, registration)?;
+        if !is_sha256(source_sha256) {
+            bail!("invalid hook preflight source fingerprint");
+        }
         let Operation::Commit {
             expected_head,
             changes,
             ..
-        } = &request.operation
+        } = operation
         else {
             bail!("hook preflight requires a commit request");
         };
@@ -681,14 +685,14 @@ impl<'a> GitInspector<'a> {
             );
         }
         if policy.verify(&self.workspace)? != hook_root
-            || crate::source_fingerprint(&self.workspace)? != request.source_sha256
+            || crate::source_fingerprint(&self.workspace)? != source_sha256
         {
             bail!("source or hook policy changed during sandbox preflight");
         }
         Ok(HookReceipt {
             policy_sha256: policy.digest()?,
             candidate_tree_oid,
-            source_sha256: request.source_sha256.clone(),
+            source_sha256: source_sha256.to_owned(),
             exit_code: output.exit_code,
             stdout_sha256: crate::hash::sha256_bytes(&output.stdout),
             stderr_sha256: crate::hash::sha256_bytes(&output.stderr),

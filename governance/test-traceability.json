@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 43,
+    "generation": 44,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 42,
-      "sha256": "f96ee1637f8af731297769bc17b6d5858fb09f917a00cdbfad0a8fff94eeeb58"
+      "generation": 43,
+      "sha256": "56f3d7bfeb30aeb56b6422dad69ebd6ff1f41c43210b97325cdc87b1c7d4e586"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "5e620be5e9f63da881c26bb5cbf9eb285aac99b861d5cd99cb93a16be72142be"
+    "sha256": "b8f4591c10dcd81062fc7288dd077c07548a0c7a24e7355bff95683e0e8f4b2c"
   },
   "sources": [
     {
@@ -88,11 +88,27 @@
     },
     {
       "source_id": "SRC-CHECKPOINT-INTEGRATION-BEHAVIOR",
-      "status": "active",
+      "status": "retired",
       "kind": "internal_contract",
       "title": "Checkpoint persistence and rollback behavior",
       "path": "docs/GLOBAL_CODEX_EXECUTION.md",
       "sha256": "fe515eae76432d6824d11c94e9ce036118d8ace181490de4c5083c866eb6ddee",
+      "valid_until": "2027-03-14",
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Reviewed successor for post-hook request issuance with unchanged expiry enforcement.",
+        "replaced_by": [
+          "SRC-CHECKPOINT-INTEGRATION-BEHAVIOR-REQUEST-ISSUANCE"
+        ]
+      }
+    },
+    {
+      "source_id": "SRC-CHECKPOINT-INTEGRATION-BEHAVIOR-REQUEST-ISSUANCE",
+      "status": "active",
+      "kind": "internal_contract",
+      "title": "Checkpoint persistence and rollback behavior",
+      "path": "docs/GLOBAL_CODEX_EXECUTION.md",
+      "sha256": "670cb58d427aeca47d5a85992949f4bf9f392797467834b2f460698d01984202",
       "valid_until": "2027-03-14",
       "retirement": null
     },
@@ -246,6 +262,16 @@
       "path": "docs/CODEX_WAIT_ROUTE_GUARD.md",
       "sha256": "ee6ceffbdf96170b95b7be8a658b8e34a22e560337020dc259dc1c41b7c112d7",
       "valid_until": "2027-09-03",
+      "retirement": null
+    },
+    {
+      "source_id": "SRC-COMMIT-REQUEST-ISSUANCE",
+      "status": "active",
+      "kind": "internal_contract",
+      "title": "Fresh commit request issuance after real hook and binding revalidation",
+      "path": "docs/GLOBAL_CODEX_EXECUTION.md",
+      "sha256": "670cb58d427aeca47d5a85992949f4bf9f392797467834b2f460698d01984202",
+      "valid_until": "2027-03-14",
       "retirement": null
     },
     {
@@ -1575,6 +1601,18 @@
       "criticality": "release_blocking",
       "required_modes": [
         "integration"
+      ],
+      "retirement": null
+    },
+    {
+      "rule_id": "RULE-COMMIT-REQUEST-ISSUANCE",
+      "status": "active",
+      "statement": "A commit preflight executes the real hook on an unsigned intent, rejects source, HEAD, index, configuration, enrollment, hook or installation drift, and only then issues a fresh request with the unchanged 120-second lifetime. Invalid intent or failed preflight produces no request; existing packets are never retimestamped.",
+      "criticality": "release_blocking",
+      "required_modes": [
+        "integration",
+        "behavioral_positive",
+        "behavioral_negative"
       ],
       "retirement": null
     },
@@ -5503,8 +5541,26 @@
     },
     {
       "link_id": "LINK-CHECKPOINT-INTEGRATION-BEHAVIOR",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-CHECKPOINT-INTEGRATION-BEHAVIOR",
+      "rule_id": "RULE-CHECKPOINT-INTEGRATION-REAL-PERSISTENCE",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-14",
+        "valid_until": "2027-03-14"
+      },
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Reviewed successor for post-hook request issuance with unchanged expiry enforcement.",
+        "replaced_by": [
+          "LINK-CHECKPOINT-INTEGRATION-BEHAVIOR-REQUEST-ISSUANCE"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-CHECKPOINT-INTEGRATION-BEHAVIOR-REQUEST-ISSUANCE",
+      "status": "active",
+      "source_id": "SRC-CHECKPOINT-INTEGRATION-BEHAVIOR-REQUEST-ISSUANCE",
       "rule_id": "RULE-CHECKPOINT-INTEGRATION-REAL-PERSISTENCE",
       "relation": "defines",
       "review": {
@@ -6602,6 +6658,18 @@
       "review": {
         "reviewed_at": "2026-09-03",
         "valid_until": "2027-03-03"
+      },
+      "retirement": null
+    },
+    {
+      "link_id": "LINK-COMMIT-REQUEST-ISSUANCE",
+      "status": "active",
+      "source_id": "SRC-COMMIT-REQUEST-ISSUANCE",
+      "rule_id": "RULE-COMMIT-REQUEST-ISSUANCE",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-14",
+        "valid_until": "2027-03-14"
       },
       "retirement": null
     },
@@ -107902,7 +107970,7 @@
     },
     {
       "binding_id": "BIND-CHECKPOINT-INTEGRATION-PERSISTENCE",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CHECKPOINT-INTEGRATION-BEHAVIOR",
         "LINK-CHECKPOINT-INTEGRATION-PIN"
@@ -107920,6 +107988,34 @@
         "valid_until": "2027-03-14"
       },
       "semantic_sha256": "48a2750602d9c4a60fcd72d84f4701d686de08bfbc71cfe5b42f5af8b9cd53c7",
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Reviewed successor for post-hook request issuance with unchanged expiry enforcement.",
+        "replaced_by": [
+          "BIND-CHECKPOINT-INTEGRATION-PERSISTENCE-REQUEST-ISSUANCE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-CHECKPOINT-INTEGRATION-PERSISTENCE-REQUEST-ISSUANCE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CHECKPOINT-INTEGRATION-BEHAVIOR-REQUEST-ISSUANCE",
+        "LINK-CHECKPOINT-INTEGRATION-PIN"
+      ],
+      "test_ids": [
+        "TEST-PYTHON-ADBD2E5A04B3899D"
+      ],
+      "rule_id": "RULE-CHECKPOINT-INTEGRATION-REAL-PERSISTENCE",
+      "gate_id": "GATE-CHECKPOINT-INTEGRATION-WINDOWS",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-14",
+        "valid_until": "2027-03-14"
+      },
+      "semantic_sha256": "a90c8a68169517ab26d4101d09f87ab5410a0aafadec29fb34ebef5714470b05",
       "retirement": null
     },
     {
@@ -166866,7 +166962,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT-P1-20260914",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
       ],
@@ -166883,6 +166979,33 @@
         "valid_until": "2027-03-14"
       },
       "semantic_sha256": "5d0197d6d6ec30e0119e3ff1944d2dbda4a4a28e834f424576a6382620f262ed",
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Reviewed successor for post-hook request issuance with unchanged expiry enforcement.",
+        "replaced_by": [
+          "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT-P1-20260914-REQUEST-ISSUANCE"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-RUST-8F0F527F49026311-ENROLL-R2-POWER-RECOVERY-WORKTREE-DISKREBIND-TESTMODULE-HOOKSTORAGE-NOWAIT-P1-20260914-REQUEST-ISSUANCE",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-GLOBAL-CODEX-EXECUTION-R1-POWER-RECOVERY-WORKTREE-DISKREBIND-HOOKSTORAGE-NOWAIT"
+      ],
+      "test_ids": [
+        "TEST-RUST-REAL-GIT-SNAPSHOT-PRESERVES-SOURCE-AND-I-7209D78A5D5C-GLOBAL-20260909-ENROLL-R2-TESTMODULE-P1-20260914-REQUEST-ISSUANCE"
+      ],
+      "rule_id": "RULE-GLOBAL-CODEX-EXECUTION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-14",
+        "valid_until": "2027-03-14"
+      },
+      "semantic_sha256": "db06fc329167e49c68764299f0fafa384bd2b73e460aeaa41378c2cb97a29e2a",
       "retirement": null
     },
     {
@@ -219843,6 +219966,96 @@
           "BIND-R10-R9-CLI-CASE-FBDE544D2A720EDE-R3"
         ]
       }
+    },
+    {
+      "binding_id": "BIND-REQUEST-ISSUANCE-301C3484288444A9",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-COMMIT-REQUEST-ISSUANCE"
+      ],
+      "test_ids": [
+        "TEST-RUST-INVALID-COMMIT-INTENT-DOES-NOT-RUN-HOOK-OR-SAMPL-BD366583C7AE-REQUEST-ISSUANCE"
+      ],
+      "rule_id": "RULE-COMMIT-REQUEST-ISSUANCE",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-14",
+        "valid_until": "2027-03-14"
+      },
+      "semantic_sha256": "ad00bfd75d593ee5c422314bf9303419dd965edf61232992341a2ac27d4738b6",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-REQUEST-ISSUANCE-3DE9709FB35E6805",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-COMMIT-REQUEST-ISSUANCE"
+      ],
+      "test_ids": [
+        "TEST-RUST-HOOKLESS-COMMIT-RETAINS-EXACT-SNAPSHOT-AND-ORIGI-081B7005FCD4-REQUEST-ISSUANCE"
+      ],
+      "rule_id": "RULE-COMMIT-REQUEST-ISSUANCE",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914",
+      "modes": [
+        "integration",
+        "behavioral_negative",
+        "behavioral_positive"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-14",
+        "valid_until": "2027-03-14"
+      },
+      "semantic_sha256": "1adf72d42fb7457d8349657792c02b53066f41a5f5153d2d1249b400420abfa0",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-REQUEST-ISSUANCE-D5A4187E88339814",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-COMMIT-REQUEST-ISSUANCE"
+      ],
+      "test_ids": [
+        "TEST-RUST-COMMIT-REQUEST-CLOCK-IS-SAMPLED-AFTER-HOOK-AND-B-F32EF7282E7F-REQUEST-ISSUANCE"
+      ],
+      "rule_id": "RULE-COMMIT-REQUEST-ISSUANCE",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914",
+      "modes": [
+        "integration",
+        "behavioral_negative",
+        "behavioral_positive"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-14",
+        "valid_until": "2027-03-14"
+      },
+      "semantic_sha256": "a3beeec4a9b892420ab2c43fb5ad563400930c3895cf43fe25dac7aa4d875fe4",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-REQUEST-ISSUANCE-E42CC1E0E4106E41",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-COMMIT-REQUEST-ISSUANCE"
+      ],
+      "test_ids": [
+        "TEST-RUST-COMMIT-PREFLIGHT-FAILURE-OR-BINDING-DRIFT-NEVER-88D5659AD8B4-REQUEST-ISSUANCE"
+      ],
+      "rule_id": "RULE-COMMIT-REQUEST-ISSUANCE",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914",
+      "modes": [
+        "integration",
+        "behavioral_negative"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-14",
+        "valid_until": "2027-03-14"
+      },
+      "semantic_sha256": "14af1bfb57dd705ef2119b9cb375f052a02bf675c1ae1f4f167ca05de1c12ca0",
+      "retirement": null
     },
     {
       "binding_id": "BIND-SB1-0F2DBA11A7442AD9713F",

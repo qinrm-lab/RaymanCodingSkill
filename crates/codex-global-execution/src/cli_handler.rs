@@ -715,12 +715,7 @@ pub fn run(json: bool, command: &GlobalExecutionCmd) -> Result<()> {
             #[cfg(windows)]
             {
                 let client = global::Client::open(root)?;
-                let request = client.prepare_commit_request(
-                    workspace,
-                    paths,
-                    message,
-                    chrono::Utc::now().timestamp(),
-                )?;
+                let request = client.prepare_commit_request(workspace, paths, message)?;
                 if !yes {
                     println!(
                         "{}",

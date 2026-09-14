@@ -22,11 +22,11 @@
     ]
   },
   "revision": {
-    "generation": 40,
+    "generation": 41,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 39,
-      "sha256": "b4fad5427f3d4ff294a5bfe62cffca1d49a3f204ad62db461ce712103f7063b3"
+      "generation": 40,
+      "sha256": "5e620be5e9f63da881c26bb5cbf9eb285aac99b861d5cd99cb93a16be72142be"
     }
   },
   "tests": [
@@ -4581,6 +4581,32 @@
       "retirement": null
     },
     {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/client/tests.rs::commit_preflight_failure_or_binding_drift_never_reaches_request_issuance",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/client/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "commit_preflight_failure_or_binding_drift_never_reaches_request_issuance",
+      "selector_sha256": "36a921aaca88e77543ad30c75da5fb7527111410989c5e65cb0a3ec00b9a7b2f",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-COMMIT-PREFLIGHT-FAILURE-OR-BINDING-DRIFT-NEVER-88D5659AD8B4-REQUEST-ISSUANCE",
+      "status": "active",
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/client/tests.rs::commit_request_clock_is_sampled_after_hook_and_binding_revalidation",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/client/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "commit_request_clock_is_sampled_after_hook_and_binding_revalidation",
+      "selector_sha256": "8e63ee6cf8e9c2e48d0e26c9867852a9808ab22c0c0f8bd300a02d7c26e91f04",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-COMMIT-REQUEST-CLOCK-IS-SAMPLED-AFTER-HOOK-AND-B-F32EF7282E7F-REQUEST-ISSUANCE",
+      "status": "active",
+      "retirement": null
+    },
+    {
       "test_id": "TEST-RUST-COMMITTED-ORPHAN-TRANSACTION-IS-CLEANABLE-AFTER-914ED1BA7E98",
       "status": "active",
       "identity": "rust::root_cargo::crates/rayman/src/checkpoint/tests.rs::committed_orphan_transaction_is_cleanable_after_ordinary_edits",
@@ -6878,6 +6904,19 @@
       "retirement": null
     },
     {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/client/tests.rs::hookless_commit_retains_exact_snapshot_and_original_ttl",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/client/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "hookless_commit_retains_exact_snapshot_and_original_ttl",
+      "selector_sha256": "854e9d890fb6acdff0b52b05912247787dc30f88538e92c8ecb6b588d9eb572c",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-HOOKLESS-COMMIT-RETAINS-EXACT-SNAPSHOT-AND-ORIGI-081B7005FCD4-REQUEST-ISSUANCE",
+      "status": "active",
+      "retirement": null
+    },
+    {
       "test_id": "TEST-RUST-HOST-PATCH-MESSAGES-SURVIVE-THE-SECOND-LOCALIZAT-DC498296728A",
       "status": "active",
       "identity": "rust::root_cargo::crates/rayman/src/i18n.rs::host_patch_messages_survive_the_second_localization_pass",
@@ -7356,6 +7395,19 @@
       "selector_sha256": "e383fca9488a03cdb462d64e4e1cf67f239340667bdf506f69d2442d484f695a",
       "cfg": "all",
       "owner": null,
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/client/tests.rs::invalid_commit_intent_does_not_run_hook_or_sample_issuance_clock",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/client/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "invalid_commit_intent_does_not_run_hook_or_sample_issuance_clock",
+      "selector_sha256": "630f328ad38ca5512189e03aa49289a9906541d5f7cbef1b1df595a3ef986f30",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-INVALID-COMMIT-INTENT-DOES-NOT-RUN-HOOK-OR-SAMPL-BD366583C7AE-REQUEST-ISSUANCE",
+      "status": "active",
       "retirement": null
     },
     {
@@ -11001,6 +11053,25 @@
       "cfg": "windows",
       "owner": null,
       "test_id": "TEST-RUST-REAL-GIT-SNAPSHOT-PRESERVES-SOURCE-AND-I-7209D78A5D5C-GLOBAL-20260909-ENROLL-R2-TESTMODULE-P1-20260914",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Reviewed successor for post-hook request issuance with unchanged expiry enforcement.",
+        "replaced_by": [
+          "TEST-RUST-REAL-GIT-SNAPSHOT-PRESERVES-SOURCE-AND-I-7209D78A5D5C-GLOBAL-20260909-ENROLL-R2-TESTMODULE-P1-20260914-REQUEST-ISSUANCE"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/git/tests.rs::real_git_snapshot_preserves_source_and_index_with_added_crlf_and_deleted_files",
+      "role": "root_cargo",
+      "path": "crates/codex-global-execution/src/global_execution/git/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "real_git_snapshot_preserves_source_and_index_with_added_crlf_and_deleted_files",
+      "selector_sha256": "65fe31172c367e9b6abe1c8da84960fc674b5cad73570e9dd6b136c574ec241a",
+      "cfg": "windows",
+      "owner": null,
+      "test_id": "TEST-RUST-REAL-GIT-SNAPSHOT-PRESERVES-SOURCE-AND-I-7209D78A5D5C-GLOBAL-20260909-ENROLL-R2-TESTMODULE-P1-20260914-REQUEST-ISSUANCE",
       "status": "active",
       "retirement": null
     },
@@ -15076,6 +15147,15 @@
     }
   ],
   "assets": [
+    {
+      "asset_id": "ASSET-COMMIT-REQUEST-ISSUANCE-TESTS",
+      "status": "active",
+      "path": "crates/codex-global-execution/src/global_execution/client/tests.rs",
+      "sha256": "0e30373c0bdca496759f24be79d66b96c78210f3da6c36a6854cef0b7425d497",
+      "kind": "dedicated_file",
+      "cleanup_policy": "delete_on_last_reference",
+      "retirement": null
+    },
     {
       "asset_id": "ASSET-FILE-07F8B0771442",
       "status": "active",

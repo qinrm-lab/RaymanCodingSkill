@@ -725,7 +725,18 @@ impl Client {
         workspace: &Path,
         paths: &[String],
         message: &str,
-        now: i64,
+    ) -> Result<Request> {
+        self.prepare_commit_request_with_clock(workspace, paths, message, || {
+            chrono::Utc::now().timestamp()
+        })
+    }
+
+    fn prepare_commit_request_with_clock(
+        &self,
+        workspace: &Path,
+        paths: &[String],
+        message: &str,
+        issue_time: impl FnOnce() -> i64,
     ) -> Result<Request> {
         let enrollment = self.enrollment(workspace)?;
         if enrollment.registration.project_id == self.installation.source_project_id {
@@ -757,27 +768,66 @@ impl Client {
                 .ok_or_else(|| anyhow::anyhow!("selected commit path is not changed: {path}"))?;
             changes.push(change.clone());
         }
-        let mut request = self.request(
-            &enrollment,
-            Operation::Commit {
-                expected_head: snapshot.head,
-                expected_index_sha256: snapshot.index_sha256,
-                message: message.into(),
-                changes,
-                hook_receipt: None,
-            },
-            now,
-        )?;
+        let mut operation = Operation::Commit {
+            expected_head: snapshot.head.clone(),
+            expected_index_sha256: snapshot.index_sha256.clone(),
+            message: message.into(),
+            changes,
+            hook_receipt: None,
+        };
+        validate_commit_operation(&operation, &enrollment.registration)?;
+        let source_sha256 = crate::source_fingerprint(workspace)?;
         if let Some(policy) = &binding.hook_policy {
-            let receipt =
-                inspector.run_hook_preflight(&request, &enrollment.registration, policy)?;
-            let Operation::Commit { hook_receipt, .. } = &mut request.operation else {
+            let receipt = inspector.run_hook_preflight(
+                &operation,
+                &source_sha256,
+                &enrollment.registration,
+                policy,
+            )?;
+            let Operation::Commit { hook_receipt, .. } = &mut operation else {
                 unreachable!()
             };
             *hook_receipt = Some(receipt);
-            validate_request(&request, &enrollment.registration, now)?;
         }
-        Ok(request)
+
+        // Re-open the protected tuple and enrollment: a long hook must not
+        // carry an earlier installation or policy attestation into issuance.
+        let current_client = Self::open(self.root.path())?;
+        if serde_json::to_vec(&current_client.installation)?
+            != serde_json::to_vec(&self.installation)?
+        {
+            bail!("backend installation changed during commit preflight");
+        }
+        let current_enrollment = current_client.enrollment(workspace)?;
+        if serde_json::to_vec(&current_enrollment)? != serde_json::to_vec(&enrollment)? {
+            bail!("project enrollment changed during commit preflight");
+        }
+        let current = GitInspector::open(
+            workspace,
+            binding,
+            &enrollment.registration,
+            &current_client.root,
+        )?;
+        if serde_json::to_vec(&current.capture(&enrollment.registration)?)?
+            != serde_json::to_vec(&snapshot)?
+        {
+            bail!("Git HEAD, index or source changed during commit preflight");
+        }
+        if let Some(policy) = &binding.hook_policy {
+            policy.verify(workspace)?;
+        }
+        if crate::source_fingerprint(workspace)? != source_sha256 {
+            bail!("source changed before commit request issuance");
+        }
+        validate_commit_operation(&operation, &enrollment.registration)?;
+        // No request existed during the hook. Mint once, after all expensive
+        // reads, with the same fixed lifetime used by every worker check.
+        current_client.request_with_source(
+            &current_enrollment,
+            operation,
+            source_sha256,
+            issue_time(),
+        )
     }
     pub fn open(root: &Path) -> Result<Self> {
         let (bytes, _) = crate::file_io::read_optional_handle_bound_file_bounded(
@@ -910,6 +960,25 @@ impl Client {
         now: i64,
     ) -> Result<Request> {
         enrollment.validate(&self.installation)?;
+        let source_sha256 = if matches!(
+            operation,
+            Operation::Storage { .. } | Operation::EnrollLinkedWorktree { .. }
+        ) {
+            "0".repeat(64)
+        } else {
+            crate::source_fingerprint(&enrollment.workspace)?
+        };
+        self.request_with_source(enrollment, operation, source_sha256, now)
+    }
+
+    fn request_with_source(
+        &self,
+        enrollment: &Enrollment,
+        operation: Operation,
+        source_sha256: String,
+        now: i64,
+    ) -> Result<Request> {
+        enrollment.validate(&self.installation)?;
         let mut random = [0u8; 16];
         getrandom::fill(&mut random)
             .map_err(|e| anyhow::anyhow!("request entropy unavailable: {e}"))?;
@@ -920,14 +989,7 @@ impl Client {
             project_id: enrollment.registration.project_id.clone(),
             worktree_id: enrollment.registration.worktree_id.clone(),
             registration_sha256: enrollment.registration.digest()?,
-            source_sha256: if matches!(
-                operation,
-                Operation::Storage { .. } | Operation::EnrollLinkedWorktree { .. }
-            ) {
-                "0".repeat(64)
-            } else {
-                crate::source_fingerprint(&enrollment.workspace)?
-            },
+            source_sha256,
             created_at: now,
             expires_at: now
                 .checked_add(MAX_LIFETIME_SECONDS)
@@ -1077,3 +1139,6 @@ impl Client {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
