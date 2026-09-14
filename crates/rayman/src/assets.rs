@@ -158,12 +158,17 @@ fn is_marker_catalog_or_fixture_line(path: &str, line: &str) -> bool {
     let scanner_test_line = path == "crates/rayman/src/assets.rs" || path == "src/assets.rs";
     let rust_test_fixture_line =
         path.ends_with(".rs") && path.contains("/tests/") && trimmed.starts_with('"');
-    trimmed.contains("WORK_MARKERS")
-        || trimmed.contains("markers.contains(&")
-        || trimmed.contains("finding.marker ==")
-        || trimmed.contains("report.markers")
-        || ((scanner_test_line || rust_test_fixture_line) && trimmed.ends_with("\\n\","))
-        || (scanner_test_line && trimmed.starts_with('"'))
+    // Comments remain actionable even inside the scanner and its tests.
+    if trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.starts_with('*') {
+        return false;
+    }
+    (scanner_test_line
+        && (trimmed.starts_with("const WORK_MARKERS:")
+            || trimmed.starts_with("assert!")
+            || trimmed.starts_with("assert_eq!")
+            || trimmed.starts_with(".any(|finding| finding.marker ==")
+            || trimmed.starts_with('"')))
+        || (rust_test_fixture_line && trimmed.ends_with("\\n\","))
 }
 
 fn line_has_work_marker(line: &str, marker: &str) -> bool {
@@ -227,12 +232,12 @@ mod tests {
     }
 
     #[test]
-    fn scan_ignores_marker_catalogs_and_pending_vocabulary() {
+    fn scan_limits_catalog_exemptions_and_preserves_pending_vocabulary() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         fs::create_dir_all(root.join("src")).unwrap();
         fs::write(
-            root.join("src/main.rs"),
+            root.join("src/assets.rs"),
             "const WORK_MARKERS: &[&str] = &[\"TODO\", \"未完成\"];\n\
              println!(\"待完成项: 0\");\n\
              println!(\"未完成标记: 0\");\n\
@@ -243,6 +248,30 @@ mod tests {
         let report = scan(root).unwrap();
         assert_eq!(report.markers.len(), 1);
         assert_eq!(report.markers[0].marker, "未完成");
+
+        let product = "// TODO: fix report.markers handling\n\
+                       // FIXME: replace WORK_MARKERS\n\
+                       // TODO: review markers.contains(&value)\n\
+                       // TODO: review finding.marker == value\n";
+        fs::write(root.join("src/main.rs"), product).unwrap();
+        let report = scan(root).unwrap();
+        assert_eq!(report.markers.len(), 5);
+        let entry = FileEntry {
+            path: "src/main.rs".into(),
+            size: product.len() as u64,
+            mtime_ns: 0,
+            sha256: String::new(),
+            kind: "rust".into(),
+            lines: 4,
+            symbols: Vec::new(),
+            read_error: None,
+        };
+        let captured = scan_from_capture([(&entry, product.as_bytes())]);
+        assert_eq!(captured.markers.len(), 4);
+        assert_eq!(
+            captured.markers.iter().map(|m| m.line).collect::<Vec<_>>(),
+            vec![1, 2, 3, 4]
+        );
     }
 
     #[test]

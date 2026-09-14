@@ -22,14 +22,27 @@
     ]
   },
   "revision": {
-    "generation": 37,
+    "generation": 38,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 36,
-      "sha256": "066f235112cbbbe81006ab5e8b1f04f0e4164527d730d54a64d19cca5f5b5b11"
+      "generation": 37,
+      "sha256": "991247a5e79043761664ced4f2f57cfd28b0bebe36190d06a5bb0a1bcc2c1846"
     }
   },
   "tests": [
+    {
+      "test_id": "TEST-ASSET-SCOPED-CATALOG-P2-20260914",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/assets.rs::scan_limits_catalog_exemptions_and_preserves_pending_vocabulary",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/assets.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "scan_limits_catalog_exemptions_and_preserves_pending_vocabulary",
+      "selector_sha256": "f87731675ead219fbcccc3359474dc9e658a983bf35fa25b90f57b1da0287b23",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
     {
       "identity": "rust::root_cargo::crates/codex-global-execution/src/global_execution/publication.rs::routing_marker_preserves_access_without_foreign_owner_assignment",
       "role": "root_cargo",
@@ -12168,7 +12181,7 @@
     },
     {
       "test_id": "TEST-RUST-SCAN-IGNORES-MARKER-CATALOGS-AND-PENDING-VOCABUL-0028BF2F94A6",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/assets.rs::scan_ignores_marker_catalogs_and_pending_vocabulary",
       "role": "root_cargo",
       "path": "crates/rayman/src/assets.rs",
@@ -12177,7 +12190,13 @@
       "selector_sha256": "8c2200840ede99ccb8095aa7b99f12d0aec86fbb6801d5f3d17edd80f7b71a16",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Removed global catalog exemption and its acceptance selector; scoped regression also verifies live/captured marker parity.",
+        "replaced_by": [
+          "TEST-ASSET-SCOPED-CATALOG-P2-20260914"
+        ]
+      }
     },
     {
       "test_id": "TEST-RUST-SCAN-IGNORES-RUST-TEST-FIXTURE-STRING-MARKERS-2270DEE047E9",
