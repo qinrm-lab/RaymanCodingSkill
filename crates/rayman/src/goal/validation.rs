@@ -1516,6 +1516,35 @@ pub(super) fn validation_matches_impact_with_context(
             } else {
                 release_installer_invocation(root, command)
             };
+        if cargo_subcommand(command).is_some()
+            && command
+                .args
+                .iter()
+                .any(|argument| matches!(argument.as_str(), "--workspace" | "--all"))
+        {
+            let manifests = cargo_option_values(command, "--manifest-path", "");
+            if !manifests.is_empty() {
+                if manifests.len() != 1 {
+                    return false;
+                }
+                let matches_manifest = |expected: &str| {
+                    if decision.has_captured_workspace_bytes() {
+                        captured_path_argument_matches(decision, manifests[0], expected)
+                    } else {
+                        path_argument_matches(root, manifests[0], expected)
+                    }
+                };
+                // --workspace is relative to the selected manifest. A child
+                // package must not inherit the root workspace's exclusions or
+                // claim coverage of unrelated root members.
+                if !matches_manifest("Cargo.toml") {
+                    return impact
+                        .manifest_path
+                        .as_deref()
+                        .is_some_and(matches_manifest);
+                }
+            }
+        }
         if cargo_driven && decision.path_is_excluded_from_root_cargo_workspace(&impact.changed_path)
         {
             return false;

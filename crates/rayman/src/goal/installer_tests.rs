@@ -422,4 +422,53 @@ fn workspace_wide_cargo_does_not_cover_an_excluded_package() {
         )
         .is_ok()
     );
+
+    for manifest in ["evals/Cargo.toml", "crates/app/Cargo.toml"] {
+        let path = root.path().join(manifest);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, "[package]\nname = \"fixture\"\nversion = \"0.1.0\"\n").unwrap();
+    }
+    let captured_files = BTreeMap::from_iter(
+        ["Cargo.toml", "evals/Cargo.toml", "crates/app/Cargo.toml"]
+            .map(|path| (path.to_owned(), fs::read(root.path().join(path)).unwrap())),
+    );
+    let live = GoalDecisionContext::live(root.path(), None);
+    let captured = GoalDecisionContext::captured(root.path(), None, &captured_files);
+    let mut eval = impact("evals/Cargo.lock");
+    eval.manifest_path = Some("evals/Cargo.toml".into());
+    let mut member = impact("crates/app/src/lib.rs");
+    member.manifest_path = Some("crates/app/Cargo.toml".into());
+    for decision in [&live, &captured] {
+        for (manifest, covers_eval, covers_member) in [
+            ("evals/Cargo.toml", true, false),
+            ("Cargo.toml", false, true),
+            ("crates/app/Cargo.toml", false, true),
+            ("missing/Cargo.toml", false, false),
+        ] {
+            let command = parse_validation_command(&format!(
+                "cargo test --locked --workspace --all-targets --manifest-path {manifest}"
+            ))
+            .unwrap();
+            assert_eq!(
+                validation_matches_impact_with_context(decision, &command, &eval),
+                covers_eval,
+                "eval coverage from {manifest}"
+            );
+            assert_eq!(
+                validation_matches_impact_with_context(decision, &command, &member),
+                covers_member,
+                "member coverage from {manifest}"
+            );
+        }
+        let repeated = parse_validation_command(
+            "cargo test --workspace --manifest-path evals/Cargo.toml --manifest-path Cargo.toml",
+        )
+        .unwrap();
+        assert!(!validation_matches_impact_with_context(
+            decision, &repeated, &eval
+        ));
+        assert!(!validation_matches_impact_with_context(
+            decision, &repeated, &member
+        ));
+    }
 }

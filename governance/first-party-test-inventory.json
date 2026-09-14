@@ -22,11 +22,11 @@
     ]
   },
   "revision": {
-    "generation": 39,
+    "generation": 40,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 38,
-      "sha256": "041fff29c3eadf0f2c3800d6a36f951afa16bf9cb3b056770a37f9b035c970b0"
+      "generation": 39,
+      "sha256": "b4fad5427f3d4ff294a5bfe62cffca1d49a3f204ad62db461ce712103f7063b3"
     }
   },
   "tests": [
@@ -14839,7 +14839,7 @@
     },
     {
       "test_id": "TEST-RUST-WORKSPACE-WIDE-CARGO-DOES-NOT-COVER-AN-EXCLUDED-3D49A2BC652F",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/goal/installer_tests.rs::workspace_wide_cargo_does_not_cover_an_excluded_package",
       "role": "root_cargo",
       "path": "crates/rayman/src/goal/installer_tests.rs",
@@ -14848,6 +14848,25 @@
       "selector_sha256": "6841e33648fc27a313403846c5007d7854962e26a91161b5148ccdf037a2f45d",
       "cfg": "all",
       "owner": null,
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Reviewed current behavior successor; explicit manifest coverage is checked in live and captured decisions.",
+        "replaced_by": [
+          "TEST-RUST-WORKSPACE-WIDE-CARGO-DOES-NOT-COVER-AN-EXCLUDED-3D49A2BC652F-TLS"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/rayman/src/goal/installer_tests.rs::workspace_wide_cargo_does_not_cover_an_excluded_package",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/goal/installer_tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "workspace_wide_cargo_does_not_cover_an_excluded_package",
+      "selector_sha256": "1f36a9270bcafc92cc798613e54d81be9468f2c20965f0b6e8112083002d97ab",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-WORKSPACE-WIDE-CARGO-DOES-NOT-COVER-AN-EXCLUDED-3D49A2BC652F-TLS",
+      "status": "active",
       "retirement": null
     },
     {

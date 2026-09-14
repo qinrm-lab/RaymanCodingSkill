@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 42,
+    "generation": 43,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 41,
-      "sha256": "428a74061176ed6af2ef9e2479f1ba614f6a91c5f1deceb9a6efc59b87cd964b"
+      "generation": 42,
+      "sha256": "f96ee1637f8af731297769bc17b6d5858fb09f917a00cdbfad0a8fff94eeeb58"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "b4fad5427f3d4ff294a5bfe62cffca1d49a3f204ad62db461ce712103f7063b3"
+    "sha256": "5e620be5e9f63da881c26bb5cbf9eb285aac99b861d5cd99cb93a16be72142be"
   },
   "sources": [
     {
@@ -172425,7 +172425,7 @@
     },
     {
       "binding_id": "BIND-P2-142483C77C75D88F2D1A8E2A-P3A",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-BEHAVIOR-VALIDATION-AUTHORITY-P3A"
       ],
@@ -172442,6 +172442,33 @@
         "valid_until": "2027-03-14"
       },
       "semantic_sha256": "ef53f34b52027347ac258c4e8f01e921328f780035471d0e69227b97387afadf",
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-P2-142483C77C75D88F2D1A8E2A-P3A-TLS"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-P2-142483C77C75D88F2D1A8E2A-P3A-TLS",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-BEHAVIOR-VALIDATION-AUTHORITY-P3A"
+      ],
+      "test_ids": [
+        "TEST-RUST-WORKSPACE-WIDE-CARGO-DOES-NOT-COVER-AN-EXCLUDED-3D49A2BC652F-TLS"
+      ],
+      "rule_id": "RULE-BEHAVIOR-VALIDATION-AUTHORITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-14",
+        "valid_until": "2027-03-14"
+      },
+      "semantic_sha256": "f8186d4ab4ebe9f678a872bd6f579546b37d5eee011334a7fba5f44c7e253df2",
       "retirement": null
     },
     {
