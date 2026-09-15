@@ -75,7 +75,7 @@ fn public_architecture_and_ci_coverage_contracts_avoid_drift_prone_counts() {
         .expect("quality policy must be readable UTF-8");
     let workflow = fs::read_to_string(repo_root.join(".github/workflows/ci.yml"))
         .expect("CI workflow must be readable UTF-8");
-    let cli_tests = fs::read_to_string(repo_root.join("crates/rayman/tests/cli.rs"))
+    let cli_tests = fs::read_to_string(repo_root.join("crates/rayman/tests/cli_cases/update.rs"))
         .expect("CLI tests must be readable UTF-8");
 
     assert!(readme.contains("`rayman` CLI"));
@@ -95,13 +95,26 @@ fn public_architecture_and_ci_coverage_contracts_avoid_drift_prone_counts() {
     for required in [
         "platform-gated activation-exempt CLI tests",
         "cross-process CLI tests cover offline status",
-        "complete platform-specific behavioral suite",
     ] {
         assert!(
             quality.contains(required),
             "quality policy lost capability-based evidence wording: {required}"
         );
     }
+
+    let policy: serde_json::Value = serde_json::from_str(&quality).unwrap();
+    assert!(
+        policy["exemptions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|entry| {
+                entry["path"] != "crates/rayman/tests/cli.rs" || entry["kind"] != "large_file"
+            }),
+        "split CLI suite must not retain its obsolete large-file waiver"
+    );
+    let entrypoint = fs::read_to_string(repo_root.join("crates/rayman/tests/cli.rs")).unwrap();
+    assert!(entrypoint.contains("#[path = \"cli_cases/update.rs\"]\nmod update;"));
 
     assert!(workflow.contains(
         "cargo check --locked -p rayman --target aarch64-unknown-linux-gnu --all-targets"

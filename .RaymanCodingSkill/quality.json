@@ -129,12 +129,6 @@
       "reviewed_max": 14
     },
     {
-      "path": "crates/rayman/tests/cli.rs",
-      "kind": "large_file",
-      "reason": "This is the single cross-process CLI contract suite; its complete platform-specific behavioral suite is run by check-repo and audit-repository, while production logic remains split into focused modules.",
-      "reviewed_max": 9882
-    },
-    {
       "path": "crates/rayman/src/context.rs",
       "kind": "high_fan_in",
       "reason": "Content-proven context indexing is intentionally a shared workspace authority; context unit tests, CLI integration tests, and strict self-dogfood cover its consumers.",

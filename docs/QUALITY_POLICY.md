@@ -45,3 +45,13 @@ JSON quality output makes policy origin auditable:
 - An applied exact exemption also carries `exemption_reason` and is sorted with informational findings.
 
 Never add a directory/glob escape hatch to the engine. A repository-specific intentional fixture or shared hub must use one exact entry with a reviewable reason, and strict CI must still run the applicable broad tests.
+
+## CLI integration suite
+
+`crates/rayman/tests/cli.rs` owns the shared process/fixture helpers. Its
+`cli_cases/` children group navigation, project maps, readiness, goal evidence,
+validation processes, lifecycle, pending boundaries, workspace activation, host
+integration, recovery and updates. They compile into the same Cargo `cli` test
+target; run `cargo test --locked -p rayman --test cli` for the complete suite.
+Splitting files must preserve test bodies, platform conditions and runtime test
+count, and retire/rebind exact inventory paths without losing history.
