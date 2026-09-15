@@ -22,11 +22,11 @@
     ]
   },
   "revision": {
-    "generation": 45,
+    "generation": 46,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 44,
-      "sha256": "1e288d20f6c68ef239204664b473df878712fbf1bc6079a5214670c0c356a4ad"
+      "generation": 45,
+      "sha256": "61396327ce11eab07c87005fd473f963c995d6f20e443aa3260658881248f355"
     }
   },
   "tests": [

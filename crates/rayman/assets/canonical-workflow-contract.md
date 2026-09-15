@@ -226,7 +226,7 @@ boundaries, not lock contention and not source defects.
   `rayman workspace inspect --probe-writes`. Without that flag both commands
   are read-only and report the probes as not run. When an opted-in probe reports
   a permission denial, run known
-  state-writing commands (goal/checkpoint/autosave transactions, git
+  state-writing commands (goal/checkpoint transactions, git
   stage/commit, installers, repository gates) with escalated host permission
   from the first attempt instead of probe-fail-retry loops.
 - The opted-in `state_write` probe proves only ordinary create/write/remove capability
@@ -284,9 +284,11 @@ boundaries, not lock contention and not source defects.
   separated from the real work.
 - Gates fail closed on environment permission boundaries. Never stitch a
   partial pass; rerun the entire gate with sufficient permission.
-- `rayman checkpoint save` and autosave default to a user-profile root. In a
-  workspace-only sandbox pass `--dir` under the workspace or escalate. Adding
-  that root to the host's writable roots fixes it once for every session.
+- Manual `rayman checkpoint save` defaults to a user-level data directory. In
+  a workspace-only sandbox pass an explicit `--dir` under the workspace or use
+  the approved writable location. Existing snapshots and legacy custom-store
+  hints remain readable. Rayman scheduled autosave is retired; automatic agent
+  recovery belongs to the separate SaveStatus capability and its own contract.
 - An explicit operator pause ("stop now, I am shutting down") overrides Owner
   Mode without becoming success or an external blocker. Record one immediate,
   goal-bound human solution package with `boundary_class=operator_pause`, a
