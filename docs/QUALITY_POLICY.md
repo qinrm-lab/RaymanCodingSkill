@@ -55,3 +55,12 @@ integration, recovery and updates. They compile into the same Cargo `cli` test
 target; run `cargo test --locked -p rayman --test cli` for the complete suite.
 Splitting files must preserve test bodies, platform conditions and runtime test
 count, and retire/rebind exact inventory paths without losing history.
+
+## Script validation ownership
+
+The complete repository gate directly runs source-byte and traceability
+publication self-tests, traceability mutation self-tests and the live runtime
+inventory. The release audit owns its corresponding direct checks. Rust audit
+tests verify orchestration and unique behavior instead of launching those same
+script suites a second time. A Cargo-only pass is not a complete repository
+gate: use `scripts/check-repo.ps1` for the script and runtime inventory checks.

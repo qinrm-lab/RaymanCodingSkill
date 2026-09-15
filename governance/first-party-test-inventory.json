@@ -22,11 +22,11 @@
     ]
   },
   "revision": {
-    "generation": 44,
+    "generation": 45,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 43,
-      "sha256": "75e33ecf2bc39daf3e0c3fcff85fcf4f3771d3319f7ed33827c36c398c29ec3f"
+      "generation": 44,
+      "sha256": "1e288d20f6c68ef239204664b473df878712fbf1bc6079a5214670c0c356a4ad"
     }
   },
   "tests": [
@@ -15931,7 +15931,7 @@
     },
     {
       "test_id": "TEST-RUST-TEST-TRACEABILITY-CHECKER-EXECUTES-MUTATION-SELF-97AF5E15E036",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/tests/audit_script.rs::test_traceability_checker_executes_mutation_self_test_and_live_graph",
       "role": "root_cargo",
       "path": "crates/rayman/tests/audit_script.rs",
@@ -15940,7 +15940,11 @@
       "selector_sha256": "03e13ee069950fe7a6537378835db37cd96cc3792061a1bfccdf87e42836aae9",
       "cfg": "all",
       "owner": null,
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Remove duplicate Rust dispatch wrappers; full repository and release audit scripts retain direct self-test and live inventory checks.",
+        "replaced_by": []
+      }
     },
     {
       "test_id": "TEST-RUST-TICK-PERSISTS-FAILURE-WHEN-ACTIVATION-IS-BROKEN-03AEF8ADACD0",
@@ -17722,6 +17726,25 @@
       "cfg": "all",
       "owner": null,
       "test_id": "TEST-SB1-04427EDEF8D25D49C0BD",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed current behavior successor; direct gate ownership and package preflight assertions remain.",
+        "replaced_by": [
+          "TEST-SB1-04427EDEF8D25D49C0BD-P4C"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/rayman/tests/audit_script.rs::repository_gate_owns_script_checks_and_package_preflight_order",
+      "role": "root_cargo",
+      "path": "crates/rayman/tests/audit_script.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "repository_gate_owns_script_checks_and_package_preflight_order",
+      "selector_sha256": "86f3b5d3f11fb7d4b9944a6c23ae0bef72e1b8c4fcac678965dfc5e678ca6cdb",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-SB1-04427EDEF8D25D49C0BD-P4C",
       "status": "active",
       "retirement": null
     },
@@ -18134,9 +18157,24 @@
     },
     {
       "asset_id": "ASSET-FILE-R4-9BDB5C4AB657-R7-AUDIT-20260908-SB1-P3B-P4B",
-      "status": "active",
+      "status": "retired",
       "path": "crates/rayman/tests/audit_script.rs",
       "sha256": "1a1f946d76d400e072902b96fd7e232ff42c0beeb216c85ef55fbd57800a35bd",
+      "kind": "dedicated_file",
+      "cleanup_policy": "delete_on_last_reference",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Retain shared test asset with surviving assertions.",
+        "replaced_by": [
+          "ASSET-FILE-R4-9BDB5C4AB657-R7-AUDIT-20260908-SB1-P3B-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "asset_id": "ASSET-FILE-R4-9BDB5C4AB657-R7-AUDIT-20260908-SB1-P3B-P4B-P4C",
+      "status": "active",
+      "path": "crates/rayman/tests/audit_script.rs",
+      "sha256": "45aab6a4ab5a31b2de40756f32be150944417050d3f847247d4e62d1317edca1",
       "kind": "dedicated_file",
       "cleanup_policy": "delete_on_last_reference",
       "retirement": null

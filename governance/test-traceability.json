@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 47,
+    "generation": 48,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 46,
-      "sha256": "76c2baa3d02ba938a8493eb422f973503d8e637e341a50823c1a7c9c6edb82b6"
+      "generation": 47,
+      "sha256": "49c5ef52808642376493b39c5c6a64eb6a2a25159ec86c70596c86f144ee4d40"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "1e288d20f6c68ef239204664b473df878712fbf1bc6079a5214670c0c356a4ad"
+    "sha256": "61396327ce11eab07c87005fd473f963c995d6f20e443aa3260658881248f355"
   },
   "sources": [
     {
@@ -612,11 +612,27 @@
     },
     {
       "source_id": "SRC-QUALITY-REPOSITORY-CONTRACT-R3-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "kind": "internal_policy",
       "title": "Context, map, and quality policy",
       "path": "docs/QUALITY_POLICY.md",
       "sha256": "33d3c4bd643c0856f3471a5e282d4a3622a93338e26fe2e9cf721dc8d333e3c6",
+      "valid_until": "2027-03-15",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed source successor after direct script validation ownership review.",
+        "replaced_by": [
+          "SRC-QUALITY-REPOSITORY-CONTRACT-R3-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "source_id": "SRC-QUALITY-REPOSITORY-CONTRACT-R3-P4A-P4B-P4C",
+      "status": "active",
+      "kind": "internal_policy",
+      "title": "Context, map, and quality policy",
+      "path": "docs/QUALITY_POLICY.md",
+      "sha256": "16d84d7fd8da6e0a03c37d7264abee04516111e2e14c75db59a67b82191ef8a5",
       "valid_until": "2027-03-15",
       "retirement": null
     },
@@ -8373,8 +8389,26 @@
     },
     {
       "link_id": "LINK-QUALITY-EXEMPTION-REVIEWED-LIMIT-P4B",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-QUALITY-REPOSITORY-CONTRACT-R3-P4A-P4B",
+      "rule_id": "RULE-QUALITY-EXEMPTION-REVIEWED-LIMIT",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed current source-link successor.",
+        "replaced_by": [
+          "LINK-QUALITY-EXEMPTION-REVIEWED-LIMIT-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-QUALITY-EXEMPTION-REVIEWED-LIMIT-P4B-P4C",
+      "status": "active",
+      "source_id": "SRC-QUALITY-REPOSITORY-CONTRACT-R3-P4A-P4B-P4C",
       "rule_id": "RULE-QUALITY-EXEMPTION-REVIEWED-LIMIT",
       "relation": "defines",
       "review": {
@@ -8602,8 +8636,26 @@
     },
     {
       "link_id": "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_id": "SRC-QUALITY-REPOSITORY-CONTRACT-R3-P4A-P4B",
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "relation": "defines",
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed current source-link successor.",
+        "replaced_by": [
+          "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "link_id": "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C",
+      "status": "active",
+      "source_id": "SRC-QUALITY-REPOSITORY-CONTRACT-R3-P4A-P4B-P4C",
       "rule_id": "RULE-REPO-CONTEXT-QUALITY",
       "relation": "defines",
       "review": {
@@ -111497,7 +111549,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-032C6900CF3392F67D75-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -111514,6 +111566,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "04b6b419977a13ecbc56753f13b69097924570cc60b63bb4834326186a8912d0",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-032C6900CF3392F67D75-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-032C6900CF3392F67D75-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-QUALITY-REPORT-KEEPS-NON-EVAL-FIXTURE-SOURCE-RIS-7C2F52B3732E"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "f2f9c46abf5ffbb173eaa7c0a08b02dcf9112f43db75c5b58834b458ed434d52",
       "retirement": null
     },
     {
@@ -113567,7 +113646,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-0963AA9A8EA0655CC4D3-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -113584,6 +113663,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "c7456aa9a6106a34ec692240a8504a3265ba5a5a9e3f324659bc77e70542c7cc",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-0963AA9A8EA0655CC4D3-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-0963AA9A8EA0655CC4D3-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-CARGO-METADATA-DOCUMENT-REJECTS-UNBOUND-WORKSPAC-74A20BF4B08B"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "91c07a0d1577de1c3f4ba4920e723e77a405c7c6908fb7b361dc75de71b8db5d",
       "retirement": null
     },
     {
@@ -113744,7 +113850,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-09C5D17E01BE110EB456-P1-20260914-P3B-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-PACKAGE-FAILURE-PREFLIGHT"
       ],
@@ -113761,6 +113867,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "76e575c8a69c27d0d9d1265710b2f3e6f530cec425ea8b8bfcdff801331aa7c7",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-09C5D17E01BE110EB456-P1-20260914-P3B-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-09C5D17E01BE110EB456-P1-20260914-P3B-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-PACKAGE-FAILURE-PREFLIGHT"
+      ],
+      "test_ids": [
+        "TEST-SB1-04427EDEF8D25D49C0BD-P4C"
+      ],
+      "rule_id": "RULE-PACKAGE-FAILURE-PREFLIGHT",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "structural"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "d56e9080467d311c1f87c6f5ce7493c475643469fbad74acc2f35a13dc9f5169",
       "retirement": null
     },
     {
@@ -114692,7 +114825,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-0F3C3BD5C7FA1A1AB3C0-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -114709,6 +114842,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "ebd6b2caef031746f2c99f96e32dc97ad88a02c5a76d661e9f112202a8ca127e",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-0F3C3BD5C7FA1A1AB3C0-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-0F3C3BD5C7FA1A1AB3C0-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-PACKAGE-COUNTS-IGNORE-FILES-THE-PACKAGE-TOOLCHAI-98ED640022B2"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "84cc6bfc64609237495a22eb16d8a95fca2ac93647a27a29f350173222d29a3c",
       "retirement": null
     },
     {
@@ -115394,7 +115554,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-12C4BE803730DFC2D84A-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -115411,6 +115571,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "e0bd076b4f6a8792eee054916bf9f11234e23fde24075077460f05b2230f6056",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-12C4BE803730DFC2D84A-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-12C4BE803730DFC2D84A-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-A-MISSING-CARGO-IS-REPORTED-AS-AN-ENVIRONMENT-BO-2CACC75F84AF"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "3f33a76ce0498dbfaa7960e92103a94c23d06d05c3ad9eea5ee7e2135ce801a1",
       "retirement": null
     },
     {
@@ -116406,7 +116593,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-17EA96B56169DAB03C43-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -116423,6 +116610,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "8e063da73312e9ce1d26d39910be5efc2b9ebeaaae630b3bd860c823315d3726",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-17EA96B56169DAB03C43-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-17EA96B56169DAB03C43-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-A-BAT-SHIM-IS-NOT-SPAWNABLE-BUT-IS-STILL-VISIBLE-DF4D6DB6EC6F"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "c69ca82be7e2e042e814f2388887bb266bfa63f29e6a78c8c87fb7c2159ae66f",
       "retirement": null
     },
     {
@@ -116562,7 +116776,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-18733E964970680E0493-P1-20260914-P3B-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3-SB1"
       ],
@@ -116579,6 +116793,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "000b0c075e3ff0a425a99635d69dde1d6aa0e0f0ac78eda185eddcccc4d765bc",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-18733E964970680E0493-P1-20260914-P3B-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-18733E964970680E0493-P1-20260914-P3B-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3-SB1"
+      ],
+      "test_ids": [
+        "TEST-RUST-PUBLIC-ARCHITECTURE-AND-CI-COVERAGE-CONTRACTS-AV-199B06D66A6C-P4B"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "3f6619c7a76789bc144fa90e5ab90d4046bc903700916262c5ece54ec7477fa6",
       "retirement": null
     },
     {
@@ -117186,7 +117427,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-1A73D12FEDD293336EAB-P1-20260914-P3B-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-CANONICAL-GOVERNANCE-PUBLICATION-P3B"
       ],
@@ -117203,6 +117444,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "beccf128fca3f91c0f41a1e7858fabd0f0976c912e928374baaf2ed3d7f9810a",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-1A73D12FEDD293336EAB-P1-20260914-P3B-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-1A73D12FEDD293336EAB-P1-20260914-P3B-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-CANONICAL-GOVERNANCE-PUBLICATION-P3B"
+      ],
+      "test_ids": [
+        "TEST-SB1-04427EDEF8D25D49C0BD-P4C"
+      ],
+      "rule_id": "RULE-CANONICAL-GOVERNANCE-PUBLICATION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "3f95bcca81707e5b7c2ddba4ec9951acadb52e2218516f835c9ee9eba685b42c",
       "retirement": null
     },
     {
@@ -117315,7 +117583,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-1A7C49B2CBD93499FAD1-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -117332,6 +117600,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "3ca510a4e911b626381211b48b7ec98949ea5b02f7cc33cca365ae2e5eaaa6ee",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-1A7C49B2CBD93499FAD1-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-1A7C49B2CBD93499FAD1-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-STRICT-QUALITY-FILE-CANNOT-RAISE-THE-MISSING-TES-3E86BE660A24"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "388073873d4fe6184ee6241293a4e82d30c6a9ec94fae1b3be412fc4385a8887",
       "retirement": null
     },
     {
@@ -117993,7 +118288,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-1D8F3FD79F8AD2A92096-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -118010,6 +118305,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "904d8996fcc21862ef0b455fede62fcf81c98928d519ad5f366ceebe5263bc32",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-1D8F3FD79F8AD2A92096-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-1D8F3FD79F8AD2A92096-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-STRICT-PROFILE-BLOCKS-LARGE-FILE-BY-DEFAULT-WHIL-CD321CA6E886"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "185160de62897d945dd4f29d30c4b7b49bcbad81571357df4c398ad4a31b1c00",
       "retirement": null
     },
     {
@@ -118359,7 +118681,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-1EE5095F7255294BD864-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -118376,6 +118698,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "54d0cdc16a194c56aa482be26e1d5b7900bbe49b8d4ce5300f515985213b29db",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-1EE5095F7255294BD864-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-1EE5095F7255294BD864-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-A-RENAMED-CARGO-MANIFEST-IS-NOT-TREATED-AS-A-MAN-A65D72CD6F34"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "690b16576806c41937337bbc63f744c2542a7b6f25bbec564ed9689f7478a302",
       "retirement": null
     },
     {
@@ -119193,7 +119542,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-22D702211F3B12A922F4-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -119210,6 +119559,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "e000fdce468eab152ea1abc210749d96fa7d6203fbaa6ace46240ee397c28aa8",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-22D702211F3B12A922F4-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-22D702211F3B12A922F4-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-EVERY-PROBE-NAMES-WHAT-IT-IS-NEEDED-FOR-DBDD729C969E"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "e6a7a18ea5ea827f2d4d85126ed507dcdd3f4ea445504079374524d197de6f85",
       "retirement": null
     },
     {
@@ -119973,7 +120349,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-2522A8A7E9DD18AE48EE-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -119990,6 +120366,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "ed0a1d005f9531cc4afc7b5fa443158a11fa93b96c8b8fc0c035ebb1f8c6b064",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-2522A8A7E9DD18AE48EE-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-2522A8A7E9DD18AE48EE-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-AN-EXTENSIONLESS-FILE-ON-PATH-IS-NOT-REPORTED-SP-FC243E2838DC"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "3bd36c936c86b2d14ca66541f832117492d7f3c87fcb976be1e3c976ad0f73a9",
       "retirement": null
     },
     {
@@ -122097,7 +122500,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-2EFB8ECEFFE883981A20-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -122114,6 +122517,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "18175e5fcced6d80eac51fdf64b3140b38a107d1dfbab78396bdee668971e2d6",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-2EFB8ECEFFE883981A20-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-2EFB8ECEFFE883981A20-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-DOCS-INSIDE-TESTS-DIRECTORY-DO-NOT-CREATE-A-TEST-0D5E9B4D106C"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "d0329b8e757aabc57045c34db9a7fcdd8194136b98e556758ed7e085d133b7fe",
       "retirement": null
     },
     {
@@ -124287,7 +124717,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-35968062977C6851D994-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -124304,6 +124734,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "cc4d114887667f8811ffc7dfc61c67d5727cdc02d86cd06c7eba2b7445329fec",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-35968062977C6851D994-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-35968062977C6851D994-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-STRICT-QUALITY-EXEMPTIONS-REJECT-GLOBS-AND-BLANK-32A669C38890"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "7322499fbb499c8d687cde5475de94bc695de7cb312296d509f37b4bd8350e04",
       "retirement": null
     },
     {
@@ -125352,7 +125809,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-3AD4AE927779F49138A5-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -125369,6 +125826,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "b3d40b9d3c54dc134a6c1fbe189ece358ccb8b882bdd14b5f026aba85fba49b9",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-3AD4AE927779F49138A5-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-3AD4AE927779F49138A5-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-MAP-RESOLVES-USE-DEPENDENCIES-INSIDE-NESTED-CRAT-EC19120EDE57"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "1c9ce0d82eb695046735e91778e35870899cf056e568add7d505d6a32f1ce7d8",
       "retirement": null
     },
     {
@@ -125847,7 +126331,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-3C029AFA36C29269B7E6-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -125864,6 +126348,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "7b53b4b1f8aaa896c48d636e3d3944c7ad37ea8cae5e1a0e132dab553093d4b8",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-3C029AFA36C29269B7E6-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-3C029AFA36C29269B7E6-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-EVALS-DEPENDENCY-POLICY-CHANGES-RECOMMEND-EVALS-0667032353EB"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "49bc25353e058f4518fe095b232bae3a24524269622878fdacfb03d67244806d",
       "retirement": null
     },
     {
@@ -127638,7 +128149,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-450CB29C30B77F6DF0AA-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -127655,6 +128166,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "207310c5da1b5535149f8e930fd7c6e327d2518e9dbbc80ae9dea7619e024b11",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-450CB29C30B77F6DF0AA-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-450CB29C30B77F6DF0AA-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHANGE-PLAN-WARNS-INSTEAD-OF-BLOCKING-WITHOUT-SU-B70D5CC8D91C"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "5e187cdb367f0d2308bc090495eaf6afec288844ad4793900abd62073004e397",
       "retirement": null
     },
     {
@@ -127896,7 +128434,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-45B547619C79045FEBED-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -127913,6 +128451,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "4151ac3dedd2d38636c4cbbd521ef4c9797280d25100eb3a840811d209908b39",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-45B547619C79045FEBED-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-45B547619C79045FEBED-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-CARGO-METADATA-DOCUMENT-REJECTS-MANIFESTS-OUTSID-155FBD865406"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "c57856fdccd7242b116f8837a8c885900314e0a929d09ca286495c28ec9e6b89",
       "retirement": null
     },
     {
@@ -128100,7 +128665,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-4637EE51A7D25BD8B9B0-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -128117,6 +128682,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "ba26362240a728874adbb60b7afee240ffa9fc6bceaf82459b9914edcdc75d24",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-4637EE51A7D25BD8B9B0-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-4637EE51A7D25BD8B9B0-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-VERIFIED-FILE-READ-REJECTS-POST-VALIDATION-BYTE-73ED03911D0B"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "561dd057f62d0791e8dc53c9edf89ecf0e54d3e03e004dd26f87ae9a8c26242a",
       "retirement": null
     },
     {
@@ -129240,7 +129832,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-49A70CE1DFF59302D0A4-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -129257,6 +129849,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "7379cd91d4cb99a4418af258164f13bd2e38709718072fad277d71ba74eeeeb5",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-49A70CE1DFF59302D0A4-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-49A70CE1DFF59302D0A4-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-QUALITY-REPORT-DOWNGRADES-MISSING-TESTS-WITHOUT-80BA060DC81B"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "7fddc619ddc096a9c39601d181d44ca00cfaf825b40f937f43366fbce8403670",
       "retirement": null
     },
     {
@@ -130494,7 +131113,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-5040EAA05FF4677FC801-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -130511,6 +131130,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "1f5d5ca035cbccf5ec2e74ece918cdc7a61d995d5aeaac5f541472907c4cc2ab",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-5040EAA05FF4677FC801-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-5040EAA05FF4677FC801-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-CARGO-PACKAGE-SOURCES-STILL-BLOCK-NEXT-TO-UNSUPP-97AECA116C32"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "8746b55f40f67ffa89bc1be30de07390226b052cff3963422f07d9c85f356046",
       "retirement": null
     },
     {
@@ -131172,7 +131818,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-532F5A5910840DD5A998-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -131189,6 +131835,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "7536a00207a3b4789af1f53882232f32dbc8304b4e2b0fca7ba754ffadc4ae9d",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-532F5A5910840DD5A998-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-532F5A5910840DD5A998-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-STRICT-QUALITY-FILE-ADDS-TO-DEFAULTS-INSTEAD-OF-C3C945065BD0"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "38024893cbc1b2a6c04d4867950b42b6c62876ddb4ac58d934438a57a96f0f46",
       "retirement": null
     },
     {
@@ -132255,7 +132928,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-58DF590C54AFA21D1768-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -132272,6 +132945,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "71086ee98af8e6dc20183b00205a8f3c66fae2f9a135ba3c0043b896bc756916",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-58DF590C54AFA21D1768-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-58DF590C54AFA21D1768-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-SUBDIRECTORY-ONLY-CARGO-WORKSPACE-OBTAINS-AUTHOR-8AFED1AFC57D"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "1a405d573c5438cb486553d903b448eabdc3db9baa2fa352caabdebd7aaabc40",
       "retirement": null
     },
     {
@@ -132615,7 +133315,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-5A0FD463B23048020CA2-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -132632,6 +133332,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "af161195686bccef79546e3b6a399728cba90dabe415eb1fdbfac2ff4318dec9",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-5A0FD463B23048020CA2-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-5A0FD463B23048020CA2-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-WORKSPACES-WITHOUT-CARGO-PACKAGES-STAY-AUTHORITA-01407255DE77"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "4a0095020faac41ad3a3bbf9bef2b22894baaad4191123cee25248d6b9e85a23",
       "retirement": null
     },
     {
@@ -132798,7 +133525,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-5AB67EC78FD43A6A8F55-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -132815,6 +133542,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "d321b9a9e47f7d833f6daba526ac92445b86e2a84a13ae2ed2d8644f44b00cde",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-5AB67EC78FD43A6A8F55-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-5AB67EC78FD43A6A8F55-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-VERIFIED-INDEX-IS-THE-SAME-OBJECT-THAT-PASSED-VA-E5B69BF5DD22"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "5104f7f2698e6103a8a02155e40a08acfc930c3a76fa9179ff6fb75cae2b7bde",
       "retirement": null
     },
     {
@@ -133281,7 +134035,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-5D1143D69530DA173409-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -133298,6 +134052,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "a5ee5f28995ead0615b22b3fcbd8e31446e5e79b5115537909de6fe54de63f0f",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-5D1143D69530DA173409-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-5D1143D69530DA173409-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-PYTHON-MAP-LINKS-PYPROJECT-IMPORTS-AND-PYTEST-TA-860662603CA7"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "9659276e25cf0321c61e77d647d93577152f0d9fcedaef42026ae3d994d949be",
       "retirement": null
     },
     {
@@ -133539,7 +134320,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-5F5C2B9E8802E5E7F6B9-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -133556,6 +134337,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "2b51a52507094252be0b490b94d98a27d8a96c2330c60a28462aed0eb2466a4e",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-5F5C2B9E8802E5E7F6B9-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-5F5C2B9E8802E5E7F6B9-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHANGE-PLAN-GROUPS-IMPACTED-FILES-TESTS-AND-CHEC-265FFBBA9274"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "da85b7103f2b9a30c3f9f9533f18a4746da2ce904b227d7e72be25c1cbd6f2a1",
       "retirement": null
     },
     {
@@ -135342,7 +136150,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-66E30A00AAE3DB65BE48-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -135359,6 +136167,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "d6bfad6e2a963ff8a9c8187a5fb44559d6ab7a8c38d710698c9f71fd73db763b",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-66E30A00AAE3DB65BE48-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-66E30A00AAE3DB65BE48-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-VERIFIED-FILE-READ-REJECTS-A-SUBSTITUTED-PARENT-A0F07D1B642A"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "cd74a84d5f96d3015cd76032be1baaf5f6e241b31da35757e1a839b9715da740",
       "retirement": null
     },
     {
@@ -135681,7 +136516,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-67C1DA6E7C96C2384B93-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -135698,6 +136533,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "c7d7bfb9fbc837ee09601b8e5f5c58bf67a8d6a6f38e27a0e556525b42ee543e",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-67C1DA6E7C96C2384B93-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-67C1DA6E7C96C2384B93-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-CORRUPT-CACHE-IS-PRESERVED-AS-AN-ERROR-BE415CD0E34B"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "1b9ee47ec86f254a50293529c662d07f1dc5554867270049ef308bb08deabf4f",
       "retirement": null
     },
     {
@@ -136074,7 +136936,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-69A710761313535F76B3-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -136091,6 +136953,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "967036f6d248c6dbd25c154452c13607eb89c5ede97febfefb4e75d6e62e5d6a",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-69A710761313535F76B3-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-69A710761313535F76B3-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-BUILD-ENTRY-REFUSES-A-NON-FILE-READ-TARGET-458B838794EA"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "e16dee64d11351d93ae5108debb52c161eddfd75fb0a1b48c9b8e7765b164989",
       "retirement": null
     },
     {
@@ -136800,7 +137689,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-6CC74ECCE699E4803577-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -136817,6 +137706,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "6379b707c4eab7df744782d8a68b8ca64c3f0a062b09241946941710428a3ac2",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-6CC74ECCE699E4803577-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-6CC74ECCE699E4803577-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-CARGO-WORKSPACE-REQUIRES-METADATA-PROVENANCE-FOR-68700A553188"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "14b96361e516a84cc8f5324b40d92365f7e41dee9995c7ba10c56eba07cbe637",
       "retirement": null
     },
     {
@@ -138042,7 +138958,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-725B8C8F40D301A74F87-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -138059,6 +138975,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "948aaa1808299ecd9d069d87a2a2a33b43304bd3d1a05a622eb6485e8e7fde03",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-725B8C8F40D301A74F87-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-725B8C8F40D301A74F87-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-A-CARGO-MANIFEST-METADATA-CANNOT-PARSE-STAYS-NON-8D463E9A706F"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "76d922c1725cf839d21f8a8c4371362040f2e4d71f43a4713616692f50295bf5",
       "retirement": null
     },
     {
@@ -138429,7 +139372,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-72F2A0273B4DF5A33D48-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -138446,6 +139389,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "4dec42235ad58e00cb5e60fd6beec995fd1d1cd27900d7153ecd9ecb2c347c27",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-72F2A0273B4DF5A33D48-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-72F2A0273B4DF5A33D48-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-A-PROGRAM-THAT-CANNOT-EXIST-IS-REPORTED-MISSING-A28ED90D9383"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "72a8fd72884e12b6046d8a24aa218c477029ee9336afd09f8471b29a3d34ef2b",
       "retirement": null
     },
     {
@@ -138612,7 +139582,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-742DD9817F7500DF2F05-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -138629,6 +139599,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "7d854b0055683870335b6c249dbf8de476b6bed99ab03df61b149dcd0ba0b764",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-742DD9817F7500DF2F05-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-742DD9817F7500DF2F05-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-CLASSIFY-EXTRACTS-REEXPORT-SYMBOLS-8F0E1A15F642"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "356356bdeac1d1c1fae63bb46ac6352d26cdcdaccd3ce037e991644dfcc35b58",
       "retirement": null
     },
     {
@@ -139602,7 +140599,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-770E6ABB30C09EFDB15F-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -139619,6 +140616,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "b3429d68b7ea53e9a32955b2b187296aa95e833fff831b066c20aca29d9d811a",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-770E6ABB30C09EFDB15F-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-770E6ABB30C09EFDB15F-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-EXTRACT-SYMBOLS-HANDLES-SCOPED-VISIBILITY-4A1D8E184D54"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "fdc5b29b76ed8692d9cbe3be14790da07a39a837f3ed9f4a1f2734663d0f8452",
       "retirement": null
     },
     {
@@ -142329,7 +143353,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-87BB9075432D711C06BB-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -142346,6 +143370,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "2d4a734ecf93836612734c9f6e27f5e702c7b032f1a51e2a82ec4a61eb2d6637",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-87BB9075432D711C06BB-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-87BB9075432D711C06BB-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-STRICT-QUALITY-EXEMPTIONS-REQUIRE-AN-EXISTING-OR-AA95D25F0FD1"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "b4ecb760e613386d1ec62e156053b324d74227ea5364e94ecbf487b62dd09095",
       "retirement": null
     },
     {
@@ -142587,7 +143638,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-8872FE59542574C205E7-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -142604,6 +143655,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "5faa860caf95c605cedc4ee07b1751195d23da79208423f6b799c2869486645a",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-8872FE59542574C205E7-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-8872FE59542574C205E7-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-VERIFIED-INDEX-STALE-ERROR-NAMES-THE-CHANGED-PAT-BCE5A7E98A46"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "734375446ff38efc3570d192ded1a1e2a2818ad466a9341dc7cc614c075ee70c",
       "retirement": null
     },
     {
@@ -143346,7 +144424,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-8B431A5FBAA51424C884-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -143363,6 +144441,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "50e5a14a2039dfceb1957b5c9cc844be23352e98cc14d7a970d9c0a381728e13",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-8B431A5FBAA51424C884-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-8B431A5FBAA51424C884-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-REFRESH-TOLERATES-NON-UTF8-FILES-EFDD8983CB29"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "dc1a5d4bbd8134c08db8788a20207311040a72ef3310aa7e8c39899803bab047",
       "retirement": null
     },
     {
@@ -143766,7 +144871,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-8DD936FA518C21202F71-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -143783,6 +144888,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "3cdecb85a30ff48822414876197a3f9110fe3815669b3ab8c0959f40d90f92ac",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-8DD936FA518C21202F71-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-8DD936FA518C21202F71-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-BUILD-ENTRY-REFUSES-A-SYMLINK-TO-A-FILE-OUTSIDE-1341725C3430"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "80b35d27188af384a5cfb8fcedcf0b650b4384d1e253b818bbb77673c4de66b2",
       "retirement": null
     },
     {
@@ -144153,7 +145285,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-8E7B63FCB99784A7D7B1-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -144170,6 +145302,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "d90f3178938c66554ee8c65cb303f6c21f9dc8a604120ccaeaee24a08d69736e",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-8E7B63FCB99784A7D7B1-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-8E7B63FCB99784A7D7B1-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-CHANGE-PLAN-BLOCKS-BROAD-SOURCE-CHANGE-WITHOUT-T-65F8EEBA2054"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "b668e582f1a9585340bc863a6fe19bd7225d88171c2244f08296ca3cf3e6043e",
       "retirement": null
     },
     {
@@ -144549,7 +145708,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-8FE6AA662FED2A3DA66C-P1-20260914-P3B-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-SOURCE-BYTES-POLICY",
         "LINK-SOURCE-BYTES-PREFLIGHT-P3B"
@@ -144567,6 +145726,34 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "db7d6be3945e22ae9223f936e3259c0adca7006e3cddad6a49dd3d84f48b5fd3",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-8FE6AA662FED2A3DA66C-P1-20260914-P3B-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-8FE6AA662FED2A3DA66C-P1-20260914-P3B-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-SOURCE-BYTES-POLICY",
+        "LINK-SOURCE-BYTES-PREFLIGHT-P3B"
+      ],
+      "test_ids": [
+        "TEST-SB1-04427EDEF8D25D49C0BD-P4C"
+      ],
+      "rule_id": "RULE-SOURCE-BYTES-PREFLIGHT",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "a32b925aef408a2d89611fac2e1889d4c55499e9b9ead445f25c5fa27a232718",
       "retirement": null
     },
     {
@@ -144916,7 +146103,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-925B279FA4FF97531535-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -144933,6 +146120,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "77d84df4b8d42c1d0c3f1d04921fd13163111e6a61e5d722945c73bc1c65fccf",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-925B279FA4FF97531535-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-925B279FA4FF97531535-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-STRONG-FRESHNESS-REJECTS-DUPLICATE-CACHED-PATHS-BBD6A271F6F0"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "e460f6b31c955f81c0df638de4f4142ce7f222e7a8c5c23c952d9886d9f7ea0a",
       "retirement": null
     },
     {
@@ -146245,7 +147459,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-97027D45C99C57FE200D-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -146262,6 +147476,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "54ad98acfee89c3487c1586a22be5b8d71b5c6f4e8fb3b3c292b2387c61c5d5f",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-97027D45C99C57FE200D-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-97027D45C99C57FE200D-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-REAL-PYTEST-FILES-KEEP-THEIR-TEST-ANCHOR-0FF1F67A9108"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "1dad0e3bd953d5da51e24902816bff7f04f028d8087b666c82d357e0e25cea6a",
       "retirement": null
     },
     {
@@ -146449,7 +147690,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-98960E634596817B5FB8-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -146466,6 +147707,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "92ae0d49fda0d3cb74970618a788c5af230993f5ed4bb8045d5232a268b6bfaf",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-98960E634596817B5FB8-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-98960E634596817B5FB8-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-FRESHNESS-IS-MISSING-THEN-READY-THEN-STALE-89FB833C06EE"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "8b2004192860649c610b94aac9c76463ce8a5f217df3df070735de1be9ccda13",
       "retirement": null
     },
     {
@@ -146578,7 +147846,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-9898982DBC57E5A74B9A-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -146595,6 +147863,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "277a35d207893c3d855d24d07851bed5138205a6fc252e89950e7eed03a31f1e",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-9898982DBC57E5A74B9A-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-9898982DBC57E5A74B9A-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-PYTHON-PLAN-BLOCKS-BROAD-SOURCE-CHANGE-WITHOUT-P-B8401481187A"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "138d06718287aa7e3f81c128514ef178f38b0a2163a0c1da01f9ab6259f13bad",
       "retirement": null
     },
     {
@@ -147421,7 +148716,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-9C69D75280A6795A14B9-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -147438,6 +148733,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "8e893cc155409846eb2dab6cedc934056b25d08038b82d30affb67629fb936e6",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-9C69D75280A6795A14B9-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-9C69D75280A6795A14B9-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-NESTED-MANIFEST-FAILURE-PROPAGATES-THE-REAL-ERRO-4D031BA56441"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "725dce1fa0232f649c85dd38bbf5ff83375ae9e76d55d771d61c4ac4529aa208",
       "retirement": null
     },
     {
@@ -147685,7 +149007,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-9D88CA859710492A27C9-P1-20260914-P3B-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3-SB1"
       ],
@@ -147702,6 +149024,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "a5de4f90f2cdcc1748879d0f7729e04d8df184ad0943cd73ee1e008c7416481f",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-9D88CA859710492A27C9-P1-20260914-P3B-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-9D88CA859710492A27C9-P1-20260914-P3B-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3-SB1"
+      ],
+      "test_ids": [
+        "TEST-RUST-REPOSITORY-QUALITY-PROVIDER-EMITS-THE-EXACT-VERS-BFA31317DEB1"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "bb6486f185426454c368a788826163cec21caeb0c41f17d268ce5b98f0d80977",
       "retirement": null
     },
     {
@@ -147814,7 +149163,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-9DD12BB43A053780E11C-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -147831,6 +149180,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "9e530bf0f27d62965fcd52ada67d05101434f26c8a0a7c968d93a5d68b6a13e1",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-9DD12BB43A053780E11C-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-9DD12BB43A053780E11C-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-CLASSIFY-DOES-NOT-TREAT-SUBSTRING-NAMES-AS-TESTS-39FB42EE87EA"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "da92b984cf39379f182fd4bc07c01af6da0455c3fa529fbc64dab788eaadb4b0",
       "retirement": null
     },
     {
@@ -148018,7 +149394,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-9E9F29CB4912CE74A889-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -148035,6 +149411,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "0a2dd63dab6ed7493f49b46d4952fd8e2cafa4e6eaab51a4f81e2a55c09b168b",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-9E9F29CB4912CE74A889-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-9E9F29CB4912CE74A889-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-RESOLVES-ABSOLUTE-IMPORTS-FROM-THE-NEAREST-NESTE-96376B3109EB"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "da95bf40eeef32ac9ebeeb4ded13f43b1d5d5deaaa688c870176a10fc863c264",
       "retirement": null
     },
     {
@@ -148657,7 +150060,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-9FB810674E026AF35532-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -148674,6 +150077,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "b0433c641d1ea5d3f1c5bcabd7a63d05ab9f6fd752fc7cdc4238c356720df17b",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-9FB810674E026AF35532-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-9FB810674E026AF35532-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-MAP-BUILDS-DEPENDENCIES-AND-IMPACT-FROM-CURRENT-54D1AD2F933F"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "f20514254a7adcc8fc463dfb80d191dfcc5c8dcf1caa436df82d8c2673cb2861",
       "retirement": null
     },
     {
@@ -149821,7 +151251,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-A28E80FDB466EA537148-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -149838,6 +151268,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "3e7241011a2075c9e86022a9454d2303851bae41fdebe7e45075eb4708319318",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-A28E80FDB466EA537148-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-A28E80FDB466EA537148-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-PYTHON-SAME-STEM-FILES-IN-OTHER-PACKAGES-ARE-NOT-C384A6812CDB"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "806f1c6c8d3aa893958b9d830201807df1d84d2543773244461bcbd25be1efcc",
       "retirement": null
     },
     {
@@ -151153,7 +152610,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-A5905B7BD5D04F5175E8-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -151170,6 +152627,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "32a38b209613f016f497b5c67ab3a90585d987b6f125b7fe6d381bf30fc40aac",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-A5905B7BD5D04F5175E8-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-A5905B7BD5D04F5175E8-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-STRONG-FRESHNESS-REJECTS-FORGED-DERIVED-FIELDS-A039CFCB20D3"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "ad5d24f2cf81d845ca8efd12e3dbbdd0af4b5aa78c70474e127d8ad88147385c",
       "retirement": null
     },
     {
@@ -152899,7 +154383,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-AC791C2B532FF11B087C-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -152916,6 +154400,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "f23de3a685f20b71e26d9e40915535a4acb0410d3f013843b8acab6098211a75",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-AC791C2B532FF11B087C-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-AC791C2B532FF11B087C-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-STRONG-FRESHNESS-DETECTS-SAME-STAT-CONTENT-REPLA-E74D9CC1F015"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "14e98ad433004e5f657974d0653475da11e11ccfb1771fa32ff6aa743646def0",
       "retirement": null
     },
     {
@@ -153976,7 +155487,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-B1720CD19038E5447F5D-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -153993,6 +155504,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "96327ce0919bf9d8166ec648f5a19ab0958c06aa7397753f5189b74ac8c16714",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-B1720CD19038E5447F5D-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-B1720CD19038E5447F5D-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-STRICT-QUALITY-EXACT-EXEMPTION-PRESERVES-FINDING-32F6F4641B28-P4A"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "0f1a46ab44f3cd9a8713ef3a52c09b562938a26897f582138921ac464df1acfa",
       "retirement": null
     },
     {
@@ -154105,7 +155643,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-B2121C7E4FA5B2FC36BA-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -154122,6 +155660,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "83c2ce18141b750706155a8f8910ab7b62e70228bd479255dcfd3b2734268f94",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-B2121C7E4FA5B2FC36BA-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-B2121C7E4FA5B2FC36BA-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-REFRESH-REFUSES-INCOMPLETE-WORKSPACE-WALK-2B284BE244DE"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "76976b84022cc3808dd057dc9f7b05361092643cffa939af27b20d431ba48857",
       "retirement": null
     },
     {
@@ -154417,7 +155982,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-B41AE93BFE7D705BCDAF-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -154434,6 +155999,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "cf973e75666a6b0045cfd3c5c01a2367346b4f69e9f5d741bb6e31022d8f05aa",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-B41AE93BFE7D705BCDAF-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-B41AE93BFE7D705BCDAF-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-MAP-BUILD-TOLERATES-NON-UTF8-SOURCE-FILES-3A145C8FFACA"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "ec57f1e9bbd4d495bad2be288489deaf5d5dcee5a5a569594ff30c8856351b5d",
       "retirement": null
     },
     {
@@ -156289,7 +157881,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-BB16F3A055C4E8DB4197-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -156306,6 +157898,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "ac7e4483029f967c93ca33e8d31b449d2c36d6f28bdaf68404cb67e7e2378c47",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-BB16F3A055C4E8DB4197-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-BB16F3A055C4E8DB4197-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-MAP-BUILD-REJECTS-SOURCE-DRIFT-AFTER-INDEX-VALID-6E6D7D9EF1B0"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "1a4e5796e988f0659674873c4b73e579c0d29257be5b7c915764a1358ac2adf6",
       "retirement": null
     },
     {
@@ -156938,7 +158557,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-BE0E07B555C0E749FDB3-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -156955,6 +158574,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "addc82918836be2360d0edaa854bbea2b24f0b11625e95e823a61a0a6209ffa4",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-BE0E07B555C0E749FDB3-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-BE0E07B555C0E749FDB3-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-MISSING-CARGO-MARKER-IS-DISTINCT-FROM-UNTRUSTED-692C8518ECF2"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "ac2cff79d247c87ba08676f5d4e4330868cc7b11da8cb9e0f8ca8a9a81122e75",
       "retirement": null
     },
     {
@@ -157820,7 +159466,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-C275A833F4190E04535E-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -157837,6 +159483,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "f2974dc9dc24bc31b948f62a5ac89639e30ca5da099447c9eb639d7f09af1436",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-C275A833F4190E04535E-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-C275A833F4190E04535E-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-CARGO-IS-ONLY-RELEVANT-TO-A-CARGO-WORKSPACE-76EA7713CCAA"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "5c8e33fc649a4f61cbec81fc45e9916dae67b86edac4f18ad42baf729823cbf4",
       "retirement": null
     },
     {
@@ -158111,7 +159784,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-C41C4FB51C75C96F6931-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -158128,6 +159801,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "3cd0da13cf937fa29d519e904309d0c5a394f4e7a0147c16d45b2bc0c373d2ca",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-C41C4FB51C75C96F6931-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-C41C4FB51C75C96F6931-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-CAPTURED-MAP-REJECTS-MISSING-MANIFEST-BYTES-BEFO-1F7DDEDA5320"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "167a936c1ce80d37fa78e71181192d9b1196dd649023fa319ccb8d185cbd81d2",
       "retirement": null
     },
     {
@@ -158594,7 +160294,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-C73E3CFD2AAC39C7EADA-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -158611,6 +160311,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "44e91d90815d6f04e77c27e638dc85ae73d4b90f8562765c0b6bd656b71dafd9",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-C73E3CFD2AAC39C7EADA-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-C73E3CFD2AAC39C7EADA-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-INLINE-TESTED-PACKAGE-DOES-NOT-TRIGGER-THE-NO-TE-5EF17E92BD01"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "94b58e3ef14f290dff6608838fc0280f2317c8ddc52830274de53ada396e8e9e",
       "retirement": null
     },
     {
@@ -159212,7 +160939,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-CC846F5CC253D1FABC5A-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -159229,6 +160956,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "17ab398074921bfcd1b32c78a817a40712d6a74f2c93227fc377802a19427569",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-CC846F5CC253D1FABC5A-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-CC846F5CC253D1FABC5A-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-STRONG-FRESHNESS-NEVER-READS-PATHS-SUPPLIED-ONLY-F05256C74C3B"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "72e8467cdbacaa857d6519996205cc3895d00345bd97012c915922c38bd9a6d8",
       "retirement": null
     },
     {
@@ -159803,7 +161557,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-CF733F7AB8F162DEC061-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -159820,6 +161574,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "828ddad911fa9e5471c4db2a0a4bdcf6763f60b4521886914e13723ec6c8177a",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-CF733F7AB8F162DEC061-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-CF733F7AB8F162DEC061-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-QUALITY-REPORT-DOES-NOT-EXEMPT-EVAL-FIXTURE-SHAP-5E70D599749A"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "583625ccd3291aa35de0f29c51a6e840afa81c7974191d946667bf48513b9608",
       "retirement": null
     },
     {
@@ -160943,7 +162724,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-D1D31D8BFFDE02BC680E-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -160960,6 +162741,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "bf24a40fe0277fc8536e57491ff62ff7129be7f6eb662d9b3b2b15c95ed99135",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-D1D31D8BFFDE02BC680E-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-D1D31D8BFFDE02BC680E-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-OVERSIZED-FILES-REPORT-THEIR-REAL-LINE-COUNT-1D4F61995189"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "51b2cbec0a46574f8790706c1642dbde779de6d39e77fc43d50d821e3fdc7e2a",
       "retirement": null
     },
     {
@@ -161072,7 +162880,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-D239F940E5FEF037E7E8-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -161089,6 +162897,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "31d44488e320d5a10f6a53643c761e45c557566c0277c3a99cd0b15cf8177626",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-D239F940E5FEF037E7E8-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-D239F940E5FEF037E7E8-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-QUALITY-REPORT-BLOCKS-MULTI-SOURCE-PROJECT-WITHO-DF2FA9C5348D"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "569959621fcaef6d504f9fa2df19e3e63ea44786ba9bf411e6a8a75053985331",
       "retirement": null
     },
     {
@@ -163229,7 +165064,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-DABEB99D02F791CA6FF1-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -163246,6 +165081,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "fee1db600a63428abf9d1ce861eb5c35bf41f4af66cca320e84db487608c8bc3",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-DABEB99D02F791CA6FF1-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-DABEB99D02F791CA6FF1-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-CARGO-METADATA-INVOCATION-IS-LOCKFILE-STABLE-2ABF332C76B6"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "7774a7ebbc19b0fdd5cc562d89030d99139139466c4252d77d3e91c08e096341",
       "retirement": null
     },
     {
@@ -163799,7 +165661,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-DC79330BB45059546405-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -163816,6 +165678,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "5a832ef4652776c192ebbebd42d5c384d78c67be7e803ac0fc633495e56d369b",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-DC79330BB45059546405-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-DC79330BB45059546405-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-NESTED-PYPROJECT-IMPORTS-RESOLVE-AGAINST-THE-PAC-84B2A6F94FED"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "5dcb83bce869c12c59f8f87247bdf2f85cfc426b6751b43f5bb26e4482f0b54a",
       "retirement": null
     },
     {
@@ -164642,7 +166531,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-E0A31175406E9B6100C5-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -164659,6 +166548,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "9b8dc32b0994cc4a77b84f087a2b59af346b9c09e1ac38edd51803bfb8cf9d45",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-E0A31175406E9B6100C5-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-E0A31175406E9B6100C5-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-PARSES-PYPROJECT-NAMES-AND-LOCAL-IMPORTS-31994B69E248"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "98fcd0fcf5268d5094f8747cedf020b96807bf5c0f830145078d588988ecaa28",
       "retirement": null
     },
     {
@@ -165593,7 +167509,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-E4799727C5337D2541F1-P1-20260914-P3B-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3-SB1"
       ],
@@ -165610,6 +167526,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "c9fa9f2749b577635bc2faafeaf9fe8c680b3cbd600a7af3b608e7cbf860e8cb",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-E4799727C5337D2541F1-P1-20260914-P3B-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-E4799727C5337D2541F1-P1-20260914-P3B-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3-SB1"
+      ],
+      "test_ids": [
+        "TEST-RUST-REPOSITORY-QUALITY-CONSUMERS-REJECT-MALFORMED-TY-B97DE1372281-AUDIT-20260908"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "faa5479b328c356f068268dddd1e9fa474ad06b3fa4d61d7bfd9dfa90e550282",
       "retirement": null
     },
     {
@@ -166169,7 +168112,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-E64AD9940A3690BFB56C-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -166186,6 +168129,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "e2cf5e4a4fb2e6febcc62224ff6604296952d5abb0bddc4a74a390c204b8c26d",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-E64AD9940A3690BFB56C-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-E64AD9940A3690BFB56C-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-USE-OF-WORKSPACE-CRATE-NAME-CREATES-LOCAL-DEPEND-25A9ECCD5271"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "192b991e56f30fcfef69e7696b64a6e77ca9b6ff152c475d557f8b2ede817b1a",
       "retirement": null
     },
     {
@@ -166427,7 +168397,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-E7DC197C05F9041CDBF2-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -166444,6 +168414,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "1fe7ad28f440b970f2b6da1fc2b93e1f633da76f126f539ca6e340f79f2b82d4",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-E7DC197C05F9041CDBF2-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-E7DC197C05F9041CDBF2-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-MAP-BUILD-TOLERATES-NON-UTF8-CARGO-AND-PYPROJECT-4EB03C245788"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "6775480ad17b6dac6454d2d25e6a4949bdb6cc61047fd25e36dedaf3b6f117d5",
       "retirement": null
     },
     {
@@ -167213,7 +169210,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-EB051C8C033C26F7DD79-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -167230,6 +169227,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "f94a2b41138145e84f06daa2e4e73c08a2e042c68f17808b42736efb308e73aa",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-EB051C8C033C26F7DD79-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-EB051C8C033C26F7DD79-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-MAP-BUILD-TOLERATES-A-NON-UTF8-ROOT-WORKSPACE-MA-1FCCB4D3E1B5"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "37560d2e7af6f419d23634149dfdeadc3713afcb31fd1ef3667e5a948faba74e",
       "retirement": null
     },
     {
@@ -167393,7 +169417,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-EB2826C55C9B7F4F235A-P1-20260914-P3B-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-TRACE-ACTIVE-SOURCE-R3"
       ],
@@ -167411,7 +169435,11 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "62f13b80073eb027669bbb6daafcc7f222b177317058fd5f952f47829fbd8f96",
-      "retirement": null
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Remove duplicate Rust dispatch wrappers; full repository and release audit scripts retain direct self-test and live inventory checks.",
+        "replaced_by": []
+      }
     },
     {
       "binding_id": "BIND-GLOBAL-EBC534DED75A1FF1C2DF",
@@ -167577,7 +169605,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-EC4C2AE7E109B1FEBCF4-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -167594,6 +169622,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "31fceae41798b206bf724c61d47c55077faf967a2eb262c45dec16061d4acec8",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-EC4C2AE7E109B1FEBCF4-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-EC4C2AE7E109B1FEBCF4-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-UNRELATED-CARGO-FIXTURE-DOES-NOT-BLOCK-JAVASCRIP-33FC23E9D516"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "718f71efb4adc416af532c265643bf918b3caa07a219afa1a5d1064eb6194203",
       "retirement": null
     },
     {
@@ -167964,7 +170019,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-ECE611831E326EDF23B8-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -167981,6 +170036,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "6c17cd811d622dd032c1b337fee613a8260e38f620d8ea8b082c2d234327508d",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-ECE611831E326EDF23B8-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-ECE611831E326EDF23B8-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-PUBLIC-API-RISK-SKIPS-TEST-HELPER-FILES-29E279088559"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "fa24a01a36fe41b013b8e30d043b6faffe40aa3cc217da8d70f0ad9e4f529e62",
       "retirement": null
     },
     {
@@ -168729,7 +170811,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-F0F4E5658A2AE602068F-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -168746,6 +170828,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "0fa1659eb695512d034c6ad6f46d88916bf774b8f24c084c067e528ee68e078d",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-F0F4E5658A2AE602068F-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-F0F4E5658A2AE602068F-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-CLASSIFY-USES-RELATIVE-PATH-AND-EXTRACTS-SYMBOLS-0E6169B00B18"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "1976d6c607cf2f63d17032a46aa5f16ef867b9838d29a22ceb2981d89b1f714d",
       "retirement": null
     },
     {
@@ -169224,7 +171333,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-F370195EAEC862CF45E3-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -169241,6 +171350,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "24c684be65eb0f8b6f0d6d150d3644efdba801d25aaa3d1d827a76e8cc7d264f",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-F370195EAEC862CF45E3-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-F370195EAEC862CF45E3-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-QUALITY-REPORT-KEEPS-UNCOVERED-PUBLIC-API-AS-WAR-F954EC948EC1"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "ab03e0d42785b851636f0b1d886c1d2264d8ab785bb5e99122dc8b3c3f02bb95",
       "retirement": null
     },
     {
@@ -171109,7 +173245,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-FB9F14ECC6D661D6A351-P1-20260914-P3B-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-GATE-AUDIT-SOURCE-R3-SB1"
       ],
@@ -171126,6 +173262,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "e779efd996a6b354c4ac45173f15032f6374b109095f1bc0f96e28767d1317ab",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-FB9F14ECC6D661D6A351-P1-20260914-P3B-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-FB9F14ECC6D661D6A351-P1-20260914-P3B-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-GATE-AUDIT-SOURCE-R3-SB1"
+      ],
+      "test_ids": [
+        "TEST-RUST-AUDIT-ORCHESTRATION-HAS-NO-ENVIRONMENT-BYPASS-OR-565B2A9F1C31-R7-AUDIT-20260908-P3B"
+      ],
+      "rule_id": "RULE-REPO-GATE-AUDIT",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "7b74f71e2f72e459f99e48619721130cb1268c22e4cab0685fcc47861101c01b",
       "retirement": null
     },
     {
@@ -171313,7 +173476,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-FC259F8D2064A2F52F14-P1-20260914-P3B-P4A-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B"
       ],
@@ -171330,6 +173493,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "6007dc36221747c2d8655c703814f6e82b1f62ce871b8b9c71f8007a83f6d0d2",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-GLOBAL-FC259F8D2064A2F52F14-P1-20260914-P3B-P4A-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-FC259F8D2064A2F52F14-P1-20260914-P3B-P4A-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CONTEXT-QUALITY-SOURCE-R3-P4A-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-PYTHON-PRODUCTION-FILE-DOES-NOT-MINT-A-SELF-COVE-F739B908D963"
+      ],
+      "rule_id": "RULE-REPO-CONTEXT-QUALITY",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "fb6488a75ce8b8f6eb8922d64595678d781800ee863fc86f09fbd4d7e4af0cba",
       "retirement": null
     },
     {
@@ -224670,7 +226860,7 @@
     },
     {
       "binding_id": "BIND-QUALITY-EXEMPTION-REVIEWED-LIMIT-P4B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-QUALITY-EXEMPTION-REVIEWED-LIMIT-P4B"
       ],
@@ -224687,6 +226877,33 @@
         "valid_until": "2027-03-15"
       },
       "semantic_sha256": "8b0011653ec416ffc67c2c650637acdd4b3e191fb7dd2277b2d8eccdaf68a79f",
+      "retirement": {
+        "retired_at": "2026-09-15",
+        "reason": "Reviewed surviving assertions and current source bindings.",
+        "replaced_by": [
+          "BIND-QUALITY-EXEMPTION-REVIEWED-LIMIT-P4B-P4C"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-QUALITY-EXEMPTION-REVIEWED-LIMIT-P4B-P4C",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-QUALITY-EXEMPTION-REVIEWED-LIMIT-P4B-P4C"
+      ],
+      "test_ids": [
+        "TEST-RUST-STRICT-QUALITY-EXACT-EXEMPTION-PRESERVES-FINDING-32F6F4641B28-P4A"
+      ],
+      "rule_id": "RULE-QUALITY-EXEMPTION-REVIEWED-LIMIT",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-15",
+        "valid_until": "2027-03-15"
+      },
+      "semantic_sha256": "18ddc2339207b5ac3bb099917bdeb2bffd8509ad269e69eddcb10115f1a8a33c",
       "retirement": null
     },
     {

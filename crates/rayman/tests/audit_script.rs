@@ -146,58 +146,6 @@ fn public_architecture_and_ci_coverage_contracts_avoid_drift_prone_counts() {
 }
 
 #[test]
-fn test_traceability_checker_executes_mutation_self_test_and_live_graph() {
-    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .canonicalize()
-        .expect("repository root must resolve");
-    let script = repo_root.join("scripts/check-test-traceability.ps1");
-    for (label, extra, marker) in [
-        (
-            "self-test",
-            Some("-SelfTest"),
-            "check-test-traceability self-test: PASS",
-        ),
-        (
-            "live graph",
-            None,
-            "\"schema\": \"rayman.test-traceability.check.v2\"",
-        ),
-    ] {
-        let mut command = Command::new("pwsh");
-        command.args([
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            script
-                .to_str()
-                .expect("traceability checker path must be UTF-8"),
-        ]);
-        if let Some(extra) = extra {
-            command.arg(extra);
-        }
-        let output = command
-            .current_dir(&repo_root)
-            .output()
-            .expect("PowerShell 7 must run the traceability checker");
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(
-            output.status.success() && stdout.contains(marker),
-            "traceability {label} failed\nstdout:\n{stdout}\nstderr:\n{stderr}"
-        );
-        if label == "live graph" {
-            assert!(
-                stdout.contains("repository_first_party_executable_tests")
-                    && stdout.contains("inventory_sha256"),
-                "live traceability output lost complete inventory binding\nstdout:\n{stdout}"
-            );
-        }
-    }
-}
-
-#[test]
 fn repository_quality_provider_emits_the_exact_versioned_command_contract() {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -602,23 +550,22 @@ fn audit_orchestration_has_no_environment_bypass_or_implicit_provisioning() {
 }
 
 #[test]
-fn source_bytes_and_governance_publication_regressions_execute() {
+fn repository_gate_owns_script_checks_and_package_preflight_order() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    for script in ["source-bytes.ps1", "update-test-traceability.ps1"] {
-        let output = Command::new("pwsh")
-            .arg("-NoProfile")
-            .arg("-File")
-            .arg(root.join("scripts").join(script))
-            .arg("-SelfTest")
-            .output()
-            .expect("PowerShell source bytes/publication regression must execute");
-        assert!(
-            output.status.success(),
-            "{script}: {}\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
+    let gate = fs::read_to_string(root.join("scripts/check-repo.ps1")).unwrap();
+    for invocation in [
+        "& (Join-Path $PSScriptRoot 'source-bytes.ps1') -SelfTest",
+        "& (Join-Path $PSScriptRoot 'update-test-traceability.ps1') -SelfTest",
+        "& (Join-Path $PSScriptRoot 'check-test-traceability.ps1') -SelfTest",
+        "& (Join-Path $PSScriptRoot 'check-test-traceability.ps1') -RuntimeInventory",
+    ] {
+        assert_eq!(
+            gate.lines()
+                .filter(|line| line.trim() == invocation)
+                .count(),
+            1,
+            "complete gate must directly own exactly one {invocation}"
         );
-        assert!(String::from_utf8_lossy(&output.stdout).contains("self-test: PASS"));
     }
     let audit = fs::read_to_string(root.join("scripts/audit-repository.ps1")).unwrap();
     let package = audit
