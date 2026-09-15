@@ -22,11 +22,11 @@
     ]
   },
   "revision": {
-    "generation": 42,
+    "generation": 43,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 41,
-      "sha256": "b8f4591c10dcd81062fc7288dd077c07548a0c7a24e7355bff95683e0e8f4b2c"
+      "generation": 42,
+      "sha256": "c7ad628659ae882a5c3af557b5ab5033fe0c27ab90d78ecdce3bb463db3516aa"
     }
   },
   "tests": [
@@ -13422,7 +13422,7 @@
     },
     {
       "test_id": "TEST-RUST-STRICT-QUALITY-EXACT-EXEMPTION-PRESERVES-FINDING-32F6F4641B28",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/map/tests.rs::strict_quality_exact_exemption_preserves_finding_and_records_provenance",
       "role": "root_cargo",
       "path": "crates/rayman/src/map/tests.rs",
@@ -13431,6 +13431,25 @@
       "selector_sha256": "504fa4b5293e0ca0b77edc41bbfe1c65d99254dd9fd8a40ae807cda853e35f18",
       "cfg": "all",
       "owner": null,
+      "retirement": {
+        "retired_at": "2026-09-14",
+        "reason": "Reviewed current behavior successor; quality exemptions now refuse unreviewed growth.",
+        "replaced_by": [
+          "TEST-RUST-STRICT-QUALITY-EXACT-EXEMPTION-PRESERVES-FINDING-32F6F4641B28-P4A"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/rayman/src/map/tests.rs::strict_quality_exact_exemption_preserves_finding_and_records_provenance",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/map/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "strict_quality_exact_exemption_preserves_finding_and_records_provenance",
+      "selector_sha256": "bddf9f90bdcacf2e65e682571e6199f3fcb5dde63a8a8da8f79cb32eeeb30c28",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-STRICT-QUALITY-EXACT-EXEMPTION-PRESERVES-FINDING-32F6F4641B28-P4A",
+      "status": "active",
       "retirement": null
     },
     {

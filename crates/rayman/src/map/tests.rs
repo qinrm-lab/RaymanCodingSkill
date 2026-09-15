@@ -1057,7 +1057,8 @@ fn strict_quality_exact_exemption_preserves_finding_and_records_provenance() {
     {
       "path": "src/lib.rs",
       "kind": "large_file",
-      "reason": "Generated compatibility table is reviewed and covered by package tests."
+      "reason": "Generated compatibility table is reviewed and covered by package tests.",
+      "reviewed_max": 2001
     }
   ]
 }
@@ -1081,6 +1082,97 @@ fn strict_quality_exact_exemption_preserves_finding_and_records_provenance() {
         Some("strict_default")
     );
     assert!(finding.exemption_reason.is_some());
+
+    // The exact reviewed boundary applies; one additional line must not inherit it.
+    write(root.join("src/lib.rs").as_path(), &"// pad\n".repeat(2_002));
+    context::refresh(root).unwrap();
+    let grown = build_readonly(root).unwrap();
+    let quality = quality_report_with_config(&grown, &config);
+    assert!(!quality.ready);
+    let finding = quality
+        .findings
+        .iter()
+        .find(|f| f.kind == "large_file")
+        .unwrap();
+    assert_eq!(finding.severity, "error");
+    assert!(finding.exemption_reason.is_none());
+
+    // An old reason-only policy remains readable but cannot waive a finding.
+    let mut legacy = serde_json::to_value(&config).unwrap();
+    legacy["exemptions"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("reviewed_max");
+    write(
+        &root.join(".RaymanCodingSkill/quality.json"),
+        &legacy.to_string(),
+    );
+    let legacy = load_quality_config(root, "strict").unwrap();
+    assert!(!quality_report_with_config(&map, &legacy).ready);
+
+    // Both remaining metrics share the exact limit, including capture evaluation.
+    for kind in ["high_fan_in", "public_api_without_test_evidence"] {
+        let policy = serde_json::json!({
+            "block_warning_kinds": [kind],
+            "exemptions": [{"path": "src/lib.rs", "kind": kind,
+                "reason": "Reviewed boundary fixture", "reviewed_max": 5}]
+        });
+        write(
+            &root.join(".RaymanCodingSkill/quality.json"),
+            &policy.to_string(),
+        );
+        let live = load_quality_config(root, "strict").unwrap();
+        let files = std::collections::BTreeMap::from([
+            (
+                ".RaymanCodingSkill/quality.json".into(),
+                policy.to_string().into_bytes(),
+            ),
+            ("src/lib.rs".into(), b"// fixture".to_vec()),
+        ]);
+        let captured = load_quality_config_from_capture("strict", &files).unwrap();
+        for value in [4, 5, 6] {
+            let mut measured = map.clone();
+            measured.risks = vec![MapRisk {
+                severity: "warning".into(),
+                kind: kind.into(),
+                path: "src/lib.rs".into(),
+                detail: "metric boundary".into(),
+            }];
+            measured
+                .modules
+                .iter_mut()
+                .find(|m| m.path == "src/lib.rs")
+                .unwrap()
+                .public_symbols = value;
+            measured.dependencies = (0..value)
+                .map(|i| Dependency {
+                    from_path: format!("src/caller{i}.rs"),
+                    to_path: "src/lib.rs".into(),
+                    kind: "use".into(),
+                    evidence: "fixture".into(),
+                })
+                .collect();
+            for policy in [&live, &captured] {
+                let report = quality_report_with_config(&measured, policy);
+                assert_eq!(report.ready, value <= 5, "{kind}: {value}");
+                assert_eq!(report.findings[0].exemption_reason.is_some(), value <= 5);
+            }
+            measured.modules.clear();
+            assert!(!quality_report_with_config(&measured, &live).ready);
+        }
+        for limit in [serde_json::Value::Null, serde_json::json!(0)] {
+            let mut policy = policy.clone();
+            policy["exemptions"][0]["reviewed_max"] = limit;
+            write(
+                &root.join(".RaymanCodingSkill/quality.json"),
+                &policy.to_string(),
+            );
+            let config = load_quality_config(root, "strict").unwrap();
+            let mut measured = map.clone();
+            measured.risks[0].kind = kind.into();
+            assert!(!quality_report_with_config(&measured, &config).ready);
+        }
+    }
 }
 
 #[test]

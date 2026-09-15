@@ -22,17 +22,18 @@ threshold overrides apply to `strict`/`release` only. `strict` and `release` alw
 
 The policy file is the one indexed file under `.RaymanCodingSkill/`. Its content hash participates in context freshness and workspace fingerprints; after editing it, run `rayman context refresh` and regenerate validation evidence.
 
-An exemption has three mandatory fields:
+An exemption requires an exact path, kind, reason and positive reviewed metric limit to apply:
 
 ```json
 {
   "path": "generated/schema.rs",
   "kind": "large_file",
-  "reason": "Exact generated file; schema snapshot and package tests validate it."
+  "reason": "Exact generated file; schema snapshot and package tests validate it.",
+  "reviewed_max": 2400
 }
 ```
 
-`path` must resolve now to one exact existing ordinary file inside the workspace. Absolute/missing/directory paths, symlink or reparse ancestors, backslashes, dot segments, and glob metacharacters are rejected. `kind` must be known and `reason` non-blank. Duplicate kinds or duplicate `(path, kind)` entries are rejected. An exemption keeps the finding visible as `info`; it does not hide it or authorize future files.
+`path` must resolve now to one exact existing ordinary file inside the workspace. Absolute/missing/directory paths, symlink or reparse ancestors, backslashes, dot segments, and glob metacharacters are rejected. `kind` must be known and `reason` non-blank. Duplicate kinds or duplicate `(path, kind)` entries are rejected. An applied exemption keeps the finding visible as `info`; it does not hide it or authorize future files. `reviewed_max` bounds physical lines for `large_file`, incoming dependency edges for `high_fan_in`, and indexed public symbols for `public_api_without_test_evidence`. The measurement uses the same current project map as the finding. At the limit the exemption applies; above it the normal warning/promotion policy applies. Missing, null or zero limits grant no exemption, so older reason-only files remain readable but must be reviewed before they can waive findings. Unknown metrics or missing module evidence never grant an exemption. Do not automatically increase a limit when a file grows; review and reduce the growth first.
 
 `multi_source_no_test_min_sources` is tightening-only. Values below the built-in default lower the threshold; values above it are capped at the default and cannot switch off the missing-tests error.
 

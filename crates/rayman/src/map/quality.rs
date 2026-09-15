@@ -70,6 +70,8 @@ pub struct QualityExemption {
     pub path: String,
     pub kind: String,
     pub reason: String,
+    #[serde(default)]
+    pub reviewed_max: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -436,6 +438,15 @@ pub fn quality_report_with_config(map: &ProjectMap, config: &QualityConfig) -> Q
         })
         .collect();
 
+    let modules: BTreeMap<_, _> = map
+        .modules
+        .iter()
+        .map(|module| (module.path.as_str(), module))
+        .collect();
+    let mut incoming = BTreeMap::<&str, usize>::new();
+    for dependency in &map.dependencies {
+        *incoming.entry(dependency.to_path.as_str()).or_default() += 1;
+    }
     for finding in &mut findings {
         let is_blocked_kind = blocking_warning_kinds.contains(finding.kind.as_str());
         let policy_source = is_blocked_kind.then(|| {
@@ -446,7 +457,15 @@ pub fn quality_report_with_config(map: &ProjectMap, config: &QualityConfig) -> Q
             }
         });
         if let Some(exemption) =
-            configured_exemptions.get(&(finding.path.as_str(), finding.kind.as_str()))
+            configured_exemptions.get(&(finding.path.as_str(), finding.kind.as_str())).filter(|exemption| {
+                let observed = modules.get(finding.path.as_str()).and_then(|module| match finding.kind.as_str() {
+                    "large_file" => Some(module.lines),
+                    "high_fan_in" => Some(incoming.get(finding.path.as_str()).copied().unwrap_or(0)),
+                    "public_api_without_test_evidence" => Some(module.public_symbols),
+                    _ => None,
+                });
+                matches!((observed, exemption.reviewed_max), (Some(value), Some(maximum)) if maximum > 0 && value <= maximum)
+            })
         {
             finding.severity = "info".into();
             finding.blocking_policy_source = policy_source.map(str::to_string);
