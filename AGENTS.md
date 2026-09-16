@@ -21,3 +21,9 @@ Save when checkpoint_due=true, or at a genuinely important freshly verified boun
 To save, run "E:\rayman\software\AI\RaymanCodingSkill\.agent-checkpoints\runtime\save-work-status.exe" handoff-template for the JSON contract, write it as UTF-8 outside the workspace, then run "E:\rayman\software\AI\RaymanCodingSkill\.agent-checkpoints\runtime\save-work-status.exe" save --workspace "<workspace-root>" --vault-path "E:\rayman\software\AI\RaymanCodingSkill\.agent-checkpoints\status.sqlite3" --agent codex --handoff "<temp-handoff.json>" (add --milestone for an eligible early boundary) and delete only that temporary file. A failing build or test still saves, with health.state=task_blocked and the failures in known_issues.
 Only when checkpoint capture safety itself is unresolved (rollback, conflict, integrity loss, incomplete capture, stale runtime source) run "E:\rayman\software\AI\RaymanCodingSkill\.agent-checkpoints\runtime\save-work-status.exe" block --workspace "<workspace-root>" --vault-path "E:\rayman\software\AI\RaymanCodingSkill\.agent-checkpoints\status.sqlite3" --agent codex --kind <rollback|conflict|integrity|capture|stale_source> --reason "<exact reason>", then do not save until recover succeeds with fresh evidence.
 <!-- save-work-status:managed-end v6 -->
+
+<!-- rayman-continuity:begin -->
+This repository uses Rayman Continuity. Before continuing, read
+`.rayman-evidence/RECOVER.md`. If the plugin is missing, report missing protection
+and use the trusted plugin installation route. Old summaries are navigation only.
+<!-- rayman-continuity:end -->

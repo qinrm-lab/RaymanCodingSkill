@@ -8,6 +8,13 @@ Cargo.lock.bak
 !.RaymanCodingSkill/quality.json
 .claude/
 
+# Continuity's live ledger stays in this repository, but is not source input.
+# Keep config.json and RECOVER.md visible; transfer the full store separately.
+# Recovery and release boundaries: docs/CONTINUITY.md.
+/.rayman-evidence/events.jsonl
+/.rayman-evidence/objects/
+/.rayman-evidence/write.lock
+
 # Logs and temporary files
 logs/
 *.log
