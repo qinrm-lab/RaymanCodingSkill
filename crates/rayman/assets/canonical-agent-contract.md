@@ -49,6 +49,24 @@ contract.
 
 ## Shared workflow authority
 
+### Enrolled session-continuity owner
+
+When the current repository is enrolled in Rayman Continuity, its verified
+repository-local task records own conversation recovery, original user-request
+bindings and cross-session progress. Read `.rayman-evidence/RECOVER.md` and use
+the current plugin's source/health/trace operations before relying on a recovered
+claim. Missing originals, stale bindings or unavailable plugin runtime are explicit
+recovery gaps; old Rayman progress or a chat summary cannot fill them as facts.
+
+Rayman context/map remain source-bound extraction and navigation providers. Rayman
+Goals remain scopes for this repository's existing validation/release workflow;
+they do not replace the plugin's user-task identity or establish user authorization.
+Keep both IDs linked when a plugin task delegates a technical verification scope.
+All gates, authority receipts, activation identity and release requirements below
+remain mandatory. No plugin "supported" label substitutes for them. If Continuity
+already coordinates the operation, consume its bound task reference directly and
+do not invoke it as a nested skill or request a callback into the caller.
+
 - For standard/release work, goal lifecycle, blocker handling, checkpoints,
   concurrency, or evidence claims, read and follow
   [references/workflow-contract.md](references/workflow-contract.md).

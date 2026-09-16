@@ -64,6 +64,15 @@ display migrated project automation.
 
 ## Shared workflow
 
+For a repository enrolled in Rayman Continuity, apply the shared contract's
+"Enrolled session-continuity owner" boundary. Recover user intent and cross-session
+progress from the plugin's repository-local originals. Use Rayman context/map as
+navigation and its Goals as required technical validation scopes. Preserve the
+plugin task ID in the scope description; never claim a Rayman Goal alone proves
+equivalence to the user's original request. Do not activate or invoke a second
+copy of the coordinating plugin skill, and do not copy its state into a competing
+session-recovery ledger.
+
 Goal lifecycle, planning, validation, blocker/frontier handling, checkpoints,
 concurrency, permissions, final authority, release transfer, and degradation
 are governed exclusively by
