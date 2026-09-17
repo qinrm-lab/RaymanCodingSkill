@@ -977,6 +977,12 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
             must,
             must_proof,
             should,
+            external_task_system,
+            external_task_id,
+            external_task_revision,
+            external_task_source_ref,
+            external_task_source_event_hash,
+            external_task_requirement_sha256,
         } => {
             let mut requirements = must
                 .into_iter()
@@ -1004,7 +1010,39 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                 kind: goal::RequirementKind::Should,
                 proof_kind: None,
             }));
-            let goal = store.start_with_specs(&title, &requirements)?;
+            let external_task_binding = match (
+                external_task_system,
+                external_task_id,
+                external_task_revision,
+                external_task_source_ref,
+                external_task_source_event_hash,
+                external_task_requirement_sha256,
+            ) {
+                (None, None, None, None, None, None) => None,
+                (
+                    Some(system),
+                    Some(task_id),
+                    Some(requirements_revision),
+                    Some(source_ref),
+                    Some(source_event_hash),
+                    Some(requirement_sha256),
+                ) => Some(goal::ExternalTaskBinding {
+                    system,
+                    task_id,
+                    requirements_revision,
+                    source_ref,
+                    source_event_hash,
+                    requirement_sha256,
+                }),
+                _ => bail!(
+                    "external task binding requires all six --external-task-* fields or none"
+                ),
+            };
+            let goal = store.start_with_specs_and_binding(
+                &title,
+                &requirements,
+                external_task_binding,
+            )?;
             if json {
                 print(&serde_json::to_value(&goal)?);
             } else {

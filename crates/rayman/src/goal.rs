@@ -1065,8 +1065,23 @@ impl GoalStore {
     }
 
     pub fn start_with_specs(&self, title: &str, requirements: &[RequirementSpec]) -> Result<Goal> {
+        self.start_with_specs_and_binding(title, requirements, None)
+    }
+
+    pub fn start_with_specs_and_binding(
+        &self,
+        title: &str,
+        requirements: &[RequirementSpec],
+        external_task_binding: Option<ExternalTaskBinding>,
+    ) -> Result<Goal> {
         if title.trim().is_empty() {
             bail!("目标标题不能为空");
+        }
+        if let Some(error) = external_task_binding
+            .as_ref()
+            .and_then(ExternalTaskBinding::validation_error)
+        {
+            bail!("{error}");
         }
         if !requirements.iter().any(|requirement| {
             requirement.kind == RequirementKind::Must && !requirement.text.trim().is_empty()
@@ -1089,7 +1104,7 @@ impl GoalStore {
         let _lock = acquire_state_lock(&goals_dir.join(".store"))?;
         let now = now_iso();
         let id = short_id("goal", &format!("{title}{now}"));
-        let requirements = requirements
+        let mut requirements = requirements
             .iter()
             .enumerate()
             .map(|(index, requirement)| Requirement {
@@ -1102,7 +1117,21 @@ impl GoalStore {
                 validations: Vec::new(),
                 impacts: Vec::new(),
             })
-            .collect();
+            .collect::<Vec<_>>();
+        if let Some(binding) = external_task_binding.as_ref() {
+            requirements.push(Requirement {
+                id: EXTERNAL_TASK_BINDING_REQUIREMENT_ID.into(),
+                text: binding.contract_marker()?,
+                kind: RequirementKind::Should,
+                proof_kind: None,
+                status: RequirementStatus::Done,
+                evidence: Some(
+                    "immutable external task provenance; not validation or authorization".into(),
+                ),
+                validations: Vec::new(),
+                impacts: Vec::new(),
+            });
+        }
         let baseline = workspace_baseline(&self.root)?;
         let updated_at = latest_timestamp([
             ("goal.created_at", now.as_str()),
@@ -3105,6 +3134,27 @@ impl GoalStore {
     }
 }
 
+fn external_task_binding_contract_error(goal: &Goal) -> Option<String> {
+    let matches = goal
+        .requirements
+        .iter()
+        .filter(|requirement| requirement.id == EXTERNAL_TASK_BINDING_REQUIREMENT_ID)
+        .collect::<Vec<_>>();
+    if matches.is_empty() {
+        return None;
+    }
+    if matches.len() != 1
+        || matches[0].kind != RequirementKind::Should
+        || matches[0].proof_kind.is_some()
+        || matches[0].status != RequirementStatus::Done
+    {
+        return Some("external_task_binding synthetic requirement is malformed".into());
+    }
+    ExternalTaskBinding::from_contract_marker(&matches[0].text)
+        .map(|_| None)
+        .unwrap_or_else(|error| Some(format!("invalid external_task_binding: {error:#}")))
+}
+
 fn parse_goal_value(value: serde_json::Value) -> Result<Goal> {
     match serde_json::from_value::<Goal>(value.clone()) {
         Ok(mut goal) => {
@@ -3112,6 +3162,11 @@ fn parse_goal_value(value: serde_json::Value) -> Result<Goal> {
             // `Goal`, but had no schema marker. Keep treating that exact shape
             // as legacy after a caller-owned readiness capture parses it.
             goal.loaded_from_legacy = goal.schema_version == 0;
+            if !goal.loaded_from_legacy
+                && let Some(error) = external_task_binding_contract_error(&goal)
+            {
+                bail!("{error}");
+            }
             Ok(goal)
         }
         Err(current_error) => match serde_json::from_value::<LegacyGoal>(value) {

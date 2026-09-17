@@ -496,6 +496,84 @@ pub struct ReplacementAuthorityReceipt {
     pub runs: Vec<AuthorityRunReceipt>,
 }
 
+/// Optional immutable provenance linking a technical Goal to the task
+/// coordinator that owns the original user request. Rayman binds this exact
+/// identity into its receipts without interpreting external authorization.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ExternalTaskBinding {
+    pub system: String,
+    pub task_id: String,
+    pub requirements_revision: u64,
+    pub source_ref: String,
+    pub source_event_hash: String,
+    pub requirement_sha256: String,
+}
+
+pub const EXTERNAL_TASK_BINDING_REQUIREMENT_ID: &str = "external_task_binding";
+
+impl ExternalTaskBinding {
+    pub fn contract_marker(&self) -> Result<String> {
+        let bytes = serde_json::to_vec(self)?;
+        Ok(format!(
+            "external-task-binding.v1::{}",
+            String::from_utf8(bytes).map_err(|_| anyhow::anyhow!("external task binding is not UTF-8"))?
+        ))
+    }
+
+    pub fn from_contract_marker(value: &str) -> Result<Self> {
+        let payload = value
+            .strip_prefix("external-task-binding.v1::")
+            .ok_or_else(|| anyhow::anyhow!("external task binding marker has an unknown schema"))?;
+        let binding: Self = serde_json::from_str(payload)?;
+        if let Some(error) = binding.validation_error() {
+            anyhow::bail!("{error}");
+        }
+        Ok(binding)
+    }
+
+    pub fn validation_error(&self) -> Option<String> {
+        fn stable_identifier(value: &str) -> bool {
+            !value.is_empty()
+                && value.len() <= 256
+                && value.bytes().all(|byte| {
+                    byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b':')
+                })
+        }
+        fn canonical_sha256(value: &str) -> bool {
+            value.len() == 64
+                && value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        }
+
+        for (label, value) in [
+            ("system", self.system.as_str()),
+            ("task_id", self.task_id.as_str()),
+            ("source_ref", self.source_ref.as_str()),
+        ] {
+            if !stable_identifier(value) {
+                return Some(format!(
+                    "external_task_binding {label} must be a non-empty stable identifier"
+                ));
+            }
+        }
+        if self.requirements_revision == 0 {
+            return Some("external_task_binding requirements_revision must be positive".into());
+        }
+        for (label, value) in [
+            ("source_event_hash", self.source_event_hash.as_str()),
+            ("requirement_sha256", self.requirement_sha256.as_str()),
+        ] {
+            if !canonical_sha256(value) {
+                return Some(format!(
+                    "external_task_binding {label} must be a canonical lowercase SHA-256"
+                ));
+            }
+        }
+        None
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Goal {
     #[serde(default)]
@@ -548,4 +626,41 @@ pub struct Goal {
 pub struct ParsedValidationCommand {
     pub program: String,
     pub args: Vec<String>,
+}
+
+#[cfg(test)]
+mod external_task_binding_tests {
+    use super::ExternalTaskBinding;
+
+    fn binding() -> ExternalTaskBinding {
+        ExternalTaskBinding {
+            system: "rayman-continuity".into(),
+            task_id: "architecture-optimization-20260916".into(),
+            requirements_revision: 2,
+            source_ref: "hook-878fd4176236da7b5c5e30cea99a646f1ddf60fbb39ac7fcda85d22d982fffc4".into(),
+            source_event_hash: "a".repeat(64),
+            requirement_sha256: "b".repeat(64),
+        }
+    }
+
+    #[test]
+    fn binding_marker_round_trips_and_is_self_validating() {
+        let original = binding();
+        let marker = original.contract_marker().unwrap();
+        let restored = ExternalTaskBinding::from_contract_marker(&marker).unwrap();
+        assert_eq!(restored, original);
+    }
+
+    #[test]
+    fn partial_or_noncanonical_binding_fails_closed() {
+        let mut partial = binding();
+        partial.requirements_revision = 0;
+        assert!(partial.validation_error().is_some());
+
+        let mut noncanonical = binding();
+        noncanonical.source_event_hash = "A".repeat(64);
+        assert!(noncanonical.validation_error().is_some());
+
+        assert!(ExternalTaskBinding::from_contract_marker("external-task-binding.v1::{}").is_err());
+    }
 }

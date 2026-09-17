@@ -685,6 +685,24 @@ pub enum GoalAction {
         /// should 需求（可重复）
         #[arg(long = "should")]
         should: Vec<String>,
+        /// External task coordinator name; all external-task fields are atomic.
+        #[arg(long)]
+        external_task_system: Option<String>,
+        /// Stable task id in the external coordinator.
+        #[arg(long)]
+        external_task_id: Option<String>,
+        /// Positive requirement revision in the external coordinator.
+        #[arg(long)]
+        external_task_revision: Option<u64>,
+        /// Exact original-source event reference.
+        #[arg(long)]
+        external_task_source_ref: Option<String>,
+        /// Exact ledger event hash for the source event.
+        #[arg(long)]
+        external_task_source_event_hash: Option<String>,
+        /// SHA-256 of the exact external requirement text.
+        #[arg(long)]
+        external_task_requirement_sha256: Option<String>,
     },
     /// 列出目标；带任一过滤或分页参数时返回 budgeted context-delivery
     List {
@@ -1084,12 +1102,24 @@ mod tests {
                         must,
                         must_proof,
                         should,
+                        external_task_system,
+                        external_task_id,
+                        external_task_revision,
+                        external_task_source_ref,
+                        external_task_source_event_hash,
+                        external_task_requirement_sha256,
                     },
             }) => {
                 assert_eq!(title, "add parser");
                 assert_eq!(must, vec!["implement".to_string()]);
                 assert!(must_proof.is_empty());
                 assert_eq!(should, vec!["nice errors".to_string()]);
+                assert!(external_task_system.is_none());
+                assert!(external_task_id.is_none());
+                assert!(external_task_revision.is_none());
+                assert!(external_task_source_ref.is_none());
+                assert!(external_task_source_event_hash.is_none());
+                assert!(external_task_requirement_sha256.is_none());
             }
             _ => panic!("unexpected command"),
         }
