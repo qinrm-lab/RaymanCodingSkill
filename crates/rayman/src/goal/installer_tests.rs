@@ -217,7 +217,11 @@ fn repository_authority_requires_the_full_script_parameter_set() {
         );
         assert_eq!(
             validation_proof_kind(root.path(), full).unwrap(),
-            ProofKind::RepositoryGate,
+            if full.contains("scripts/audit-repository.ps1") {
+                ProofKind::RepositoryAudit
+            } else {
+                ProofKind::RepositoryGate
+            },
             "full repository gate must retain its typed proof: {full}"
         );
     }

@@ -491,6 +491,40 @@ function Get-AuthorityArguments {
     return $arguments
 }
 
+function Get-GoalAuditContract {
+    param($Goal, [string]$RequestedRequirement)
+    $handoff = if ($Goal.PSObject.Properties.Name -contains 'handoff') { $Goal.handoff } else { $null }
+    if ($null -eq $handoff -or $handoff.PSObject.Properties.Name -notcontains 'audit_policy') {
+        return [pscustomobject]@{ strict = $false; audit = $null; authority = $RequestedRequirement }
+    }
+    if ($handoff.audit_policy -cne 'complete_repository_audit_v1') {
+        throw 'Unsupported release handoff audit policy.'
+    }
+    $audit = @($handoff.stages | Where-Object { $_.stage -ceq 'repository_audit' -and $_.proof_kind -ceq 'repository_audit' })
+    $authority = @($handoff.stages | Where-Object { $_.stage -ceq 'stable_authority' -and $_.proof_kind -ceq 'repository_gate' })
+    if ($audit.Count -ne 1 -or $authority.Count -ne 1 -or
+        $audit[0].requirement_id -cne $RequestedRequirement -or
+        $audit[0].requirement_id -ceq $authority[0].requirement_id) {
+        throw 'Complete audit and final authority must bind distinct handoff requirements.'
+    }
+    foreach ($stage in @($audit[0], $authority[0])) {
+        $requirements = @($Goal.requirements | Where-Object { $_.id -ceq $stage.requirement_id -and $_.kind -ceq 'must' -and $_.proof_kind -ceq $stage.proof_kind })
+        if ($requirements.Count -ne 1) { throw 'Release requirement differs from its stage contract.' }
+    }
+    return [pscustomobject]@{ strict = $true; audit = $audit[0].requirement_id; authority = $authority[0].requirement_id }
+}
+
+function Get-AuditValidationArguments {
+    param([string]$Goal, [string]$Requirement, [string]$Cli, [string]$Skill)
+    # Rayman's argv grammar, not shell evaluation: quote both paths exactly.
+    $quotedCli = '"' + $Cli.Replace('\', '\\').Replace('"', '\"') + '"'
+    $quotedSkill = '"' + $Skill.Replace('\', '\\').Replace('"', '\"') + '"'
+    $command = 'pwsh -NoProfile -File scripts/audit-repository.ps1 -CliPath ' + $quotedCli + ' -SkillPath ' + $quotedSkill
+    return @('goal', 'validate', $Goal, '--req', $Requirement, '--message',
+        'complete repository audit executed for this release goal', '--changed',
+        'scripts/audit-repository.ps1', '--command', $command)
+}
+
 function Get-AuditArguments {
     param(
         [Parameter(Mandatory = $true)][string]$Cli,
@@ -721,6 +755,29 @@ if ($PSCmdlet.ParameterSetName -eq 'SelfTest') {
         $authority -contains '--workspace-snapshot') {
         throw 'release closeout self-test lost the zero-delta workspace snapshot scope boundary.'
     }
+    $strictGoal = [pscustomobject]@{
+        handoff = [pscustomobject]@{ audit_policy = 'complete_repository_audit_v1'; stages = @(
+            [pscustomobject]@{stage='repository_audit';requirement_id='req_2';proof_kind='repository_audit'},
+            [pscustomobject]@{stage='stable_authority';requirement_id='req_4';proof_kind='repository_gate'}
+        ) }
+        requirements = @(
+            [pscustomobject]@{id='req_2';kind='must';proof_kind='repository_audit'},
+            [pscustomobject]@{id='req_4';kind='must';proof_kind='repository_gate'}
+        )
+    }
+    $stageContract = Get-GoalAuditContract $strictGoal 'req_2'
+    if (-not $stageContract.strict -or $stageContract.authority -cne 'req_4') { throw 'Strict release stage split lost.' }
+    $auditValidation = @(Get-AuditValidationArguments 'goal_test' 'req_2' 'C:\Program Files\Rayman\rayman.exe' 'C:\skill\SKILL.md')
+    if ($auditValidation -contains '--authority' -or $auditValidation[([Array]::IndexOf($auditValidation, '--req') + 1)] -cne 'req_2') { throw 'Complete audit proof mixed with final authority.' }
+    $rejected = $false
+    try { Get-GoalAuditContract $strictGoal 'req_4' | Out-Null } catch { $rejected = $true }
+    if (-not $rejected) { throw 'Wrong audit requirement accepted.' }
+    $strictGoal.handoff.audit_policy = 'unknown'
+    $rejected = $false
+    try { Get-GoalAuditContract $strictGoal 'req_2' | Out-Null } catch { $rejected = $true }
+    if (-not $rejected) { throw 'Unknown audit policy accepted.' }
+    $legacy = Get-GoalAuditContract ([pscustomobject]@{id='legacy_goal'}) 'req_8'
+    if ($legacy.strict -or $legacy.authority -cne 'req_8') { throw 'Historical closeout compatibility changed.' }
     # EvidencePath 必须与 `rayman state audit --check` 的白名单一致，否则一次
     # closeout 就会让此后每一次仓库审计永久翻红（见 Resolve-EvidencePath）。
     if ((Resolve-EvidencePath '.RaymanCodingSkill/release-closeout-evidence.json') -ne
@@ -744,13 +801,18 @@ if ($PSCmdlet.ParameterSetName -eq 'SelfTest') {
 
 Push-Location $repoRoot
 try {
+    $goalOutput = & $CliPath '--format' 'json' 'goal' 'show' $GoalId
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot read the release Goal.' }
+    $goalDocument = ($goalOutput -join "`n") | ConvertFrom-Json -Depth 50
+    $stageContract = Get-GoalAuditContract $goalDocument $RequirementId
     $binding = Get-ReleaseBinding `
         -Cli $CliPath `
         -Worker $WorkerPath `
         -Skill $SkillPath
     $evidenceFile = Resolve-EvidencePath $EvidencePath
     $reuse = $false
-    if ($AllowEvidenceReuse -and (Test-Path -LiteralPath $evidenceFile -PathType Leaf)) {
+    # Cached audit bytes alone cannot create a new strict Goal audit receipt.
+    if (-not $stageContract.strict -and $AllowEvidenceReuse -and (Test-Path -LiteralPath $evidenceFile -PathType Leaf)) {
         try {
             $existing = Get-Content -Raw -LiteralPath $evidenceFile |
                 ConvertFrom-Json -Depth 20 -ErrorAction Stop
@@ -781,7 +843,13 @@ try {
         $auditArguments = Get-AuditArguments `
             -Cli $CliPath `
             -Skill $SkillPath
-        & (Join-Path $PSScriptRoot 'audit-repository.ps1') @auditArguments
+        if ($stageContract.strict) {
+            $auditValidation = Get-AuditValidationArguments $GoalId $stageContract.audit $CliPath $SkillPath
+            & $CliPath @auditValidation
+            if ($LASTEXITCODE -ne 0) { throw 'Goal-bound complete audit failed.' }
+        } else {
+            & (Join-Path $PSScriptRoot 'audit-repository.ps1') @auditArguments
+        }
         & (Join-Path $PSScriptRoot 'verify-release-contract.ps1') `
             -CliPath $CliPath `
             -ReferenceCliPath $CliPath `
@@ -805,7 +873,7 @@ try {
     }
 
     Write-Output 'RAYMAN_RELEASE_PHASE {"phase":"authority_repeat_2","status":"start"}'
-    $authorityArguments = Get-AuthorityArguments $GoalId $RequirementId $ChangedPath
+    $authorityArguments = Get-AuthorityArguments $GoalId $stageContract.authority $ChangedPath
     & $CliPath @authorityArguments
     if ($LASTEXITCODE -ne 0) { throw 'Goal authority repeat 2 failed.' }
     Write-Output 'RAYMAN_RELEASE_PHASE {"phase":"authority_repeat_2","status":"pass"}'

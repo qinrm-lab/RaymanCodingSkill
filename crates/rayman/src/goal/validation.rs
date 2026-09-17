@@ -3,6 +3,7 @@ use super::*;
 mod cargo_isolation;
 mod installation;
 mod process_temp;
+mod proof_kind;
 mod pytest_isolation;
 mod receipts;
 
@@ -11,6 +12,8 @@ use installation::{release_installer_invocation, release_installer_invocation_wi
 pub use process_temp::{
     run_with_managed_validation_temp, test_invocation_requires_pytest_isolation,
 };
+pub(crate) use proof_kind::validation_proof_kind_with_context;
+pub use proof_kind::{proof_kind_matches, validation_proof_kind};
 pub use pytest_isolation::run_with_managed_pytest_lease;
 use pytest_isolation::{
     insert_pytest_args_before_separator, pytest_has_pre_separator_option,
@@ -348,70 +351,6 @@ fn git_clean_head_invocation(command: &ParsedValidationCommand) -> bool {
                 "--porcelain=v1".to_string(),
                 "--untracked-files=all".to_string(),
             ]
-}
-
-pub fn validation_proof_kind(root: &Path, command: &str) -> Result<ProofKind> {
-    let parsed = parse_validation_command(command)?;
-    let script = trusted_gate_script(root, &parsed).unwrap_or_default();
-
-    if trusted_xtask_repository_gate(root, &parsed)? {
-        return Ok(ProofKind::RepositoryGate);
-    }
-    if trusted_source_fresh_gate_script(root, &parsed) {
-        return Ok(ProofKind::SourceFresh);
-    }
-    if trusted_workspace_gate_script(root, &parsed) {
-        return Ok(ProofKind::RepositoryGate);
-    }
-    if release_installer_invocation(root, &parsed) {
-        return Ok(ProofKind::Installation);
-    }
-    if documentation_invocation(script, &parsed) {
-        return Ok(ProofKind::Documentation);
-    }
-    if git_clean_head_invocation(&parsed) {
-        return Ok(ProofKind::GitCommit);
-    }
-    if test_invocation(&parsed) {
-        return Ok(ProofKind::Test);
-    }
-    Ok(ProofKind::Generic)
-}
-
-/// Capture-only proof classification for readiness.  It deliberately avoids
-/// reopening a PowerShell path after the decision capture.
-pub(crate) fn validation_proof_kind_with_context(
-    decision: &GoalDecisionContext<'_>,
-    command: &str,
-) -> Result<ProofKind> {
-    let parsed = parse_validation_command(command)?;
-    let script = trusted_gate_script_with_context(decision, &parsed)?.unwrap_or_default();
-    if trusted_xtask_repository_gate_with_context(decision, &parsed)? {
-        return Ok(ProofKind::RepositoryGate);
-    }
-    if trusted_source_fresh_gate_script_with_context(decision, &parsed)? {
-        return Ok(ProofKind::SourceFresh);
-    }
-    if trusted_workspace_gate_script_with_context(decision, &parsed)? {
-        return Ok(ProofKind::RepositoryGate);
-    }
-    if release_installer_invocation_with_context(decision, &parsed)? {
-        return Ok(ProofKind::Installation);
-    }
-    if documentation_invocation(script, &parsed) {
-        return Ok(ProofKind::Documentation);
-    }
-    if git_clean_head_invocation(&parsed) {
-        return Ok(ProofKind::GitCommit);
-    }
-    if test_invocation(&parsed) {
-        return Ok(ProofKind::Test);
-    }
-    Ok(ProofKind::Generic)
-}
-
-pub fn proof_kind_matches(required: Option<ProofKind>, actual: ProofKind) -> bool {
-    matches!(required, None | Some(ProofKind::Generic)) || required == Some(actual)
 }
 
 fn validation_has_matching_stable_authority_receipt(

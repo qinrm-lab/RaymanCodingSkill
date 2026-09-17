@@ -409,6 +409,7 @@ fn close_success_rejects_an_invalid_handoff_contract() {
         created_at: now_iso(),
         stages: Vec::new(),
         contract_sha256: "d".repeat(64),
+        audit_policy: None,
     });
     write_json(&path, &tampered).unwrap();
 

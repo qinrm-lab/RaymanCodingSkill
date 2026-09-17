@@ -59,7 +59,7 @@ phase authority gate are green.
    `finish --goal <id>`.
 
 Use `--must-proof KIND::TEXT` for atomic mandatory proof. Supported kinds are
-`generic`, `test`, `repository_gate`, `source_fresh`, `installation`,
+`generic`, `test`, `repository_gate`, `repository_audit`, `source_fresh`, `installation`,
 `documentation`, and `git_commit`. A typed requirement accepts only a
 matching validation command; split compound delivery claims into separate
 requirements.
@@ -77,6 +77,13 @@ The source goal must already be success with current repeated authority, and
 the worktree must be clean at that exact HEAD. The handoff contract binds the
 source goal contract, authority receipt, commit, workspace fingerprint, and
 typed installation, repository-audit, and source-fresh stages.
+
+New handoffs use `complete_repository_audit_v1`: `req_2` requires an executed
+complete `audit-repository.ps1` invocation (`repository_audit`), and `req_4`
+separately requires repeated stable repository authority (`repository_gate`).
+Cargo/pytest authority and partial audit modes cannot satisfy `repository_audit`.
+Historical handoffs without this policy retain their original three-stage hash
+and meaning; they are not silently promoted to the new complete-audit proof.
 
 ## Owner mode and boundaries
 

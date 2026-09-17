@@ -822,10 +822,81 @@ fn handoff_start_binds_source_goal_authority_clean_head_and_structured_stages() 
     );
     assert_eq!(handoff["handoff"]["source_goal_id"], source_id);
     assert_eq!(handoff["handoff"]["git_commit"], commit);
-    assert_eq!(handoff["handoff"]["stages"].as_array().unwrap().len(), 3);
+    assert_eq!(handoff["handoff"]["stages"].as_array().unwrap().len(), 4);
+    assert_eq!(
+        handoff["handoff"]["audit_policy"],
+        "complete_repository_audit_v1"
+    );
     assert_eq!(handoff["requirements"][0]["proof_kind"], "installation");
-    assert_eq!(handoff["requirements"][1]["proof_kind"], "repository_gate");
+    assert_eq!(handoff["requirements"][1]["proof_kind"], "repository_audit");
+    assert_eq!(handoff["requirements"][3]["proof_kind"], "repository_gate");
     assert_eq!(handoff["requirements"][2]["proof_kind"], "source_fresh");
+
+    let rejected = run(
+        root,
+        &[
+            "goal",
+            "validate",
+            handoff["id"].as_str().unwrap(),
+            "--req",
+            "req_2",
+            "--message",
+            "Cargo is not a complete audit",
+            "--workspace-snapshot",
+            "--authority",
+            "--repeat",
+            "2",
+            "--command",
+            "cargo test --all",
+        ],
+    );
+    assert_eq!(rejected.status, 1, "{}", rejected.stdout);
+    let unchanged = run_json(root, &["goal", "show", handoff["id"].as_str().unwrap()]);
+    assert!(
+        unchanged["requirements"][1]["validations"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    let final_authority = run(
+        root,
+        &[
+            "goal",
+            "validate",
+            handoff["id"].as_str().unwrap(),
+            "--req",
+            "req_4",
+            "--message",
+            "independent final authority",
+            "--workspace-snapshot",
+            "--authority",
+            "--repeat",
+            "2",
+            "--command",
+            "cargo test --all",
+        ],
+    );
+    assert_eq!(final_authority.status, 0, "{}", final_authority.stderr);
+    let separated = run_json(root, &["goal", "show", handoff["id"].as_str().unwrap()]);
+    assert_eq!(separated["requirements"][3]["status"], "done");
+    assert_eq!(separated["requirements"][1]["status"], "open");
+    let partial_check = run(
+        root,
+        &[
+            "check",
+            "--goal",
+            handoff["id"].as_str().unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert!(
+        !partial_check
+            .stdout
+            .contains("handoff final authority receipt is missing or stale"),
+        "{}",
+        partial_check.stdout
+    );
 
     write(root, "src/lib.rs", "pub fn answer() -> i32 { 43 }\n");
     let dirty = run(

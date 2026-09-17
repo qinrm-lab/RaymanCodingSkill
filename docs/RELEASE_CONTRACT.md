@@ -1,5 +1,13 @@
 # Release and installed-CLI contract
 
+New release handoffs bind four independent requirements: installed identity,
+complete repository audit (`repository_audit`), installed source freshness and
+repeated final authority (`repository_gate`). The versioned
+`complete_repository_audit_v1` policy preserves historical three-stage handoff
+hashes without claiming that their older general-gate proof is a complete audit.
+Complete audit accepts only the full `scripts/audit-repository.ps1` invocation;
+Cargo tests and partial audit modes cannot satisfy it.
+
 ## What identifies a release
 
 The reported `rayman --version` value is necessary but insufficient. A valid release is this tuple:

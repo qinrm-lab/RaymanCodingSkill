@@ -1,5 +1,15 @@
 # Complete repository audit
 
+New release handoffs machine-enforce separate complete-audit and stable-authority
+proofs with `complete_repository_audit_v1`. `req_2` has proof kind
+`repository_audit`; only the complete source-bound audit command qualifies.
+Self-test, dependency-only and tool-preparation modes never qualify. `req_4`
+separately carries stable repository authority. `release-closeout.ps1
+-RequirementId req_2` resolves both requirements from the handoff. A cached audit
+binding alone cannot mint a strict Goal receipt; strict closeout executes the
+audit through `goal validate`. Old handoffs remain readable under their original
+policy and are not rewritten.
+
 Owner Mode controls continuation only after the user has authorized a write-capable repair task; an audit request by itself does not grant tracked-source repair authority. An unqualified full-repository audit is source-read-only: it may run the official gates, which create build output, managed temp, refreshed derived state, and an isolated checkpoint, but it must not edit tracked project files. A strictly no-write request is limited to static/read-only inspection and cannot claim the complete audit command ran. When the user explicitly asks to repair or close audit findings, it becomes an audit-to-closure task: repair safe in-scope findings, rerun the authoritative gates, and stop only at a stable pass or a structured human/external boundary. `只审计` / `只报告` / `不要修改` restates the tracked-source boundary and any stricter no-write wording takes precedence.
 
 During development, bind the final project gate to the task instead of running it as untracked prose evidence:

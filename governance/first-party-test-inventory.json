@@ -22,11 +22,11 @@
     ]
   },
   "revision": {
-    "generation": 46,
+    "generation": 47,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 45,
-      "sha256": "61396327ce11eab07c87005fd473f963c995d6f20e443aa3260658881248f355"
+      "generation": 46,
+      "sha256": "84edde12bd625ceb4fd4fd61c1f11be359711c98ea35b08226dd9bbdbe8c6de3"
     }
   },
   "tests": [
@@ -2075,13 +2075,32 @@
     },
     {
       "test_id": "TEST-PS-SELFTEST-7EBA611DF16F-AUDIT-20260908-SB1",
-      "status": "active",
+      "status": "retired",
       "identity": "powershell::powershell_self_test::scripts/release-closeout.ps1::powershell_self_test_suite::-SelfTest",
       "role": "powershell_self_test",
       "path": "scripts/release-closeout.ps1",
       "selector_kind": "powershell_self_test_suite",
       "selector": "-SelfTest",
       "selector_sha256": "d13a3bf601b36200b9878f86e35ef0ac592cb4edab841ae71983a348743a79e7",
+      "cfg": "all",
+      "owner": "",
+      "retirement": {
+        "retired_at": "2026-09-16",
+        "reason": "Reviewed successor for complete audit proof separation; unchanged historical bytes remain immutable.",
+        "replaced_by": [
+          "TEST-PS-SELFTEST-7EBA611DF16F-AUDIT-20260908-SB1-OPT-P1"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-PS-SELFTEST-7EBA611DF16F-AUDIT-20260908-SB1-OPT-P1",
+      "status": "active",
+      "identity": "powershell::powershell_self_test::scripts/release-closeout.ps1::powershell_self_test_suite::-SelfTest",
+      "role": "powershell_self_test",
+      "path": "scripts/release-closeout.ps1",
+      "selector_kind": "powershell_self_test_suite",
+      "selector": "-SelfTest",
+      "selector_sha256": "10da8219ee05318c2474bf2c656d872868588280b303667c1255e0c67f4fd983",
       "cfg": "all",
       "owner": "",
       "retirement": null
@@ -4802,13 +4821,32 @@
     },
     {
       "test_id": "TEST-RUST-CLOSE-SUCCESS-REJECTS-AN-INVALID-HANDOFF-CONTRAC-4ECDC7019CC0",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/goal/tests.rs::close_success_rejects_an_invalid_handoff_contract",
       "role": "root_cargo",
       "path": "crates/rayman/src/goal/tests.rs",
       "selector_kind": "rust_test_fn",
       "selector": "close_success_rejects_an_invalid_handoff_contract",
       "selector_sha256": "3f36caf432a4293758ffa0ecd4cbccba15090f9786b60a114610315c29c13bb0",
+      "cfg": "all",
+      "owner": null,
+      "retirement": {
+        "retired_at": "2026-09-16",
+        "reason": "Reviewed successor for complete audit proof separation; unchanged historical bytes remain immutable.",
+        "replaced_by": [
+          "TEST-RUST-CLOSE-SUCCESS-REJECTS-AN-INVALID-HANDOFF-CONTRAC-4ECDC7019CC0-OPT-P1"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-CLOSE-SUCCESS-REJECTS-AN-INVALID-HANDOFF-CONTRAC-4ECDC7019CC0-OPT-P1",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/goal/tests.rs::close_success_rejects_an_invalid_handoff_contract",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/goal/tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "close_success_rejects_an_invalid_handoff_contract",
+      "selector_sha256": "42bc7c8deda05409b6cbe6b66b7acb94dc12f2243b68ae7582e0e92322c5c862",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -5084,6 +5122,19 @@
       "selector_sha256": "cf6001d454da5814442d921c4c4f1da8e86e93064c529ebc469592df1cae55c2",
       "cfg": "all",
       "owner": null,
+      "retirement": null
+    },
+    {
+      "identity": "rust::root_cargo::crates/rayman/src/goal/validation/proof_kind.rs::complete_audit_proof_refuses_partial_lanes_and_general_authority",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/goal/validation/proof_kind.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "complete_audit_proof_refuses_partial_lanes_and_general_authority",
+      "selector_sha256": "2ddd6e9ffc681aa8f651c38ab8de0a30315d0e1408b712f3eed79c7c2b997c67",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-COMPLETE-AUDIT-PROOF-REFUSES-PARTIAL-LANES-AND-G-B29AC2C13C96-OPT-P1",
+      "status": "active",
       "retirement": null
     },
     {
@@ -7702,6 +7753,19 @@
       "retirement": null
     },
     {
+      "identity": "rust::root_cargo::crates/rayman/src/goal/handoff.rs::handoff_audit_policy_preserves_legacy_hash_and_rejects_unknown_policy",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/goal/handoff.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "handoff_audit_policy_preserves_legacy_hash_and_rejects_unknown_policy",
+      "selector_sha256": "95f9dc2c5af00a6e29138818a0e8ed155b252c3766f2b2da78ebe5859cf06d86",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-HANDOFF-AUDIT-POLICY-PRESERVES-LEGACY-HASH-AND-R-6EBAD16C88D3-OPT-P1",
+      "status": "active",
+      "retirement": null
+    },
+    {
       "test_id": "TEST-RUST-HANDOFF-START-BINDS-SOURCE-GOAL-AUTHORITY-CLEAN-F5DDF2E86DE6",
       "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/tests/cli.rs::handoff_start_binds_source_goal_authority_clean_head_and_structured_stages",
@@ -7730,6 +7794,25 @@
       "cfg": "all",
       "owner": null,
       "test_id": "TEST-RUST-HANDOFF-START-BINDS-SOURCE-GOAL-AUTHORITY-CLEAN-F5DDF2E86DE6-P4B",
+      "status": "retired",
+      "retirement": {
+        "retired_at": "2026-09-16",
+        "reason": "Reviewed successor for complete audit proof separation; unchanged historical bytes remain immutable.",
+        "replaced_by": [
+          "TEST-RUST-HANDOFF-START-BINDS-SOURCE-GOAL-AUTHORITY-CLEAN-F5DDF2E86DE6-P4B-OPT-P1"
+        ]
+      }
+    },
+    {
+      "identity": "rust::root_cargo::crates/rayman/tests/cli_cases/lifecycle.rs::handoff_start_binds_source_goal_authority_clean_head_and_structured_stages",
+      "role": "root_cargo",
+      "path": "crates/rayman/tests/cli_cases/lifecycle.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "handoff_start_binds_source_goal_authority_clean_head_and_structured_stages",
+      "selector_sha256": "66763b20c1b9c7773c06075eb9f4c20d30d255e3bbbcdea76017039dcb28a08c",
+      "cfg": "all",
+      "owner": null,
+      "test_id": "TEST-RUST-HANDOFF-START-BINDS-SOURCE-GOAL-AUTHORITY-CLEAN-F5DDF2E86DE6-P4B-OPT-P1",
       "status": "active",
       "retirement": null
     },
@@ -13329,13 +13412,32 @@
     },
     {
       "test_id": "TEST-RUST-REPOSITORY-AUTHORITY-REQUIRES-THE-FULL-SCRIPT-PA-A6B610FD0E92",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/goal/installer_tests.rs::repository_authority_requires_the_full_script_parameter_set",
       "role": "root_cargo",
       "path": "crates/rayman/src/goal/installer_tests.rs",
       "selector_kind": "rust_test_fn",
       "selector": "repository_authority_requires_the_full_script_parameter_set",
       "selector_sha256": "41ff44f8f8fb743ad9f0eaf6d6b7efdc95f4bd92c21d371bb639b1aab9f03ba0",
+      "cfg": "all",
+      "owner": null,
+      "retirement": {
+        "retired_at": "2026-09-16",
+        "reason": "Reviewed successor for complete audit proof separation; unchanged historical bytes remain immutable.",
+        "replaced_by": [
+          "TEST-RUST-REPOSITORY-AUTHORITY-REQUIRES-THE-FULL-SCRIPT-PA-A6B610FD0E92-OPT-P1"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-REPOSITORY-AUTHORITY-REQUIRES-THE-FULL-SCRIPT-PA-A6B610FD0E92-OPT-P1",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/goal/installer_tests.rs::repository_authority_requires_the_full_script_parameter_set",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/goal/installer_tests.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "repository_authority_requires_the_full_script_parameter_set",
+      "selector_sha256": "bd4d825a6ed9278c2cafc2edb0eacfb02b81027dde0ef2d926126e307c173286",
       "cfg": "all",
       "owner": null,
       "retirement": null
