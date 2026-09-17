@@ -5,17 +5,17 @@
     "claim": "Machine-complete semantic source -> rule -> reachable execution gate -> exact first-party test graph with expiring reviewed links and reverse-cascade retirement."
   },
   "revision": {
-    "generation": 50,
+    "generation": 51,
     "predecessor": {
       "schema": "rayman.test-traceability.v2",
-      "generation": 49,
-      "sha256": "3211b908c8c3a498e28da5b9efe31a3606623f8a05af8b4bccb917c50b886d0e"
+      "generation": 50,
+      "sha256": "f015934849584f18113a99e51ff0587fb7d1f49b827b2c9adcb03f782b3635ed"
     }
   },
   "inventory": {
     "path": "governance/first-party-test-inventory.json",
     "schema": "rayman.first-party-test-inventory.v1",
-    "sha256": "c8d92648a5521a8a558354451155d2f8718839a1fdba281593f817d8a3d743f0"
+    "sha256": "337ef17126b7aba8c65cb69b981ff05f9931d2cd56d16d036edce41bc3441f0d"
   },
   "sources": [
     {
@@ -111706,6 +111706,48 @@
       }
     },
     {
+      "binding_id": "BIND-EXTERNAL-TASK-BINDING-FAILSAFE-20260917",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-BEHAVIOR-GOAL-CLOSURE-P3A"
+      ],
+      "test_ids": [
+        "TEST-RUST-PARTIAL-OR-NONCANONICAL-BINDING-FAILS-CLOSED-25917FA12F9A"
+      ],
+      "rule_id": "RULE-BEHAVIOR-GOAL-CLOSURE",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-17",
+        "valid_until": "2027-03-17"
+      },
+      "semantic_sha256": "b1a1402ce0b3b904cbf6d2ffd06feab57119da7fa81639b7d066e38d16eeacc5",
+      "retirement": null
+    },
+    {
+      "binding_id": "BIND-EXTERNAL-TASK-BINDING-ROUNDTRIP-20260917",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-BEHAVIOR-GOAL-CLOSURE-P3A"
+      ],
+      "test_ids": [
+        "TEST-RUST-BINDING-MARKER-ROUND-TRIPS-AND-IS-SELF-VALIDATIN-33D05A7148DA"
+      ],
+      "rule_id": "RULE-BEHAVIOR-GOAL-CLOSURE",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-17",
+        "valid_until": "2027-03-17"
+      },
+      "semantic_sha256": "763c063272ea070612bdde78fb6462672e1b98dd7fbb8a6023517affaee2f832",
+      "retirement": null
+    },
+    {
       "binding_id": "BIND-GLOBAL-0050B30D7FDBEB3DCE12",
       "status": "retired",
       "source_rule_link_ids": [
@@ -145782,7 +145824,7 @@
     },
     {
       "binding_id": "BIND-GLOBAL-7EBE1D7E495515A2973C-P1-20260914-P3A-P3B",
-      "status": "active",
+      "status": "retired",
       "source_rule_link_ids": [
         "LINK-REPO-CLI-LOCALIZATION-SOURCE-R3-AUDIT-20260908-P3A"
       ],
@@ -145799,6 +145841,33 @@
         "valid_until": "2027-03-14"
       },
       "semantic_sha256": "c0ad93cf9b4f24de2a8e9215ee8d5b6a17250232a816c91b5308a5728ebb7700",
+      "retirement": {
+        "retired_at": "2026-09-17",
+        "reason": "Selector-bound test successor created for current executable bytes.",
+        "replaced_by": [
+          "BIND-GLOBAL-7EBE1D7E495515A2973C-P1-20260914-P3A-P3B-R4-20260917"
+        ]
+      }
+    },
+    {
+      "binding_id": "BIND-GLOBAL-7EBE1D7E495515A2973C-P1-20260914-P3A-P3B-R4-20260917",
+      "status": "active",
+      "source_rule_link_ids": [
+        "LINK-REPO-CLI-LOCALIZATION-SOURCE-R3-AUDIT-20260908-P3A"
+      ],
+      "test_ids": [
+        "TEST-RUST-PARSES-GOAL-START-WITH-REQUIREMENTS-E58C87B6F662-R4-20260917"
+      ],
+      "rule_id": "RULE-REPO-CLI-LOCALIZATION",
+      "gate_id": "GATE-GLOBAL-3163ABCC151EA4FA-P1-20260914-P3B",
+      "modes": [
+        "integration"
+      ],
+      "review": {
+        "reviewed_at": "2026-09-14",
+        "valid_until": "2027-03-14"
+      },
+      "semantic_sha256": "fd9b0ceccabf745521d2e29076444580b3adf3ef617ef8f405d233a8c80c1ed8",
       "retirement": null
     },
     {

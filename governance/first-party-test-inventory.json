@@ -22,11 +22,11 @@
     ]
   },
   "revision": {
-    "generation": 47,
+    "generation": 48,
     "predecessor": {
       "schema": "rayman.first-party-test-inventory.v1",
-      "generation": 46,
-      "sha256": "84edde12bd625ceb4fd4fd61c1f11be359711c98ea35b08226dd9bbdbe8c6de3"
+      "generation": 47,
+      "sha256": "c8d92648a5521a8a558354451155d2f8718839a1fdba281593f817d8a3d743f0"
     }
   },
   "tests": [
@@ -3509,6 +3509,19 @@
       "selector_kind": "rust_test_fn",
       "selector": "baseline_less_goal_cannot_absorb_receipts_at_all",
       "selector_sha256": "013c9b2c2929e9a429d70d908442bad022806c94d52442e5ad2f2b0e60008bff",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
+      "test_id": "TEST-RUST-BINDING-MARKER-ROUND-TRIPS-AND-IS-SELF-VALIDATIN-33D05A7148DA",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/goal/model.rs::binding_marker_round_trips_and_is_self_validating",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/goal/model.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "binding_marker_round_trips_and_is_self_validating",
+      "selector_sha256": "d2fc2a5e34937d304f5b9e6cf76b3e8e691f52587c53f93d098c05bd9ddb37b7",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -10832,13 +10845,32 @@
     },
     {
       "test_id": "TEST-RUST-PARSES-GOAL-START-WITH-REQUIREMENTS-E58C87B6F662",
-      "status": "active",
+      "status": "retired",
       "identity": "rust::root_cargo::crates/rayman/src/cli.rs::parses_goal_start_with_requirements",
       "role": "root_cargo",
       "path": "crates/rayman/src/cli.rs",
       "selector_kind": "rust_test_fn",
       "selector": "parses_goal_start_with_requirements",
       "selector_sha256": "068045b647156da287844e5c8e11df1ffb12b1a5d3ad85303b8995ab8c808e25",
+      "cfg": "all",
+      "owner": null,
+      "retirement": {
+        "retired_at": "2026-09-17",
+        "reason": "Current executable selector bytes changed; immutable test identity replaced for traceability repair.",
+        "replaced_by": [
+          "TEST-RUST-PARSES-GOAL-START-WITH-REQUIREMENTS-E58C87B6F662-R4-20260917"
+        ]
+      }
+    },
+    {
+      "test_id": "TEST-RUST-PARSES-GOAL-START-WITH-REQUIREMENTS-E58C87B6F662-R4-20260917",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/cli.rs::parses_goal_start_with_requirements",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/cli.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "parses_goal_start_with_requirements",
+      "selector_sha256": "1a671b7259245d7c801d54d791da79d9aac7b4cb8051376b2e275d287e5e44bc",
       "cfg": "all",
       "owner": null,
       "retirement": null
@@ -11104,6 +11136,19 @@
       "selector_kind": "rust_test_fn",
       "selector": "parses_standard_check_profile",
       "selector_sha256": "b7e17d0474baa043125efcdc4661bef3c45d100c632f0780a0f4b2018a741d7b",
+      "cfg": "all",
+      "owner": null,
+      "retirement": null
+    },
+    {
+      "test_id": "TEST-RUST-PARTIAL-OR-NONCANONICAL-BINDING-FAILS-CLOSED-25917FA12F9A",
+      "status": "active",
+      "identity": "rust::root_cargo::crates/rayman/src/goal/model.rs::partial_or_noncanonical_binding_fails_closed",
+      "role": "root_cargo",
+      "path": "crates/rayman/src/goal/model.rs",
+      "selector_kind": "rust_test_fn",
+      "selector": "partial_or_noncanonical_binding_fails_closed",
+      "selector_sha256": "25dd05bab7d76cbc2e9487e5b17394744390d933c9b0521349f289f80fd9d77c",
       "cfg": "all",
       "owner": null,
       "retirement": null

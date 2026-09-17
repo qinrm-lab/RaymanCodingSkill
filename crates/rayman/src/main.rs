@@ -1034,15 +1034,12 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                     source_event_hash,
                     requirement_sha256,
                 }),
-                _ => bail!(
-                    "external task binding requires all six --external-task-* fields or none"
-                ),
+                _ => {
+                    bail!("external task binding requires all six --external-task-* fields or none")
+                }
             };
-            let goal = store.start_with_specs_and_binding(
-                &title,
-                &requirements,
-                external_task_binding,
-            )?;
+            let goal =
+                store.start_with_specs_and_binding(&title, &requirements, external_task_binding)?;
             if json {
                 print(&serde_json::to_value(&goal)?);
             } else {

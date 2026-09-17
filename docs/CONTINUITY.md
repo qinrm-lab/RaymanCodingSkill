@@ -40,16 +40,6 @@ existing validation and lifecycle contracts bind it without changing historical
 unbound Goal hashes. The binding is provenance only; it is not authorization,
 completion, or host identity. Partial or malformed bindings fail closed.
 
-## Technical Goal binding
-
-When a technical Goal is created for a Continuity task, pass all six
-`--external-task-*` fields together: coordinator system, task id, requirement
-revision, exact source reference, source-event SHA-256, and exact requirement
-text SHA-256. Rayman stores this as a synthetic, immutable Goal requirement so
-existing validation and lifecycle contracts bind it without changing historical
-unbound Goal hashes. The binding is provenance only; it is not authorization,
-completion, or host identity. Partial or malformed bindings fail closed.
-
 ## Moving or cloning the repository
 
 Git clone alone does not carry the ignored ledger and objects. Before moving to

@@ -516,7 +516,8 @@ impl ExternalTaskBinding {
         let bytes = serde_json::to_vec(self)?;
         Ok(format!(
             "external-task-binding.v1::{}",
-            String::from_utf8(bytes).map_err(|_| anyhow::anyhow!("external task binding is not UTF-8"))?
+            String::from_utf8(bytes)
+                .map_err(|_| anyhow::anyhow!("external task binding is not UTF-8"))?
         ))
     }
 
@@ -637,7 +638,8 @@ mod external_task_binding_tests {
             system: "rayman-continuity".into(),
             task_id: "architecture-optimization-20260916".into(),
             requirements_revision: 2,
-            source_ref: "hook-878fd4176236da7b5c5e30cea99a646f1ddf60fbb39ac7fcda85d22d982fffc4".into(),
+            source_ref: "hook-878fd4176236da7b5c5e30cea99a646f1ddf60fbb39ac7fcda85d22d982fffc4"
+                .into(),
             source_event_hash: "a".repeat(64),
             requirement_sha256: "b".repeat(64),
         }
