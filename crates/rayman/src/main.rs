@@ -1232,10 +1232,14 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                         )
                         .context("独立 test list proof 执行失败；不会写入 receipt")?;
                         if !list_output.status.success() {
-                            bail!(
+                            return Err(anyhow::anyhow!(
                                 "独立 test list proof 失败（exit={}）；不会写入 receipt",
                                 list_output.status.code().unwrap_or(-1)
-                            );
+                            )
+                            .context(validation_failure_details(
+                                &list_output.stdout,
+                                &list_output.stderr,
+                            )));
                         }
                         (
                             Some(goal::listed_test_count(
@@ -1268,12 +1272,12 @@ fn run_goal(root: &std::path::Path, json: bool, action: GoalAction) -> Result<()
                             })?;
                     let run_after = goal::workspace_fingerprint(root)?;
                     if !output.status.success() {
-                        bail!(
+                        return Err(anyhow::anyhow!(
                             "验证命令第 {run_index}/{repeat} 次失败（exit={}）；不会写入 receipt。stdout_sha256={} stderr_sha256={}",
                             output.status.code().unwrap_or(-1),
                             sha256_hex(&output.stdout),
                             sha256_hex(&output.stderr)
-                        );
+                        ).context(validation_failure_details(&output.stdout, &output.stderr)));
                     }
                     let test_proof = goal::validation_execution_proof(
                         &parsed,
@@ -1621,6 +1625,22 @@ fn impact_evidence_for_changed_paths(
             Ok(impact_evidence_from_report(&report))
         })
         .collect()
+}
+
+fn validation_failure_details(stdout: &[u8], stderr: &[u8]) -> String {
+    const LIMIT: usize = 8 * 1024;
+    let mut details = String::new();
+    for (label, bytes) in [("stdout", stdout), ("stderr", stderr)] {
+        if bytes.is_empty() {
+            continue;
+        }
+        let start = bytes.len().saturating_sub(LIMIT);
+        details.push_str(&format!(
+            "--- validation {label} ({start} bytes omitted) ---\n{}\n",
+            String::from_utf8_lossy(&bytes[start..])
+        ));
+    }
+    details
 }
 
 fn run_validation_command(
